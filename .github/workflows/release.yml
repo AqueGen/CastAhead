@@ -74,8 +74,9 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "📦 Version: $VERSION"
 
+      # A dry run must leave nothing behind, so it does not tag either.
       - name: Create tag for manual dispatch
-        if: github.ref_type != 'tag'
+        if: github.ref_type != 'tag' && !inputs.dry_run
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           git config user.name "github-actions[bot]"
