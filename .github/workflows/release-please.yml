@@ -1,0 +1,41 @@
+name: Release Please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      releases_created: ${{ steps.release.outputs.releases_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Create or update the release PR
+        id: release
+        uses: googleapis/release-please-action@v4
+
+  # A tag pushed with GITHUB_TOKEN does not start a workflow, so packaging
+  # cannot wait for a tag-push run. Packaging in this run does not work either:
+  # the packager reads the real GITHUB_REF (refs/heads/main here, and step-level
+  # env cannot override a reserved GITHUB_* variable) and skips with
+  # "Found future tag". workflow_dispatch is the one event GITHUB_TOKEN may
+  # still start, and dispatching on the tag gives the packager a tag ref.
+  package:
+    needs: release-please
+    if: needs.release-please.outputs.releases_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch packaging on the new tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Passed as an env var, not interpolated into the run script.
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"

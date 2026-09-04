@@ -1,0 +1,42 @@
+package-as: CastAhead
+
+enable-nolib-creation: no
+
+manual-changelog:
+  filename: RELEASE_NOTES.md
+  markup-type: markdown
+
+# Libraries are not committed; the packager fetches them at build time. The
+# addon needs LibDBIcon for the minimap button and LibSharedMedia so players
+# can pick any sound their other addons registered.
+externals:
+  Libs/LibStub:
+    url: https://repos.wowace.com/wow/libstub/trunk
+    tag: latest
+  Libs/CallbackHandler-1.0:
+    url: https://repos.wowace.com/wow/callbackhandler/trunk/CallbackHandler-1.0
+    tag: latest
+  Libs/LibDataBroker-1.1:
+    url: https://repos.wowace.com/wow/libdatabroker-1-1
+    tag: latest
+  Libs/LibDBIcon-1.0:
+    url: https://repos.wowace.com/wow/libdbicon-1-0/trunk/LibDBIcon-1.0
+    tag: latest
+  Libs/LibSharedMedia-3.0:
+    url: https://repos.wowace.com/wow/libsharedmedia-3-0/trunk/LibSharedMedia-3.0
+    tag: latest
+
+# Sounds/ is deliberately NOT here: the voice clips are the addon's own assets
+# and must ship. Everything below is development-only.
+ignore:
+  - README.md
+  - RELEASE_NOTES.md
+  - .gitignore
+  - .github
+  - .busted
+  - CLAUDE.md
+  - test.lua
+  - test_core.lua
+  - tools
+  - release-please-config.json
+  - .release-please-manifest.json

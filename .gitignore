@@ -1,0 +1,29 @@
+# Libraries: fetched by the packager from .pkgmeta, never committed.
+Libs/
+
+# WoW leftovers
+*.bak
+*.orig
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE / editor
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+*~
+
+# Packager output
+.release/
+*.zip
+RELEASE_NOTES.md
+
+# Harvests and scratch data used to regenerate Data.lua; never part of a build.
+casts*.json
+mdt.json
+overrides.json

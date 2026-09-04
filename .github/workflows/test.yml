@@ -1,0 +1,21 @@
+name: tests
+
+on: [push, pull_request]
+
+# The suites are plain Lua 5.1 scripts, not busted specs: test.lua validates the
+# shipped data end to end, test_core.lua replays event sequences against a
+# stubbed WoW API. Both print OK and exit non-zero on any failure.
+jobs:
+  lua:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "5.1"
+      - name: Syntax-check every shipped file
+        run: luac -p Config.lua Data.lua Priority.lua Traits.lua Match.lua Timeline.lua Core.lua UI.lua Options.lua Minimap.lua
+      - name: Data and matcher suite
+        run: lua test.lua
+      - name: Runtime suite against the stubbed API
+        run: lua test_core.lua

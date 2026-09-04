@@ -1,0 +1,30 @@
+## Interface: 120100
+## Title: CastAhead
+## Notes: Predicts trash casts in Mythic+ and tells you what to do about them.
+## Author: AqueGen
+# x-release-please-start-version
+## Version: 0.1.0
+## X-Curse-Version: 0.1.0
+# x-release-please-end
+## X-License: MIT
+## X-Website: https://github.com/AqueGen/CastAhead
+## SavedVariables: CastAheadDB
+## IconTexture: Interface\Icons\Ability_Warrior_Sunder
+## AddonCompartmentFunc: CastAhead_OnCompartmentClick
+
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
+Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
+Libs\LibDBIcon-1.0\lib.xml
+Libs\LibSharedMedia-3.0\lib.xml
+
+Config.lua
+Data.lua
+Priority.lua
+Traits.lua
+Match.lua
+Timeline.lua
+Core.lua
+UI.lua
+Options.lua
+Minimap.lua
