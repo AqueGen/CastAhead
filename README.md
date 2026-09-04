@@ -27,7 +27,7 @@ CastAhead watches enemy nameplates, works out which spell a mob is casting and w
 
 ## Settings that are worth knowing about
 
-Everything lives in `/ca options`, split into four tabs. **Keys** and **Raid** hold the same eight switches with independent values, so a raid where a boss mod already speaks can stay quiet while keys stay loud. **General** holds icon placement and the centre call's position; **Sounds** lets you pick any sound your other addons registered, per category.
+Everything lives in the addon window, next to the cast table. **General** holds the eight switches for what gets announced, plus icon placement and the centre call's position; **Sounds** lets you pick any sound your other addons registered, per category.
 
 The early warning ("tank buster soon") is a slider in seconds, off by default: on top of the real call it can read as two separate casts.
 

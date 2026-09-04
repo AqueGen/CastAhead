@@ -274,85 +274,68 @@ dofile("Core.lua")
 
 local function fire(event, ...) eventHandler(nil, event, ...) end
 
--- Config: per-context options -------------------------------------------
+-- Config: flat settings -------------------------------------------------
 local savedInInstance, savedInstanceInfo = IsInInstance, GetInstanceInfo
 local instanceKind = "party"
 IsInInstance = function() return true, instanceKind end
 GetInstanceInfo = function() return "d", instanceKind, 0, "", 0, 0, false, 1877 end
 
 CastAheadDB = nil
-check(CastAheadConfig.Context() == "key", "a party instance is the key context")
-instanceKind = "raid"
-check(CastAheadConfig.Context() == "raid", "a raid instance is the raid context")
-instanceKind = "none"
-check(CastAheadConfig.Context() == "key", "outside an instance the key context is used")
-
--- The same key holds different values per context.
-instanceKind = "party"
 CastAheadConfig.SetEnabled("centerText", false)
-check(CastAheadConfig.Enabled("centerText") == false, "the key context remembers its own value")
-instanceKind = "raid"
-check(CastAheadConfig.Enabled("centerText") == true, "the raid context is untouched by it")
-CastAheadConfig.SetEnabled("centerText", false)
-instanceKind = "party"
-check(CastAheadConfig.Enabled("centerText") == false, "and the key context still holds its own")
+check(CastAheadConfig.Enabled("centerText") == false, "an option switched off reads back off")
 CastAheadConfig.SetEnabled("centerText", true)
 check(CastAheadConfig.Enabled("centerText") == true, "switching it back on is honored")
+check(CastAheadDB.centerText == nil, "and stores nothing, so a later default change still applies")
 
--- Global keys are shared, not duplicated per context.
-CastAheadConfig.Set("anchor", "top")
 instanceKind = "raid"
-check(CastAheadConfig.Get("anchor") == "top", "global settings are shared between contexts")
-check(CastAheadDB.anchor == "top", "and are stored flat, not under ctx")
+check(CastAheadConfig.Enabled("centerText") == true, "settings do not change with the instance kind")
+CastAheadConfig.Set("anchor", "top")
+check(CastAheadDB.anchor == "top", "values are stored flat")
 
--- Lead seconds: default 5, clamped, 0 means off.
-check(CastAheadConfig.Lead() == 5, "the early warning defaults to 5 seconds")
-CastAheadConfig.Set("leadSeconds", 0)
-check(CastAheadConfig.Lead() == 0, "0 seconds is allowed and means off")
+-- Lead seconds: off by default, clamped.
+CastAheadDB = nil
+check(CastAheadConfig.Lead() == 0, "the early warning is off by default")
+CastAheadConfig.Set("leadSeconds", 5)
+check(CastAheadConfig.Lead() == 5, "a stored lead is used")
 CastAheadConfig.Set("leadSeconds", 99)
 check(CastAheadConfig.Lead() == 15, "a lead beyond the range is clamped to 15")
 
--- Migration: flat values from before this change seed both contexts, and the
--- old leadWarning boolean becomes 5 or 0.
-CastAheadDB = { centerText = false, sound = false, leadWarning = true, anchor = "left" }
+-- Migration: a per-context profile collapses onto the flat one, and the old
+-- leadWarning boolean becomes 5 or 0.
+CastAheadDB = { ctx = { key = { centerText = false, leadSeconds = 7 },
+    raid = { sound = false } }, anchor = "left" }
 CastAheadConfig.Migrate()
-instanceKind = "party"
-check(CastAheadConfig.Enabled("centerText") == false, "migration seeds the key context")
-check(CastAheadConfig.Lead() == 5, "leadWarning = true migrates to 5 seconds")
-instanceKind = "raid"
-check(CastAheadConfig.Enabled("sound") == false, "migration seeds the raid context too")
-check(CastAheadDB.centerText == nil, "the flat per-context value is removed after migration")
+check(CastAheadConfig.Enabled("centerText") == false, "the key context is lifted to the flat profile")
+check(CastAheadConfig.Lead() == 7, "including its early warning")
+check(CastAheadConfig.Enabled("sound") == true, "the raid context is dropped, not merged")
+check(CastAheadDB.ctx == nil, "and the context table is gone")
 check(CastAheadDB.anchor == "left", "a global value survives migration untouched")
--- Three profile shapes, three answers for leadSeconds.
-instanceKind = "party"
+
 CastAheadDB = { leadWarning = true }
 CastAheadConfig.Migrate()
-check(CastAheadDB.ctx.key.leadSeconds == 5, "a pre-context profile with leadWarning seeds 5 seconds")
-CastAheadDB = { voice = false }
+check(CastAheadDB.leadSeconds == 5, "the old leadWarning boolean becomes 5 seconds")
+check(CastAheadDB.leadWarning == nil, "and is removed")
+CastAheadDB = { leadWarning = false }
 CastAheadConfig.Migrate()
-check(CastAheadDB.ctx.key.leadSeconds == 0, "per-context keys without leadWarning seed 0 seconds")
-check(CastAheadConfig.Lead() == 0, "and the early warning reads back as off")
+check(CastAheadConfig.Lead() == 0, "leadWarning = false stays off")
 CastAheadDB = {}
 CastAheadConfig.Migrate()
-check(CastAheadDB.ctx.key.leadSeconds == nil, "a fresh profile leaves leadSeconds unset")
-check(CastAheadConfig.Lead() == 5, "so a fresh profile gets the documented 5 second default")
+check(CastAheadDB.leadSeconds == nil, "a fresh profile leaves leadSeconds unset")
+check(CastAheadConfig.Lead() == 0, "so a fresh profile gets the documented default of off")
 
--- Entering the world migrates a pre-context profile exactly once.
--- Migrate seeds both contexts, so the context in force does not affect it;
--- this only puts the reads below in the key context.
-instanceKind = "party"
+-- Entering the world migrates an old profile exactly once.
 CastAheadDB = { voice = false }
 fire("PLAYER_ENTERING_WORLD")
-check(CastAheadDB.ctx and CastAheadDB.ctx.key and CastAheadDB.ctx.key.voice == false,
-    "entering the world migrates flat settings into the contexts")
-CastAheadDB.ctx.key.voice = nil
+check(CastAheadDB.voice == false and CastAheadDB.ctx == nil,
+    "entering the world migrates a per-context profile")
+CastAheadDB.voice = nil
 fire("PLAYER_ENTERING_WORLD")
-check(CastAheadDB.ctx.key.voice == nil, "migration does not run twice over a live profile")
+check(CastAheadDB.voice == nil, "migration does not run twice over a live profile")
 
 -- The UI helpers write where the accessor reads.
 CastAheadDB = nil
 CastAheadUI.SetOption("voice", false)
-check(CastAheadConfig.Enabled("voice") == false, "a UI toggle writes to the active context")
+check(CastAheadConfig.Enabled("voice") == false, "a UI toggle writes where the accessor reads")
 check(CastAheadUI.OptionEnabled("voice") == false, "and reads back through the same path")
 CastAheadUI.SetOption("voice", true)
 check(CastAheadConfig.Enabled("voice") == true, "switching it back on clears the stored value")
@@ -360,7 +343,7 @@ check(CastAheadConfig.Enabled("voice") == true, "switching it back on clears the
 CastAheadDB = nil
 IsInInstance, GetInstanceInfo = savedInInstance, savedInstanceInfo
 
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
 -- Count bars that actually became visible: counting CreateFrame would miss the
 -- pool, which hands back an existing frame instead of making a new one.
@@ -494,7 +477,7 @@ reset()
 
 -- The heads-up lead is configurable: at 8 seconds it fires earlier than the
 -- old fixed 3, and at 0 it never fires at all.
-CastAheadDB = { ctx = { key = { leadSeconds = 8 } } }
+CastAheadDB = { leadSeconds = 8 }
 sounds, spoken, clips = 0, 0, 0
 enter()
 castFor(3.0)                       -- spell 100, 20s rotation
@@ -503,18 +486,18 @@ check(Alerts() == 0, string.format("no heads-up before the configured lead, got 
 advance(1.0)                       -- 7.5s before it: inside an 8s lead
 check(Alerts() == 1, string.format("the heads-up fires at the configured lead, got %d", Alerts()))
 reset()
-CastAheadDB = { ctx = { key = { leadSeconds = 0 } } }
+CastAheadDB = { leadSeconds = 0 }
 sounds, spoken, clips = 0, 0, 0
 enter()
 castFor(3.0)
 advance(19.0)                      -- 1s before the next cast
 check(Alerts() == 0, string.format("leadSeconds = 0 silences the heads-up, got %d", Alerts()))
 reset()
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }
+CastAheadDB = { leadSeconds = 5 }
 
 -- With the early warning switched off there is no heads-up at all - only the
 -- call when the cast starts.
-CastAheadDB = { ctx = { key = { leadSeconds = 0 } } }
+CastAheadDB = { leadSeconds = 0 }
 sounds, spoken, clips = 0, 0, 0
 enter()
 castFor(3.0)
@@ -523,10 +506,10 @@ check(Alerts() == 0, string.format("no heads-up while leadSeconds is 0, got %d",
 castFor(3.0)                       -- the predicted cast itself still alerts
 check(Alerts() == 1, string.format("the cast-start call is unaffected, got %d", Alerts()))
 reset()
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }
+CastAheadDB = { leadSeconds = 5 }
 
 -- Turning the sound off in the UI is honoured.
-CastAheadDB = { ctx = { key = { sound = false } } }
+CastAheadDB = { sound = false }
 sounds, spoken, clips = 0, 0, 0
 enter()
 castFor(3.0)
@@ -534,7 +517,7 @@ advance(17)
 castFor(3.0)
 check(Alerts() == 0, "no alert when the sound is switched off")
 reset()
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
 -- Helpers for the trait cases: which spell icons are on screen.
 local function IconShown(spellID)
@@ -548,7 +531,7 @@ end
 -- A trait match alone must not name a creature: the trait table does not know
 -- every mob, and a level-91 plate that matches npc 1 may be an unlisted
 -- creature that merely looks like it. So nothing is previewed on sight...
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 table.insert(CastAheadData[1877], { spell = 900, npc = 9, mob = "Lookalike", name = "Twin", cast = 3.0,
                           cd = { 20.0 }, first = 5.0, firstN = 5, hits = 5, dmg = 0.5, n = 50,
                           kick = 0, cc = 0, prio = "AOE" })
@@ -634,7 +617,7 @@ hostile[other], combat[other], levels[other] = nil, nil, nil
 levels[unit] = nil
 table.remove(CastAheadData[1877])   -- 960
 table.remove(CastAheadData[1877])   -- 950
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
 -- Only confident predictions reach Blizzard's timeline. The fixture spell has
 -- no sample count, so it must stay off it - the timeline cannot say "estimate".
@@ -713,7 +696,7 @@ table.remove(CastAheadData[1877])
 -- The two outputs are independent: turning nameplate icons off must leave the
 -- timeline working, and vice versa.
 CastAheadData[1877][1].n = 40
-CastAheadDB = { ctx = { key = { nameplates = false } } }
+CastAheadDB = { nameplates = false }
 timeline.added = 0
 enter()
 castFor(3.0)
@@ -721,14 +704,14 @@ check(VisibleBars() == 0, "no icons when nameplate output is off")
 check(timeline.added == 1, "but the timeline still gets the prediction")
 reset()
 
-CastAheadDB = { ctx = { key = { timeline = false } } }
+CastAheadDB = { timeline = false }
 timeline.added = 0
 enter()
 castFor(3.0)
 check(VisibleBars() > 0, "icons still show when the timeline is off")
 check(timeline.added == 0, "and nothing is published to the timeline")
 reset()
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 CastAheadData[1877][1].n = nil
 
 -- Timeline.lua is a new entry in the TOC, and a TOC change only applies on a
@@ -748,13 +731,13 @@ CastAheadTimeline = savedTimeline
 -- Option toggles: on stores nil, off stores false, and a fresh profile is on.
 -- `checked and nil or false` always yields false, which is how both outputs
 -- ended up permanently disabled no matter what the player clicked.
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 check(CastAheadUI.OptionEnabled("nameplates"), "a fresh profile has outputs on")
 CastAheadUI.SetOption("nameplates", false)
 check(not CastAheadUI.OptionEnabled("nameplates"), "unchecking turns it off")
 CastAheadUI.SetOption("nameplates", true)
 check(CastAheadUI.OptionEnabled("nameplates"), "and checking turns it back on")
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
 -- The anchor has to belong to the plate, or every icon stacks in the middle of
 -- the screen instead of sitting beside its mob.
@@ -866,7 +849,7 @@ check(framesMade == afterFirst, string.format("bars must come from the pool (mad
 -- Curated filter: a cast outside the priority set is neither drawn nor spoken
 -- while "important only" (the default) is in force - even one that looks
 -- dangerous by the statistics (spell 700: 5 targets, half their health).
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 sounds, spoken, clips = 0, 0, 0
 enter()
 castFor(7.0)
@@ -877,12 +860,12 @@ check(Alerts() == 0, "an unmarked cast must stay silent by default")
 reset()
 
 -- Switching the filter off brings the same cast back.
-CastAheadDB = { ctx = { key = { importantOnly = false } } }
+CastAheadDB = { importantOnly = false }
 enter()
 castFor(7.0)
 check(VisibleBars() > 0, "with the filter off, the unmarked cast shows again")
 reset()
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
 -- Role filter: a dps does not hear a curated TANK cast, and switching the
 -- filter off (or swapping to a tank spec) brings it back without a reload.
@@ -897,12 +880,12 @@ advance(14.0)
 castFor(6.0)
 check(Alerts() == 0, string.format("nor hear it, got %d alerts", Alerts()))
 reset()
-CastAheadDB = { ctx = { key = { roleFilter = false } } }
+CastAheadDB = { roleFilter = false }
 enter()
 castFor(6.0)
 check(VisibleBars() > 0, "with the role filter off, the TANK cast shows to a dps")
 reset()
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 specRole = "TANK"
 enter()
 castFor(6.0)
@@ -946,7 +929,7 @@ reset()
 
 -- A kickable cast already announced at START must not be announced again
 -- when the game confirms it is interruptible a frame later.
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 enter()
 castFor(2.5)                       -- spell 200 (curated KICK), now identified
 sounds, spoken, clips = 0, 0, 0
@@ -1028,7 +1011,7 @@ table.remove(CastAheadData[1877])
 -- Dispel learning: a "targeted" cast that lands a Poison on the player is
 -- called "dispel poison" from then on - and only when exactly one identified
 -- cast just finished, so the debuff cannot be pinned on the wrong spell.
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 local row101 = CastAheadData[1877][2]
 row101.prio = "TARGET"
 enter()
@@ -1042,11 +1025,11 @@ check(CastAheadMatch.Advice(row101) == CastAheadMatch.ADVICE.POISON,
 reset()
 -- Two casts finishing together: nothing is learned.
 row101.dispel = nil
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 -- Secret aura data (the in-game reality inside instances) must neither error
 -- nor teach anything.
 row101.dispel = nil
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 playerAuras[1] = { auraInstanceID = 4300, spellId = 4300, isHarmful = true, dispelName = "Magic" }
 issecretvalue = function(v) return v == playerAuras[1] end
 enter()
@@ -1076,7 +1059,7 @@ hostile[second], combat[second] = nil, nil
 check(not (CastAheadDB and CastAheadDB.dispel), "a debuff after two casts at once is not attributed")
 reset()
 row101.prio = "AOE"
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
 -- Rows are ordered by when the cast is due: after spell 100 is identified its
 -- sibling 101 is projected 9s after it (offset), while 100 itself comes back
@@ -1110,12 +1093,12 @@ check(xOf[textures[101]] and xOf[textures[100]] and xOf[textures[101]] > xOf[tex
     string.format("growing left, the soonest icon sits nearest the plate (101 at %s, 100 at %s)",
         tostring(xOf[textures[101]]), tostring(xOf[textures[100]])))
 reset()
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
 -- A cast whose interval is nowhere near the spell's schedule is rejected, and
 -- the re-identification that follows must not hand the same spell straight
 -- back (the interval fallback used to keep every candidate when none fit).
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 enter()
 castFor(3.0)                       -- spell 100, cd 20
 advance(42)                        -- 45s since: far outside 20 +/- 50%
@@ -1129,7 +1112,7 @@ enter()
 castFor(3.0)                       -- identifies 100; sibling 101 would be projected
 check(not IconShown(101), "a disabled spell is not laid out as a sibling")
 reset()
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
 -- A prediction kept as overdue ("!") must still recognise the cast when it
 -- finally starts, well outside the usual four-second window.
@@ -1148,7 +1131,7 @@ reset()
 
 -- A channel is identified by its measured length like a cast, and its next
 -- occurrence is predicted from the rotation.
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 enter()
 channelFor(6.0)                        -- spell 610, cd 22
 check(IconShown(610), "a channel is identified by its length and drawn")
@@ -1340,10 +1323,10 @@ hostile[unit] = nil
 
 -- The speaker button's preview speaks (or beeps) regardless of the mutes.
 sounds, spoken, clips = 0, 0, 0
-CastAheadDB = { ctx = { key = { sound = false, voice = false } } }
+CastAheadDB = { sound = false, voice = false }
 CastAheadCore.PreviewAdvice(CastAheadMatch.ADVICE.TANK)
 check(Alerts() == 1, string.format("preview plays through the mute switches, got %d", Alerts()))
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
 -- Voice chain: our clip first; a clip the client cannot play (missing file)
 -- falls through to the game's voice; a SpeakText that returns no utteranceID
@@ -1375,7 +1358,7 @@ sounds, spoken, clips = 0, 0, 0
 CastAheadCore.PreviewAdvice(CastAheadMatch.ADVICE.TANK)
 check(clips == 1 and sounds == 0, string.format("voiceTTS with a mute game voice falls back to the clip, got clips=%d beeps=%d", clips, sounds))
 C_CombatAudioAlert.SpeakText = realSpeak
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
 -- A sound the player picked for a category (LibSharedMedia name) plays every
 -- time, on top of the voice; the stock beep stays a fallback only.
@@ -1392,7 +1375,7 @@ check(clips == 2 and sounds == 0, string.format("a chosen sound plays alongside 
 sounds, spoken, clips = 0, 0, 0
 CastAheadCore.PreviewAdvice(CastAheadMatch.ADVICE.AOE)
 check(clips == 1 and sounds == 0, string.format("a category without a chosen sound plays only its voice, got files=%d beeps=%d", clips, sounds))
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 LibStub = nil
 
 -- Centre call: shown with the response in words while an important cast goes
@@ -1406,7 +1389,7 @@ local function CenterFrameStub()
     end
     return nil
 end
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 -- castFor completes a cast in one call, so drive START by hand to catch the
 -- frame mid-cast. Spell 100 (curated AOE, 3.0s, cd 20) identifies the plate
 -- on its own, and its predicted repeat is what the START below resolves to.
@@ -1422,7 +1405,7 @@ check(shownMid and shownMid.timeValue:match("^%u[%l ,]+  2%.%d$"),
 advance(4.0)                       -- past the 3s cast, no STOP yet
 check(not (shownMid and shownMid.shown), "the centre call is gone once the cast time has run out")
 reset()
-CastAheadDB = { ctx = { key = { centerText = false } } }
+CastAheadDB = { centerText = false }
 enter()
 castFor(3.0)
 advance(17.0)
@@ -1431,7 +1414,7 @@ advance(0.5)
 local hidden = CenterFrameStub()
 check(not (hidden and hidden.shown), "centerText = false keeps the centre call hidden")
 reset()
-CastAheadDB = { ctx = { key = { leadSeconds = 5 } } }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

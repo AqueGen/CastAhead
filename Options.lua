@@ -1,36 +1,24 @@
--- /ca options - every setting in one place.
---
--- The data browser used to carry the options along its bottom edge, which
--- ran out of room and mixed two jobs in one frame. Here they are grouped,
--- and the two announcement blocks (keys and raid) are literally the same
--- builder run twice against different contexts.
+-- The settings panels. They are pages of the main window (UI.lua owns the
+-- frame and the tab strip); this file only knows how to build and show them.
+-- A second floating window was the first attempt and it overlapped the table
+-- it was meant to configure.
 
 CastAheadOptions = {}
 
-local TABS = { "General", "Keys", "Raid", "Sounds" }
-local WIDTH, HEIGHT = 460, 520
-local window, panels, tabButtons
+CastAheadOptions.TABS = { "General", "Sounds" }
+local panels
+local LAYOUT_X = 320  -- left edge of the layout column, clear of the checkboxes
 -- Forward declarations: BuildWindow calls these, and Lua resolves a local by
 -- what it holds at call time, so they must exist as upvalues before it runs.
 local BuildGeneral, BuildAnnounce, BuildSounds
--- Widgets are painted once, when the window is first built, but storage can
--- change behind the window's back: the old option panel until Task 5 removes
--- it, and always the /ca anchor|grow|offset|center slash commands and the
--- Move button. Every widget that displays stored state registers a closure
--- here that re-reads it; ShowTab and Toggle run the lot before showing.
+-- Widgets are painted once, when a panel is first built, but storage can
+-- change behind their back: the /ca anchor|grow|offset|center slash commands
+-- and the Move button all write it. Every widget that displays stored state
+-- registers a closure here that re-reads it; showing a panel runs the lot.
 local refreshers = {}
 
-local function ShowPanel(name)
-    for tab, panel in pairs(panels) do
-        panel:SetShown(tab == name)
-        tabButtons[tab]:SetEnabled(tab ~= name)
-    end
-end
-
--- Seven of the eight per-context options; the eighth, leadSeconds, is the
--- slider built under them. Both contexts get the same widgets. The
--- accessor defaults to the ACTIVE context, so these widgets pass their own
--- context to it explicitly.
+-- What gets announced. The eighth switch, leadSeconds, is the slider built
+-- under them.
 local ANNOUNCE = {
     { key = "importantOnly", label = "Important casts only",
       tip = "Show, speak and time only the casts marked with a star - the hand-picked set that needs a reaction." },
@@ -43,12 +31,12 @@ local ANNOUNCE = {
     { key = "timeline", label = "Blizzard timeline",
       tip = "Feed confident predictions to the game's own encounter timeline." },
     { key = "sound", label = "Sound",
-      tip = "Master switch for everything audible in this context." },
+      tip = "Master switch for everything the addon plays." },
     { key = "voice", label = "Voice",
       tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"interrupt\"." },
 }
 
-function BuildAnnounce(panel, context)
+function BuildAnnounce(panel)
     local y = -4
     for _, option in ipairs(ANNOUNCE) do
         local box = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
@@ -58,9 +46,9 @@ function BuildAnnounce(panel, context)
         box.text:SetPoint("LEFT", box, "RIGHT", 2, 0)
         box.text:SetText(option.label)
         box:SetHitRectInsets(0, -(box.text:GetStringWidth() + 6), 0, 0)
-        box:SetChecked(CastAheadConfig.Enabled(option.key, context))
+        box:SetChecked(CastAheadConfig.Enabled(option.key))
         box:SetScript("OnClick", function(self)
-            CastAheadConfig.SetEnabled(option.key, self:GetChecked() and true or false, context)
+            CastAheadConfig.SetEnabled(option.key, self:GetChecked() and true or false)
             if CastAheadCore and CastAheadCore.Reapply then CastAheadCore.Reapply() end
         end)
         box:SetScript("OnEnter", function(self)
@@ -71,7 +59,7 @@ function BuildAnnounce(panel, context)
         end)
         box:SetScript("OnLeave", GameTooltip_Hide)
         table.insert(refreshers, function()
-            box:SetChecked(CastAheadConfig.Enabled(option.key, context))
+            box:SetChecked(CastAheadConfig.Enabled(option.key))
         end)
         y = y - 26
     end
@@ -93,7 +81,7 @@ function BuildAnnounce(panel, context)
             or "Early warning: off")
     end
     local suppress = false
-    local stored = tonumber(CastAheadConfig.Get("leadSeconds", context)) or CastAheadConfig.LEAD_DEFAULT
+    local stored = tonumber(CastAheadConfig.Get("leadSeconds")) or CastAheadConfig.LEAD_DEFAULT
     suppress = true
     slider:SetValue(stored)
     suppress = false
@@ -101,11 +89,11 @@ function BuildAnnounce(panel, context)
     slider:SetScript("OnValueChanged", function(self, value)
         if suppress then return end
         value = math.floor(value + 0.5)
-        CastAheadConfig.Set("leadSeconds", value, context)
+        CastAheadConfig.Set("leadSeconds", value)
         paint(value)
     end)
     table.insert(refreshers, function()
-        local value = tonumber(CastAheadConfig.Get("leadSeconds", context)) or CastAheadConfig.LEAD_DEFAULT
+        local value = tonumber(CastAheadConfig.Get("leadSeconds")) or CastAheadConfig.LEAD_DEFAULT
         suppress = true
         slider:SetValue(value)
         suppress = false
@@ -113,81 +101,45 @@ function BuildAnnounce(panel, context)
     end)
 end
 
-local function BuildWindow()
-    window = CreateFrame("Frame", "CastAheadOptionsWindow", UIParent, "BasicFrameTemplateWithInset")
-    window:SetSize(WIDTH, HEIGHT)
-    window:SetPoint("CENTER")
-    window:SetMovable(true)
-    window:EnableMouse(true)
-    window:RegisterForDrag("LeftButton")
-    window:SetScript("OnDragStart", window.StartMoving)
-    window:SetScript("OnDragStop", window.StopMovingOrSizing)
-    window:SetFrameStrata("DIALOG")
-    table.insert(UISpecialFrames, "CastAheadOptionsWindow")
-    window.TitleText:SetText("CastAhead - settings")
-
-    panels, tabButtons = {}, {}
-    local previous
-    for _, name in ipairs(TABS) do
-        local button = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
-        button:SetSize(96, 20)
-        if previous then
-            button:SetPoint("LEFT", previous, "RIGHT", 4, 0)
-        else
-            button:SetPoint("TOPLEFT", window, "TOPLEFT", 12, -30)
-        end
-        button:SetText(name)
-        button:SetScript("OnClick", function() ShowPanel(name) end)
-        tabButtons[name] = button
-        previous = button
-
-        local panel = CreateFrame("Frame", nil, window)
-        panel:SetPoint("TOPLEFT", window, "TOPLEFT", 12, -58)
-        panel:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -12, 12)
+-- Built once, the first time a settings tab is opened, as children of the
+-- host frame the main window hands over.
+local function Build(host)
+    panels = {}
+    for _, name in ipairs(CastAheadOptions.TABS) do
+        local panel = CreateFrame("Frame", nil, host)
+        panel:SetAllPoints(host)
         panel:Hide()
         panels[name] = panel
     end
 
     BuildGeneral(panels.General)
-    BuildAnnounce(panels.Keys, "key")
-    BuildAnnounce(panels.Raid, "raid")
     BuildSounds(panels.Sounds)
 end
 
-local function RefreshAll()
+-- Show one settings page inside `host`, building them all on first use.
+-- Every stateful widget is repainted first: the slash commands write the same
+-- storage from outside, so what was drawn last time may be stale.
+function CastAheadOptions.ShowPanel(host, name)
+    if not panels then Build(host) end
     for _, refresh in ipairs(refreshers) do refresh() end
-end
-
-function CastAheadOptions.ShowTab(name)
-    if not window then BuildWindow() end
-    RefreshAll()
-    window:Show()
-    ShowPanel(name)
-end
-
--- UI.lua asks so the Sounds button can close the window it opened.
-function CastAheadOptions.Current()
-    if not window or not window:IsShown() then return nil end
     for tab, panel in pairs(panels) do
-        if panel:IsShown() then return tab end
+        panel:SetShown(tab == name)
     end
 end
 
-function CastAheadOptions.Toggle()
-    if not window then BuildWindow() end
-    if window:IsShown() then
-        window:Hide()
-    else
-        RefreshAll()
-        window:Show()
-        ShowPanel("General")
-    end
+-- The main window switching to a non-settings tab.
+function CastAheadOptions.HideAll()
+    if not panels then return end
+    for _, panel in pairs(panels) do panel:Hide() end
 end
 
--- Layout is global: the icons sit in the same place whatever the content.
+-- One page, two columns: what gets announced on the left, where it is drawn
+-- on the right. The window is wide, so neither column has to scroll.
 function BuildGeneral(panel)
+    BuildAnnounce(panel)
+
     local anchorLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    anchorLabel:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -4)
+    anchorLabel:SetPoint("TOPLEFT", panel, "TOPLEFT", LAYOUT_X, -4)
     anchorLabel:SetText("Icon position around the nameplate")
 
     local square = CreateFrame("Frame", nil, panel, "BackdropTemplate")
@@ -294,10 +246,8 @@ function BuildSounds(panel)
     hint:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -4)
     hint:SetText("|cffaaaaaaDefault = stock beep, only when nothing spoke. A chosen sound always plays.|r")
 
-    -- Global, off by default: the shipped clips speak unless this is on. Gated
-    -- only on the game's own Combat Audio Alerts setting - a global switch
-    -- cannot follow the per-context "voice" option, which has its own value
-    -- in Keys and Raid.
+    -- Off by default: the shipped clips speak unless this is on. Gated on the
+    -- game's own Combat Audio Alerts setting, which it cannot work without.
     local tts = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
     tts:SetSize(22, 22)
     tts:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -4, -2)

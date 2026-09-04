@@ -18,6 +18,13 @@ local THIN_EVIDENCE = 5      -- fewer samples than this and the row is dimmed
 
 local window, dungeonButtons, rows, rowParent, headers
 local selectedInstanceID, sortKey, sortDescending, searchText
+-- The window is a book: the casts page (dungeon list, search, table) and one
+-- page per settings group, built by Options.lua into `settingsHost`.
+local castsPage, settingsHost, tabButtons
+local currentTab = "Casts"
+local CASTS_TAB = "Casts"
+-- Declared here because ShowTab, defined above BuildWindow, calls it.
+local BuildWindow
 
 local function IsDisabled(spellID)
     return CastAheadDB and CastAheadDB.disabled and CastAheadDB.disabled[spellID] == true
@@ -379,7 +386,34 @@ function Refresh()
     window.summary:SetText(summary)
 end
 
-local function BuildWindow()
+-- Switching pages. The casts page and the settings host are siblings filling
+-- the same area; exactly one of them is ever shown.
+local function ShowTab(name)
+    currentTab = name
+    for tab, button in pairs(tabButtons or {}) do
+        button:SetEnabled(tab ~= name)
+    end
+    if name == CASTS_TAB then
+        if CastAheadOptions then CastAheadOptions.HideAll() end
+        settingsHost:Hide()
+        castsPage:Show()
+        Refresh()
+    else
+        castsPage:Hide()
+        settingsHost:Show()
+        if CastAheadOptions then CastAheadOptions.ShowPanel(settingsHost, name) end
+    end
+end
+
+-- Opens the window if it is closed, then selects a page. Used by the slash
+-- commands and by anything that wants a particular settings group.
+function CastAheadUI.ShowTab(name)
+    if not window then BuildWindow() end
+    window:Show()
+    ShowTab(name)
+end
+
+function BuildWindow()
     window = CreateFrame("Frame", "CastAheadWindow", UIParent, "BasicFrameTemplateWithInset")
     window:SetSize(WINDOW_WIDTH, WINDOW_HEIGHT)
     window:SetPoint("CENTER")
@@ -436,26 +470,44 @@ local function BuildWindow()
         if CastAheadCore and CastAheadCore.Test then CastAheadCore.Test(selectedInstanceID) end
     end)
 
-    local sounds = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
-    sounds:SetSize(60, 18)
-    sounds:SetPoint("RIGHT", test, "LEFT", -4, 0)
-    sounds:SetText("Sounds")
-    sounds:SetScript("OnClick", function() CastAheadUI.ToggleSounds() end)
+    -- Tab strip: the casts table first, then one page per settings group.
+    tabButtons = {}
+    local previousTab
+    local names = { CASTS_TAB }
+    for _, name in ipairs(CastAheadOptions and CastAheadOptions.TABS or {}) do
+        names[#names + 1] = name
+    end
+    for _, name in ipairs(names) do
+        local button = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+        button:SetSize(78, 20)
+        if previousTab then
+            button:SetPoint("LEFT", previousTab, "RIGHT", 4, 0)
+        else
+            button:SetPoint("TOPLEFT", window, "TOPLEFT", 12, -28)
+        end
+        button:SetText(name)
+        button:SetScript("OnClick", function() ShowTab(name) end)
+        tabButtons[name] = button
+        previousTab = button
+    end
 
-    local settings = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
-    settings:SetSize(64, 18)
-    settings:SetPoint("RIGHT", sounds, "LEFT", -4, 0)
-    settings:SetText("Settings")
-    settings:SetScript("OnClick", function()
-        if CastAheadOptions then CastAheadOptions.Toggle() end
-    end)
+    -- The two pages. Both fill the area under the tab strip; the settings
+    -- panels are built into the host on first use.
+    castsPage = CreateFrame("Frame", nil, window)
+    castsPage:SetPoint("TOPLEFT", window, "TOPLEFT", 0, -52)
+    castsPage:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", 0, 0)
 
-    window.summary = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    settingsHost = CreateFrame("Frame", nil, window)
+    settingsHost:SetPoint("TOPLEFT", window, "TOPLEFT", 12, -56)
+    settingsHost:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -12, 12)
+    settingsHost:Hide()
+
+    window.summary = castsPage:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     window.summary:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", 16, 12)
 
-    local search = CreateFrame("EditBox", nil, window, "SearchBoxTemplate")
+    local search = CreateFrame("EditBox", nil, castsPage, "SearchBoxTemplate")
     search:SetSize(LIST_WIDTH - 8, 20)
-    search:SetPoint("TOPLEFT", window, "TOPLEFT", 16, -32)
+    search:SetPoint("TOPLEFT", window, "TOPLEFT", 16, -56)
     search:SetAutoFocus(false)
     search:SetScript("OnTextChanged", function(self)
         SearchBoxTemplate_OnTextChanged(self)
@@ -467,9 +519,9 @@ local function BuildWindow()
     local list = DungeonList()
     local current = CurrentInstanceID()
     for i, entry in ipairs(list) do
-        local button = CreateFrame("Button", nil, window)
+        local button = CreateFrame("Button", nil, castsPage)
         button:SetSize(LIST_WIDTH, ROW_HEIGHT + 2)
-        button:SetPoint("TOPLEFT", window, "TOPLEFT", 12, -58 - (i - 1) * (ROW_HEIGHT + 2))
+        button:SetPoint("TOPLEFT", window, "TOPLEFT", 12, -82 - (i - 1) * (ROW_HEIGHT + 2))
         button.instanceID = entry.id
         button.text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         button.text:SetPoint("LEFT", button, "LEFT", 6, 0)
@@ -488,8 +540,8 @@ local function BuildWindow()
     -- The table lives in a clipping container: shrink the window and the
     -- rightmost columns are simply cut off at the frame edge instead of
     -- hanging outside it. Nothing forces the window to stay table-wide.
-    local clip = CreateFrame("Frame", nil, window)
-    clip:SetPoint("TOPLEFT", window, "TOPLEFT", LIST_WIDTH + 24, -34)
+    local clip = CreateFrame("Frame", nil, castsPage)
+    clip:SetPoint("TOPLEFT", window, "TOPLEFT", LIST_WIDTH + 24, -58)
     clip:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -8, 34)   -- above the summary line
     if clip.SetClipsChildren then clip:SetClipsChildren(true) end
 
@@ -529,16 +581,19 @@ function CastAhead_Toggle()
         window:Hide()
     else
         window:Show()
-        Refresh()
+        -- Always come back to the casts page: the window's job is the table,
+        -- and reopening it on whatever settings tab was last used hides that.
+        ShowTab(CASTS_TAB)
     end
 end
 
+-- Kept as the name other code already calls; it selects the Sounds page,
+-- and selecting it twice closes the window the way a toggle should.
 function CastAheadUI.ToggleSounds()
-    if not CastAheadOptions then return end
-    if CastAheadOptions.Current and CastAheadOptions.Current() == "Sounds" then
-        CastAheadOptions.Toggle()
+    if window and window:IsShown() and currentTab == "Sounds" then
+        window:Hide()
     else
-        CastAheadOptions.ShowTab("Sounds")
+        CastAheadUI.ShowTab("Sounds")
     end
 end
 
@@ -558,7 +613,11 @@ SlashCmdList.CASTAHEAD = function(msg)
         return
     end
     if word == "option" or word == "options" or word == "config" or word == "settings" then
-        if CastAheadOptions then CastAheadOptions.Toggle() end
+        if window and window:IsShown() and currentTab ~= CASTS_TAB then
+            window:Hide()
+        else
+            CastAheadUI.ShowTab("General")
+        end
         return
     end
     if word == "sound" or word == "sounds" then

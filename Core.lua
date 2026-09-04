@@ -21,10 +21,10 @@
 -- Updating the addon in place and typing /reload does not re-scan the TOC, so
 -- a client that started before Config.lua joined the file list loads this file
 -- but not that one. The fallback keeps the addon alive until the next full
--- restart, behaving as it did before per-context settings existed.
-CastAheadConfig = CastAheadConfig or { LEAD_DEFAULT = 5, LEAD_MAX = 15, PER_CONTEXT = {},
+-- restart, behaving as it did before the settings file existed.
+CastAheadConfig = CastAheadConfig or { LEAD_DEFAULT = 0, LEAD_MAX = 15,
     Get = function() end, Set = function() end, SetEnabled = function() end,
-    Enabled = function() return true end, Lead = function() return 5 end, Migrate = function() end }
+    Enabled = function() return true end, Lead = function() return 0 end, Migrate = function() end }
 
 local ICON_SIZE = 26
 local BAR_GAP = 6        -- distance from the plate's left edge
@@ -1624,7 +1624,7 @@ end)
 -- Centre-screen call: while an important cast is going out, its icon, the
 -- response in words and the seconds left, big, where the eyes already are.
 -- One at a time - the cast ending soonest - since two lines of shouting help
--- nobody. `CastAheadDB.ctx.<context>.centerText = false` switches it off; `centerY` shifts it.
+-- nobody. `CastAheadDB.centerText = false` switches it off; `centerY` shifts it.
 local CENTER_Y = -120
 local center
 local centerUnlocked = false   -- /ca move: the block is being dragged
