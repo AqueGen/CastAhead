@@ -3,8 +3,8 @@
 ## Notes: Predicts trash casts in Mythic+ and tells you what to do about them.
 ## Author: AqueGen
 # x-release-please-start-version
-## Version: 0.1.0
-## X-Curse-Version: 0.1.0
+## Version: 0.2.0
+## X-Curse-Version: 0.2.0
 # x-release-please-end
 ## X-License: MIT
 ## X-Website: https://github.com/AqueGen/CastAhead

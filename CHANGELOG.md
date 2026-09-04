@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/AqueGen/CastAhead/compare/v0.1.0...v0.2.0) (2026-09-04)
+
+
+### Features
+
+* initial CastAhead alpha ([ed6d022](https://github.com/AqueGen/CastAhead/commit/ed6d022036d2fe60cb97d69de9cc53353f00b473))
+
 ## [0.1.0] - 2026-09-01
 
 First alpha.
