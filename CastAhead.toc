@@ -8,6 +8,7 @@
 # x-release-please-end
 ## X-License: MIT
 ## X-Website: https://github.com/AqueGen/CastAhead
+## X-Curse-Project-ID: 1681771
 ## SavedVariables: CastAheadDB
 ## IconTexture: Interface\Icons\Ability_Warrior_Sunder
 ## AddonCompartmentFunc: CastAhead_OnCompartmentClick
