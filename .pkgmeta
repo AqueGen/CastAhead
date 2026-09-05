@@ -29,6 +29,7 @@ externals:
 # Sounds/ is deliberately NOT here: the voice clips are the addon's own assets
 # and must ship. Everything below is development-only.
 ignore:
+  - AGENTS.md
   - README.md
   - RELEASE_NOTES.md
   - .gitignore

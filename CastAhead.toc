@@ -6,7 +6,7 @@
 ## Version: 0.1.0
 ## X-Curse-Version: 0.1.0
 # x-release-please-end
-## X-License: MIT
+## X-License: All Rights Reserved
 ## X-Website: https://github.com/AqueGen/CastAhead
 ## X-Curse-Project-ID: 1681771
 ## SavedVariables: CastAheadDB

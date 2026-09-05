@@ -27,3 +27,5 @@ RELEASE_NOTES.md
 casts*.json
 mdt.json
 overrides.json
+
+__pycache__/
