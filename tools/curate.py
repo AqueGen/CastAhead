@@ -48,11 +48,12 @@ AOE_TARGETS = 3          # this many players hit -> group damage
 TANK_SHARE = 0.20        # this share of the tank's health -> tank buster
 GATE_SHARE = 0.15        # this much on anyone -> worth calling at all
 KICK_SHARE = 0.25        # kicked this often -> people clearly interrupt it
-CONE_DEGREES = 60.0      # half-angle counted as "in front of" the caster
-CONE_PURITY = 0.85       # this share of victims inside the cone -> frontal
+FRONTAL_ARC = 140.0      # victims packed into this sector -> a cone
+ARC_MARGIN = 60.0        # ... and the bystanders must span this much wider
 AVOID_SHARE = 0.40       # this share of bystanders untouched -> avoidable
 AVOID_SPREAD = 0.50      # casts landing on this share fewer people -> dodged
 MIN_PAYLOADS = 3         # observations before a shape verdict is trusted
+MIN_CASTS = 3            # a cast seen fewer times than this is not evidence
 
 HOSTILE = 0x40
 
@@ -132,6 +133,7 @@ class Scan:
         self.dungeon = None
         self.in_boss = False
         self.tanks = set()
+        self.run_id = 0          # payloads are tagged with the run they came from
         self.reset_run()
 
     def reset_run(self):
@@ -156,6 +158,7 @@ class Scan:
             "bystanders": 0,
             "child_only": row["child_only"],
             "around": row["around"],
+            "run": self.run_id,
         })
 
     def close_all(self):
@@ -167,6 +170,7 @@ class Scan:
         self.close_all()
         if self.swings:
             self.tanks.add(max(self.swings, key=self.swings.get))
+        self.run_id += 1
         self.reset_run()
 
     # -- the pass -----------------------------------------------------------
@@ -269,10 +273,12 @@ class Scan:
         self.pending[guid] = row
 
     def bystanders(self, t, x, y, facing):
-        """Everyone standing near the caster when it cast, and where.
+        """Everyone standing near the caster when it cast, and at what bearing.
 
         Positions come from the last event that mentioned each player, so a
-        stale one is dropped rather than guessed at.
+        stale one is dropped rather than guessed at. The bearing is kept
+        rather than an in-cone flag: which sector the victims share turned out
+        to be far steadier than where the caster happened to be looking.
         """
         if x is None:
             return {}
@@ -282,17 +288,8 @@ class Scan:
                 continue
             if math.hypot(px - x, py - y) > IN_RANGE:
                 continue
-            near[player] = self.in_cone(x, y, facing, px, py)
+            near[player] = math.atan2(py - y, px - x)
         return near
-
-    def in_cone(self, x, y, facing, px, py):
-        if facing is None:
-            return False
-        dx, dy = px - x, py - y
-        if abs(dx) < 0.01 and abs(dy) < 0.01:
-            return True
-        delta = abs((math.atan2(dy, dx) - facing + math.pi) % (2 * math.pi) - math.pi)
-        return math.degrees(delta) <= CONE_DEGREES
 
     def on_damage(self, t, ev, p):
         if p[DST].startswith("Player-"):
@@ -414,11 +411,19 @@ def classify(scan, spell, rec, tanks):
     kick_rate = rec["kicked"] / attempts
     auras = own_auras(scan, rec, spell)
 
+    if rec["casts"] < MIN_CASTS and not rec["kicked"]:
+        return None, "seen %d time(s), too few to judge" % rec["casts"]
+
+    # A debuff only counts towards the gate when it does something: it can be
+    # removed, or it ticks. Every second trash mob leaves some inert stack
+    # behind, and letting those in is what floods the set.
+    real = [a for a in auras if a in scan.dispels or a in scan.periodic
+            or a in rec["children"]]
     reasons = []
     if kick_rate >= KICK_SHARE:
         reasons.append("kicked %d of %d" % (rec["kicked"], attempts))
-    if auras:
-        reasons.append("applies %s" % ", ".join(str(a) for a in auras))
+    if real:
+        reasons.append("applies %s" % ", ".join(str(a) for a in real))
     if worst >= GATE_SHARE:
         reasons.append("takes %.0f%% health" % (worst * 100))
     if hits and max(hits) >= AOE_TARGETS:
@@ -458,12 +463,18 @@ def classify(scan, spell, rec, tanks):
 
     geometry = shape(landed)
     if len(landed) >= MIN_PAYLOADS and geometry["bystanders"]:
-        struck = geometry["cone_hit"] + geometry["wide_hit"]
-        if struck and geometry["cone_hit"] / struck >= CONE_PURITY \
-                and geometry["wide_miss"]:
-            return "FRONTAL", why + "; %d of %d victims stood in front, %d beside it were untouched" % (
-                geometry["cone_hit"], struck, geometry["wide_miss"])
-        missed = geometry["cone_miss"] + geometry["wide_miss"]
+        # A cone: three or more victims sharing one sector while the people it
+        # missed stand spread around the caster.
+        sectors = [(load["victim_arc"], load["near_arc"]) for load in landed
+                   if load["cone_hit"] >= 3 and load["wide_miss"]]
+        if len(sectors) >= MIN_PAYLOADS:
+            victim_arc = sorted(a for a, _ in sectors)[len(sectors) // 2]
+            near_arc = sorted(b for _, b in sectors)[len(sectors) // 2]
+            if victim_arc <= FRONTAL_ARC and near_arc - victim_arc >= ARC_MARGIN:
+                return "FRONTAL", why + ("; victims share a %.0f degree sector "
+                                         "while the group spans %.0f"
+                                         % (victim_arc, near_arc))
+        struck, missed = geometry["cone_hit"], geometry["wide_miss"]
         if missed and max(hits) >= 2 and missed / (missed + struck) >= AVOID_SHARE:
             return "DODGE", why + "; %d of %d in range took nothing" % (
                 missed, missed + struck)
@@ -471,10 +482,15 @@ def classify(scan, spell, rec, tanks):
     # The same cast landing on five people once and on one the next time is a
     # cast people move out of. One that always lands on everyone is not.
     if len(landed) >= MIN_PAYLOADS and max(hits) >= AOE_TARGETS:
-        spread = (max(hits) - min(load["hits"] for load in landed)) / max(hits)
-        if spread >= AVOID_SPREAD:
-            return "DODGE", why + "; lands on %d players some casts and %d others" % (
-                max(hits), min(load["hits"] for load in landed))
+        by_run = defaultdict(list)
+        for load in landed:
+            by_run[load.get("run")].append(load["hits"])
+        spreads = [(max(v) - min(v)) / max(v) for v in by_run.values()
+                   if len(v) >= MIN_PAYLOADS and max(v) >= AOE_TARGETS]
+        if spreads and sorted(spreads)[len(spreads) // 2] >= AVOID_SPREAD:
+            return "DODGE", why + ("; within one group it lands on %d players "
+                                   "some casts and %d others"
+                                   % (max(hits), min(load["hits"] for load in landed)))
 
     if hits and max(hits) >= AOE_TARGETS:
         return "AOE", why + "; it lands on the group"
@@ -520,17 +536,35 @@ def write_review(path, rows, tanks):
     out.close()
 
 
+def arc(bearings):
+    """How wide a sector holds all of these bearings, in degrees.
+
+    Found from the largest empty gap between neighbours: what is left over is
+    the sector they occupy. Two people always fit inside some half circle, so
+    this only says anything from three upwards.
+    """
+    if len(bearings) < 2:
+        return 0.0
+    ordered = sorted(bearings)
+    gaps = [b - a for a, b in zip(ordered, ordered[1:])]
+    gaps.append(ordered[0] + 2 * math.pi - ordered[-1])
+    return math.degrees(2 * math.pi - max(gaps))
+
+
 def score_geometry(scan):
-    """Fill in each payload's hit/miss counts now that victims are known."""
+    """Fill in each payload's hit and miss counts, and the sectors involved."""
     for rec in scan.spells.values():
         for load in rec["payloads"]:
             victims = set(load["victims"])
-            for player, in_cone in load.pop("around", {}).items():
+            around = load.pop("around", {}) or {}
+            struck, missed = [], []
+            for player, bearing in around.items():
                 load["bystanders"] += 1
-                if player in victims:
-                    load["cone_hit" if in_cone else "wide_hit"] += 1
-                else:
-                    load["cone_miss" if in_cone else "wide_miss"] += 1
+                (struck if player in victims else missed).append(bearing)
+            load["cone_hit"] = len(struck)
+            load["wide_miss"] = len(missed)
+            load["victim_arc"] = arc(struck)
+            load["near_arc"] = arc(struck + missed)
 
 
 def main():
