@@ -1099,6 +1099,11 @@ local function ClearTimeline(state)
     end
 end
 
+-- Between ENCOUNTER_START and ENCOUNTER_END nothing is tracked: the data is
+-- about trash, and a boss add whose cast happens to last as long as some
+-- trash spell would otherwise wear that spell's schedule.
+local inEncounter = false
+
 local function DropUnit(unit)
     local state = plates[unit]
     if state then
@@ -1545,11 +1550,21 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         end
         return
     end
+    if event == "ENCOUNTER_START" or event == "ENCOUNTER_END" then
+        inEncounter = event == "ENCOUNTER_START"
+        if inEncounter then
+            -- Everything on screen belongs to the pull that just ended; the
+            -- centre call clears itself once no plate is casting.
+            for tracked in pairs(plates) do DropUnit(tracked) end
+        end
+        return
+    end
     if event == "NAME_PLATE_UNIT_REMOVED" then
         DropUnit(unit)
         return
     end
-    if not dungeon or type(unit) ~= "string" or not unit:match("^nameplate%d+$") then
+    if not dungeon or inEncounter
+        or type(unit) ~= "string" or not unit:match("^nameplate%d+$") then
         return
     end
     if event == "NAME_PLATE_UNIT_ADDED" then
@@ -1884,6 +1899,7 @@ end)
 
 for _, event in ipairs({
     "PLAYER_ENTERING_WORLD", "PLAYER_SPECIALIZATION_CHANGED", "SPELLS_CHANGED",
+    "ENCOUNTER_START", "ENCOUNTER_END",
     "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH",
     "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP",
     "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",

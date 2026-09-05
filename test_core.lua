@@ -693,6 +693,26 @@ reset()
 levels[unit] = nil
 table.remove(CastAheadData[1877])
 
+-- Bosses: the table is about trash, so between ENCOUNTER_START and
+-- ENCOUNTER_END nothing is drawn at all - not even for adds whose cast happens
+-- to last as long as some trash spell.
+enter()
+castFor(3.0)
+advance(0.1)
+check(VisibleBars() > 0, "a trash cast is tracked before the boss pull")
+fire("ENCOUNTER_START", 1234)
+check(VisibleBars() == 0, "starting an encounter clears what is on screen")
+fire("NAME_PLATE_UNIT_ADDED", unit)
+castFor(3.0)
+advance(0.1)
+check(VisibleBars() == 0, "and nothing new is drawn while the boss is up")
+fire("ENCOUNTER_END", 1234)
+fire("NAME_PLATE_UNIT_ADDED", unit)
+castFor(3.0)
+advance(0.1)
+check(VisibleBars() > 0, "the encounter ending puts tracking back")
+reset()
+
 -- The two outputs are independent: turning nameplate icons off must leave the
 -- timeline working, and vice versa.
 CastAheadData[1877][1].n = 40
