@@ -40,7 +40,9 @@ PAYLOAD_WINDOW = 2.0
 # never cast in their own right.
 CHILD_WINDOW = 10.0
 # A player's position is only worth using if it was seen this recently.
-POSITION_AGE = 4.0
+# Generous, because it only decides who counts as a bystander: people move,
+# but not usually out of the pull.
+POSITION_AGE = 8.0
 # Players further away than this were not in the cast's business at all.
 IN_RANGE = 40.0
 
@@ -158,6 +160,7 @@ class Scan:
             "bystanders": 0,
             "child_only": row["child_only"],
             "around": row["around"],
+            "struck": row["struck"],
             "run": self.run_id,
         })
 
@@ -268,7 +271,7 @@ class Scan:
         row = {"rec": rec, "spell": spell, "t": t, "targets": {}, "direct": set(),
                "x": x, "y": y, "facing": facing, "seen": False,
                "cone_hit": 0, "cone_miss": 0, "wide_hit": 0, "wide_miss": 0,
-               "bystanders": 0, "child_only": True}
+               "bystanders": 0, "child_only": True, "struck": {}}
         row["around"] = self.bystanders(t, x, y, facing)
         self.pending[guid] = row
 
@@ -326,6 +329,10 @@ class Scan:
         share = taken / max_hp
         old = row["targets"].get(p[DST], (0.0, None))
         row["targets"][p[DST]] = (max(old[0], share), p[DST])
+        # Where the victim stood when it was hit, straight from the hit.
+        if row["x"] is not None and p[DST] in self.where:
+            _, px, py = self.where[p[DST]]
+            row["struck"][p[DST]] = math.atan2(py - row["y"], px - row["x"])
 
     def on_aura(self, t, p):
         row = self.pending.get(p[SRC])
@@ -452,6 +459,19 @@ def classify(scan, spell, rec, tanks):
 
     # Payloads that only applied a debuff say nothing about the cast's shape.
     landed = [load for load in loads if load["hits"] > 0]
+    # A cone shows itself on the casts that catch more than one person: the
+    # victims share one sector while someone nearby was missed. Checked before
+    # the single-target rules, because a frontal against a group that knows it
+    # lands on the tank alone most of the time - and looks like a tank buster.
+    wide = [load for load in landed if load["cone_hit"] >= 3 and load["wide_miss"]]
+    if len(wide) >= MIN_PAYLOADS:
+        victim_arc = sorted(load["victim_arc"] for load in wide)[len(wide) // 2]
+        near_arc = sorted(load["near_arc"] for load in wide)[len(wide) // 2]
+        if victim_arc <= FRONTAL_ARC and near_arc - victim_arc >= ARC_MARGIN:
+            return "FRONTAL", why + ("; on %d casts the victims shared a %.0f degree "
+                                     "sector while the group spanned %.0f"
+                                     % (len(wide), victim_arc, near_arc))
+
     single = [load for load in landed if load["hits"] == 1]
     if landed and len(single) == len(landed):
         on_tank = sum(1 for load in single if load["victims"][0] in tanks)
@@ -463,17 +483,6 @@ def classify(scan, spell, rec, tanks):
 
     geometry = shape(landed)
     if len(landed) >= MIN_PAYLOADS and geometry["bystanders"]:
-        # A cone: three or more victims sharing one sector while the people it
-        # missed stand spread around the caster.
-        sectors = [(load["victim_arc"], load["near_arc"]) for load in landed
-                   if load["cone_hit"] >= 3 and load["wide_miss"]]
-        if len(sectors) >= MIN_PAYLOADS:
-            victim_arc = sorted(a for a, _ in sectors)[len(sectors) // 2]
-            near_arc = sorted(b for _, b in sectors)[len(sectors) // 2]
-            if victim_arc <= FRONTAL_ARC and near_arc - victim_arc >= ARC_MARGIN:
-                return "FRONTAL", why + ("; victims share a %.0f degree sector "
-                                         "while the group spans %.0f"
-                                         % (victim_arc, near_arc))
         struck, missed = geometry["cone_hit"], geometry["wide_miss"]
         if missed and max(hits) >= 2 and missed / (missed + struck) >= AVOID_SHARE:
             return "DODGE", why + "; %d of %d in range took nothing" % (
@@ -552,19 +561,28 @@ def arc(bearings):
 
 
 def score_geometry(scan):
-    """Fill in each payload's hit and miss counts, and the sectors involved."""
+    """Fill in each payload's hit and miss counts, and the sectors involved.
+
+    Victims are placed by the hit they took; everyone else by the last thing
+    that mentioned them before the cast.
+    """
     for rec in scan.spells.values():
         for load in rec["payloads"]:
             victims = set(load["victims"])
             around = load.pop("around", {}) or {}
-            struck, missed = [], []
+            hit_at = load.pop("struck", {}) or {}
+            struck = dict(hit_at)
+            missed = {}
             for player, bearing in around.items():
-                load["bystanders"] += 1
-                (struck if player in victims else missed).append(bearing)
+                if player in victims:
+                    struck.setdefault(player, bearing)
+                else:
+                    missed[player] = bearing
+            load["bystanders"] = len(struck) + len(missed)
             load["cone_hit"] = len(struck)
             load["wide_miss"] = len(missed)
-            load["victim_arc"] = arc(struck)
-            load["near_arc"] = arc(struck + missed)
+            load["victim_arc"] = arc(list(struck.values()))
+            load["near_arc"] = arc(list(struck.values()) + list(missed.values()))
 
 
 def main():
