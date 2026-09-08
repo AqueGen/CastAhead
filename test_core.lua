@@ -183,7 +183,21 @@ CreateFrame = function(kind)
         -- The layout steps the icons sideways by the width of the advice under
         -- them, so a stub that answers with a table (the catch-all below) turns
         -- into an arithmetic error rather than a wrong number.
-        fs.GetStringWidth = function() return #(f.labelValue or "") * 6 end
+        fs.GetStringWidth = function()
+            -- The widest line, the way the real font string measures it.
+            local widest = 0
+            for line in tostring(f.labelValue or ""):gmatch("[^\n]+") do
+                widest = math.max(widest, #line * 6)
+            end
+            return widest
+        end
+        -- The layout also stacks icons by the height of the advice, so a
+        -- verdict written over two lines does not overlap its neighbour.
+        fs.GetStringHeight = function()
+            local lines = 0
+            for _ in tostring(f.labelValue or ""):gmatch("[^\n]+") do lines = lines + 1 end
+            return math.max(lines, 1) * 11
+        end
         return fs
     end
     f.GetParent = function(self) return self.parent end
@@ -658,6 +672,13 @@ castFor(3.0)
 reset()
 check(timeline.cancelled >= 1, "removing the nameplate cancels its timeline event")
 check(next(timeline.live) == nil, "and leaves nothing of ours on the timeline")
+-- The bar is labelled with the spoken phrase, capitalised: it is written for a
+-- voice and arrives in lower case, while the game's own entries on that bar
+-- are spell names in ordinary case.
+check(timeline.last and timeline.last.overrideName
+    and timeline.last.overrideName:match("^%u")
+    and timeline.last.overrideName:find(" ") ~= 1,
+    "the timeline entry is capitalised, got " .. tostring(timeline.last and timeline.last.overrideName))
 CastAheadData[1877][1].n = nil
 
 -- An icon with no countdown still has to follow its nameplate and vanish with
@@ -1466,9 +1487,11 @@ fire("UNIT_SPELLCAST_STOP", unit)
 local splitLabel
 for i = 1, #allFrames do
     local f = allFrames[i]
-    if f.shown and IsBar(f) and f.labelValue and f.labelValue:find("/", 1, true) then splitLabel = f.labelValue end
+    -- Stacked, not joined: two verdicts are the widest thing the row ever has
+    -- to fit, so they go one above the other.
+    if f.shown and IsBar(f) and f.labelValue and f.labelValue:find("\n", 1, true) then splitLabel = f.labelValue end
 end
-check(splitLabel == "DODGE / KICK", "a disagreeing tie is labelled with both calls, got " .. tostring(splitLabel))
+check(splitLabel == "DODGE\nKICK", "a disagreeing tie is labelled with both calls, got " .. tostring(splitLabel))
 advance(17.0)                          -- the tie comes round again: a live cast
 fire("UNIT_SPELLCAST_START", unit)
 advance(0.5)

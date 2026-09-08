@@ -28,12 +28,13 @@ CastAheadConfig = CastAheadConfig or { LEAD_DEFAULT = 0, LEAD_MAX = 15,
 
 local ICON_SIZE = 26
 local BAR_GAP = 6        -- distance from the plate's left edge
-local LABEL_HEIGHT = 11  -- the advice text sits under each icon
+local LABEL_HEIGHT = 11  -- one line of advice under the icon; two are measured
 local BAR_SPACING = 5    -- gap between one row's label and the next icon
 local H_STEP = 68        -- fallback sideways step, before any label is measured
 local LABEL_GAP = 8      -- clear space between one icon's label and the next
 local ICON_GAP = 4       -- ... and the floor, when both labels are short
 local DEMO_PER_PLATE = 3 -- calls the test drive puts on each nameplate
+local DEMO_PLATES = 4    -- ... and how many nameplates it uses at all
 local COMBAT_POLL_BATCH = 8      -- nameplates re-checked per tick
 local PREDICTION_MATCH_WINDOW = 4.0  -- how far off a predicted cast may start
 local ESTIMATE_NOW = 2.0             -- an estimate this close just reads as "now"
@@ -883,8 +884,12 @@ local function AnchorBar(unit, bar, index)
     -- SpreadBars measured this one against its neighbours; the fallback only
     -- covers a bar anchored before anything has been painted.
     local hOffset = bar._hOffset or (index - 1) * H_STEP
+    -- Measured, not assumed: a verdict too long for one line is written over
+    -- two, and stacking icons by a constant would then overlap them.
+    local labelH = math.max(bar.label:GetStringHeight() or 0, LABEL_HEIGHT)
     if bar._plate ~= plate or bar._index ~= index or bar._gap ~= gap or bar._side ~= side
         or bar._grow ~= growSetting or bar._placed ~= hOffset or bar._sized ~= size
+        or bar._labelH ~= labelH
         or bar._nudgeX ~= nudgeX or bar._nudgeY ~= nudgeY then
         bar._plate = plate
         bar._index = index
@@ -893,14 +898,15 @@ local function AnchorBar(unit, bar, index)
         bar._grow = growSetting
         bar._placed = hOffset
         bar._sized = size
+        bar._labelH = labelH
         bar._nudgeX = nudgeX
         bar._nudgeY = nudgeY
         bar._anchor = plate
         bar:ClearAllPoints()
-        local step = size + LABEL_HEIGHT + BAR_SPACING
+        local step = size + labelH + BAR_SPACING
         local x = spec.dx * gap + nudgeX
         -- Above the plate the label hangs under the icon, so lift it clear.
-        local y = spec.dy * (gap + (spec.dy > 0 and LABEL_HEIGHT or 0)) + nudgeY
+        local y = spec.dy * (gap + (spec.dy > 0 and labelH or 0)) + nudgeY
         -- Growth direction: the player's choice, or the position's own.
         local grow = CastAheadDB and CastAheadDB.grow
         if not GROW[grow] then grow = spec.grow end
@@ -1117,11 +1123,14 @@ local function PaintBar(bar, entry, interruptible)
     local split = not advice and CastAheadMatch.SplitAdvice(entry.candidates, interruptible) or nil
     bar.icon:SetTexture(SpellIcon(row.spell))
     if advice then
-        bar.label:SetText(advice.label)
+        bar.label:SetText(advice.plate or advice.label)
         bar.label:SetTextColor(advice.r, advice.g, advice.b)
         bar.border:SetColorTexture(advice.r, advice.g, advice.b, entry.casting and 1 or 0.7)
     elseif split then
-        bar.label:SetText(split[1].label .. " / " .. split[2].label)
+        -- Stacked, not joined by a slash: two verdicts side by side are the
+        -- widest thing the layout ever has to make room for, and they read
+        -- just as well one above the other.
+        bar.label:SetText(split[1].label .. "\n" .. split[2].label)
         bar.label:SetTextColor(0.9, 0.9, 0.9)
         bar.border:SetColorTexture(0.7, 0.7, 0.7, entry.casting and 1 or 0.7)
     else
@@ -2299,12 +2308,16 @@ function CastAheadCore.Test(instanceID)
     local now = GetTime()
     -- Several calls per plate, always: one icon per plate tells the player
     -- nothing about the spacing between them, which is the thing a test drive
-    -- is usually run to judge.
-    local total = math.max(#picked, #units * DEMO_PER_PLATE)
+    -- is usually run to judge. But only on the first few plates - the icons
+    -- spread across the screen while the timeline stacks every one of them
+    -- into a single column, so a room full of training dummies filled it top
+    -- to bottom.
+    local plates = math.min(#units, DEMO_PLATES)
+    local total = math.max(#picked, plates * DEMO_PER_PLATE)
     local slots = {}
     for i = 1, total do
         local row = picked[(i - 1) % #picked + 1]
-        local unit = units[(i - 1) % math.max(#units, 1) + 1]
+        local unit = units[(i - 1) % math.max(plates, 1) + 1]
         slots[unit or 0] = (slots[unit or 0] or 0) + 1
         local e = {
             row = row, candidates = { row },
@@ -2340,7 +2353,7 @@ function CastAheadCore.Test(instanceID)
         SpreadBars(list, #list)
     end
     print(string.format("|cff33ff99CastAhead|r test: %d call(s) from %s on %d plate(s) (again to stop)",
-        total, tostring(rows.name or id), #units))
+        total, tostring(rows.name or id), plates))
     if CastAheadUI and CastAheadUI.RefreshTest then CastAheadUI.RefreshTest() end
     demo.frame:SetScript("OnUpdate", function()
         if not demo then return end

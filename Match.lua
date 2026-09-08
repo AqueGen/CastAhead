@@ -38,7 +38,17 @@ M.ADVICE = {
     -- One target taking a large hit and the whole group taking one call for
     -- different answers - a personal cooldown versus everyone reacting - so
     -- they are separate verdicts rather than one "defensive".
-    TANK = { label = "TANKBUSTER", say = "tank buster", r = 1.00, g = 0.45, b = 0.10 },
+    -- `plate` is the label as it appears under a nameplate icon, where width
+    -- is the scarce thing: the icons step sideways by the width of the words
+    -- under them, so the longest verdict pushed every one of its neighbours
+    -- away. The table and the voice keep the whole word.
+    --
+    -- "BUSTER" rather than "TANK": the same four characters saved, and it
+    -- still reads as the threat rather than as a role assignment. Stacking it
+    -- over two lines was tried and is strictly worse - a two-line label is as
+    -- wide as its longest line, which is "BUSTER" either way, for twice the
+    -- height.
+    TANK = { label = "TANKBUSTER", plate = "BUSTER", say = "tank buster", r = 1.00, g = 0.45, b = 0.10 },
     AOE  = { label = "AOE", say = "aoe damage", r = 1.00, g = 0.75, b = 0.15 },
     -- Categories assigned by the curated priority set (row.prio).
     DODGE   = { label = "DODGE", say = "dodge", r = 0.30, g = 0.90, b = 0.40 },
@@ -65,6 +75,9 @@ M.ADVICE = {
 for key, advice in pairs(M.ADVICE) do
     advice.key = key
     advice.file = key:gsub(" ", "_")
+    -- Only the verdicts long enough to crowd their neighbours carry a `plate`
+    -- of their own; the rest read the same in both places.
+    advice.plate = advice.plate or advice.label
 end
 M.ADVICE.SAVE = M.ADVICE.TANK   -- old name, kept so saved settings still resolve
 
