@@ -31,7 +31,9 @@ local BAR_GAP = 6        -- distance from the plate's left edge
 local LABEL_HEIGHT = 11  -- the advice text sits under each icon
 local BAR_SPACING = 5    -- gap between one row's label and the next icon
 local H_STEP = 68        -- fallback sideways step, before any label is measured
-local LABEL_GAP = 8      -- clear space between one row's label and the next
+local LABEL_GAP = 8      -- clear space between one icon's label and the next
+local ICON_GAP = 4       -- ... and the floor, when both labels are short
+local DEMO_PER_PLATE = 3 -- calls the test drive puts on each nameplate
 local COMBAT_POLL_BATCH = 8      -- nameplates re-checked per tick
 local PREDICTION_MATCH_WINDOW = 4.0  -- how far off a predicted cast may start
 local ESTIMATE_NOW = 2.0             -- an estimate this close just reads as "now"
@@ -832,11 +834,31 @@ local GROW = { left = true, down = true, right = true, up = true }
 CastAheadGrowth = GROW
 
 -- Sideways, the icons cannot simply sit an icon's width apart: the advice
--- under them is wider than they are, and "TANKBUSTER" next to "TANKBUSTER"
--- would collide. The step is the widest label actually on screen, which is
--- why two short calls sit close together and no longer leave a hole the size
--- of a third icon between them.
-local function AnchorBar(unit, bar, index, hStep)
+-- under them is wider than the icon and centred on it, so two neighbours need
+-- half of each label between them. Only half of each - stepping everything by
+-- the widest label on screen puts "TANKBUSTER"'s full width beside "AOE" and
+-- leaves a hole the size of a third icon.
+--
+-- Each bar therefore carries its own distance from the first, and the floor is
+-- the icon itself, for the case where both labels are short or empty.
+local function SpreadBars(bars, count)
+    local offset, previous = 0, 0
+    for i = 1, count do
+        local bar = bars[i]
+        local width = bar.label:GetStringWidth() or 0
+        if i > 1 then
+            offset = offset + math.max((bar._size or ICON_SIZE) + ICON_GAP,
+                (previous + width) / 2 + LABEL_GAP)
+        end
+        bar._hOffset = offset
+        previous = width
+    end
+end
+
+-- Filled by RefreshBar on every repaint, so the spread costs no garbage.
+local spread = {}
+
+local function AnchorBar(unit, bar, index)
     local plate = C_NamePlate.GetNamePlateForUnit(unit)
     -- The bar is a child of UIParent, not of the plate, so it does not inherit
     -- the plate's visibility: a plate that is gone or hidden would otherwise
@@ -858,16 +880,18 @@ local function AnchorBar(unit, bar, index, hStep)
     local growSetting = CastAheadDB and CastAheadDB.grow or "auto"
     local size = bar._size or ICON_SIZE
     local nudgeX, nudgeY = CastAheadConfig.NudgeX(), CastAheadConfig.NudgeY()
-    hStep = hStep or H_STEP
+    -- SpreadBars measured this one against its neighbours; the fallback only
+    -- covers a bar anchored before anything has been painted.
+    local hOffset = bar._hOffset or (index - 1) * H_STEP
     if bar._plate ~= plate or bar._index ~= index or bar._gap ~= gap or bar._side ~= side
-        or bar._grow ~= growSetting or bar._hStep ~= hStep or bar._sized ~= size
+        or bar._grow ~= growSetting or bar._placed ~= hOffset or bar._sized ~= size
         or bar._nudgeX ~= nudgeX or bar._nudgeY ~= nudgeY then
         bar._plate = plate
         bar._index = index
         bar._gap = gap
         bar._side = side
         bar._grow = growSetting
-        bar._hStep = hStep
+        bar._placed = hOffset
         bar._sized = size
         bar._nudgeX = nudgeX
         bar._nudgeY = nudgeY
@@ -882,9 +906,9 @@ local function AnchorBar(unit, bar, index, hStep)
         if not GROW[grow] then grow = spec.grow end
         local n = index - 1
         if grow == "right" then
-            x = x + n * hStep
+            x = x + hOffset
         elseif grow == "left" then
-            x = x - n * hStep
+            x = x - hOffset
         elseif grow == "up" then
             y = y + n * step
         else
@@ -1153,7 +1177,6 @@ function RefreshBar(unit, state)
     -- Painted before being placed: sideways the icons step by the width of the
     -- widest advice under them, not by the icon, so two short calls sit close
     -- together instead of leaving a hole the size of a third icon.
-    local hStep = 0
     for i = 1, #entries do
         local entry = entries[i]
         local bar = GetBar(state, i)
@@ -1162,13 +1185,12 @@ function RefreshBar(unit, state)
         if entry.casting then interruptible = state.interruptible end
         PaintBar(bar, entry, interruptible)
         entry.bar = bar
-        local width = (bar.label:GetStringWidth() or 0) + LABEL_GAP
-        if width > hStep then hStep = width end
+        spread[i] = bar
     end
-    hStep = math.max(hStep, (state.bars and state.bars[1] and state.bars[1]._size or ICON_SIZE) + LABEL_GAP)
+    SpreadBars(spread, #entries)
     for i = 1, #entries do
         local bar = entries[i].bar
-        if AnchorBar(unit, bar, i, hStep) then
+        if AnchorBar(unit, bar, i) then
             bar:Show()
             diag.shown = diag.shown + 1
         end
@@ -2226,6 +2248,7 @@ local function DemoAnchor(e, i)
         e.bar:SetPoint("CENTER", UIParent, "CENTER",
             (i - 1) * step - (#demo.entries - 1) * step / 2, -160)
     end
+
     e.bar:Show()
 end
 
@@ -2274,7 +2297,10 @@ function CastAheadCore.Test(instanceID)
     end
     demo = { frame = CreateFrame("Frame"), entries = {}, state = { bars = {} } }
     local now = GetTime()
-    local total = math.max(#picked, math.min(#units * 2, 8))
+    -- Several calls per plate, always: one icon per plate tells the player
+    -- nothing about the spacing between them, which is the thing a test drive
+    -- is usually run to judge.
+    local total = math.max(#picked, #units * DEMO_PER_PLATE)
     local slots = {}
     for i = 1, total do
         local row = picked[(i - 1) % #picked + 1]
@@ -2295,6 +2321,23 @@ function CastAheadCore.Test(instanceID)
                 CastAheadMatch.Advice(row), true)
         end
         demo.entries[i] = e
+    end
+    -- Spread each plate's own icons against each other, the way a live plate
+    -- is laid out - otherwise the test drive shows a spacing the game never
+    -- uses. Built once here rather than every frame.
+    local perPlate = {}
+    for i = 1, #demo.entries do
+        local e = demo.entries[i]
+        local key = e.unit or "loose"
+        local list = perPlate[key]
+        if not list then
+            list = {}
+            perPlate[key] = list
+        end
+        list[e.slot or (#list + 1)] = e.bar
+    end
+    for _, list in pairs(perPlate) do
+        SpreadBars(list, #list)
     end
     print(string.format("|cff33ff99CastAhead|r test: %d call(s) from %s on %d plate(s) (again to stop)",
         total, tostring(rows.name or id), #units))

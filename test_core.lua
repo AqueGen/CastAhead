@@ -1119,6 +1119,16 @@ end
 check(xOf[textures[101]] and xOf[textures[100]] and xOf[textures[101]] > xOf[textures[100]],
     string.format("growing left, the soonest icon sits nearest the plate (101 at %s, 100 at %s)",
         tostring(xOf[textures[101]]), tostring(xOf[textures[100]])))
+
+-- ... and no further left than these two labels need. Both fixture calls carry
+-- a short label (the stub measures one as six pixels a character), so nothing
+-- but the icons themselves sets the distance: 26 wide plus a 4 pixel margin.
+-- The rule this replaced stepped every icon by the widest label on screen and
+-- put them 34 apart here, and much further apart whenever one call was
+-- "TANKBUSTER" and its neighbour "AOE".
+local gap = math.abs(xOf[textures[101]] - xOf[textures[100]])
+check(gap == 30,
+    string.format("two short calls sit an icon apart, not a label apart (gap %.0f, expected 30)", gap))
 reset()
 CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
