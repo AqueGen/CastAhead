@@ -9,6 +9,15 @@ CastAheadOptions = {}
 -- it, and hiding the final tab leaves the strip intact.
 CastAheadOptions.TABS = { "General", "Sounds", "Development" }
 local panels
+-- The three columns of groups, and what they add up to. UI.lua uses the
+-- total as the window's resize floor: at anything narrower the right-hand
+-- column hangs outside the frame, which is exactly what happened.
+local COL1_X, COL1_W = 8, 290
+local COL2_X, COL2_W = 310, 300
+local COL3_X, COL3_W = 620, 300
+CastAheadOptions.MIN_WIDTH = COL3_X + COL3_W + COL1_X
+-- The tallest column: the nameplate group with its four sliders.
+CastAheadOptions.MIN_HEIGHT = 406
 -- Forward declarations: BuildWindow calls these, and Lua resolves a local by
 -- what it holds at call time, so they must exist as upvalues before it runs.
 local BuildGeneral, BuildSounds, BuildDevelopment
@@ -209,7 +218,7 @@ end
 function BuildGeneral(panel)
     -- What is announced ---------------------------------------------------
     local what = BuildGroup(panel, "What to call out",
-        { "TOPLEFT", panel, "TOPLEFT", 8, -6 }, 290, 152)
+        { "TOPLEFT", panel, "TOPLEFT", COL1_X, -6 }, COL1_W, 152)
     local important = BuildSwitch(panel, "importantOnly",
         { "TOPLEFT", what, "TOPLEFT", 10, -26 })
     local role = BuildSwitch(panel, "roleFilter",
@@ -232,20 +241,20 @@ function BuildGeneral(panel)
 
     -- Sound ---------------------------------------------------------------
     local audio = BuildGroup(panel, "Sound",
-        { "TOPLEFT", what, "BOTTOMLEFT", 0, -12 }, 290, 86)
+        { "TOPLEFT", what, "BOTTOMLEFT", 0, -12 }, COL1_W, 86)
     local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 })
     BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 })
 
     -- Development mode ----------------------------------------------------
     local extra = BuildGroup(panel, "Advanced",
-        { "TOPLEFT", audio, "BOTTOMLEFT", 0, -12 }, 290, 56)
+        { "TOPLEFT", audio, "BOTTOMLEFT", 0, -12 }, COL1_W, 62)
     BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
         if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
     end)
 
     -- Nameplate icons -----------------------------------------------------
     local plates = BuildGroup(panel, "Nameplate icons",
-        { "TOPLEFT", panel, "TOPLEFT", 310, -6 }, 300, 336)
+        { "TOPLEFT", panel, "TOPLEFT", COL2_X, -6 }, COL2_W, 400)
     BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 })
 
     local anchorLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -303,9 +312,6 @@ function BuildGeneral(panel)
         end
     end)
 
-    BuildReset(panel, { "TOPLEFT", growDropdown, "BOTTOMLEFT", 0, -8 },
-        { "iconSize", "offsetX", "nudgeX", "nudgeY" }, Redraw)
-
     local iconSlider = BuildSlider(panel, {
         key = "iconSize",
         default = CastAheadConfig.ICON_DEFAULT,
@@ -347,9 +353,12 @@ function BuildGeneral(panel)
         after = Redraw,
     })
 
+    BuildReset(panel, { "BOTTOMRIGHT", plates, "BOTTOMRIGHT", -12, 10 },
+        { "iconSize", "offsetX", "nudgeX", "nudgeY" }, Redraw)
+
     -- Centre call ---------------------------------------------------------
     local centre = BuildGroup(panel, "Centre call",
-        { "TOPLEFT", panel, "TOPLEFT", 620, -6 }, 300, 160)
+        { "TOPLEFT", panel, "TOPLEFT", COL3_X, -6 }, COL3_W, 156)
     BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 })
 
     local centerScale = function()

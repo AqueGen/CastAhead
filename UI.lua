@@ -12,7 +12,7 @@ local WINDOW_WIDTH = 1000
 local WINDOW_HEIGHT = 520
 -- Resize floor. The width is derived from the column list below (see
 -- MinWidth), so every header still fits inside the frame.
-local MIN_HEIGHT = 420
+local BASE_MIN_HEIGHT = 420
 local COLUMN_GAP = 4
 local THIN_EVIDENCE = 5      -- fewer samples than this and the row is dimmed
 
@@ -185,8 +185,20 @@ local function TableWidth()
     return ColumnOffset(#COLUMNS + 1)
 end
 
+-- Wide enough for the casts page to keep its useful columns, and for the
+-- settings page's three columns of groups to sit inside the frame. Narrower
+-- than the settings need, the right-hand column simply hangs outside the
+-- window, since the panels do not scroll.
 local function MinWidth()
-    return LIST_WIDTH + 24 + 520
+    local settings = (CastAheadOptions and CastAheadOptions.MIN_WIDTH or 0) + 24
+    return math.max(LIST_WIDTH + 24 + 520, settings)
+end
+
+-- The settings panels sit between the tab strip and the bottom edge and do
+-- not scroll, so the frame has to be tall enough for the longest column.
+local function MinHeight()
+    local settings = (CastAheadOptions and CastAheadOptions.MIN_HEIGHT or 0) + 68
+    return math.max(BASE_MIN_HEIGHT, settings)
 end
 
 -- Data ---------------------------------------------------------------------
@@ -513,7 +525,7 @@ function BuildWindow()
     window:SetFrameStrata("DIALOG")
     window:SetResizable(true)
     if window.SetResizeBounds then
-        window:SetResizeBounds(MinWidth(), MIN_HEIGHT)
+        window:SetResizeBounds(MinWidth(), MinHeight())
     end
 
     local function RememberSize()
@@ -667,7 +679,7 @@ function BuildWindow()
     rowParent = content
     local saved = CastAheadDB and CastAheadDB.window
     if saved and saved.width and saved.height then
-        window:SetSize(math.max(saved.width, MinWidth()), math.max(saved.height, MIN_HEIGHT))
+        window:SetSize(math.max(saved.width, MinWidth()), math.max(saved.height, MinHeight()))
     end
     sortKey = sortKey or "n"
     if sortDescending == nil then sortDescending = true end
