@@ -132,10 +132,7 @@ CastAheadExtra = {
         { spell = 269928, npc = 134158, mob = "Shadow-Borne Champion", cast = 1, cd = { 18.3 }, first = 11.7, n = 0, approx = true, },
     },
     [2521] = {
-        { spell = 372047, npc = 187897, cast = 1, cd = { 16.6 }, first = 6.4, n = 0, approx = true, },
-        { spell = 1306366, npc = 197535, cast = 2, cd = { 25.8 }, first = 20.4, n = 0, approx = true, },
-        { spell = 391723, npc = 197697, cast = 4, cd = { 12.5 }, first = 3.5, n = 0, approx = true, },
-        { spell = 391726, npc = 197698, cast = 4, cd = { 17.3 }, first = 19.7, n = 0, approx = true, },
+        { spell = 1306366, npc = 197535, mob = "High Channeler Ryvati", cast = 2, cd = { 25.8 }, first = 20.4, n = 0, approx = true, },
     },
     [2923] = {
         { spell = 1233472, npc = 263228, mob = "Agitated Voidscythe", cast = 2.5, cd = { 20.2 }, first = 15.3, n = 0, approx = true, },

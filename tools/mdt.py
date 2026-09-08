@@ -20,6 +20,12 @@ ENEMY = re.compile(r'\n  \[\d+\] = \{\n(.*?)(?=\n  \[\d+\] = \{|\n\};|\Z)', re.S
 NAME = re.compile(r'\["name"\]\s*=\s*"([^"]*)"')
 NPC_ID = re.compile(r'\["id"\]\s*=\s*(\d+)')
 IS_BOSS = re.compile(r'\["isBoss"\]\s*=\s*true')
+# The creatures a boss mod actually covers carry an encounter id as well.
+# "isBoss" alone also marks the mini-bosses and rares standing in the
+# trash path - Flamegullet, Defier Draghar, High Channeler Ryvati - which
+# nothing else announces and which our own logs show casting outside any
+# ENCOUNTER_START window.
+ENCOUNTER = re.compile(r'\["encounterID"\]\s*=\s*(\d+)')
 LEVEL = re.compile(r'\["level"\]\s*=\s*(\d+)')
 SPELLS = re.compile(r'\["spells"\]\s*=\s*\{(.*?)\n    \},', re.S)
 SPELL = re.compile(r'\[(\d+)\] = \{(.*?)\},', re.S)
@@ -63,6 +69,7 @@ def parse(path, packs=None):
         out[int(npc_id.group(1))] = {
             "mob": name.group(1),
             "boss": bool(IS_BOSS.search(body)),
+            "encounter": int(ENCOUNTER.search(body).group(1)) if ENCOUNTER.search(body) else None,
             # UnitLevel is one of the few things still readable off a hostile
             # nameplate, so it can narrow candidates before any cast happens.
             "level": int(level.group(1)) if level else None,
@@ -110,6 +117,7 @@ def main(mdt_dir, out_path, packs_path=None):
             # A creature can appear in several dungeons; merge what is known.
             if existing:
                 existing["boss"] = existing["boss"] or row["boss"]
+                existing["encounter"] = existing["encounter"] or row["encounter"]
                 existing["level"] = existing["level"] or row["level"]
                 existing["spells"].update(row["spells"])
             else:
@@ -117,7 +125,7 @@ def main(mdt_dir, out_path, packs_path=None):
 
     json.dump({str(k): v for k, v in merged.items()},
               open(out_path, "w", encoding="utf-8"), ensure_ascii=False)
-    bosses = sum(1 for r in merged.values() if r["boss"])
+    bosses = sum(1 for r in merged.values() if r["encounter"])
     kickable = sum(1 for r in merged.values() for ok in r["spells"].values() if ok)
     spells = sum(len(r["spells"]) for r in merged.values())
     print("%d creatures (%d bosses), %d spells (%d interruptible) -> %s"
