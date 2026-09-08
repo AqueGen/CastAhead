@@ -38,6 +38,7 @@ ignore:
   - CLAUDE.md
   - test.lua
   - test_core.lua
+  - test_replay.lua
   - tools
   - release-please-config.json
   - .release-please-manifest.json
