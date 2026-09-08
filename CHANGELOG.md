@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/AqueGen/CastAhead/compare/v0.2.0...v0.3.0) (2026-09-08)
+
+
+### Features
+
+* stun calls, adjustable icons, and settings you can read ([d6b8035](https://github.com/AqueGen/CastAhead/commit/d6b80359c81f0869be16db1f47e2e14831dc9d91))
+
 ## [0.2.0](https://github.com/AqueGen/CastAhead/compare/v0.1.0...v0.2.0) (2026-09-08)
 
 
