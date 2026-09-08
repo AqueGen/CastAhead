@@ -235,6 +235,51 @@ function BuildGeneral(panel)
     move:SetScript("OnClick", function()
         if CastAheadCore and CastAheadCore.MoveCenter then CastAheadCore.MoveCenter() end
     end)
+
+    -- Diagnostics: the probe samples what the game still lets us read off a
+    -- hostile plate (level, power, health...) while trash is being fought,
+    -- and the results are printed to chat. Same as /ca probe and /ca probe show.
+    local probeLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    probeLabel:SetPoint("TOPLEFT", move, "BOTTOMLEFT", 6, -18)
+    probeLabel:SetText("Diagnostics")
+    local probe = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+    probe:SetSize(22, 22)
+    probe:SetPoint("TOPLEFT", probeLabel, "BOTTOMLEFT", -6, -4)
+    probe.text = probe:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    probe.text:SetPoint("LEFT", probe, "RIGHT", 2, 0)
+    probe.text:SetText("Collect what the game reveals about enemies")
+    probe:SetHitRectInsets(0, -(probe.text:GetStringWidth() + 6), 0, 0)
+    probe:SetScript("OnClick", function(self)
+        if CastAheadCore and CastAheadCore.Probe then
+            CastAheadCore.Probe(self:GetChecked() and "on" or "off")
+        end
+    end)
+    probe:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Probe", 1, 1, 1)
+        GameTooltip:AddLine("While on, every hostile nameplate and cast is checked against the unit API to see which facts are readable and which come back secret. Pull some trash, then press Show. Costs nothing noticeable.", nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    probe:SetScript("OnLeave", GameTooltip_Hide)
+    table.insert(refreshers, function()
+        probe:SetChecked(CastAheadCore and CastAheadCore.Probing and CastAheadCore.Probing() or false)
+    end)
+
+    local show = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    show:SetSize(120, 22)
+    show:SetPoint("LEFT", probe.text, "RIGHT", 12, 0)
+    show:SetText("Show results")
+    show:SetScript("OnClick", function()
+        if CastAheadCore and CastAheadCore.Probe then CastAheadCore.Probe("show") end
+    end)
+
+    local clear = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    clear:SetSize(60, 22)
+    clear:SetPoint("LEFT", show, "RIGHT", 4, 0)
+    clear:SetText("Clear")
+    clear:SetScript("OnClick", function()
+        if CastAheadCore and CastAheadCore.Probe then CastAheadCore.Probe("clear") end
+    end)
 end
 
 local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",

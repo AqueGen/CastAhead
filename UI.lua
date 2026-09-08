@@ -223,6 +223,41 @@ local function SortedRows()
     return list
 end
 
+-- Every heading is an abbreviation, and half of them measure something the
+-- game never shows anywhere else, so each one explains itself on hover.
+local HEADER_TIPS = {
+    check = { "Track this cast",
+        "Unticked casts are ignored in a run: no bar, no call, no sound." },
+    hear = { "Play the call",
+        "Click to hear how this cast is announced, without waiting for a pull." },
+    prio = { "Important",
+        "Starred casts are the ones worth reacting to. |cffffd100Only important casts|r in the General tab hides everything else." },
+    advice = { "What to do",
+        "The call made when this cast starts. Grey means the cast is tracked but has earned no verdict - too rare in the logs, and not starred." },
+    spell = { "Spell",
+        "The cast being tracked. Hover a row for the spell tooltip." },
+    mob = { "Caster",
+        "Which creature casts it. In 12.1 a nameplate never reveals a creature's name or ID, so this comes from combat logs - the addon only guesses which of them is in front of you." },
+    level = { "Mob level",
+        "One of the few things a hostile nameplate still reveals, so it is used to tell apart casts that look identical." },
+    cast = { "Cast time",
+        "How long the cast bar runs. |cffffd100ch|r marks a channel." },
+    cd = { "Rotation",
+        "Start-to-start seconds until this cast comes back. Several numbers = a repeating cycle, used in order." },
+    first = { "Opener",
+        "Seconds from the mob entering combat to this cast. This is what predicts the first cast of a pull, before anything has been seen." },
+    offset = { "Offset",
+        "Seconds from the mob's very first cast of the pull to this one - where the cast sits in the opening sequence." },
+    n = { "Times seen",
+        "How many casts the timings rest on. Small numbers mean a rough estimate; |cffffd100~|r on a timer means the same." },
+    hits = { "Targets hit",
+        "How many players the cast lands on, on average. |cffffd1001|r is single target, |cffffd1005|r hits the group." },
+    dmg = { "Damage",
+        "The worst hit as a share of that player's maximum health, averaged over the logs. Healing and utility casts have none." },
+    kick = { "Kicked",
+        "How often the group actually interrupts this cast. A high number means it is worth a kick; |cffffd100-|r means it cannot be interrupted." },
+}
+
 -- Widgets ------------------------------------------------------------------
 
 local Refresh
@@ -234,8 +269,24 @@ local function CreateHeader(parent, index, column)
     button.text = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     button.text:SetAllPoints()
     button.text:SetJustifyH(column.justify or "LEFT")
+
+    local tip = HEADER_TIPS[column.key]
+    if tip then
+        button:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+            GameTooltip:AddLine(tip[1])
+            GameTooltip:AddLine(tip[2], 0.8, 0.8, 0.8, true)
+            if column.sort then
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("Click to sort by this column.", 0.5, 0.5, 0.5)
+            end
+            GameTooltip:Show()
+        end)
+        button:SetScript("OnLeave", GameTooltip_Hide)
+    end
+
     if not column.sort then
-        button:EnableMouse(false)
+        button:EnableMouse(tip ~= nil)
         return button
     end
     button:SetScript("OnClick", function()
@@ -608,6 +659,12 @@ SlashCmdList.CASTAHEAD = function(msg)
     -- The sub-command is the FIRST word: `msg:find` anywhere in the string
     -- meant "/ca anchor center" was answered by the `center` branch.
     local word = msg:match("^%s*(%a+)") or ""
+    if word == "probe" then
+        if CastAheadCore and CastAheadCore.Probe then
+            CastAheadCore.Probe(msg:match("^%s*%a+%s+(%a+)"))
+        end
+        return
+    end
     if word == "debug" then
         if CastAheadCore and CastAheadCore.Debug then CastAheadCore.Debug() end
         return
