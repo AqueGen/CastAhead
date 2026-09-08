@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.0](https://github.com/AqueGen/CastAhead/compare/v0.1.0...v0.2.0) (2026-09-08)
+
+
+### Features
+
+* explain every column in the cast list ([0f53dac](https://github.com/AqueGen/CastAhead/commit/0f53dac73cb9115f7f7d6fd838bbe6e242d4e151))
+* rebuild the tables and record what stands in each pack ([8e39406](https://github.com/AqueGen/CastAhead/commit/8e39406b6e97d50beacdbc03416d80b465d2eee2))
+* say both calls when a cast could be either ([8bce9e1](https://github.com/AqueGen/CastAhead/commit/8bce9e1caa9c2a2cab50f033c7a71ba4acc45293))
+
 ## 0.1.0 (2026-09-05)
 
 
