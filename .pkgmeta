@@ -29,7 +29,8 @@ externals:
 # Sounds/ is deliberately NOT here: the voice clips are the addon's own assets
 # and must ship. Everything below is development-only.
 ignore:
-  - AGENTS.md
+  # AGENTS.md is deliberately NOT ignored: the notice only does its job where
+  # an agent actually reads the addon, which is the installed folder.
   - README.md
   - RELEASE_NOTES.md
   - .gitignore
