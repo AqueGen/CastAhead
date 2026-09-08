@@ -180,6 +180,10 @@ CreateFrame = function(kind)
         -- bar.text / bar.time, so writing there would overwrite them.
         fs.SetText = function(_, text) f.labelValue = text end
         fs.SetFormattedText = function(_, fmt, ...) f.timeValue = string.format(fmt, ...) end
+        -- The layout steps the icons sideways by the width of the advice under
+        -- them, so a stub that answers with a table (the catch-all below) turns
+        -- into an arithmetic error rather than a wrong number.
+        fs.GetStringWidth = function() return #(f.labelValue or "") * 6 end
         return fs
     end
     f.GetParent = function(self) return self.parent end
