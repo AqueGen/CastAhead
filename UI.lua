@@ -20,7 +20,10 @@ local window, dungeonButtons, rows, rowParent, headers
 local selectedInstanceID, sortKey, sortDescending, searchText
 -- The window is a book: the casts page (dungeon list, search, table) and one
 -- page per settings group, built by Options.lua into `settingsHost`.
-local castsPage, settingsHost, tabButtons
+local castsPage, settingsHost, tabButtons, testButton
+-- Forward declaration: RefreshTabs falls back to another page when the
+-- Development tab is switched off, and it is defined above ShowTab.
+local ShowTab
 local currentTab = "Casts"
 local CASTS_TAB = "Casts"
 -- Declared here because ShowTab, defined above BuildWindow, calls it.
@@ -155,9 +158,19 @@ local COLUMNS = {
     { key = "dmg", header = "%HP", width = 40, justify = "RIGHT",
       text = function(e) return e.dmg and string.format("%d%%", e.dmg * 100) or "-" end,
       sort = function(e) return e.dmg or -1 end },
+    -- Two different facts, deliberately side by side. "Kick" is capability -
+    -- green when the game lets the cast be interrupted at all - with how often
+    -- the group actually did it. "Stop" is everything else that ended the cast
+    -- early, which in practice means a stun or another control.
     { key = "kick", header = "Kick", width = 40, justify = "RIGHT",
-      text = function(e) return (e.kick or 0) > 0 and string.format("%d%%", e.kick * 100) or "-" end,
-      sort = function(e) return e.kick or 0 end },
+      text = function(e)
+          local seen = (e.kick or 0) > 0 and string.format("%d%%", e.kick * 100) or "-"
+          return e.kickable and ("|cff40dd60" .. seen .. "|r") or ("|cff886666" .. seen .. "|r")
+      end,
+      sort = function(e) return (e.kickable and 100 or 0) + (e.kick or 0) end },
+    { key = "cc", header = "Stop", width = 40, justify = "RIGHT",
+      text = function(e) return (e.cc or 0) > 0 and string.format("%d%%", e.cc * 100) or "-" end,
+      sort = function(e) return e.cc or 0 end },
 }
 
 local function ColumnOffset(index)
@@ -254,8 +267,10 @@ local HEADER_TIPS = {
         "How many players the cast lands on, on average. |cffffd1001|r is single target, |cffffd1005|r hits the group." },
     dmg = { "Damage",
         "The worst hit as a share of that player's maximum health, averaged over the logs. Healing and utility casts have none." },
-    kick = { "Kicked",
-        "How often the group actually interrupts this cast. A high number means it is worth a kick; |cffffd100-|r means it cannot be interrupted." },
+    kick = { "Interrupt",
+        "|cff40dd60Green|r means the game lets this cast be interrupted at all; |cff886666grey|r means it does not, whatever anyone tries. The number is how often the group actually landed a kick on it, so |cffffd100-|r on green only means nobody has bothered yet." },
+    cc = { "Stopped another way",
+        "How often the cast started and never finished without an interrupt being logged - a stun, a knock, a fear. This is the column that says \"you cannot kick it, but you can stop it\". |cffffd100-|r means nobody in our logs ever stopped it, which is not proof that it cannot be stopped." },
 }
 
 -- Widgets ------------------------------------------------------------------
@@ -437,9 +452,31 @@ function Refresh()
     window.summary:SetText(summary)
 end
 
+-- The test drive stops by itself when the last sample cast runs out, so the
+-- button is repainted from the addon's state rather than from what was
+-- clicked. Core calls this when a run ends.
+function CastAheadUI.RefreshTest()
+    if not testButton then return end
+    local running = CastAheadCore and CastAheadCore.Testing and CastAheadCore.Testing()
+    testButton:SetText(running and "Stop test" or "Test drive")
+end
+
+-- The Development page is the last tab and is off by default, so hiding its
+-- button leaves the rest of the strip where it was. Called when the switch on
+-- the General page is clicked, and once while the strip is built.
+function CastAheadUI.RefreshTabs()
+    local button = tabButtons and tabButtons.Development
+    if not button then return end
+    local on = CastAheadOptions and CastAheadOptions.DevMode and CastAheadOptions.DevMode()
+    button:SetShown(on and true or false)
+    -- Switched off while its own page was open: fall back rather than leave
+    -- the window showing a page with no way back to it.
+    if not on and currentTab == "Development" then ShowTab("General") end
+end
+
 -- Switching pages. The casts page and the settings host are siblings filling
 -- the same area; exactly one of them is ever shown.
-local function ShowTab(name)
+function ShowTab(name)
     currentTab = name
     for tab, button in pairs(tabButtons or {}) do
         button:SetEnabled(tab ~= name)
@@ -508,18 +545,25 @@ function BuildWindow()
     table.insert(UISpecialFrames, "CastAheadWindow")   -- Escape closes it
     window.TitleText:SetText("CastAhead - tracked casts")
 
-    -- Dry run of the selected dungeon's calls: icons, sounds, timeline.
-    local test = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
-    test:SetSize(50, 18)
-    if window.CloseButton then
-        test:SetPoint("RIGHT", window.CloseButton, "LEFT", -2, 0)
-    else
-        test:SetPoint("TOPRIGHT", window, "TOPRIGHT", -26, -3)
-    end
-    test:SetText("Test")
-    test:SetScript("OnClick", function()
+    -- Dry run of the selected dungeon's calls: icons, sounds, timeline. It sat
+    -- squeezed against the close button, where nobody found it - it belongs on
+    -- the tab row, which is the one strip visible on every page, and it says
+    -- which half of the toggle it is rather than leaving the player guessing
+    -- whether the run started.
+    testButton = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+    testButton:SetSize(110, 20)
+    testButton:SetPoint("TOPRIGHT", window, "TOPRIGHT", -14, -28)
+    testButton:SetScript("OnClick", function()
         if CastAheadCore and CastAheadCore.Test then CastAheadCore.Test(selectedInstanceID) end
     end)
+    testButton:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:SetText("Test drive", 1, 1, 1)
+        GameTooltip:AddLine("Play the selected dungeon's calls with nothing pulled - icons on any nameplate in front of you, the centre call, the voice and the sounds. Click again to stop.", nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    testButton:SetScript("OnLeave", GameTooltip_Hide)
+    CastAheadUI.RefreshTest()
 
     -- Tab strip: the casts table first, then one page per settings group.
     tabButtons = {}
@@ -541,6 +585,7 @@ function BuildWindow()
         tabButtons[name] = button
         previousTab = button
     end
+    CastAheadUI.RefreshTabs()
 
     -- The two pages. Both fill the area under the tab strip; the settings
     -- panels are built into the host on first use.
@@ -555,6 +600,13 @@ function BuildWindow()
 
     window.summary = castsPage:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     window.summary:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", 16, 12)
+
+    -- Author's mark. Bottom centre because the left corner is the summary and the
+    -- right one is the resize grip, and it belongs to the window rather than to a
+    -- page so it stays put when the pages swap.
+    window.madeIn = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    window.madeIn:SetPoint("BOTTOM", window, "BOTTOM", 0, 12)
+    window.madeIn:SetText("|cFF0057B7Made|r |cFFFFD700in Ukraine|r")
 
     local search = CreateFrame("EditBox", nil, castsPage, "SearchBoxTemplate")
     search:SetSize(LIST_WIDTH - 8, 20)
