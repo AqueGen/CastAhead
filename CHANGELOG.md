@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/AqueGen/CastAhead/compare/v0.4.0...v0.5.0) (2026-09-08)
+
+
+### Features
+
+* adjustable text sizes, shorter verdicts, one row of settings ([68ab77b](https://github.com/AqueGen/CastAhead/commit/68ab77b4e13134ba4934a80ca297ba46545d1d96))
+
+
+### Bug Fixes
+
+* pack the icons by their own labels ([#10](https://github.com/AqueGen/CastAhead/issues/10)) ([00eae63](https://github.com/AqueGen/CastAhead/commit/00eae63c61b316474a89269bac56a9294146a90d))
+
 ## [0.4.0](https://github.com/AqueGen/CastAhead/compare/v0.3.0...v0.4.0) (2026-09-08)
 
 
