@@ -730,14 +730,15 @@ local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
 local function ApplyBarSize(bar)
     local size = CastAheadConfig.IconSize()
-    if bar._size == size then return size end
-    bar._size = size
+    local labelScale = CastAheadConfig.LabelScale()
+    if bar._size == size and bar._labelScale == labelScale then return size end
+    bar._size, bar._labelScale = size, labelScale
     local scale = size / ICON_SIZE
     bar:SetSize(size, size)
     bar.glow:SetPoint("TOPLEFT", -size * 0.42, size * 0.42)
     bar.glow:SetPoint("BOTTOMRIGHT", size * 0.42, -size * 0.42)
     bar.time:SetFont(FONT, math.max(8, math.floor(14 * scale + 0.5)), "OUTLINE")
-    bar.label:SetFont(FONT, math.max(7, math.floor(10 * scale + 0.5)), "OUTLINE")
+    bar.label:SetFont(FONT, math.max(6, math.floor(10 * scale * labelScale + 0.5)), "OUTLINE")
     return size
 end
 
@@ -1122,15 +1123,17 @@ local function PaintBar(bar, entry, interruptible)
     -- the player decides between them rather than being told the wrong one.
     local split = not advice and CastAheadMatch.SplitAdvice(entry.candidates, interruptible) or nil
     bar.icon:SetTexture(SpellIcon(row.spell))
+    local short = CastAheadConfig.ShortLabels()
     if advice then
-        bar.label:SetText(advice.plate or advice.label)
+        bar.label:SetText(short and advice.short or advice.label)
         bar.label:SetTextColor(advice.r, advice.g, advice.b)
         bar.border:SetColorTexture(advice.r, advice.g, advice.b, entry.casting and 1 or 0.7)
     elseif split then
         -- Stacked, not joined by a slash: two verdicts side by side are the
         -- widest thing the layout ever has to make room for, and they read
         -- just as well one above the other.
-        bar.label:SetText(split[1].label .. "\n" .. split[2].label)
+        bar.label:SetText((short and split[1].short or split[1].label)
+            .. "\n" .. (short and split[2].short or split[2].label))
         bar.label:SetTextColor(0.9, 0.9, 0.9)
         bar.border:SetColorTexture(0.7, 0.7, 0.7, entry.casting and 1 or 0.7)
     else
@@ -2243,6 +2246,34 @@ function CastAheadCore.Testing()
     return demo ~= nil
 end
 
+-- Lay out each plate's own icons against each other, the way a live plate is
+-- laid out - otherwise the test drive shows a spacing the game never uses.
+-- Run again whenever a call finishes: the survivors have to close up against
+-- the plate rather than leave a hole where the finished one was, which is what
+-- the live path does on every repaint.
+local demoPlates = {}
+local function DemoLayout()
+    if not demo then return end
+    for key in pairs(demoPlates) do demoPlates[key] = nil end
+    for i = 1, #demo.entries do
+        local e = demo.entries[i]
+        if not e.done then
+            local key = e.unit or "loose"
+            local list = demoPlates[key]
+            if not list then
+                list = {}
+                demoPlates[key] = list
+            end
+            list[#list + 1] = e.bar
+            e.slot = #list
+        end
+    end
+    for _, list in pairs(demoPlates) do
+        SpreadBars(list, #list)
+    end
+    demo.repack = nil
+end
+
 local function DemoAnchor(e, i)
     if e.unit and AnchorBar(e.unit, e.bar, e.slot) then return end
     -- No plate (or it went away): park the icon mid-screen instead.
@@ -2335,23 +2366,7 @@ function CastAheadCore.Test(instanceID)
         end
         demo.entries[i] = e
     end
-    -- Spread each plate's own icons against each other, the way a live plate
-    -- is laid out - otherwise the test drive shows a spacing the game never
-    -- uses. Built once here rather than every frame.
-    local perPlate = {}
-    for i = 1, #demo.entries do
-        local e = demo.entries[i]
-        local key = e.unit or "loose"
-        local list = perPlate[key]
-        if not list then
-            list = {}
-            perPlate[key] = list
-        end
-        list[e.slot or (#list + 1)] = e.bar
-    end
-    for _, list in pairs(perPlate) do
-        SpreadBars(list, #list)
-    end
+    DemoLayout()
     print(string.format("|cff33ff99CastAhead|r test: %d call(s) from %s on %d plate(s) (again to stop)",
         total, tostring(rows.name or id), plates))
     if CastAheadUI and CastAheadUI.RefreshTest then CastAheadUI.RefreshTest() end
@@ -2359,6 +2374,9 @@ function CastAheadCore.Test(instanceID)
         if not demo then return end
         local t = GetTime()
         if not dungeon then UpdateCenter(t) end   -- in a dungeon the main ticker does it
+        -- A call finished on the previous tick: close the row up before
+        -- anything is placed again.
+        if demo.repack then DemoLayout() end
         local alive = 0
         for i = 1, #demo.entries do
             local e = demo.entries[i]
@@ -2369,6 +2387,7 @@ function CastAheadCore.Test(instanceID)
                     if t >= e.castEnd then
                         e.done = true
                         e.bar:Hide()
+                        demo.repack = true
                     end
                 elseif t >= e.endAt then
                     -- The predicted cast "starts": glow, alert, timeline done.

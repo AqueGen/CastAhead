@@ -17,7 +17,7 @@ local COL2_X, COL2_W = 310, 300
 local COL3_X, COL3_W = 620, 300
 CastAheadOptions.MIN_WIDTH = COL3_X + COL3_W + COL1_X
 -- The tallest column: the nameplate group with its four sliders.
-CastAheadOptions.MIN_HEIGHT = 406
+CastAheadOptions.MIN_HEIGHT = 458
 -- Forward declarations: BuildWindow calls these, and Lua resolves a local by
 -- what it holds at call time, so they must exist as upvalues before it runs.
 local BuildGeneral, BuildSounds, BuildDevelopment
@@ -96,6 +96,8 @@ local SWITCHES = {
         tip = "Master switch for everything the addon plays." },
     voice = { label = "Voice",
         tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"interrupt\"." },
+    shortLabels = { label = "Short labels", defaultOff = true,
+        tip = "Write the longest verdicts in their short form under a nameplate icon - TANKBUSTER becomes BUSTER. The icons step sideways by the width of the words under them, so shorter words pack the row tighter. The cast table and the spoken call always use the whole word." },
     devMode = { label = "Development mode", defaultOff = true,
         tip = "Adds a Development tab with the data-collection tools. Nothing here changes what the addon calls out - it is for finding out what the game still lets an addon read." },
 }
@@ -254,11 +256,12 @@ function BuildGeneral(panel)
 
     -- Nameplate icons -----------------------------------------------------
     local plates = BuildGroup(panel, "Nameplate icons",
-        { "TOPLEFT", panel, "TOPLEFT", COL2_X, -6 }, COL2_W, 400)
-    BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 })
+        { "TOPLEFT", panel, "TOPLEFT", COL2_X, -6 }, COL2_W, 452)
+    local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 })
+    BuildSwitch(panel, "shortLabels", { "TOPLEFT", platesOn, "BOTTOMLEFT", 0, -4 })
 
     local anchorLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    anchorLabel:SetPoint("TOPLEFT", plates, "TOPLEFT", 16, -56)
+    anchorLabel:SetPoint("TOPLEFT", plates, "TOPLEFT", 16, -82)
     anchorLabel:SetText("Position around the plate")
 
     local square = CreateFrame("Frame", nil, panel, "BackdropTemplate")
@@ -333,12 +336,23 @@ function BuildGeneral(panel)
         after = Redraw,
     })
 
+    local labelSlider = BuildSlider(panel, {
+        key = "labelScale",
+        default = CastAheadConfig.LABEL_DEFAULT,
+        min = CastAheadConfig.LABEL_MIN, max = CastAheadConfig.LABEL_MAX, step = 5,
+        low = CastAheadConfig.LABEL_MIN .. "%", high = CastAheadConfig.LABEL_MAX .. "%",
+        width = 250,
+        point = { "TOPLEFT", offsetSlider, "BOTTOMLEFT", -6, -18 },
+        caption = function(value) return string.format("Label size: %d%% of the icon", value) end,
+        after = Redraw,
+    })
+
     local nudgeXSlider = BuildSlider(panel, {
         key = "nudgeX",
         default = 0,
         min = -CastAheadConfig.NUDGE_MAX, max = CastAheadConfig.NUDGE_MAX, step = 1,
         width = 250,
-        point = { "TOPLEFT", offsetSlider, "BOTTOMLEFT", -6, -18 },
+        point = { "TOPLEFT", labelSlider, "BOTTOMLEFT", -6, -18 },
         caption = function(value) return string.format("Nudge sideways: %+d px", value) end,
         after = Redraw,
     })
@@ -354,7 +368,7 @@ function BuildGeneral(panel)
     })
 
     BuildReset(panel, { "BOTTOMRIGHT", plates, "BOTTOMRIGHT", -12, 10 },
-        { "iconSize", "offsetX", "nudgeX", "nudgeY" }, Redraw)
+        { "iconSize", "labelScale", "offsetX", "nudgeX", "nudgeY" }, Redraw)
 
     -- Centre call ---------------------------------------------------------
     local centre = BuildGroup(panel, "Centre call",

@@ -24,6 +24,10 @@ C.LEAD_MAX = 15
 C.ICON_DEFAULT, C.ICON_MIN, C.ICON_MAX = 26, 14, 64
 C.NUDGE_MAX = 100
 C.CENTER_DEFAULT, C.CENTER_MIN, C.CENTER_MAX = 100, 50, 250
+-- The advice under an icon is sized from the icon, so one setting keeps them
+-- in proportion. This is the adjustment on top of that, in percent, for a
+-- player who wants tighter rows or larger words than the icon implies.
+C.LABEL_DEFAULT, C.LABEL_MIN, C.LABEL_MAX = 100, 50, 200
 
 function C.Get(key)
     return CastAheadDB and CastAheadDB[key]
@@ -54,6 +58,16 @@ end
 -- Percent, so the slider reads the way a player expects.
 function C.CenterScale()
     return C.Number("centerScale", C.CENTER_DEFAULT, C.CENTER_MIN, C.CENTER_MAX) / 100
+end
+
+function C.LabelScale()
+    return C.Number("labelScale", C.LABEL_DEFAULT, C.LABEL_MIN, C.LABEL_MAX) / 100
+end
+
+-- Off unless asked for: the full word is what teaches a player what the call
+-- means, and only someone who already knows them wants the short form.
+function C.ShortLabels()
+    return C.Get("shortLabels") == true
 end
 
 function C.Set(key, value)
