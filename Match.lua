@@ -38,7 +38,18 @@ M.ADVICE = {
     -- One target taking a large hit and the whole group taking one call for
     -- different answers - a personal cooldown versus everyone reacting - so
     -- they are separate verdicts rather than one "defensive".
-    TANK = { label = "TANKBUSTER", say = "tank buster", r = 1.00, g = 0.45, b = 0.10 },
+    -- `short` is the narrower spelling used under a nameplate icon when the
+    -- player asks for short labels: the icons step sideways by the width of
+    -- the words under them, so the longest verdict pushes every neighbour it
+    -- has away. Off by default - the full word teaches, the short one only
+    -- reminds - and the table and the voice always keep the whole word.
+    --
+    -- "BUSTER" rather than "TANK": the same four characters saved, and it
+    -- still reads as the threat rather than as a role assignment. Stacking it
+    -- over two lines was tried and is strictly worse - a two-line label is as
+    -- wide as its longest line, which is "BUSTER" either way, for twice the
+    -- height.
+    TANK = { label = "TANKBUSTER", short = "BUSTER", say = "tank buster", r = 1.00, g = 0.45, b = 0.10 },
     AOE  = { label = "AOE", say = "aoe damage", r = 1.00, g = 0.75, b = 0.15 },
     -- Categories assigned by the curated priority set (row.prio).
     DODGE   = { label = "DODGE", say = "dodge", r = 0.30, g = 0.90, b = 0.40 },
@@ -56,7 +67,11 @@ M.ADVICE = {
     DISEASE = { label = "DISEASE", say = "dispel disease", r = 0.75, g = 0.65, b = 0.30 },
     -- Nothing removes a bleed; the call is the defensive, not the dispel.
     BLEED   = { label = "BLEED", say = "bleed, defensive", r = 0.90, g = 0.25, b = 0.25 },
-    SWITCH  = { label = "SWITCH", say = "switch target", r = 0.85, g = 0.85, b = 0.85 },
+    -- "SWAP" everywhere, not only when short labels are on: four characters
+    -- fit the icon's own width at the default size where six did not, and
+    -- nobody has to learn what it means. The voice still says the whole
+    -- instruction, which is what a spoken line has room for.
+    SWITCH  = { label = "SWAP", say = "switch target", r = 0.85, g = 0.85, b = 0.85 },
     ALERT   = { label = "WATCH", say = "danger", r = 1.00, g = 1.00, b = 1.00 },
 }
 -- Each verdict knows its own key: the voice clip on disk is named after it
@@ -65,6 +80,9 @@ M.ADVICE = {
 for key, advice in pairs(M.ADVICE) do
     advice.key = key
     advice.file = key:gsub(" ", "_")
+    -- Only the verdicts long enough to crowd their neighbours carry a short
+    -- form; the rest are already short and read the same either way.
+    advice.short = advice.short or advice.label
 end
 M.ADVICE.SAVE = M.ADVICE.TANK   -- old name, kept so saved settings still resolve
 

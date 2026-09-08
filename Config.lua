@@ -24,6 +24,14 @@ C.LEAD_MAX = 15
 C.ICON_DEFAULT, C.ICON_MIN, C.ICON_MAX = 26, 14, 64
 C.NUDGE_MAX = 100
 C.CENTER_DEFAULT, C.CENTER_MIN, C.CENTER_MAX = 100, 50, 250
+-- The advice under an icon is sized from the icon, so one setting keeps them
+-- in proportion. This is the adjustment on top of that, in percent, for a
+-- player who wants tighter rows or larger words than the icon implies.
+C.LABEL_DEFAULT, C.LABEL_MIN, C.LABEL_MAX = 100, 50, 200
+-- The countdown drawn on the icon, and the words in the centre call, are
+-- adjusted the same way: a percentage of what the thing they sit on implies.
+C.TIME_DEFAULT, C.TIME_MIN, C.TIME_MAX = 100, 50, 200
+C.CENTER_TEXT_DEFAULT, C.CENTER_TEXT_MIN, C.CENTER_TEXT_MAX = 100, 50, 200
 
 function C.Get(key)
     return CastAheadDB and CastAheadDB[key]
@@ -54,6 +62,32 @@ end
 -- Percent, so the slider reads the way a player expects.
 function C.CenterScale()
     return C.Number("centerScale", C.CENTER_DEFAULT, C.CENTER_MIN, C.CENTER_MAX) / 100
+end
+
+function C.LabelScale()
+    return C.Number("labelScale", C.LABEL_DEFAULT, C.LABEL_MIN, C.LABEL_MAX) / 100
+end
+
+function C.TimeScale()
+    return C.Number("timeScale", C.TIME_DEFAULT, C.TIME_MIN, C.TIME_MAX) / 100
+end
+
+-- Only the words. The block's own scale moves the icon and the countdown with
+-- them, so this is for a player who wants the call readable from further away
+-- without a bigger block.
+function C.CenterTextScale()
+    return C.Number("centerTextScale", C.CENTER_TEXT_DEFAULT,
+        C.CENTER_TEXT_MIN, C.CENTER_TEXT_MAX) / 100
+end
+
+-- Short by default. Measured on real rows: with the long verdicts spelled
+-- out, three icons stretched across the whole nameplate and the spacing
+-- depended on which verdict happened to come up; short, the widest word on a
+-- plate is six characters and every row packs the same. The whole word is
+-- still spoken and still shown in the cast table, so nothing is lost - but
+-- the switch is there for anyone who wants it on the icons too.
+function C.ShortLabels()
+    return C.Get("fullLabels") ~= true
 end
 
 function C.Set(key, value)

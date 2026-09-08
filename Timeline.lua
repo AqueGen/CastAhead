@@ -43,6 +43,19 @@ local function IconMask(advice)
     return nil
 end
 
+-- What the bar is labelled with. The verdict's spoken line is the right words
+-- - the bar has room for a phrase, and "tank buster" says more there than the
+-- nameplate icon's cramped "BUSTER" - but it is written for a voice, so it
+-- arrives in lower case. The game's own entries on this bar are spell names in
+-- ordinary case, so ours are capitalised to match rather than shouted.
+local function TimelineName(advice, info, row)
+    local say = advice and advice.say
+    if say and say ~= "" then
+        return say:sub(1, 1):upper() .. say:sub(2)
+    end
+    return (info and info.name) or row.name or ""
+end
+
 local function Severity(advice)
     local levels = Enum and Enum.EncounterEventSeverity
     if not levels then return nil end
@@ -103,7 +116,7 @@ function T.Sync(track, targetAt, row, advice, confident)
         iconFileID = icon or (info and info.iconID) or 136243,
         duration = remaining,
         maxQueueDuration = QUEUE_GRACE,
-        overrideName = advice and advice.say or (info and info.name) or row.name or "",
+        overrideName = TimelineName(advice, info, row),
         severity = Severity(advice),
     }
     local icons = IconMask(advice)

@@ -8,8 +8,10 @@
 local ROW_HEIGHT = 20
 local HEADER_HEIGHT = 18
 local LIST_WIDTH = 190
-local WINDOW_WIDTH = 1000
-local WINDOW_HEIGHT = 520
+-- Wide enough for the settings page's row of groups, which is the widest
+-- thing the window has to hold; the casts table wants about this much too.
+local WINDOW_WIDTH = 1330
+local WINDOW_HEIGHT = 560
 -- Resize floor. The width is derived from the column list below (see
 -- MinWidth), so every header still fits inside the frame.
 local BASE_MIN_HEIGHT = 420

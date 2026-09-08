@@ -28,10 +28,13 @@ CastAheadConfig = CastAheadConfig or { LEAD_DEFAULT = 0, LEAD_MAX = 15,
 
 local ICON_SIZE = 26
 local BAR_GAP = 6        -- distance from the plate's left edge
-local LABEL_HEIGHT = 11  -- the advice text sits under each icon
+local LABEL_HEIGHT = 11  -- one line of advice under the icon; two are measured
 local BAR_SPACING = 5    -- gap between one row's label and the next icon
 local H_STEP = 68        -- fallback sideways step, before any label is measured
-local LABEL_GAP = 8      -- clear space between one row's label and the next
+local LABEL_GAP = 8      -- clear space between one icon's label and the next
+local ICON_GAP = 4       -- ... and the floor, when both labels are short
+local DEMO_PER_PLATE = 3 -- calls the test drive puts on each nameplate
+local DEMO_PLATES = 4    -- ... and how many nameplates it uses at all
 local COMBAT_POLL_BATCH = 8      -- nameplates re-checked per tick
 local PREDICTION_MATCH_WINDOW = 4.0  -- how far off a predicted cast may start
 local ESTIMATE_NOW = 2.0             -- an estimate this close just reads as "now"
@@ -727,14 +730,19 @@ local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
 local function ApplyBarSize(bar)
     local size = CastAheadConfig.IconSize()
-    if bar._size == size then return size end
-    bar._size = size
+    local labelScale = CastAheadConfig.LabelScale()
+    local timeScale = CastAheadConfig.TimeScale()
+    if bar._size == size and bar._labelScale == labelScale
+        and bar._timeScale == timeScale then
+        return size
+    end
+    bar._size, bar._labelScale, bar._timeScale = size, labelScale, timeScale
     local scale = size / ICON_SIZE
     bar:SetSize(size, size)
     bar.glow:SetPoint("TOPLEFT", -size * 0.42, size * 0.42)
     bar.glow:SetPoint("BOTTOMRIGHT", size * 0.42, -size * 0.42)
-    bar.time:SetFont(FONT, math.max(8, math.floor(14 * scale + 0.5)), "OUTLINE")
-    bar.label:SetFont(FONT, math.max(7, math.floor(10 * scale + 0.5)), "OUTLINE")
+    bar.time:SetFont(FONT, math.max(7, math.floor(14 * scale * timeScale + 0.5)), "OUTLINE")
+    bar.label:SetFont(FONT, math.max(6, math.floor(10 * scale * labelScale + 0.5)), "OUTLINE")
     return size
 end
 
@@ -832,11 +840,31 @@ local GROW = { left = true, down = true, right = true, up = true }
 CastAheadGrowth = GROW
 
 -- Sideways, the icons cannot simply sit an icon's width apart: the advice
--- under them is wider than they are, and "TANKBUSTER" next to "TANKBUSTER"
--- would collide. The step is the widest label actually on screen, which is
--- why two short calls sit close together and no longer leave a hole the size
--- of a third icon between them.
-local function AnchorBar(unit, bar, index, hStep)
+-- under them is wider than the icon and centred on it, so two neighbours need
+-- half of each label between them. Only half of each - stepping everything by
+-- the widest label on screen puts "TANKBUSTER"'s full width beside "AOE" and
+-- leaves a hole the size of a third icon.
+--
+-- Each bar therefore carries its own distance from the first, and the floor is
+-- the icon itself, for the case where both labels are short or empty.
+local function SpreadBars(bars, count)
+    local offset, previous = 0, 0
+    for i = 1, count do
+        local bar = bars[i]
+        local width = bar.label:GetStringWidth() or 0
+        if i > 1 then
+            offset = offset + math.max((bar._size or ICON_SIZE) + ICON_GAP,
+                (previous + width) / 2 + LABEL_GAP)
+        end
+        bar._hOffset = offset
+        previous = width
+    end
+end
+
+-- Filled by RefreshBar on every repaint, so the spread costs no garbage.
+local spread = {}
+
+local function AnchorBar(unit, bar, index)
     local plate = C_NamePlate.GetNamePlateForUnit(unit)
     -- The bar is a child of UIParent, not of the plate, so it does not inherit
     -- the plate's visibility: a plate that is gone or hidden would otherwise
@@ -858,33 +886,40 @@ local function AnchorBar(unit, bar, index, hStep)
     local growSetting = CastAheadDB and CastAheadDB.grow or "auto"
     local size = bar._size or ICON_SIZE
     local nudgeX, nudgeY = CastAheadConfig.NudgeX(), CastAheadConfig.NudgeY()
-    hStep = hStep or H_STEP
+    -- SpreadBars measured this one against its neighbours; the fallback only
+    -- covers a bar anchored before anything has been painted.
+    local hOffset = bar._hOffset or (index - 1) * H_STEP
+    -- Measured, not assumed: a verdict too long for one line is written over
+    -- two, and stacking icons by a constant would then overlap them.
+    local labelH = math.max(bar.label:GetStringHeight() or 0, LABEL_HEIGHT)
     if bar._plate ~= plate or bar._index ~= index or bar._gap ~= gap or bar._side ~= side
-        or bar._grow ~= growSetting or bar._hStep ~= hStep or bar._sized ~= size
+        or bar._grow ~= growSetting or bar._placed ~= hOffset or bar._sized ~= size
+        or bar._labelH ~= labelH
         or bar._nudgeX ~= nudgeX or bar._nudgeY ~= nudgeY then
         bar._plate = plate
         bar._index = index
         bar._gap = gap
         bar._side = side
         bar._grow = growSetting
-        bar._hStep = hStep
+        bar._placed = hOffset
         bar._sized = size
+        bar._labelH = labelH
         bar._nudgeX = nudgeX
         bar._nudgeY = nudgeY
         bar._anchor = plate
         bar:ClearAllPoints()
-        local step = size + LABEL_HEIGHT + BAR_SPACING
+        local step = size + labelH + BAR_SPACING
         local x = spec.dx * gap + nudgeX
         -- Above the plate the label hangs under the icon, so lift it clear.
-        local y = spec.dy * (gap + (spec.dy > 0 and LABEL_HEIGHT or 0)) + nudgeY
+        local y = spec.dy * (gap + (spec.dy > 0 and labelH or 0)) + nudgeY
         -- Growth direction: the player's choice, or the position's own.
         local grow = CastAheadDB and CastAheadDB.grow
         if not GROW[grow] then grow = spec.grow end
         local n = index - 1
         if grow == "right" then
-            x = x + n * hStep
+            x = x + hOffset
         elseif grow == "left" then
-            x = x - n * hStep
+            x = x - hOffset
         elseif grow == "up" then
             y = y + n * step
         else
@@ -1092,12 +1127,17 @@ local function PaintBar(bar, entry, interruptible)
     -- the player decides between them rather than being told the wrong one.
     local split = not advice and CastAheadMatch.SplitAdvice(entry.candidates, interruptible) or nil
     bar.icon:SetTexture(SpellIcon(row.spell))
+    local short = CastAheadConfig.ShortLabels()
     if advice then
-        bar.label:SetText(advice.label)
+        bar.label:SetText(short and advice.short or advice.label)
         bar.label:SetTextColor(advice.r, advice.g, advice.b)
         bar.border:SetColorTexture(advice.r, advice.g, advice.b, entry.casting and 1 or 0.7)
     elseif split then
-        bar.label:SetText(split[1].label .. " / " .. split[2].label)
+        -- Stacked, not joined by a slash: two verdicts side by side are the
+        -- widest thing the layout ever has to make room for, and they read
+        -- just as well one above the other.
+        bar.label:SetText((short and split[1].short or split[1].label)
+            .. "\n" .. (short and split[2].short or split[2].label))
         bar.label:SetTextColor(0.9, 0.9, 0.9)
         bar.border:SetColorTexture(0.7, 0.7, 0.7, entry.casting and 1 or 0.7)
     else
@@ -1153,7 +1193,6 @@ function RefreshBar(unit, state)
     -- Painted before being placed: sideways the icons step by the width of the
     -- widest advice under them, not by the icon, so two short calls sit close
     -- together instead of leaving a hole the size of a third icon.
-    local hStep = 0
     for i = 1, #entries do
         local entry = entries[i]
         local bar = GetBar(state, i)
@@ -1162,13 +1201,12 @@ function RefreshBar(unit, state)
         if entry.casting then interruptible = state.interruptible end
         PaintBar(bar, entry, interruptible)
         entry.bar = bar
-        local width = (bar.label:GetStringWidth() or 0) + LABEL_GAP
-        if width > hStep then hStep = width end
+        spread[i] = bar
     end
-    hStep = math.max(hStep, (state.bars and state.bars[1] and state.bars[1]._size or ICON_SIZE) + LABEL_GAP)
+    SpreadBars(spread, #entries)
     for i = 1, #entries do
         local bar = entries[i].bar
-        if AnchorBar(unit, bar, i, hStep) then
+        if AnchorBar(unit, bar, i) then
             bar:Show()
             diag.shown = diag.shown + 1
         end
@@ -1937,6 +1975,15 @@ local function PlaceCenter(f)
     -- moves the icon, the words and the countdown together, and the spacing
     -- between them stays right at any size.
     local scale = CastAheadConfig.CenterScale()
+    -- The words have a size of their own on top of the block's: the icon and
+    -- the countdown beside them are already as big as the block makes them.
+    local textScale = CastAheadConfig.CenterTextScale()
+    if f._textScale ~= textScale then
+        f._textScale = textScale
+        for i = 1, #f.lines do
+            f.lines[i].text:SetFont(FONT, math.max(10, math.floor(28 * textScale + 0.5)), "OUTLINE")
+        end
+    end
     if f._x ~= x or f._y ~= y or f._scale ~= scale then
         f._x, f._y, f._scale = x, y, scale
         f:SetScale(scale)
@@ -2212,6 +2259,34 @@ function CastAheadCore.Testing()
     return demo ~= nil
 end
 
+-- Lay out each plate's own icons against each other, the way a live plate is
+-- laid out - otherwise the test drive shows a spacing the game never uses.
+-- Run again whenever a call finishes: the survivors have to close up against
+-- the plate rather than leave a hole where the finished one was, which is what
+-- the live path does on every repaint.
+local demoPlates = {}
+local function DemoLayout()
+    if not demo then return end
+    for key in pairs(demoPlates) do demoPlates[key] = nil end
+    for i = 1, #demo.entries do
+        local e = demo.entries[i]
+        if not e.done then
+            local key = e.unit or "loose"
+            local list = demoPlates[key]
+            if not list then
+                list = {}
+                demoPlates[key] = list
+            end
+            list[#list + 1] = e.bar
+            e.slot = #list
+        end
+    end
+    for _, list in pairs(demoPlates) do
+        SpreadBars(list, #list)
+    end
+    demo.repack = nil
+end
+
 local function DemoAnchor(e, i)
     if e.unit and AnchorBar(e.unit, e.bar, e.slot) then return end
     -- No plate (or it went away): park the icon mid-screen instead.
@@ -2226,6 +2301,7 @@ local function DemoAnchor(e, i)
         e.bar:SetPoint("CENTER", UIParent, "CENTER",
             (i - 1) * step - (#demo.entries - 1) * step / 2, -160)
     end
+
     e.bar:Show()
 end
 
@@ -2274,11 +2350,18 @@ function CastAheadCore.Test(instanceID)
     end
     demo = { frame = CreateFrame("Frame"), entries = {}, state = { bars = {} } }
     local now = GetTime()
-    local total = math.max(#picked, math.min(#units * 2, 8))
+    -- Several calls per plate, always: one icon per plate tells the player
+    -- nothing about the spacing between them, which is the thing a test drive
+    -- is usually run to judge. But only on the first few plates - the icons
+    -- spread across the screen while the timeline stacks every one of them
+    -- into a single column, so a room full of training dummies filled it top
+    -- to bottom.
+    local plates = math.min(#units, DEMO_PLATES)
+    local total = math.max(#picked, plates * DEMO_PER_PLATE)
     local slots = {}
     for i = 1, total do
         local row = picked[(i - 1) % #picked + 1]
-        local unit = units[(i - 1) % math.max(#units, 1) + 1]
+        local unit = units[(i - 1) % math.max(plates, 1) + 1]
         slots[unit or 0] = (slots[unit or 0] or 0) + 1
         local e = {
             row = row, candidates = { row },
@@ -2296,13 +2379,17 @@ function CastAheadCore.Test(instanceID)
         end
         demo.entries[i] = e
     end
+    DemoLayout()
     print(string.format("|cff33ff99CastAhead|r test: %d call(s) from %s on %d plate(s) (again to stop)",
-        total, tostring(rows.name or id), #units))
+        total, tostring(rows.name or id), plates))
     if CastAheadUI and CastAheadUI.RefreshTest then CastAheadUI.RefreshTest() end
     demo.frame:SetScript("OnUpdate", function()
         if not demo then return end
         local t = GetTime()
         if not dungeon then UpdateCenter(t) end   -- in a dungeon the main ticker does it
+        -- A call finished on the previous tick: close the row up before
+        -- anything is placed again.
+        if demo.repack then DemoLayout() end
         local alive = 0
         for i = 1, #demo.entries do
             local e = demo.entries[i]
@@ -2313,6 +2400,7 @@ function CastAheadCore.Test(instanceID)
                     if t >= e.castEnd then
                         e.done = true
                         e.bar:Hide()
+                        demo.repack = true
                     end
                 elseif t >= e.endAt then
                     -- The predicted cast "starts": glow, alert, timeline done.

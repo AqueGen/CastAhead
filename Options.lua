@@ -9,15 +9,17 @@ CastAheadOptions = {}
 -- it, and hiding the final tab leaves the strip intact.
 CastAheadOptions.TABS = { "General", "Sounds", "Development" }
 local panels
--- The three columns of groups, and what they add up to. UI.lua uses the
--- total as the window's resize floor: at anything narrower the right-hand
--- column hangs outside the frame, which is exactly what happened.
-local COL1_X, COL1_W = 8, 290
-local COL2_X, COL2_W = 310, 300
-local COL3_X, COL3_W = 620, 300
-CastAheadOptions.MIN_WIDTH = COL3_X + COL3_W + COL1_X
--- The tallest column: the nameplate group with its four sliders.
-CastAheadOptions.MIN_HEIGHT = 406
+-- One row of groups, each in its own column, so nothing is stacked and every
+-- setting is reachable without reading up and down the page. UI.lua takes the
+-- total as the window's resize floor: the panels do not scroll, so a narrower
+-- window would simply draw the last column outside the frame.
+local COL_W, COL_GAP, COL_X = 250, 8, 8
+local COLUMNS = 5
+local SLIDER_W = COL_W - 40
+CastAheadOptions.MIN_WIDTH = COL_X * 2 + COLUMNS * COL_W + (COLUMNS - 1) * COL_GAP
+-- The tallest column: the nameplate group, where the anchor square sits above
+-- three sliders and their reset.
+CastAheadOptions.MIN_HEIGHT = 404
 -- Forward declarations: BuildWindow calls these, and Lua resolves a local by
 -- what it holds at call time, so they must exist as upvalues before it runs.
 local BuildGeneral, BuildSounds, BuildDevelopment
@@ -36,7 +38,7 @@ local function BuildSlider(panel, spec)
     label:SetPoint(unpack(spec.point))
     local slider = CreateFrame("Slider", nil, panel, "UISliderTemplateWithLabels")
     slider:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 6, -12)
-    slider:SetSize(spec.width or 200, 16)
+    slider:SetSize(spec.width or SLIDER_W, 16)
     slider:SetOrientation("HORIZONTAL")
     slider:SetMinMaxValues(spec.min, spec.max)
     slider:SetValueStep(spec.step or 1)
@@ -96,6 +98,8 @@ local SWITCHES = {
         tip = "Master switch for everything the addon plays." },
     voice = { label = "Voice",
         tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"interrupt\"." },
+    fullLabels = { label = "Full labels", defaultOff = true,
+        tip = "Spell the longest verdicts out under a nameplate icon - BUSTER becomes TANKBUSTER. The icons step sideways by the width of the words under them, so the full words spread the row out; off, every plate's widest word is six characters and the rows pack evenly. The cast table and the spoken call always use the whole word either way." },
     devMode = { label = "Development mode", defaultOff = true,
         tip = "Adds a Development tab with the data-collection tools. Nothing here changes what the addon calls out - it is for finding out what the game still lets an addon read." },
 }
@@ -115,10 +119,15 @@ end
 
 -- A titled box. Widgets are anchored to what it returns, so a group can be
 -- moved by changing one SetPoint.
-local function BuildGroup(panel, title, point, width, height)
+local function BuildGroup(panel, title, column, height, point)
     local box = CreateFrame("Frame", nil, panel, "BackdropTemplate")
-    box:SetSize(width, height)
-    box:SetPoint(unpack(point))
+    box:SetSize(COL_W, height)
+    if point then
+        box:SetPoint(unpack(point))
+    else
+        box:SetPoint("TOPLEFT", panel, "TOPLEFT",
+            COL_X + (column - 1) * (COL_W + COL_GAP), -6)
+    end
     box:SetBackdrop({
         bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -217,8 +226,7 @@ end
 -- own on/off switch, so nothing has to be traced across the page.
 function BuildGeneral(panel)
     -- What is announced ---------------------------------------------------
-    local what = BuildGroup(panel, "What to call out",
-        { "TOPLEFT", panel, "TOPLEFT", COL1_X, -6 }, COL1_W, 152)
+    local what = BuildGroup(panel, "What to call out", 1, 180)
     local important = BuildSwitch(panel, "importantOnly",
         { "TOPLEFT", what, "TOPLEFT", 10, -26 })
     local role = BuildSwitch(panel, "roleFilter",
@@ -230,35 +238,33 @@ function BuildGeneral(panel)
         default = CastAheadConfig.LEAD_DEFAULT,
         min = 0, max = CastAheadConfig.LEAD_MAX,
         low = "off", high = CastAheadConfig.LEAD_MAX .. "s",
-        width = 250,
         point = { "TOPLEFT", timeline, "BOTTOMLEFT", 6, -12 },
         caption = function(value)
             return value > 0
-                and string.format("Early warning: %d seconds before the cast", value)
+                and string.format("Early warning: %ds", value)
                 or "Early warning: off"
         end,
     })
 
     -- Sound ---------------------------------------------------------------
-    local audio = BuildGroup(panel, "Sound",
-        { "TOPLEFT", what, "BOTTOMLEFT", 0, -12 }, COL1_W, 86)
+    local audio = BuildGroup(panel, "Sound", 2, 86)
     local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 })
     BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 })
 
     -- Development mode ----------------------------------------------------
-    local extra = BuildGroup(panel, "Advanced",
-        { "TOPLEFT", audio, "BOTTOMLEFT", 0, -12 }, COL1_W, 62)
+    local extra = BuildGroup(panel, "Advanced", 2, 62,
+        { "TOPLEFT", audio, "BOTTOMLEFT", 0, -12 })
     BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
         if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
     end)
 
-    -- Nameplate icons -----------------------------------------------------
-    local plates = BuildGroup(panel, "Nameplate icons",
-        { "TOPLEFT", panel, "TOPLEFT", COL2_X, -6 }, COL2_W, 400)
-    BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 })
+    -- Where the icons go --------------------------------------------------
+    local plates = BuildGroup(panel, "Nameplate icons", 3, 396)
+    local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 })
+    BuildSwitch(panel, "fullLabels", { "TOPLEFT", platesOn, "BOTTOMLEFT", 0, -4 })
 
     local anchorLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    anchorLabel:SetPoint("TOPLEFT", plates, "TOPLEFT", 16, -56)
+    anchorLabel:SetPoint("TOPLEFT", plates, "TOPLEFT", 16, -82)
     anchorLabel:SetText("Position around the plate")
 
     local square = CreateFrame("Frame", nil, panel, "BackdropTemplate")
@@ -312,21 +318,10 @@ function BuildGeneral(panel)
         end
     end)
 
-    local iconSlider = BuildSlider(panel, {
-        key = "iconSize",
-        default = CastAheadConfig.ICON_DEFAULT,
-        min = CastAheadConfig.ICON_MIN, max = CastAheadConfig.ICON_MAX, step = 2,
-        width = 250,
-        point = { "TOPLEFT", square, "BOTTOMLEFT", -4, -16 },
-        caption = function(value) return string.format("Icon size: %d px", value) end,
-        after = Redraw,
-    })
-
     local offsetSlider = BuildSlider(panel, {
         key = "offsetX",
         default = 0, min = 0, max = 120, step = 2,
-        width = 250,
-        point = { "TOPLEFT", iconSlider, "BOTTOMLEFT", -6, -18 },
+        point = { "TOPLEFT", square, "BOTTOMLEFT", -4, -16 },
         caption = function(value)
             return string.format("Distance from the plate: %d px", value)
         end,
@@ -337,28 +332,63 @@ function BuildGeneral(panel)
         key = "nudgeX",
         default = 0,
         min = -CastAheadConfig.NUDGE_MAX, max = CastAheadConfig.NUDGE_MAX, step = 1,
-        width = 250,
         point = { "TOPLEFT", offsetSlider, "BOTTOMLEFT", -6, -18 },
         caption = function(value) return string.format("Nudge sideways: %+d px", value) end,
         after = Redraw,
     })
 
-    BuildSlider(panel, {
+    local nudgeYSlider = BuildSlider(panel, {
         key = "nudgeY",
         default = 0,
         min = -CastAheadConfig.NUDGE_MAX, max = CastAheadConfig.NUDGE_MAX, step = 1,
-        width = 250,
         point = { "TOPLEFT", nudgeXSlider, "BOTTOMLEFT", -6, -18 },
         caption = function(value) return string.format("Nudge up or down: %+d px", value) end,
         after = Redraw,
     })
 
-    BuildReset(panel, { "BOTTOMRIGHT", plates, "BOTTOMRIGHT", -12, 10 },
-        { "iconSize", "offsetX", "nudgeX", "nudgeY" }, Redraw)
+    BuildReset(panel, { "TOPLEFT", nudgeYSlider, "BOTTOMLEFT", -6, -22 },
+        { "offsetX", "nudgeX", "nudgeY" }, Redraw)
+
+    -- How big they are ----------------------------------------------------
+    -- Everything drawn on a nameplate icon in one place: the icon sets the
+    -- size and the two texts on it are a share of that, so changing the icon
+    -- keeps them in proportion.
+    local sizes = BuildGroup(panel, "Icon size", 4, 244)
+
+    local iconSlider = BuildSlider(panel, {
+        key = "iconSize",
+        default = CastAheadConfig.ICON_DEFAULT,
+        min = CastAheadConfig.ICON_MIN, max = CastAheadConfig.ICON_MAX, step = 2,
+        point = { "TOPLEFT", sizes, "TOPLEFT", 16, -26 },
+        caption = function(value) return string.format("Icon: %d px", value) end,
+        after = Redraw,
+    })
+
+    local labelSlider = BuildSlider(panel, {
+        key = "labelScale",
+        default = CastAheadConfig.LABEL_DEFAULT,
+        min = CastAheadConfig.LABEL_MIN, max = CastAheadConfig.LABEL_MAX, step = 5,
+        low = CastAheadConfig.LABEL_MIN .. "%", high = CastAheadConfig.LABEL_MAX .. "%",
+        point = { "TOPLEFT", iconSlider, "BOTTOMLEFT", -6, -18 },
+        caption = function(value) return string.format("Label: %d%% of the icon", value) end,
+        after = Redraw,
+    })
+
+    local timeSlider = BuildSlider(panel, {
+        key = "timeScale",
+        default = CastAheadConfig.TIME_DEFAULT,
+        min = CastAheadConfig.TIME_MIN, max = CastAheadConfig.TIME_MAX, step = 5,
+        low = CastAheadConfig.TIME_MIN .. "%", high = CastAheadConfig.TIME_MAX .. "%",
+        point = { "TOPLEFT", labelSlider, "BOTTOMLEFT", -6, -18 },
+        caption = function(value) return string.format("Countdown: %d%% of the icon", value) end,
+        after = Redraw,
+    })
+
+    BuildReset(panel, { "TOPLEFT", timeSlider, "BOTTOMLEFT", -6, -22 },
+        { "iconSize", "labelScale", "timeScale" }, Redraw)
 
     -- Centre call ---------------------------------------------------------
-    local centre = BuildGroup(panel, "Centre call",
-        { "TOPLEFT", panel, "TOPLEFT", COL3_X, -6 }, COL3_W, 156)
+    local centre = BuildGroup(panel, "Centre call", 5, 218)
     BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 })
 
     local centerScale = function()
@@ -369,22 +399,31 @@ function BuildGeneral(panel)
         default = CastAheadConfig.CENTER_DEFAULT,
         min = CastAheadConfig.CENTER_MIN, max = CastAheadConfig.CENTER_MAX, step = 5,
         low = CastAheadConfig.CENTER_MIN .. "%", high = CastAheadConfig.CENTER_MAX .. "%",
-        width = 250,
         point = { "TOPLEFT", centre, "TOPLEFT", 16, -56 },
         caption = function(value) return string.format("Size: %d%%", value) end,
         after = centerScale,
     })
 
+    local centerTextSlider = BuildSlider(panel, {
+        key = "centerTextScale",
+        default = CastAheadConfig.CENTER_TEXT_DEFAULT,
+        min = CastAheadConfig.CENTER_TEXT_MIN, max = CastAheadConfig.CENTER_TEXT_MAX, step = 5,
+        low = CastAheadConfig.CENTER_TEXT_MIN .. "%", high = CastAheadConfig.CENTER_TEXT_MAX .. "%",
+        point = { "TOPLEFT", centerSlider, "BOTTOMLEFT", -6, -18 },
+        caption = function(value) return string.format("Text: %d%% of the block", value) end,
+        after = centerScale,
+    })
+
     local move = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-    move:SetSize(160, 22)
-    move:SetPoint("TOPLEFT", centerSlider, "BOTTOMLEFT", -6, -18)
+    move:SetSize(140, 22)
+    move:SetPoint("TOPLEFT", centerTextSlider, "BOTTOMLEFT", -6, -18)
     move:SetText("Move it on screen")
     move:SetScript("OnClick", function()
         if CastAheadCore and CastAheadCore.MoveCenter then CastAheadCore.MoveCenter() end
     end)
 
     BuildReset(panel, { "LEFT", move, "RIGHT", 6, 0 },
-        { "centerScale", "centerX", "centerY" }, centerScale)
+        { "centerScale", "centerTextScale", "centerX", "centerY" }, centerScale)
 end
 
 -- The tools that collect data rather than change what is called out. Behind
@@ -400,15 +439,17 @@ function BuildDevelopment(panel)
     -- The probe samples what the game still lets us read off a hostile plate
     -- (level, power, health...) while trash is being fought, and prints the
     -- results to chat. Same as /ca probe and /ca probe show.
-    local group = BuildGroup(panel, "Nameplate probe",
-        { "TOPLEFT", intro, "BOTTOMLEFT", 0, -14 }, 420, 120)
+    local group = BuildGroup(panel, "Nameplate probe", 1, 120,
+        { "TOPLEFT", intro, "BOTTOMLEFT", 0, -14 })
 
     local probe = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
     probe:SetSize(22, 22)
     probe:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -26)
     probe.text = probe:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     probe.text:SetPoint("LEFT", probe, "RIGHT", 2, 0)
-    probe.text:SetText("Collect what the game reveals about enemies")
+    -- Short: the group is one column wide like every other, and the whole
+    -- explanation is a hover away.
+    probe.text:SetText("Collect enemy data")
     probe:SetHitRectInsets(0, -(probe.text:GetStringWidth() + 6), 0, 0)
     probe:SetScript("OnClick", function(self)
         if CastAheadCore and CastAheadCore.Probe then
