@@ -17,7 +17,7 @@ local COL2_X, COL2_W = 310, 300
 local COL3_X, COL3_W = 620, 300
 CastAheadOptions.MIN_WIDTH = COL3_X + COL3_W + COL1_X
 -- The tallest column: the nameplate group with its four sliders.
-CastAheadOptions.MIN_HEIGHT = 458
+CastAheadOptions.MIN_HEIGHT = 492
 -- Forward declarations: BuildWindow calls these, and Lua resolves a local by
 -- what it holds at call time, so they must exist as upvalues before it runs.
 local BuildGeneral, BuildSounds, BuildDevelopment
@@ -96,8 +96,8 @@ local SWITCHES = {
         tip = "Master switch for everything the addon plays." },
     voice = { label = "Voice",
         tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"interrupt\"." },
-    shortLabels = { label = "Short labels", defaultOff = true,
-        tip = "Write the longest verdicts in their short form under a nameplate icon - TANKBUSTER becomes BUSTER. The icons step sideways by the width of the words under them, so shorter words pack the row tighter. The cast table and the spoken call always use the whole word." },
+    fullLabels = { label = "Full labels", defaultOff = true,
+        tip = "Spell the longest verdicts out under a nameplate icon - BUSTER becomes TANKBUSTER. The icons step sideways by the width of the words under them, so the full words spread the row out; off, every plate's widest word is six characters and the rows pack evenly. The cast table and the spoken call always use the whole word either way." },
     devMode = { label = "Development mode", defaultOff = true,
         tip = "Adds a Development tab with the data-collection tools. Nothing here changes what the addon calls out - it is for finding out what the game still lets an addon read." },
 }
@@ -256,9 +256,9 @@ function BuildGeneral(panel)
 
     -- Nameplate icons -----------------------------------------------------
     local plates = BuildGroup(panel, "Nameplate icons",
-        { "TOPLEFT", panel, "TOPLEFT", COL2_X, -6 }, COL2_W, 452)
+        { "TOPLEFT", panel, "TOPLEFT", COL2_X, -6 }, COL2_W, 486)
     local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 })
-    BuildSwitch(panel, "shortLabels", { "TOPLEFT", platesOn, "BOTTOMLEFT", 0, -4 })
+    BuildSwitch(panel, "fullLabels", { "TOPLEFT", platesOn, "BOTTOMLEFT", 0, -4 })
 
     local anchorLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     anchorLabel:SetPoint("TOPLEFT", plates, "TOPLEFT", 16, -82)
@@ -357,7 +357,7 @@ function BuildGeneral(panel)
         after = Redraw,
     })
 
-    BuildSlider(panel, {
+    local nudgeYSlider = BuildSlider(panel, {
         key = "nudgeY",
         default = 0,
         min = -CastAheadConfig.NUDGE_MAX, max = CastAheadConfig.NUDGE_MAX, step = 1,
@@ -367,7 +367,7 @@ function BuildGeneral(panel)
         after = Redraw,
     })
 
-    BuildReset(panel, { "BOTTOMRIGHT", plates, "BOTTOMRIGHT", -12, 10 },
+    BuildReset(panel, { "TOPLEFT", nudgeYSlider, "BOTTOMLEFT", -6, -22 },
         { "iconSize", "labelScale", "offsetX", "nudgeX", "nudgeY" }, Redraw)
 
     -- Centre call ---------------------------------------------------------

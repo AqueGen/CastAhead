@@ -64,10 +64,14 @@ function C.LabelScale()
     return C.Number("labelScale", C.LABEL_DEFAULT, C.LABEL_MIN, C.LABEL_MAX) / 100
 end
 
--- Off unless asked for: the full word is what teaches a player what the call
--- means, and only someone who already knows them wants the short form.
+-- Short by default. Measured on real rows: with the long verdicts spelled
+-- out, three icons stretched across the whole nameplate and the spacing
+-- depended on which verdict happened to come up; short, the widest word on a
+-- plate is six characters and every row packs the same. The whole word is
+-- still spoken and still shown in the cast table, so nothing is lost - but
+-- the switch is there for anyone who wants it on the icons too.
 function C.ShortLabels()
-    return C.Get("shortLabels") == true
+    return C.Get("fullLabels") ~= true
 end
 
 function C.Set(key, value)
