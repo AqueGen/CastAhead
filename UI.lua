@@ -809,3 +809,48 @@ end
 function CastAhead_OnCompartmentClick()
     CastAhead_Toggle()
 end
+
+-- An entry in the game's own AddOns list, which is where a player who does not
+-- know the slash command looks first. Every setting lives in our window, so
+-- this page is a signpost to it rather than a second copy of the settings that
+-- would then have to be kept in step.
+local function RegisterSettingsCategory()
+    if not (Settings and Settings.RegisterCanvasLayoutCategory) then return end
+
+    local panel = CreateFrame("Frame")
+    panel.name = "CastAhead"
+
+    local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", 16, -16)
+    title:SetText("CastAhead")
+
+    local blurb = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    blurb:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
+    blurb:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
+    blurb:SetJustifyH("LEFT")
+    blurb:SetText("Everything CastAhead has is in its own window: the tracked casts, "
+        .. "what gets called out, where it is drawn and how it sounds.\n\n"
+        .. "Open it with |cffffd100/ca|r, the minimap button, or the button below.")
+
+    local open = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    open:SetSize(180, 24)
+    open:SetPoint("TOPLEFT", blurb, "BOTTOMLEFT", 0, -16)
+    open:SetText("Open CastAhead")
+    open:SetScript("OnClick", function()
+        -- Close the game's settings first: our window would otherwise open
+        -- behind it, which reads as the button doing nothing.
+        if SettingsPanel and SettingsPanel:IsShown() then
+            HideUIPanel(SettingsPanel)
+        end
+        if not (window and window:IsShown()) then CastAhead_Toggle() end
+    end)
+
+    local category = Settings.RegisterCanvasLayoutCategory(panel, "CastAhead")
+    category.ID = "CastAhead"
+    Settings.RegisterAddOnCategory(category)
+end
+
+-- Registered as the file loads. The settings API is up before addons are, and
+-- an event frame here would be the first OnEvent handler in the file, which is
+-- what the stubbed API in the test suite hands events to.
+RegisterSettingsCategory()
