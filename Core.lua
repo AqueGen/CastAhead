@@ -30,7 +30,8 @@ local ICON_SIZE = 26
 local BAR_GAP = 6        -- distance from the plate's left edge
 local LABEL_HEIGHT = 11  -- the advice text sits under each icon
 local BAR_SPACING = 5    -- gap between one row's label and the next icon
-local H_STEP = 68        -- sideways step: the label under an icon is wider than the icon
+local H_STEP = 68        -- fallback sideways step, before any label is measured
+local LABEL_GAP = 8      -- clear space between one row's label and the next
 local COMBAT_POLL_BATCH = 8      -- nameplates re-checked per tick
 local PREDICTION_MATCH_WINDOW = 4.0  -- how far off a predicted cast may start
 local ESTIMATE_NOW = 2.0             -- an estimate this close just reads as "now"
@@ -719,12 +720,34 @@ end
 
 -- One icon per tracked spell with the seconds left written on it, the way a
 -- cooldown reads. No progress bar: the number is the information.
+-- The icon size is the player's, so everything drawn on the icon is measured
+-- from it rather than from the constant: the countdown, the advice under it
+-- and the alert ring all keep their proportions at any size.
+local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+
+local function ApplyBarSize(bar)
+    local size = CastAheadConfig.IconSize()
+    if bar._size == size then return size end
+    bar._size = size
+    local scale = size / ICON_SIZE
+    bar:SetSize(size, size)
+    bar.glow:SetPoint("TOPLEFT", -size * 0.42, size * 0.42)
+    bar.glow:SetPoint("BOTTOMRIGHT", size * 0.42, -size * 0.42)
+    bar.time:SetFont(FONT, math.max(8, math.floor(14 * scale + 0.5)), "OUTLINE")
+    bar.label:SetFont(FONT, math.max(7, math.floor(10 * scale + 0.5)), "OUTLINE")
+    return size
+end
+
 local function GetBar(state, index)
     state.bars = state.bars or {}
-    if state.bars[index] then return state.bars[index] end
+    if state.bars[index] then
+        ApplyBarSize(state.bars[index])
+        return state.bars[index]
+    end
     local pooled = table.remove(barPool)
     if pooled then
         state.bars[index] = pooled
+        ApplyBarSize(pooled)
         return pooled
     end
     local bar = CreateFrame("Frame", nil, UIParent)
@@ -776,6 +799,7 @@ local function GetBar(state, index)
     bar.label:SetPoint("TOP", bar, "BOTTOM", 0, -1)
 
     bar:Hide()
+    ApplyBarSize(bar)
     state.bars[index] = bar
     return bar
 end
@@ -807,7 +831,12 @@ CastAheadAnchors = ANCHORS   -- the options window builds its grid from this
 local GROW = { left = true, down = true, right = true, up = true }
 CastAheadGrowth = GROW
 
-local function AnchorBar(unit, bar, index)
+-- Sideways, the icons cannot simply sit an icon's width apart: the advice
+-- under them is wider than they are, and "TANKBUSTER" next to "TANKBUSTER"
+-- would collide. The step is the widest label actually on screen, which is
+-- why two short calls sit close together and no longer leave a hole the size
+-- of a third icon between them.
+local function AnchorBar(unit, bar, index, hStep)
     local plate = C_NamePlate.GetNamePlateForUnit(unit)
     -- The bar is a child of UIParent, not of the plate, so it does not inherit
     -- the plate's visibility: a plate that is gone or hidden would otherwise
@@ -827,27 +856,35 @@ local function AnchorBar(unit, bar, index)
     local spec = ANCHORS[side] or ANCHORS.left
     local gap = BAR_GAP + (CastAheadDB and tonumber(CastAheadDB.offsetX) or 0)
     local growSetting = CastAheadDB and CastAheadDB.grow or "auto"
+    local size = bar._size or ICON_SIZE
+    local nudgeX, nudgeY = CastAheadConfig.NudgeX(), CastAheadConfig.NudgeY()
+    hStep = hStep or H_STEP
     if bar._plate ~= plate or bar._index ~= index or bar._gap ~= gap or bar._side ~= side
-        or bar._grow ~= growSetting then
+        or bar._grow ~= growSetting or bar._hStep ~= hStep or bar._sized ~= size
+        or bar._nudgeX ~= nudgeX or bar._nudgeY ~= nudgeY then
         bar._plate = plate
         bar._index = index
         bar._gap = gap
         bar._side = side
         bar._grow = growSetting
+        bar._hStep = hStep
+        bar._sized = size
+        bar._nudgeX = nudgeX
+        bar._nudgeY = nudgeY
         bar._anchor = plate
         bar:ClearAllPoints()
-        local step = ICON_SIZE + LABEL_HEIGHT + BAR_SPACING
-        local x = spec.dx * gap
+        local step = size + LABEL_HEIGHT + BAR_SPACING
+        local x = spec.dx * gap + nudgeX
         -- Above the plate the label hangs under the icon, so lift it clear.
-        local y = spec.dy * (gap + (spec.dy > 0 and LABEL_HEIGHT or 0))
+        local y = spec.dy * (gap + (spec.dy > 0 and LABEL_HEIGHT or 0)) + nudgeY
         -- Growth direction: the player's choice, or the position's own.
         local grow = CastAheadDB and CastAheadDB.grow
         if not GROW[grow] then grow = spec.grow end
         local n = index - 1
         if grow == "right" then
-            x = x + n * H_STEP
+            x = x + n * hStep
         elseif grow == "left" then
-            x = x - n * H_STEP
+            x = x - n * hStep
         elseif grow == "up" then
             y = y + n * step
         else
@@ -1113,15 +1150,25 @@ function RefreshBar(unit, state)
     end
     local entries = CollectRows(state)
     state.shown = entries
+    -- Painted before being placed: sideways the icons step by the width of the
+    -- widest advice under them, not by the icon, so two short calls sit close
+    -- together instead of leaving a hole the size of a third icon.
+    local hStep = 0
     for i = 1, #entries do
         local entry = entries[i]
         local bar = GetBar(state, i)
-        if AnchorBar(unit, bar, i) then
-            -- The game's own verdict only applies to the cast happening now.
-            local interruptible
-            if entry.casting then interruptible = state.interruptible end
-            PaintBar(bar, entry, interruptible)
-            entry.bar = bar
+        -- The game's own verdict only applies to the cast happening now.
+        local interruptible
+        if entry.casting then interruptible = state.interruptible end
+        PaintBar(bar, entry, interruptible)
+        entry.bar = bar
+        local width = (bar.label:GetStringWidth() or 0) + LABEL_GAP
+        if width > hStep then hStep = width end
+    end
+    hStep = math.max(hStep, (state.bars and state.bars[1] and state.bars[1]._size or ICON_SIZE) + LABEL_GAP)
+    for i = 1, #entries do
+        local bar = entries[i].bar
+        if AnchorBar(unit, bar, i, hStep) then
             bar:Show()
             diag.shown = diag.shown + 1
         end
@@ -1871,8 +1918,12 @@ local function CenterFrame()
         local ux, uy = UIParent:GetCenter()
         if cx and ux then
             CastAheadDB = CastAheadDB or {}
-            CastAheadDB.centerX = math.floor(cx - ux + 0.5)
-            CastAheadDB.centerY = math.floor(cy - uy - CENTER_LINE_H / 2 + self:GetHeight() / 2 - CENTER_Y + 0.5)
+            -- GetCenter reports in the frame's own scale, UIParent's in its
+            -- own, so the block's side is converted before the subtraction.
+            local scale = self:GetScale()
+            CastAheadDB.centerX = math.floor(cx * scale - ux + 0.5)
+            CastAheadDB.centerY = math.floor(cy * scale - uy
+                + (self:GetHeight() / 2 - CENTER_LINE_H / 2) * scale - CENTER_Y + 0.5)
             self._x = nil          -- force the anchor to be re-applied
         end
     end)
@@ -1882,10 +1933,18 @@ end
 
 local function PlaceCenter(f)
     local x, y = CenterOffset()
-    if f._x ~= x or f._y ~= y then
-        f._x, f._y = x, y
+    -- The block is scaled rather than rebuilt at a new size: one setting then
+    -- moves the icon, the words and the countdown together, and the spacing
+    -- between them stays right at any size.
+    local scale = CastAheadConfig.CenterScale()
+    if f._x ~= x or f._y ~= y or f._scale ~= scale then
+        f._x, f._y, f._scale = x, y, scale
+        f:SetScale(scale)
         f:ClearAllPoints()
-        f:SetPoint("TOP", UIParent, "CENTER", x, y + CENTER_LINE_H / 2)
+        -- The saved offsets are screen pixels, while SetPoint measures in the
+        -- frame's own scale, so they are divided back out - the block stays
+        -- where it was dragged when the size changes.
+        f:SetPoint("TOP", UIParent, "CENTER", x / scale, y / scale + CENTER_LINE_H / 2)
     end
 end
 
@@ -2139,19 +2198,33 @@ local function StopTest(quiet)
         end
     end
     demo = nil
+    -- The run also ends on its own, so the window's toggle is repainted here
+    -- rather than only where it was clicked.
+    if CastAheadUI and CastAheadUI.RefreshTest then CastAheadUI.RefreshTest() end
     if not quiet then print("|cff33ff99CastAhead|r test finished") end
 end
 CastAheadCore.StopTest = StopTest
+
+-- The window's button is a toggle, so it has to be able to say which half of
+-- the toggle it currently is. The test also stops on its own once every
+-- sample cast has run out.
+function CastAheadCore.Testing()
+    return demo ~= nil
+end
 
 local function DemoAnchor(e, i)
     if e.unit and AnchorBar(e.unit, e.bar, e.slot) then return end
     -- No plate (or it went away): park the icon mid-screen instead.
     e.unit = nil
-    if e.bar._plate ~= UIParent then
+    -- Wide enough for the advice under the icon, and never narrower than the
+    -- icon itself, so the row still reads at the largest size.
+    local step = math.max(H_STEP, (e.bar._size or ICON_SIZE) + LABEL_GAP)
+    if e.bar._plate ~= UIParent or e.bar._demoStep ~= step then
         e.bar._plate = UIParent
+        e.bar._demoStep = step
         e.bar:ClearAllPoints()
         e.bar:SetPoint("CENTER", UIParent, "CENTER",
-            (i - 1) * H_STEP - (#demo.entries - 1) * H_STEP / 2, -160)
+            (i - 1) * step - (#demo.entries - 1) * step / 2, -160)
     end
     e.bar:Show()
 end
@@ -2225,6 +2298,7 @@ function CastAheadCore.Test(instanceID)
     end
     print(string.format("|cff33ff99CastAhead|r test: %d call(s) from %s on %d plate(s) (again to stop)",
         total, tostring(rows.name or id), #units))
+    if CastAheadUI and CastAheadUI.RefreshTest then CastAheadUI.RefreshTest() end
     demo.frame:SetScript("OnUpdate", function()
         if not demo then return end
         local t = GetTime()
@@ -2446,6 +2520,12 @@ end
 -- Called by the options window when an output toggle changes, so bars and
 -- timeline events already on screen follow the new setting instead of
 -- lingering until the next cast happens to repaint them.
+-- The centre call's size changed in the window: re-anchor it, and let a block
+-- that is currently on screen (or being dragged) take the new scale at once.
+function CastAheadCore.ResizeCenter()
+    if center then PlaceCenter(center) end
+end
+
 function CastAheadCore.Reapply()
     local isDisabled = CastAheadUI and CastAheadUI.IsDisabled
     for unit, state in pairs(plates) do
@@ -2465,6 +2545,18 @@ function CastAheadCore.Reapply()
             end
         end
         RefreshBar(unit, state)
+    end
+    -- The test drive keeps its own bars, outside `plates`. Without this a size
+    -- or position change made while it runs is only seen after restarting it,
+    -- which is exactly when the player is trying to judge the change.
+    if demo then
+        for i = 1, #demo.entries do
+            local e = demo.entries[i]
+            if e.bar then
+                ApplyBarSize(e.bar)
+                DemoAnchor(e, i)
+            end
+        end
     end
 end
 

@@ -18,8 +18,42 @@ local C = CastAheadConfig
 C.LEAD_DEFAULT = 0
 C.LEAD_MAX = 15
 
+-- Every nameplate addon draws a different frame, so where our icons land and
+-- how big they are has to be the player's call. Sizes are in pixels at the
+-- default UI scale; the nudge shifts the whole row off the anchor point.
+C.ICON_DEFAULT, C.ICON_MIN, C.ICON_MAX = 26, 14, 64
+C.NUDGE_MAX = 100
+C.CENTER_DEFAULT, C.CENTER_MIN, C.CENTER_MAX = 100, 50, 250
+
 function C.Get(key)
     return CastAheadDB and CastAheadDB[key]
+end
+
+-- A saved variable can hold anything, so every number the drawing code reads
+-- comes back through one clamp rather than being trusted where it is used.
+function C.Number(key, default, low, high)
+    local value = tonumber(C.Get(key))
+    if not value then return default end
+    if value < low then return low end
+    if value > high then return high end
+    return value
+end
+
+function C.IconSize()
+    return C.Number("iconSize", C.ICON_DEFAULT, C.ICON_MIN, C.ICON_MAX)
+end
+
+function C.NudgeX()
+    return C.Number("nudgeX", 0, -C.NUDGE_MAX, C.NUDGE_MAX)
+end
+
+function C.NudgeY()
+    return C.Number("nudgeY", 0, -C.NUDGE_MAX, C.NUDGE_MAX)
+end
+
+-- Percent, so the slider reads the way a player expects.
+function C.CenterScale()
+    return C.Number("centerScale", C.CENTER_DEFAULT, C.CENTER_MIN, C.CENTER_MAX) / 100
 end
 
 function C.Set(key, value)
