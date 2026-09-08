@@ -214,8 +214,11 @@ CastAheadData = {
           first = 12.0, offset = 9.0, hits = 4, dmg = 0.35, kick = 0, cc = 0 },
         { spell = 200, npc = 2, mob = "Filler", name = "Bolt", cast = 2.5, cd = { 3.6 },
           first = 4.0, hits = 1, dmg = 0.3, kick = 0.5, cc = 0.2, filler = true },
+        -- firstN matters: the neighbour-lock cases below tie this row against
+        -- 950, and a row without opening samples loses that tie to any rival
+        -- inside FIRST_TOLERANCE before the lock ever gets a say.
         { spell = 300, npc = 3, mob = "Cycler", name = "Cycle", cast = 1.5, cd = { 4.8, 4.8, 8.7 },
-          first = 3.0, hits = 3, dmg = 0.25, kick = 0, cc = 0.05 },
+          first = 3.0, firstN = 5, hits = 3, dmg = 0.25, kick = 0, cc = 0.05 },
         -- Statistically dangerous (5 targets, half their health) but NOT in the
         -- curated set: the "important only" filter must hide it anyway.
         { spell = 700, npc = 7, mob = "Unmarked", name = "Loud", cast = 7.0, cd = { 25.0 },
@@ -1435,6 +1438,92 @@ local hidden = CenterFrameStub()
 check(not (hidden and hidden.shown), "centerText = false keeps the centre call hidden")
 reset()
 CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
+
+-- A tie whose candidates disagree names both calls instead of nothing: the
+-- player is told a cast is out and which two answers are in play. Spell 300
+-- is DODGE; a 1.5s KICK lookalike on another creature makes the tie.
+table.insert(CastAheadData[1877], { spell = 960, npc = 9, mob = "Stranger", name = "Loud", cast = 1.5,
+                          cd = { 4.8, 4.8, 8.7 }, first = 3.0, firstN = 5, hits = 1, dmg = 0.25, n = 200,
+                          kick = 0.9, cc = 0, prio = "KICK", kickable = true })
+enter()
+fire("UNIT_SPELLCAST_START", unit)
+advance(1.5)
+fire("UNIT_SPELLCAST_STOP", unit)
+local splitLabel
+for i = 1, #allFrames do
+    local f = allFrames[i]
+    if f.shown and IsBar(f) and f.labelValue and f.labelValue:find("/", 1, true) then splitLabel = f.labelValue end
+end
+check(splitLabel == "DODGE / KICK", "a disagreeing tie is labelled with both calls, got " .. tostring(splitLabel))
+advance(17.0)                          -- the tie comes round again: a live cast
+fire("UNIT_SPELLCAST_START", unit)
+advance(0.5)
+local splitCenter = CenterFrameStub()
+check(splitCenter and splitCenter.shown and splitCenter.timeValue:find("Dodge or interrupt", 1, true),
+    "the centre call reads both answers for a disagreeing tie, got " .. tostring(splitCenter and splitCenter.timeValue))
+reset()
+table.remove(CastAheadData[1877])
+
+-- Population and packs, from MDT ------------------------------------------
+-- Normally Packs.lua. One Caster (npc 1) in the whole dungeon; Filler (npc 2)
+-- stands with Cycler (npc 3). Picked up by the next enter().
+CastAheadPacks = { ["Test"] = {
+    total = { [1] = 1, [2] = 5, [3] = 5, [4] = 5, [9] = 5, [11] = 5 },
+    packs = { { [2] = 1, [3] = 2 } },
+} }
+-- Both rules ship switched off (see the tuning table in Core.lua for the
+-- measurements); the cases exercise the machinery behind the switches.
+CastAheadCore.Tuning.population = true
+CastAheadCore.Tuning.packsNarrow = true
+CastAheadCore.Tuning.packsCompany = true
+enter()
+castFor(3.0)                            -- spell 100: npc 1, unique length
+check(IconShown(100), "the dungeon's one Caster is identified from its cast")
+dead[unit] = true
+fire("UNIT_HEALTH", unit)               -- it dies in view
+local killed, exhausted = CastAheadCore.Population()
+check(killed[1] == 1 and exhausted[1] == true,
+    "its death is counted, and with every Caster dead the kind is exhausted")
+hostile[unit], combat[unit], dead[unit] = true, true, nil
+fire("NAME_PLATE_UNIT_ADDED", unit)     -- a new plate on the recycled token
+castFor(3.0)
+check(not IconShown(100), "a 3.0s cast can no longer be the Caster once every one is dead")
+reset()
+fire("CHALLENGE_MODE_START")
+killed, exhausted = CastAheadCore.Population()
+check(next(exhausted) == nil, "a new key starts the count over")
+enter()
+castFor(3.0)
+check(IconShown(100), "and the Caster is back on the table")
+reset()
+
+-- Packs beat the imported neighbour list: the trait rows say Cycler (npc 3)
+-- stands with Filler (npc 2), MDT says Other (npc 4) does. With Filler locked
+-- next door, the 1.5s tie between them falls the way MDT says.
+CastAheadPacks["Test"].packs = { { [2] = 1, [4] = 1 } }
+-- The lookalike from the earlier tie cases, gone again by now.
+table.insert(CastAheadData[1877], { spell = 950, npc = 4, mob = "Other", name = "Also", cast = 1.5,
+                          cd = { 4.8, 4.8, 8.7 }, first = 3.0, firstN = 5, hits = 3, dmg = 0.25, n = 99,
+                          kick = 0, cc = 0, prio = "DODGE" })
+levels[other] = 93
+hostile[other], combat[other] = true, true
+fire("NAME_PLATE_UNIT_ADDED", other)
+fire("UNIT_SPELLCAST_START", other)
+advance(2.5)
+fire("UNIT_SPELLCAST_STOP", other)      -- spell 200, unique length: npc 2 locked
+levels[unit] = 92
+enter()
+castFor(1.5)
+check(IconShown(950) and not IconShown(300),
+    "MDT's pack, not the imported neighbour list, says who stands with a locked Filler")
+reset()
+fire("NAME_PLATE_UNIT_REMOVED", other)
+levels[unit], levels[other] = nil, nil
+table.remove(CastAheadData[1877])
+CastAheadPacks = nil
+CastAheadCore.Tuning.population = false
+CastAheadCore.Tuning.packsNarrow = false
+CastAheadCore.Tuning.packsCompany = false
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

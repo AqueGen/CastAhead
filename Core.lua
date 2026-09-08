@@ -57,6 +57,8 @@ local GetTrack
 local recentCasts
 local StartPreview
 local RefineByNPC
+local ResolvedNPCs, LockedNPCs
+local Probe                 -- /ca probe, defined next to Debug; the event handler calls it
 local Identify
 local LockNPC
 local diag = { plates = 0, casts = 0, identified = 0, shown = 0, published = 0 }
@@ -102,11 +104,70 @@ local function MergeCuration()
     end
 end
 
+-- Matcher switches the replay harness can flip to measure a rule against real
+-- fights. Defaults are the shipped behaviour, each settled by that harness:
+--  - traitsNarrow on: switching it off cost 4-5 points of correct calls on
+--    both our own and public logs and removed no wrong ones;
+--  - trustUnsureTrack off: a single candidate that was never confirmed used
+--    to be inherited by every later cast of the same length on that plate,
+--    so one guess became a run of wrong calls ("never: track" was the single
+--    largest source of them). Re-identifying each cast cut wrong calls by a
+--    quarter for two points of correct ones, which the wider opening
+--    tolerance in Match.lua then won back.
+local tuning = {
+    traitsNarrow = true,       -- let the trait-derived creature set pick among candidates
+    trustUnsureTrack = false,  -- a single unconfirmed candidate is re-identified, not inherited
+    --  - population off: MDT counts the creatures it places, not the ones a
+    --    dungeon spawns (Kings' Rest lists two Interment Constructs and the
+    --    waves bring more), so "every one is dead" came true early and the
+    --    real creature was excluded - 20 wrong Entomb calls in our own runs,
+    --    and fewer right calls on both sources. Stays off until a spawn
+    --    table exists; the counting itself is sound and stays in.
+    --  - packsNarrow / packsCompany off: preferring a locked neighbour's
+    --    packmates buys about one wrong call per extra right one (own logs
+    --    +34 right / +24 wrong, public +44 / +45), and turns cross-creature
+    --    ties into same-creature ties, which nothing here can settle. A
+    --    wrong call costs more than silence, so neither is on by default.
+    population = false,        -- a creature seen dying as many times as MDT places it is out
+    packsNarrow = false,       -- a locked neighbour's packmates are preferred among cast candidates
+    packsCompany = false,      -- ... and among trait matches, instead of the trait rows' own `co`
+}
+
+-- Population: how many of each creature MDT places in this dungeon (Packs.lua,
+-- keyed by the dungeon's English name), how many of each we have watched die,
+-- and which kinds are therefore gone. A key restarts the count; a /reload does
+-- not, so the count only ever lags behind the truth, never runs ahead of it.
+local packs                 -- { total = { [npc] = n }, packs = { { [npc] = n }, ... } }
+local killed = {}
+local exhausted = {}
+local countedInstance
+
+local function ResetPopulation()
+    wipe(killed)
+    wipe(exhausted)
+end
+
+-- MDT and our table spell a name apart ("King's Rest" against "Kings' Rest"),
+-- so the lookup ignores everything but letters and digits.
+local function PacksFor(name)
+    if not (name and CastAheadPacks) then return nil end
+    local want = name:lower():gsub("[^%w]", "")
+    for key, data in pairs(CastAheadPacks) do
+        if key:lower():gsub("[^%w]", "") == want then return data end
+    end
+    return nil
+end
+
 local function LoadDungeon()
     MergeCuration()
     local _, _, _, _, _, _, _, instanceID = GetInstanceInfo()
     dungeon = IsInInstance() and instanceID and CastAheadData and CastAheadData[instanceID] or nil
     traitRows = dungeon and CastAheadTraits and CastAheadTraits[instanceID] or nil
+    packs = dungeon and PacksFor(dungeon.name) or nil
+    if instanceID ~= countedInstance then
+        ResetPopulation()
+        countedInstance = instanceID
+    end
     wipe(byNPC)
     if dungeon then
         for i = 1, #dungeon do
@@ -444,7 +505,49 @@ end
 
 -- Creatures pinned down on the other plates. Only a locked identity counts as
 -- company; a plate still choosing between several says nothing.
-local function LockedNPCs(except)
+-- A plate we knew the identity of has died: one fewer of that kind left.
+local function NoteDeath(state)
+    if not packs or not packs.total then return end
+    local npc = state.npc
+    if not npc then
+        -- No lock, but every sure cast on the plate agreed on one creature.
+        local known = ResolvedNPCs(state)
+        if known then
+            local only
+            for id in pairs(known) do
+                if only then only = nil break end
+                only = id
+            end
+            npc = only
+        end
+    end
+    if not npc then return end
+    killed[npc] = (killed[npc] or 0) + 1
+    local total = packs.total[npc]
+    if total and killed[npc] >= total then exhausted[npc] = true end
+end
+
+-- Creatures that share a pack with any plate locked nearby. Nil when no pack
+-- data or no lock, so callers fall back to whatever else they know.
+local function PackMates(except)
+    if not packs or not packs.packs then return nil end
+    local locked = LockedNPCs(except)
+    if not next(locked) then return nil end
+    local mates
+    for _, pack in ipairs(packs.packs) do
+        local shared = false
+        for npc in pairs(pack) do
+            if locked[npc] then shared = true break end
+        end
+        if shared then
+            mates = mates or {}
+            for npc in pairs(pack) do mates[npc] = true end
+        end
+    end
+    return mates
+end
+
+function LockedNPCs(except)
     local out = {}
     for unit, other in pairs(plates) do
         if unit ~= except and other.npc then out[other.npc] = true end
@@ -522,20 +625,28 @@ function Identify(unit, state)
     local stage = CurrentStage()
     local matched = {}
     for i = 1, #traitRows do
-        if MatchTraits(traitRows[i], obs, stage, state) then
+        if not (tuning.population and exhausted[traitRows[i].npc])
+            and MatchTraits(traitRows[i], obs, stage, state) then
             matched[#matched + 1] = traitRows[i]
         end
     end
     if #matched > 1 then
+        -- Company narrows: packmates of a locked neighbour, from MDT's packs
+        -- when they are known, else from the trait rows' own neighbour list.
+        local mates = tuning.packsCompany and PackMates(unit) or nil
         local locked = LockedNPCs(unit)
-        if next(locked) then
+        if mates or next(locked) then
             local kept = {}
             for i = 1, #matched do
-                local co = matched[i].co
-                for j = 1, #(co or {}) do
-                    if locked[co[j]] then
-                        kept[#kept + 1] = matched[i]
-                        break
+                if mates then
+                    if mates[matched[i].npc] then kept[#kept + 1] = matched[i] end
+                else
+                    local co = matched[i].co
+                    for j = 1, #(co or {}) do
+                        if locked[co[j]] then
+                            kept[#kept + 1] = matched[i]
+                            break
+                        end
                     end
                 end
             end
@@ -940,12 +1051,20 @@ local function PaintBar(bar, entry, interruptible)
     local row = entry.row
     -- Only advise when the whole candidate set agrees.
     local advice = CastAheadMatch.ConsensusAdvice(entry.candidates or { row }, interruptible)
+    -- No agreement: name the calls in play instead of nothing, in white, so
+    -- the player decides between them rather than being told the wrong one.
+    local split = not advice and CastAheadMatch.SplitAdvice(entry.candidates, interruptible) or nil
     bar.icon:SetTexture(SpellIcon(row.spell))
-    bar.label:SetText(advice and advice.label or "")
     if advice then
+        bar.label:SetText(advice.label)
         bar.label:SetTextColor(advice.r, advice.g, advice.b)
         bar.border:SetColorTexture(advice.r, advice.g, advice.b, entry.casting and 1 or 0.7)
+    elseif split then
+        bar.label:SetText(split[1].label .. " / " .. split[2].label)
+        bar.label:SetTextColor(0.9, 0.9, 0.9)
+        bar.border:SetColorTexture(0.7, 0.7, 0.7, entry.casting and 1 or 0.7)
     else
+        bar.label:SetText("")
         bar.border:SetColorTexture(0, 0, 0, 0.8)
     end
     -- A cast happening right now is the urgent case, so it desaturates nothing
@@ -1050,7 +1169,7 @@ end
 -- the dungeon, or an interval that matched the schedule) get to name the
 -- creature: the narrowing this feeds is strict, and a single candidate left
 -- over by a fallback would rule out the right spells.
-local function ResolvedNPCs(state, exclude)
+function ResolvedNPCs(state, exclude)
     local known
     for _, track in pairs(state.tracks) do
         if track ~= exclude and track.sure and track.candidates and #track.candidates == 1 then
@@ -1099,6 +1218,18 @@ local function ClearTimeline(state)
     end
 end
 
+-- What the last finished cast on each unit was identified as - the candidate
+-- rows, possibly none. Read by the replay harness (test_replay.lua) to score
+-- the matcher against real combat logs; nothing in the addon reads it.
+local lastIdentified = {}
+local function LastCandidates(unit) return lastIdentified[unit] end
+-- Optional observer of the narrowing steps in OnCastStop: trace(unit, step,
+-- candidates). Set by the replay harness, nil in the game.
+local narrowTrace
+local function Trace(unit, step, candidates)
+    if narrowTrace then narrowTrace(unit, step, candidates) end
+end
+
 -- Between ENCOUNTER_START and ENCOUNTER_END nothing is tracked: the data is
 -- about trash, and a boss add whose cast happens to last as long as some
 -- trash spell would otherwise wear that spell's schedule.
@@ -1124,6 +1255,7 @@ local function RefreshCombat(unit)
     if not IsHostileNameplate(unit) or not C_NamePlate.GetNamePlateForUnit(unit) then
         -- Not attackable any more, dead, or the plate is simply gone: the unit
         -- token may already have been recycled onto something else.
+        if UnitIsDead(unit) then NoteDeath(state) end
         DropUnit(unit)
         return
     end
@@ -1327,29 +1459,57 @@ local function OnCastStop(unit, channel)
             track.index = nil
         end
     end
-    if not candidates or #candidates ~= 1 then
+    if candidates and #candidates == 1 and not track.sure and not tuning.trustUnsureTrack then
+        -- The track's one candidate was a guess, not a confirmed identity:
+        -- identify this cast on its own merits instead of inheriting it.
+        candidates = nil
+    end
+    if candidates and #candidates == 1 then
+        Trace(unit, "track", candidates)
+    else
         candidates = CastAheadMatch.ByCastTime(dungeon, duration, channel)
+        Trace(unit, "length", candidates)
+        if tuning.population and next(exhausted) then
+            candidates = CastAheadMatch.DropNPCs(candidates, exhausted)
+            Trace(unit, "population", candidates)
+        end
         if rejected then
             local kept = {}
             for i = 1, #candidates do
                 if candidates[i] ~= rejected then kept[#kept + 1] = candidates[i] end
             end
             candidates = kept
+            Trace(unit, "rejected", candidates)
         end
         candidates = CastAheadMatch.NarrowByEnabled(candidates, CastAheadUI and CastAheadUI.IsDisabled)
         candidates = CastAheadMatch.NarrowByLevel(candidates, state.level)
+        Trace(unit, "level", candidates)
         candidates = CastAheadMatch.NarrowByMob(candidates, KnownNPCs(state, track))
+        Trace(unit, "mob", candidates)
         -- The trait match prefers its own creatures but cannot exclude: a
         -- creature the trait table does not list still has to be recognised
         -- from the cast table alone.
-        if state.npcSet and #candidates > 1 then
+        if state.npcSet and #candidates > 1 and tuning.traitsNarrow then
             local within = CastAheadMatch.NarrowByMob(candidates, state.npcSet)
             if #within > 0 then candidates = within end
+            Trace(unit, "traits", candidates)
+        end
+        -- A neighbour we are sure of narrows this plate to its packmates -
+        -- preferred, never exclusive, since patrols and mixed pulls exist.
+        if #candidates > 1 and tuning.packsNarrow then
+            local mates = PackMates(unit)
+            if mates then
+                local within = CastAheadMatch.NarrowByMob(candidates, mates)
+                if #within > 0 then candidates = within end
+                Trace(unit, "packs", candidates)
+            end
         end
         if previousCast then
             candidates = CastAheadMatch.NarrowByInterval(candidates, startAt - previousCast)
+            Trace(unit, "interval", candidates)
         elseif state.engagedAt then
             candidates = CastAheadMatch.NarrowByFirst(candidates, startAt - state.engagedAt)
+            Trace(unit, "first", candidates)
         end
     end
     if #candidates == 0 and not channel and state.npc and state.npcSource == "traits" then
@@ -1376,6 +1536,7 @@ local function OnCastStop(unit, channel)
             candidates = CastAheadMatch.NarrowByFirst(candidates, startAt - state.engagedAt)
         end
     end
+    lastIdentified[unit] = candidates
     if #candidates == 0 then
         -- The track goes, so its timeline event must go with it, or the id is
         -- lost and the icon lingers on Blizzard's timeline.
@@ -1550,6 +1711,10 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         end
         return
     end
+    if event == "CHALLENGE_MODE_START" then
+        ResetPopulation()
+        return
+    end
     if event == "ENCOUNTER_START" or event == "ENCOUNTER_END" then
         inEncounter = event == "ENCOUNTER_START"
         if inEncounter then
@@ -1570,6 +1735,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     if event == "NAME_PLATE_UNIT_ADDED" then
         diag.plates = diag.plates + 1
         if IsHostileNameplate(unit) then
+            Probe(unit)
             diag.hostilePlates = (diag.hostilePlates or 0) + 1
             local state = GetState(unit)
             ClearTimeline(state)
@@ -1588,9 +1754,11 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         end
     elseif event == "UNIT_HEALTH" then
         if plates[unit] and UnitIsDead(unit) then
+            NoteDeath(plates[unit])
             DropUnit(unit)
         end
     elseif event == "UNIT_SPELLCAST_START" then
+        Probe(unit)
         OnCastStart(unit, false)
     elseif event == "UNIT_SPELLCAST_STOP" then
         OnCastStop(unit, false)
@@ -1756,6 +1924,15 @@ local function CenterPick(now)
             local advice = CastAheadMatch.ConsensusAdvice(c.candidates, state.interruptible)
             if advice then
                 centerPicks[#centerPicks + 1] = { endAt = c.endAt, advice = advice, row = c.row }
+            else
+                -- Disagreement is still a cast going out: show both answers
+                -- and let the player pick. Nothing is spoken for these.
+                local split = CastAheadMatch.SplitAdvice(c.candidates, state.interruptible)
+                if split then
+                    centerPicks[#centerPicks + 1] = { endAt = c.endAt, row = c.row,
+                        advice = { say = split[1].say .. " or " .. split[2].say,
+                                   r = 0.9, g = 0.9, b = 0.9 } }
+                end
             end
         end
     end
@@ -1899,7 +2076,7 @@ end)
 
 for _, event in ipairs({
     "PLAYER_ENTERING_WORLD", "PLAYER_SPECIALIZATION_CHANGED", "SPELLS_CHANGED",
-    "ENCOUNTER_START", "ENCOUNTER_END",
+    "ENCOUNTER_START", "ENCOUNTER_END", "CHALLENGE_MODE_START",
     "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH",
     "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP",
     "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",
@@ -1921,6 +2098,10 @@ end
 -- the dungeon table load, are plates being tracked, what level did we read, and
 -- how far identification got on each one.
 CastAheadCore = {}
+CastAheadCore.LastCandidates = LastCandidates   -- replay harness only
+CastAheadCore.SetTrace = function(fn) narrowTrace = fn end
+CastAheadCore.Tuning = tuning
+CastAheadCore.Population = function() return killed, exhausted end
 CastAheadCore.MoveCenter = ToggleMoveCenter
 
 -- The options window's speaker buttons: hear a category's call on demand.
@@ -2080,6 +2261,98 @@ function CastAheadCore.Test(instanceID)
         end
         if alive == 0 then StopTest() end
     end)
+end
+
+-- Probe: which unit facts a hostile nameplate still hands out in 12.x, and
+-- which come back Secret. The matcher can only narrow on the readable ones,
+-- so this is the list of possible new columns for Traits.lua. Every API is
+-- called under pcall and the value classified; a readable sample is kept.
+local PROBES = {
+    { "UnitHealthMax", function(u) return UnitHealthMax(u) end },
+    { "UnitHealth", function(u) return UnitHealth(u) end },
+    { "UnitPowerMax", function(u) return UnitPowerMax(u) end },
+    { "UnitPowerType", function(u) return UnitPowerType(u) end },
+    { "UnitLevel", function(u) return UnitLevel(u) end },
+    { "UnitEffectiveLevel", function(u) return UnitEffectiveLevel(u) end },
+    { "UnitClassification", function(u) return UnitClassification(u) end },
+    { "UnitCreatureType", function(u) return UnitCreatureType(u) end },
+    { "UnitCreatureFamily", function(u) return UnitCreatureFamily(u) end },
+    { "UnitIsBossMob", function(u) return UnitIsBossMob(u) end },
+    { "UnitIsLieutenant", function(u) return UnitIsLieutenant(u) end },
+    { "UnitName", function(u) return UnitName(u) end },
+    { "UnitGUID", function(u) return UnitGUID(u) end },
+    { "UnitSex", function(u) return UnitSex(u) end },
+    { "UnitReaction", function(u) return UnitReaction("player", u) end },
+    { "UnitThreatSituation", function(u) return UnitThreatSituation("player", u) end },
+    { "UnitCastingInfo.name", function(u) return (UnitCastingInfo(u)) end },
+    { "UnitCastingInfo.texture", function(u) local _, _, t = UnitCastingInfo(u) return t end },
+    { "UnitCastingInfo.spellID", function(u) local _, _, _, _, _, _, _, _, id = UnitCastingInfo(u) return id end },
+    { "UnitChannelInfo.name", function(u) return (UnitChannelInfo(u)) end },
+    { "GetCreatureFamily(GUID)", function(u)
+        local guid = UnitGUID(u)
+        return guid and select(6, strsplit("-", guid)) or nil
+    end },
+}
+local probing = false
+
+function Probe(unit)
+    if not probing then return end
+    CastAheadDB = CastAheadDB or {}
+    CastAheadDB.probe = CastAheadDB.probe or {}
+    local db = CastAheadDB.probe
+    for i = 1, #PROBES do
+        local name, fn = PROBES[i][1], PROBES[i][2]
+        local row = db[name]
+        if not row then row = { secret = 0, readable = 0, empty = 0 } db[name] = row end
+        local ok, value = pcall(fn, unit)
+        if not ok then
+            row.errors = (row.errors or 0) + 1
+        elseif value == nil then
+            row.empty = row.empty + 1
+        elseif IsSecret(value) then
+            row.secret = row.secret + 1
+        else
+            row.readable = row.readable + 1
+            if row.sample == nil then row.sample = tostring(value) end
+            -- Several distinct readable values means it can tell creatures apart.
+            row.values = row.values or {}
+            local key = tostring(value)
+            if not row.values[key] and (row.distinct or 0) < 12 then
+                row.values[key] = true
+                row.distinct = (row.distinct or 0) + 1
+            end
+        end
+    end
+end
+
+function CastAheadCore.Probing() return probing end
+
+function CastAheadCore.Probe(command)
+    if command == "off" then
+        probing = false
+        print("|cff33ff99CastAhead|r probe off")
+        return
+    end
+    if command == "clear" then
+        if CastAheadDB then CastAheadDB.probe = nil end
+        print("|cff33ff99CastAhead|r probe results cleared")
+        return
+    end
+    if command == "show" then
+        local db = CastAheadDB and CastAheadDB.probe
+        if not db then print("|cff33ff99CastAhead|r no probe results yet") return end
+        local names = {}
+        for name in pairs(db) do names[#names + 1] = name end
+        table.sort(names)
+        for _, name in ipairs(names) do
+            local r = db[name]
+            print(string.format("|cff33ff99CastAhead|r %-26s readable %3d  secret %3d  nil %3d  distinct %s  e.g. %s",
+                name, r.readable, r.secret, r.empty, tostring(r.distinct or 0), tostring(r.sample)))
+        end
+        return
+    end
+    probing = true
+    print("|cff33ff99CastAhead|r probe on - pull some trash, then /ca probe show")
 end
 
 function CastAheadCore.Debug()

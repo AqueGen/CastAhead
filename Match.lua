@@ -12,8 +12,11 @@ CastAheadMatch = {
     CD_TOLERANCE_FLAT = 1.0,
     CD_TOLERANCE_REL = 0.05,
     -- Time from engage to first cast varies with how fast the pull is walked
-    -- into, so this is the loosest of the three.
-    FIRST_TOLERANCE = 2.5,
+    -- into, so this is the loosest of the three. 4.0 was measured on 115 real
+    -- runs (ours and public): against 2.5 it resolved 2-3 points more casts
+    -- for a fraction of a point of wrong calls, while 6.0 doubled the wrong
+    -- calls on public logs.
+    FIRST_TOLERANCE = 4.0,
 }
 
 local M = CastAheadMatch
@@ -142,6 +145,26 @@ function M.ConsensusAdvice(candidates, interruptible)
     return first
 end
 
+-- When the candidates disagree, the distinct calls they would make, in a
+-- stable order - "KICK / DODGE" is still worth more to the player than a
+-- blank: they know something is coming and which two answers are on the
+-- table. Nil when there is agreement (ConsensusAdvice covers that) or when
+-- nothing here has a call at all.
+function M.SplitAdvice(candidates, interruptible)
+    if not candidates or #candidates < 2 then return nil end
+    local seen, out = {}, {}
+    for i = 1, #candidates do
+        local advice = M.Advice(candidates[i], interruptible)
+        if advice and not seen[advice] then
+            seen[advice] = true
+            out[#out + 1] = advice
+        end
+    end
+    if #out < 2 then return nil end
+    table.sort(out, function(a, b) return a.label < b.label end)
+    return out
+end
+
 -- Which candidate to name while several are still possible: the one seen most
 -- often, rather than whichever happened to sort first.
 function M.BestGuess(candidates)
@@ -224,6 +247,11 @@ end
 -- where Corrupted Guardian opens at 3.5s.
 function M.NarrowByFirst(candidates, elapsed)
     if not elapsed then return candidates end
+    -- A row with no opening data is dropped when a rival fits the window. That
+    -- reads harsh, and the gentler rule (keep the unknowns) was measured on 115
+    -- real runs: it resolved 1.5 points fewer casts and removed no wrong calls.
+    -- Rows without an opening are the rarely seen ones, and rarely seen is
+    -- itself evidence against them.
     local out = {}
     for i = 1, #candidates do
         local first = M.HasOpening(candidates[i]) and candidates[i].first or nil
@@ -382,6 +410,21 @@ function M.NarrowByMob(candidates, knownNPCs)
     local out = {}
     for i = 1, #candidates do
         if knownNPCs[candidates[i].npc] then
+            out[#out + 1] = candidates[i]
+        end
+    end
+    return out
+end
+
+-- Creatures that cannot be it any more: every one MDT placed in the dungeon
+-- has already been seen dying. Unlike the other narrowings this one may
+-- empty the list - a cast from a creature that no longer exists was never
+-- that creature's, and an empty answer is the honest one.
+function M.DropNPCs(candidates, exhausted)
+    if not exhausted or not next(exhausted) then return candidates end
+    local out = {}
+    for i = 1, #candidates do
+        if not exhausted[candidates[i].npc] then
             out[#out + 1] = candidates[i]
         end
     end
