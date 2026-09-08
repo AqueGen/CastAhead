@@ -731,13 +731,17 @@ local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local function ApplyBarSize(bar)
     local size = CastAheadConfig.IconSize()
     local labelScale = CastAheadConfig.LabelScale()
-    if bar._size == size and bar._labelScale == labelScale then return size end
-    bar._size, bar._labelScale = size, labelScale
+    local timeScale = CastAheadConfig.TimeScale()
+    if bar._size == size and bar._labelScale == labelScale
+        and bar._timeScale == timeScale then
+        return size
+    end
+    bar._size, bar._labelScale, bar._timeScale = size, labelScale, timeScale
     local scale = size / ICON_SIZE
     bar:SetSize(size, size)
     bar.glow:SetPoint("TOPLEFT", -size * 0.42, size * 0.42)
     bar.glow:SetPoint("BOTTOMRIGHT", size * 0.42, -size * 0.42)
-    bar.time:SetFont(FONT, math.max(8, math.floor(14 * scale + 0.5)), "OUTLINE")
+    bar.time:SetFont(FONT, math.max(7, math.floor(14 * scale * timeScale + 0.5)), "OUTLINE")
     bar.label:SetFont(FONT, math.max(6, math.floor(10 * scale * labelScale + 0.5)), "OUTLINE")
     return size
 end
@@ -1971,6 +1975,15 @@ local function PlaceCenter(f)
     -- moves the icon, the words and the countdown together, and the spacing
     -- between them stays right at any size.
     local scale = CastAheadConfig.CenterScale()
+    -- The words have a size of their own on top of the block's: the icon and
+    -- the countdown beside them are already as big as the block makes them.
+    local textScale = CastAheadConfig.CenterTextScale()
+    if f._textScale ~= textScale then
+        f._textScale = textScale
+        for i = 1, #f.lines do
+            f.lines[i].text:SetFont(FONT, math.max(10, math.floor(28 * textScale + 0.5)), "OUTLINE")
+        end
+    end
     if f._x ~= x or f._y ~= y or f._scale ~= scale then
         f._x, f._y, f._scale = x, y, scale
         f:SetScale(scale)

@@ -28,6 +28,10 @@ C.CENTER_DEFAULT, C.CENTER_MIN, C.CENTER_MAX = 100, 50, 250
 -- in proportion. This is the adjustment on top of that, in percent, for a
 -- player who wants tighter rows or larger words than the icon implies.
 C.LABEL_DEFAULT, C.LABEL_MIN, C.LABEL_MAX = 100, 50, 200
+-- The countdown drawn on the icon, and the words in the centre call, are
+-- adjusted the same way: a percentage of what the thing they sit on implies.
+C.TIME_DEFAULT, C.TIME_MIN, C.TIME_MAX = 100, 50, 200
+C.CENTER_TEXT_DEFAULT, C.CENTER_TEXT_MIN, C.CENTER_TEXT_MAX = 100, 50, 200
 
 function C.Get(key)
     return CastAheadDB and CastAheadDB[key]
@@ -62,6 +66,18 @@ end
 
 function C.LabelScale()
     return C.Number("labelScale", C.LABEL_DEFAULT, C.LABEL_MIN, C.LABEL_MAX) / 100
+end
+
+function C.TimeScale()
+    return C.Number("timeScale", C.TIME_DEFAULT, C.TIME_MIN, C.TIME_MAX) / 100
+end
+
+-- Only the words. The block's own scale moves the icon and the countdown with
+-- them, so this is for a player who wants the call readable from further away
+-- without a bigger block.
+function C.CenterTextScale()
+    return C.Number("centerTextScale", C.CENTER_TEXT_DEFAULT,
+        C.CENTER_TEXT_MIN, C.CENTER_TEXT_MAX) / 100
 end
 
 -- Short by default. Measured on real rows: with the long verdicts spelled

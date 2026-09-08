@@ -17,7 +17,8 @@ local COL2_X, COL2_W = 310, 300
 local COL3_X, COL3_W = 620, 300
 CastAheadOptions.MIN_WIDTH = COL3_X + COL3_W + COL1_X
 -- The tallest column: the nameplate group with its four sliders.
-CastAheadOptions.MIN_HEIGHT = 492
+-- The tallest column: the centre call and the icon sizes stacked.
+CastAheadOptions.MIN_HEIGHT = 476
 -- Forward declarations: BuildWindow calls these, and Lua resolves a local by
 -- what it holds at call time, so they must exist as upvalues before it runs.
 local BuildGeneral, BuildSounds, BuildDevelopment
@@ -256,7 +257,7 @@ function BuildGeneral(panel)
 
     -- Nameplate icons -----------------------------------------------------
     local plates = BuildGroup(panel, "Nameplate icons",
-        { "TOPLEFT", panel, "TOPLEFT", COL2_X, -6 }, COL2_W, 486)
+        { "TOPLEFT", panel, "TOPLEFT", COL2_X, -6 }, COL2_W, 396)
     local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 })
     BuildSwitch(panel, "fullLabels", { "TOPLEFT", platesOn, "BOTTOMLEFT", 0, -4 })
 
@@ -315,64 +316,9 @@ function BuildGeneral(panel)
         end
     end)
 
-    local iconSlider = BuildSlider(panel, {
-        key = "iconSize",
-        default = CastAheadConfig.ICON_DEFAULT,
-        min = CastAheadConfig.ICON_MIN, max = CastAheadConfig.ICON_MAX, step = 2,
-        width = 250,
-        point = { "TOPLEFT", square, "BOTTOMLEFT", -4, -16 },
-        caption = function(value) return string.format("Icon size: %d px", value) end,
-        after = Redraw,
-    })
-
-    local offsetSlider = BuildSlider(panel, {
-        key = "offsetX",
-        default = 0, min = 0, max = 120, step = 2,
-        width = 250,
-        point = { "TOPLEFT", iconSlider, "BOTTOMLEFT", -6, -18 },
-        caption = function(value)
-            return string.format("Distance from the plate: %d px", value)
-        end,
-        after = Redraw,
-    })
-
-    local labelSlider = BuildSlider(panel, {
-        key = "labelScale",
-        default = CastAheadConfig.LABEL_DEFAULT,
-        min = CastAheadConfig.LABEL_MIN, max = CastAheadConfig.LABEL_MAX, step = 5,
-        low = CastAheadConfig.LABEL_MIN .. "%", high = CastAheadConfig.LABEL_MAX .. "%",
-        width = 250,
-        point = { "TOPLEFT", offsetSlider, "BOTTOMLEFT", -6, -18 },
-        caption = function(value) return string.format("Label size: %d%% of the icon", value) end,
-        after = Redraw,
-    })
-
-    local nudgeXSlider = BuildSlider(panel, {
-        key = "nudgeX",
-        default = 0,
-        min = -CastAheadConfig.NUDGE_MAX, max = CastAheadConfig.NUDGE_MAX, step = 1,
-        width = 250,
-        point = { "TOPLEFT", labelSlider, "BOTTOMLEFT", -6, -18 },
-        caption = function(value) return string.format("Nudge sideways: %+d px", value) end,
-        after = Redraw,
-    })
-
-    local nudgeYSlider = BuildSlider(panel, {
-        key = "nudgeY",
-        default = 0,
-        min = -CastAheadConfig.NUDGE_MAX, max = CastAheadConfig.NUDGE_MAX, step = 1,
-        width = 250,
-        point = { "TOPLEFT", nudgeXSlider, "BOTTOMLEFT", -6, -18 },
-        caption = function(value) return string.format("Nudge up or down: %+d px", value) end,
-        after = Redraw,
-    })
-
-    BuildReset(panel, { "TOPLEFT", nudgeYSlider, "BOTTOMLEFT", -6, -22 },
-        { "iconSize", "labelScale", "offsetX", "nudgeX", "nudgeY" }, Redraw)
-
     -- Centre call ---------------------------------------------------------
     local centre = BuildGroup(panel, "Centre call",
-        { "TOPLEFT", panel, "TOPLEFT", COL3_X, -6 }, COL3_W, 156)
+        { "TOPLEFT", panel, "TOPLEFT", COL3_X, -6 }, COL3_W, 218)
     BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 })
 
     local centerScale = function()
@@ -389,16 +335,69 @@ function BuildGeneral(panel)
         after = centerScale,
     })
 
+    local centerTextSlider = BuildSlider(panel, {
+        key = "centerTextScale",
+        default = CastAheadConfig.CENTER_TEXT_DEFAULT,
+        min = CastAheadConfig.CENTER_TEXT_MIN, max = CastAheadConfig.CENTER_TEXT_MAX, step = 5,
+        low = CastAheadConfig.CENTER_TEXT_MIN .. "%", high = CastAheadConfig.CENTER_TEXT_MAX .. "%",
+        width = 250,
+        point = { "TOPLEFT", centerSlider, "BOTTOMLEFT", -6, -18 },
+        caption = function(value) return string.format("Text: %d%% of the block", value) end,
+        after = centerScale,
+    })
+
     local move = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     move:SetSize(160, 22)
-    move:SetPoint("TOPLEFT", centerSlider, "BOTTOMLEFT", -6, -18)
+    move:SetPoint("TOPLEFT", centerTextSlider, "BOTTOMLEFT", -6, -18)
     move:SetText("Move it on screen")
     move:SetScript("OnClick", function()
         if CastAheadCore and CastAheadCore.MoveCenter then CastAheadCore.MoveCenter() end
     end)
 
     BuildReset(panel, { "LEFT", move, "RIGHT", 6, 0 },
-        { "centerScale", "centerX", "centerY" }, centerScale)
+        { "centerScale", "centerTextScale", "centerX", "centerY" }, centerScale)
+
+    -- Size ----------------------------------------------------------------
+    -- Everything drawn on a nameplate icon, in one place: the icon sets the
+    -- size, and the two texts on it are adjusted as a share of that, so
+    -- changing the icon keeps them in proportion.
+    local sizes = BuildGroup(panel, "Icon size",
+        { "TOPLEFT", centre, "BOTTOMLEFT", 0, -12 }, COL3_W, 240)
+
+    local iconSlider = BuildSlider(panel, {
+        key = "iconSize",
+        default = CastAheadConfig.ICON_DEFAULT,
+        min = CastAheadConfig.ICON_MIN, max = CastAheadConfig.ICON_MAX, step = 2,
+        width = 250,
+        point = { "TOPLEFT", sizes, "TOPLEFT", 16, -26 },
+        caption = function(value) return string.format("Icon: %d px", value) end,
+        after = Redraw,
+    })
+
+    local labelSlider = BuildSlider(panel, {
+        key = "labelScale",
+        default = CastAheadConfig.LABEL_DEFAULT,
+        min = CastAheadConfig.LABEL_MIN, max = CastAheadConfig.LABEL_MAX, step = 5,
+        low = CastAheadConfig.LABEL_MIN .. "%", high = CastAheadConfig.LABEL_MAX .. "%",
+        width = 250,
+        point = { "TOPLEFT", iconSlider, "BOTTOMLEFT", -6, -18 },
+        caption = function(value) return string.format("Label: %d%% of the icon", value) end,
+        after = Redraw,
+    })
+
+    local timeSlider = BuildSlider(panel, {
+        key = "timeScale",
+        default = CastAheadConfig.TIME_DEFAULT,
+        min = CastAheadConfig.TIME_MIN, max = CastAheadConfig.TIME_MAX, step = 5,
+        low = CastAheadConfig.TIME_MIN .. "%", high = CastAheadConfig.TIME_MAX .. "%",
+        width = 250,
+        point = { "TOPLEFT", labelSlider, "BOTTOMLEFT", -6, -18 },
+        caption = function(value) return string.format("Countdown: %d%% of the icon", value) end,
+        after = Redraw,
+    })
+
+    BuildReset(panel, { "TOPLEFT", timeSlider, "BOTTOMLEFT", -6, -22 },
+        { "iconSize", "labelScale", "timeScale" }, Redraw)
 end
 
 -- The tools that collect data rather than change what is called out. Behind
