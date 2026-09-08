@@ -2454,6 +2454,38 @@ local PROBES = {
         local guid = UnitGUID(u)
         return guid and select(6, strsplit("-", guid)) or nil
     end },
+    -- The list above was written from memory and missed things. These come
+    -- from Blizzard's own generated documentation instead: every function that
+    -- takes a unit token, describes the creature rather than the group around
+    -- it, and carries no secrecy flag. A flag is only a promise about the
+    -- return value, not about what a hostile nameplate will actually answer -
+    -- UnitThreatSituation is unflagged and still came back nil every time - so
+    -- these are candidates to measure, not facts.
+    --
+    -- The first is the interesting one: a plain boolean about the cast going
+    -- out right now, which is a property of the spell rather than the mob and
+    -- would split candidates that tie on everything else.
+    { "UnitShouldDisplaySpellTargetName", function(u) return UnitShouldDisplaySpellTargetName(u) end },
+    { "UnitShouldDisplayName", function(u) return UnitShouldDisplayName(u) end },
+    -- Summoned adds are not the pack's own creatures, and our tables should
+    -- not be timing them as if they were.
+    { "UnitIsMinion", function(u) return UnitIsMinion(u) end },
+    -- Any of these would fingerprint a creature far harder than its level.
+    { "UnitArmor.effective", function(u) return select(2, UnitArmor(u)) end },
+    { "UnitAttackSpeed", function(u) return (UnitAttackSpeed(u)) end },
+    { "UnitSpellHaste", function(u) return UnitSpellHaste(u) end },
+    { "UnitPowerBarID", function(u) return UnitPowerBarID(u) end },
+    { "UnitNumPowerBarTimers", function(u) return UnitNumPowerBarTimers(u) end },
+    { "UnitWidgetSet", function(u) return UnitWidgetSet(u) end },
+    { "UnitNameplateShowsWidgetsOnly", function(u) return UnitNameplateShowsWidgetsOnly(u) end },
+    { "UnitSelectionType", function(u) return UnitSelectionType(u) end },
+    { "UnitIsGameObject", function(u) return UnitIsGameObject(u) end },
+    { "UnitAffectingCombat", function(u) return UnitAffectingCombat(u) end },
+    -- Empowered casts have stages, which is a hard tell where it happens.
+    { "UnitEmpoweredChannelDuration", function(u) return UnitEmpoweredChannelDuration(u) end },
+    -- Almost certainly party-only, but the check costs one call.
+    { "UnitPosition.x", function(u) return (UnitPosition(u)) end },
+    { "UnitDistanceSquared", function(u) return (UnitDistanceSquared(u)) end },
 }
 local probing = false
 
