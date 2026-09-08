@@ -137,10 +137,17 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
         for npcid, spells in mobs.items():
             for spellid, r in spells.items():
                 facts = mdt.get(str(npcid))
-                if facts and facts["boss"]:
+                if facts and facts.get("encounter"):
                     # Boss abilities are DBM's job, and letting them compete to
                     # identify a trash cast is how Melidrussa's kickable Frigid
                     # Shard ended up labelling Primal Juggernaut's Crushing Smash.
+                    #
+                    # The test is the encounter id, not the route data's "boss"
+                    # flag: that flag also covers the mini-bosses and rares a
+                    # group walks into on the way - Flamegullet, Defier Draghar,
+                    # High Channeler Ryvati - which no boss mod announces, and
+                    # which our own logs show casting outside every
+                    # ENCOUNTER_START window.
                     continue
                 if facts and facts["spells"] and str(spellid) not in facts["spells"]:
                     # The logs attributed a spell this creature does not own.
