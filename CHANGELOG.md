@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/AqueGen/CastAhead/compare/v0.5.0...v0.6.0) (2026-09-08)
+
+
+### Features
+
+* probe every unit fact the game still allows ([#13](https://github.com/AqueGen/CastAhead/issues/13)) ([79d84d1](https://github.com/AqueGen/CastAhead/commit/79d84d1c19553310c9c1c9648a7fea468e23be12))
+* track the mini-bosses standing in the trash path ([#12](https://github.com/AqueGen/CastAhead/issues/12)) ([cdaf92f](https://github.com/AqueGen/CastAhead/commit/cdaf92fcee523e2adc334f5877f52c3b6ba29985))
+
 ## [0.5.0](https://github.com/AqueGen/CastAhead/compare/v0.4.0...v0.5.0) (2026-09-08)
 
 
