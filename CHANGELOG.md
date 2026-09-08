@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/AqueGen/CastAhead/compare/v0.3.0...v0.4.0) (2026-09-08)
+
+
+### Features
+
+* appear in the game's own AddOns list ([#9](https://github.com/AqueGen/CastAhead/issues/9)) ([430a346](https://github.com/AqueGen/CastAhead/commit/430a346a3a2e31ea724ae5fca77de3db8cb59f79))
+
+
+### Bug Fixes
+
+* keep the settings page inside the window ([#7](https://github.com/AqueGen/CastAhead/issues/7)) ([18c181a](https://github.com/AqueGen/CastAhead/commit/18c181ac71e7fc9653fa96d6522db850b6fd791d))
+
 ## [0.3.0](https://github.com/AqueGen/CastAhead/compare/v0.2.0...v0.3.0) (2026-09-08)
 
 
