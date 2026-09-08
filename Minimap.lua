@@ -11,7 +11,12 @@ if not (LDB and LDBIcon) then return end
 
 local broker = LDB:NewDataObject("CastAhead", {
     type = "launcher",
-    icon = "Interface\\Icons\\Ability_Warrior_Sunder",
+    -- An eye: the addon's whole job is seeing what a mob is about to cast. The
+    -- button draws about twenty pixels across, masked to a circle, among a row
+    -- of other addons' buttons, so what matters is a silhouette nobody else
+    -- there is using - not detail. The warrior armour-break icon this replaces
+    -- meant nothing and read as a brown smudge at that size.
+    icon = "Interface\\Icons\\Spell_Holy_MindVision",
     OnClick = function(_, button)
         if button == "RightButton" and CastAheadCore and CastAheadCore.Debug then
             CastAheadCore.Debug()
