@@ -33,6 +33,14 @@ def cluster(xs):
     for v in xs:
         buckets[round(v * 2) / 2].append(v)
     best = max(buckets.values(), key=len)
+    if len(best) == 1 and len(xs) > 1:
+        # Nothing repeated. Every bucket holds one sample, so the "densest" one
+        # is whichever happened to be seen first, and handing it back as a
+        # schedule ships an outlier as fact. The median of everything at least
+        # sits among what was seen, and the spread marks the row approximate.
+        m = statistics.median(xs)
+        spread = (max(xs) - min(xs)) / m if m else 0.0
+        return round(m, 1), 1, spread
     m = statistics.median(best)
     spread = (max(best) - min(best)) / m if m else 0.0
     return round(m, 1), len(best), spread

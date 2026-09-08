@@ -130,10 +130,6 @@ CastAheadPriority = {
 CastAheadExtra = {
     [1762] = {
         { spell = 269928, npc = 134158, mob = "Shadow-Borne Champion", cast = 1, cd = { 18.2 }, first = 13.7, n = 0, approx = true, },
-        { spell = 272388, npc = 138489, mob = "Shadow of Zul", cast = 1.5, cd = { 2 }, first = 1, n = 0, approx = true, },
-    },
-    [1877] = {
-        { spell = 1293464, npc = 136076, mob = "Agitated Nimbus", cast = 1.5, cd = { 8.2, 5.8, 5.8, 5.8, 5.8, 5.8, 5.8 }, first = 20.1, n = 0, approx = true, },
     },
     [2521] = {
         { spell = 372047, npc = 187897, cast = 1, cd = { 16.6 }, first = 9.2, n = 0, approx = true, },

@@ -23,6 +23,7 @@ Config.lua
 Data.lua
 Priority.lua
 Traits.lua
+Packs.lua
 Match.lua
 Timeline.lua
 Core.lua
