@@ -10,7 +10,7 @@
 ## X-Website: https://github.com/AqueGen/CastAhead
 ## X-Curse-Project-ID: 1681771
 ## SavedVariables: CastAheadDB
-## IconTexture: Interface\Icons\Ability_Warrior_Sunder
+## IconTexture: Interface\Icons\Spell_Holy_MindVision
 ## AddonCompartmentFunc: CastAhead_OnCompartmentClick
 
 Libs\LibStub\LibStub.lua
