@@ -62,7 +62,7 @@ local recentCasts
 local StartPreview
 local RefineByNPC
 local ResolvedNPCs, LockedNPCs
-local Probe                 -- /ca probe, defined next to Debug; the event handler calls it
+local Probe, ProbeCast, ProbeAnchor, ProbeRestore -- /ca probe, defined next to Debug; the event handler calls them
 local Identify
 local LockNPC
 local diag = { plates = 0, casts = 0, identified = 0, shown = 0, published = 0 }
@@ -1767,6 +1767,10 @@ end
 -- (never read - it is Secret in instances), the spellcast events carry
 -- castGUID, spellID and, on CHANNEL_STOP, interruptedBy.
 frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
+    if unit == "player" and (event == "UNIT_SPELLCAST_SUCCEEDED" or event == "UNIT_SPELLCAST_START") then
+        ProbeAnchor(arg3)
+        if event == "UNIT_SPELLCAST_SUCCEEDED" then return end
+    end
     if event == "UNIT_AURA" then
         if unit == "player" then LearnDispel() end
         return
@@ -1785,6 +1789,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         -- adopted before anything reads or writes settings.
         if CastAheadConfig.AdoptOldName then CastAheadConfig.AdoptOldName() end
         CastAheadConfig.Migrate()
+        ProbeRestore()
         wipe(seenAuras)
         wipe(recentCasts)
         for _, state in pairs(plates) do
@@ -1844,10 +1849,12 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         end
     elseif event == "UNIT_SPELLCAST_START" then
         Probe(unit)
+        ProbeCast(unit, false)
         OnCastStart(unit, false)
     elseif event == "UNIT_SPELLCAST_STOP" then
         OnCastStop(unit, false)
     elseif event == "UNIT_SPELLCAST_CHANNEL_START" then
+        ProbeCast(unit, true)
         OnCastStart(unit, true)
     elseif event == "UNIT_SPELLCAST_CHANNEL_STOP" then
         -- A kicked channel is told apart from one that ran its course by the
@@ -2194,8 +2201,10 @@ for _, event in ipairs({
 end
 if frame.RegisterUnitEvent then
     frame:RegisterUnitEvent("UNIT_AURA", "player")
+    frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
 else
     frame:RegisterEvent("UNIT_AURA")
+    frame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
 end
 
 -- Diagnostics ---------------------------------------------------------------
@@ -2483,40 +2492,219 @@ local PROBES = {
     { "UnitAffectingCombat", function(u) return UnitAffectingCombat(u) end },
     -- Empowered casts have stages, which is a hard tell where it happens.
     { "UnitEmpoweredChannelDuration", function(u) return UnitEmpoweredChannelDuration(u) end },
+    -- How long the cast in progress runs for. Identification rests on that
+    -- length, and today it can only be measured after the cast ends, which is
+    -- why nothing is named while the bar is still filling.
+    --
+    -- UnitCastingDuration is documented SecretReturns, so this is expected to
+    -- come back secret - it is here to prove that rather than assume it.
+    -- UnitChannelDuration carries no such flag, and a channel's length is the
+    -- one thing combat logs never record, so if it reads we gain a fact we
+    -- currently ship by hand.
+    { "UnitCastingDuration", function(u) return UnitCastingDuration(u) end },
+    { "UnitCastingDuration:GetTotalDuration", function(u)
+        local d = UnitCastingDuration(u)
+        return d and d:GetTotalDuration() or nil
+    end },
+    { "UnitChannelDuration", function(u) return UnitChannelDuration(u) end },
+    { "UnitChannelDuration:GetTotalDuration", function(u)
+        local d = UnitChannelDuration(u)
+        return d and d:GetTotalDuration() or nil
+    end },
     -- Almost certainly party-only, but the check costs one call.
     { "UnitPosition.x", function(u) return (UnitPosition(u)) end },
     { "UnitDistanceSquared", function(u) return (UnitDistanceSquared(u)) end },
 }
 local probing = false
 
+local function Tally(db, name, ok, value)
+    local row = db[name]
+    if not row then row = { secret = 0, readable = 0, empty = 0 } db[name] = row end
+    if not ok then
+        row.errors = (row.errors or 0) + 1
+    elseif value == nil then
+        row.empty = row.empty + 1
+    elseif IsSecret(value) then
+        row.secret = row.secret + 1
+    else
+        row.readable = row.readable + 1
+        if row.sample == nil then row.sample = tostring(value) end
+        -- Several distinct readable values means it can tell creatures apart.
+        row.values = row.values or {}
+        local key = tostring(value)
+        if not row.values[key] and (row.distinct or 0) < 12 then
+            row.values[key] = true
+            row.distinct = (row.distinct or 0) + 1
+        end
+    end
+end
+
 function Probe(unit)
     if not probing then return end
     CastAheadDB = CastAheadDB or {}
     CastAheadDB.probe = CastAheadDB.probe or {}
-    local db = CastAheadDB.probe
     for i = 1, #PROBES do
-        local name, fn = PROBES[i][1], PROBES[i][2]
-        local row = db[name]
-        if not row then row = { secret = 0, readable = 0, empty = 0 } db[name] = row end
-        local ok, value = pcall(fn, unit)
-        if not ok then
-            row.errors = (row.errors or 0) + 1
-        elseif value == nil then
-            row.empty = row.empty + 1
-        elseif IsSecret(value) then
-            row.secret = row.secret + 1
-        else
-            row.readable = row.readable + 1
-            if row.sample == nil then row.sample = tostring(value) end
-            -- Several distinct readable values means it can tell creatures apart.
-            row.values = row.values or {}
-            local key = tostring(value)
-            if not row.values[key] and (row.distinct or 0) < 12 then
-                row.values[key] = true
-                row.distinct = (row.distinct or 0) + 1
-            end
+        Tally(CastAheadDB.probe, PROBES[i][1], pcall(PROBES[i][2], unit))
+    end
+end
+
+-- Fingerprints: what the game still says about a cast at the moment it starts,
+-- one row per hostile cast, joined offline against the combat log to learn
+-- which readable facts tell spells apart. The player's own cast starts carry
+-- readable spell ids and are the clock anchors that make that join possible.
+-- The duration and name attempts ask whether a secret can still be measured
+-- through something documented as safe: a curve, a formatter, a bar, a text
+-- width. The sweep calls every documented Unit* function on the casting unit
+-- and keeps only counts, to find readable facts nobody thought to try.
+local FINGERPRINT_CAP = 4000
+local SESSIONS_KEPT = 5
+local session, sweep, identityCurve, secondsFormatter, widthProbe, barProbe
+
+local function Now()
+    return (GetTimePreciseSec or GetTime)()
+end
+
+local function Fact(ok, ...)
+    if not ok then return "E" end
+    local value = ...
+    if value == nil then return "-" end
+    if IsSecret(value) then return "S" end
+    return tostring(value)
+end
+
+local function Try(fn, ...)
+    return Fact(pcall(fn, ...))
+end
+
+local function Session()
+    CastAheadDB = CastAheadDB or {}
+    CastAheadDB.fingerprints = CastAheadDB.fingerprints or {}
+    if not session then
+        session = { started = date("%Y-%m-%d %H:%M:%S"), startedAt = Now(),
+                    player = UnitGUID("player"), rows = {}, anchors = {} }
+        local list = CastAheadDB.fingerprints
+        list[#list + 1] = session
+        while #list > SESSIONS_KEPT do table.remove(list, 1) end
+    end
+    return session
+end
+
+function ProbeAnchor(spellID)
+    if not probing then return end
+    local s = Session()
+    if #s.anchors < FINGERPRINT_CAP then
+        s.anchors[#s.anchors + 1] = { Now(), Fact(true, spellID) }
+    end
+end
+
+local function DurationFacts(row, duration)
+    if type(duration) ~= "userdata" and type(duration) ~= "table" then return end
+    if not identityCurve and C_CurveUtil and C_CurveUtil.CreateCurve then
+        identityCurve = C_CurveUtil.CreateCurve()
+        identityCurve:AddPoint(0, 0)
+        identityCurve:AddPoint(600, 600)
+    end
+    if not secondsFormatter and C_StringUtil and C_StringUtil.CreateSecondsFormatter then
+        secondsFormatter = C_StringUtil.CreateSecondsFormatter()
+    end
+    row.zero = Try(duration.IsZero, duration)
+    row.modRate = Try(duration.GetModRate, duration)
+    row.hasSecret = Try(duration.HasSecretValues, duration)
+    row.total = Try(duration.GetTotalDuration, duration)
+    row.curve = identityCurve and Try(duration.EvaluateTotalDuration, duration, identityCurve) or "-"
+    row.formatted = secondsFormatter and Try(duration.FormatTotalDuration, duration, secondsFormatter) or "-"
+    if not barProbe then
+        barProbe = CreateFrame("StatusBar")
+        barProbe:Hide()
+    end
+    row.bar = Try(function()
+        barProbe:SetTimerDuration(duration)
+        return select(2, barProbe:GetMinMaxValues())
+    end)
+end
+
+local function BuildSweep()
+    sweep = {}
+    if C_AddOns and C_AddOns.LoadAddOn then
+        pcall(C_AddOns.LoadAddOn, "Blizzard_APIDocumentationGenerated")
+    end
+    local docs = APIDocumentation and APIDocumentation.functions
+    for _, info in ipairs(docs or {}) do
+        local args = info.Arguments
+        local system = info.System
+        local namespace = system and system.GetNamespaceName and system:GetNamespaceName()
+        if (namespace == nil or namespace == "") and type(info.Name) == "string"
+            and info.Name:match("^Unit") and not info.Name:match("^UnitSetRole")
+            and args and args[1] and tostring(args[1].Type):match("UnitToken")
+            and type(_G[info.Name]) == "function" then
+            local other = args[2] and tostring(args[2].Type):match("UnitToken") and "player" or nil
+            sweep[#sweep + 1] = { info.Name, other }
         end
     end
+end
+
+-- Loading the documentation mid-pull would stall the frame the pull starts on.
+function ProbeRestore()
+    probing = CastAheadDB ~= nil and CastAheadDB.probing == true
+    if probing and not sweep then BuildSweep() end
+end
+
+local function Sweep(unit)
+    if not sweep then BuildSweep() end
+    CastAheadDB.sweep = CastAheadDB.sweep or {}
+    for i = 1, #sweep do
+        local name, other = sweep[i][1], sweep[i][2]
+        Tally(CastAheadDB.sweep, name, pcall(_G[name], unit, other))
+    end
+end
+
+function ProbeCast(unit, channel)
+    if not probing or not IsHostileNameplate(unit) then return end
+    local s = Session()
+    if #s.rows >= FINGERPRINT_CAP then return end
+    local row = { t = Now(), unit = unit, channel = channel or nil }
+    local info = { pcall(channel and UnitChannelInfo or UnitCastingInfo, unit) }
+    if info[1] then
+        row.startMs, row.endMs = Fact(true, info[5]), Fact(true, info[6])
+        if channel then
+            row.notInterruptible, row.empowered = Fact(true, info[8]), Fact(true, info[10])
+            row.stages, row.castBarID = Fact(true, info[11]), Fact(true, info[12])
+        else
+            row.notInterruptible, row.castBarID, row.delayMs = Fact(true, info[9]), Fact(true, info[11]), Fact(true, info[12])
+        end
+        local name = info[2]
+        if name ~= nil then
+            if not widthProbe then
+                widthProbe = UIParent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+                widthProbe:Hide()
+            end
+            row.nameWidth = Try(function()
+                widthProbe:SetText(name)
+                return widthProbe:GetStringWidth()
+            end)
+        end
+    else
+        row.info = "E"
+    end
+    local target = unit .. "target"
+    row.level = Try(UnitLevel, unit)
+    row.classification = Try(UnitClassification, unit)
+    row.power = Try(UnitPowerType, unit)
+    row.lieutenant = Try(UnitIsLieutenant, unit)
+    row.class = Try(function() return select(2, UnitClass(unit)) end)
+    row.classID = Try(function() return select(3, UnitClass(unit)) end)
+    row.spellTarget = Try(UnitShouldDisplaySpellTargetName, unit)
+    row.spellTargetClass = Try(UnitSpellTargetClass, unit)
+    row.spellTargetName = Try(UnitSpellTargetName, unit)
+    row.targetExists = Try(UnitExists, target)
+    row.targetIsMe = Try(UnitIsUnit, target, "player")
+    row.targetIsPlayer = Try(UnitIsPlayer, target)
+    row.targetRole = Try(UnitGroupRolesAssigned, target)
+    row.threat = Try(UnitThreatSituation, "player", unit)
+    local okDuration, duration = pcall(channel and UnitChannelDuration or UnitCastingDuration, unit)
+    if okDuration then DurationFacts(row, duration) end
+    s.rows[#s.rows + 1] = row
+    Sweep(unit)
 end
 
 function CastAheadCore.Probing() return probing end
@@ -2524,15 +2712,41 @@ function CastAheadCore.Probing() return probing end
 function CastAheadCore.Probe(command)
     if command == "off" then
         probing = false
+        CastAheadDB = CastAheadDB or {}
+        CastAheadDB.probing = false
         print("|cff33ff99CastAhead|r probe off")
         return
     end
     if command == "clear" then
-        if CastAheadDB then CastAheadDB.probe = nil end
+        if CastAheadDB then
+            CastAheadDB.probe, CastAheadDB.sweep, CastAheadDB.fingerprints = nil, nil, nil
+        end
+        session = nil
         print("|cff33ff99CastAhead|r probe results cleared")
         return
     end
+    if command == "sweep" then
+        local db = CastAheadDB and CastAheadDB.sweep
+        if not db then print("|cff33ff99CastAhead|r no sweep results yet") return end
+        local names = {}
+        for name, r in pairs(db) do
+            if r.readable > 0 then names[#names + 1] = name end
+        end
+        table.sort(names)
+        for _, name in ipairs(names) do
+            local r = db[name]
+            print(string.format("|cff33ff99CastAhead|r %-34s readable %4d  secret %4d  nil %4d  err %4d  distinct %s  e.g. %s",
+                name, r.readable, r.secret, r.empty, r.errors or 0, tostring(r.distinct or 0), tostring(r.sample)))
+        end
+        return
+    end
     if command == "show" then
+        local fp = CastAheadDB and CastAheadDB.fingerprints
+        if fp and #fp > 0 then
+            local last = fp[#fp]
+            print(string.format("|cff33ff99CastAhead|r fingerprints: %d session(s), last %s with %d casts and %d anchors",
+                #fp, tostring(last.started), #last.rows, #last.anchors))
+        end
         local db = CastAheadDB and CastAheadDB.probe
         if not db then print("|cff33ff99CastAhead|r no probe results yet") return end
         local names = {}
@@ -2540,13 +2754,15 @@ function CastAheadCore.Probe(command)
         table.sort(names)
         for _, name in ipairs(names) do
             local r = db[name]
-            print(string.format("|cff33ff99CastAhead|r %-26s readable %3d  secret %3d  nil %3d  distinct %s  e.g. %s",
-                name, r.readable, r.secret, r.empty, tostring(r.distinct or 0), tostring(r.sample)))
+            print(string.format("|cff33ff99CastAhead|r %-26s readable %3d  secret %3d  nil %3d  err %3d  distinct %s  e.g. %s",
+                name, r.readable, r.secret, r.empty, r.errors or 0, tostring(r.distinct or 0), tostring(r.sample)))
         end
         return
     end
-    probing = true
-    print("|cff33ff99CastAhead|r probe on - pull some trash, then /ca probe show")
+    CastAheadDB = CastAheadDB or {}
+    CastAheadDB.probing = true
+    ProbeRestore()
+    print("|cff33ff99CastAhead|r probe on - it stays on across reloads. Turn on /combatlog, pull some trash, then /ca probe show and /ca probe sweep")
 end
 
 function CastAheadCore.Debug()
