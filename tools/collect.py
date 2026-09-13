@@ -1,4 +1,4 @@
-import sys, os, csv, json, glob
+import sys, os, csv, json, glob, datetime
 from collections import defaultdict
 
 HOSTILE = 0x40
@@ -12,13 +12,18 @@ PAYLOAD_WINDOW = 2.0
 # A mob idle this long has reset; its next pull is a fresh engage.
 ENGAGE_RESET = 30.0
 # Advanced-logging column offsets in SPELL_DAMAGE.
-DMG_MAXHP, DMG_AMOUNT, DMG_ABSORBED = 15, 31, 37
+DMG_MAXHP, DMG_AMOUNT, DMG_OVERKILL, DMG_ABSORBED = 15, 31, 33, 37
+# A cast still open this long before its caster died was stopped by something
+# else first; only a death inside a cast's own length ended it.
+CAST_CEILING = 6.0
 
 
 def ts(s):
-    t = s.split(" ")[1]
+    d, t = s.split(" ")[:2]
+    month, day, *year = d.split("/")
+    date = datetime.date(int(year[0]) if year else 2000, int(month), int(day))
     h, m, sec = t.split(":")
-    return int(h) * 3600 + int(m) * 60 + float(sec)
+    return (date.toordinal() - 739000) * 86400 + int(h) * 3600 + int(m) * 60 + float(sec)
 
 
 # out[dungeon][npcid][spellid] = {"cast":[], "iv":[], "first":[], "name":.., "mob":..}
@@ -54,6 +59,7 @@ def scan(path):
     last_seen = {}      # guid -> last time it did anything
     acted_at = {}       # guid -> when this spawn first cast anything
     pending = {}        # caster guid -> what its last finished cast has hit
+    pulls = {}          # guid -> how many times this spawn was engaged afresh
     in_encounter = False  # inside a boss fight: those casts are not trash
 
     def flush(guid):
@@ -68,6 +74,18 @@ def scan(path):
         for guid in list(pending):
             flush(guid)
 
+    def reset(guid):
+        """A spawn idle past ENGAGE_RESET starts over: nothing from its last pull carries."""
+        flush(guid)
+        for store in (open_cast, last_start, breaks):
+            for key in [k for k in store if k[0] == guid]:
+                del store[key]
+        completed.difference_update([k for k in completed if k[0] == guid])
+        seen_first.pop(guid, None)
+        acted_at.pop(guid, None)
+        engaged.pop(guid, None)
+        pulls[guid] = pulls.get(guid, 0) + 1
+
     def run_for(rec, key):
         """The interval sequence currently being recorded for this caster.
 
@@ -75,7 +93,8 @@ def scan(path):
         that hole would slide every later interval one rotation slot to the
         left. Each break therefore starts a fresh sequence.
         """
-        return rec["runs"].setdefault("%s#%d" % (key[0], breaks.get(key, 0)), [])
+        return rec["runs"].setdefault(
+            "%s@%d#%d" % (key[0], pulls.get(key[0], 0), breaks.get(key, 0)), [])
 
     def note_opening(rec, guid, spellid, t):
         """Record when this spawn first used this spell, once per spawn.
@@ -120,6 +139,7 @@ def scan(path):
                     last_seen.clear()
                     acted_at.clear()
                     pending.clear()
+                    pulls.clear()
                     in_encounter = False
                 else:
                     flush_all()
@@ -130,7 +150,8 @@ def scan(path):
             iscast = "SPELL_CAST_" in line
             isdmg = any(e in line for e in DMG_EVENTS)
             iskick = "SPELL_INTERRUPT" in line
-            if not iscast and not isdmg and not iskick:
+            isdeath = "UNIT_DIED" in line
+            if not iscast and not isdmg and not iskick and not isdeath:
                 continue
             try:
                 stamp, rest = line.split("  ", 1)
@@ -147,9 +168,9 @@ def scan(path):
                         g = p[gi]
                         if not g.startswith("Creature-") or not (int(p[fi], 16) & HOSTILE):
                             continue
-                        if g not in engaged or t - last_seen.get(g, t) > ENGAGE_RESET:
-                            engaged[g] = t
-                            seen_first.pop(g, None)
+                        if t - last_seen.get(g, t) > ENGAGE_RESET:
+                            reset(g)
+                        engaged.setdefault(g, t)
                         last_seen[g] = t
                     except Exception:
                         pass
@@ -161,7 +182,8 @@ def scan(path):
                     if t - row["t"] <= PAYLOAD_WINDOW:
                         try:
                             max_hp = int(p[DMG_MAXHP])
-                            taken = int(p[DMG_AMOUNT]) + int(p[DMG_ABSORBED])
+                            taken = (int(p[DMG_AMOUNT]) - max(0, int(p[DMG_OVERKILL]))
+                                     + int(p[DMG_ABSORBED]))
                             if max_hp > 0:
                                 share = taken / max_hp
                                 row["targets"][p[5]] = max(row["targets"].get(p[5], 0.0), share)
@@ -176,8 +198,17 @@ def scan(path):
                     if p[5].startswith("Creature-"):
                         kicked_npc = int(p[5].split("-")[5])
                         out[cur][kicked_npc][int(p[12])]["kicked"] += 1
+                        open_cast.pop((p[5], int(p[12])), None)
                 except (ValueError, IndexError):
                     pass
+                continue
+            if ev == "UNIT_DIED":
+                guid = p[5]
+                if guid.startswith("Creature-"):
+                    for key in [k for k in open_cast if k[0] == guid]:
+                        if t - open_cast.pop(key) <= CAST_CEILING:
+                            out[cur][int(guid.split("-")[5])][key[1]]["starts"] -= 1
+                    flush(guid)
                 continue
             if ev not in ("SPELL_CAST_START", "SPELL_CAST_SUCCESS"):
                 continue
@@ -193,6 +224,9 @@ def scan(path):
             except Exception:
                 continue
             npcid = int(guid.split("-")[5])
+            if t - last_seen.get(guid, t) > ENGAGE_RESET:
+                reset(guid)
+            last_seen[guid] = t
             rec = out[cur][npcid][spellid]
             rec["name"] = spellname
             rec["mob"] = mob
