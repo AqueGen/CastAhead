@@ -135,6 +135,7 @@ local tuning = {
     population = false,        -- a creature seen dying as many times as MDT places it is out
     packsNarrow = false,       -- a locked neighbour's packmates are preferred among cast candidates
     packsCompany = false,      -- ... and among trait matches, instead of the trait rows' own `co`
+    targetNarrow = false,      -- whether the cast has a target, read at its start, narrows candidates
 }
 
 -- Population: how many of each creature MDT places in this dungeon (Packs.lua,
@@ -1377,6 +1378,14 @@ end
 
 -- Events ------------------------------------------------------------------
 
+local function SpellTargeted(unit)
+    if not UnitShouldDisplaySpellTargetName then return nil end
+    local ok, value = pcall(UnitShouldDisplaySpellTargetName, unit)
+    if ok and type(value) == "boolean" and not (issecretvalue and issecretvalue(value)) then
+        return value
+    end
+end
+
 local function OnCastStart(unit, channel)
     -- Out-of-combat casts (patrol flavour channels) tell us nothing about a
     -- pull's rotation, so they are ignored - the poll may be up to a tick
@@ -1394,6 +1403,7 @@ local function OnCastStart(unit, channel)
     state.interruptible = nil
     state.casting = nil
     state.opening = nil
+    state.spellTarget = SpellTargeted(unit)
 
     -- Which spell is this? The one we predicted for about now. Cast length is
     -- Secret, so the bar's length comes from the table instead.
@@ -1428,14 +1438,18 @@ local function OnCastStart(unit, channel)
     end
     if best then
         if CastAheadTimeline then CastAheadTimeline.Finish(best) end
+        local candidates = best.candidates
+        if tuning.targetNarrow then
+            candidates = CastAheadMatch.NarrowByTarget(candidates, state.spellTarget)
+        end
         state.casting = {
             casting = true,
             track = best,
-            row = CastAheadMatch.BestGuess(best.candidates),
-            candidates = best.candidates,
-            ambiguous = best.ambiguous,
+            row = CastAheadMatch.BestGuess(candidates),
+            candidates = candidates,
+            ambiguous = best.ambiguous and (not tuning.targetNarrow or #candidates > 1) or nil,
             startAt = now,
-            endAt = now + CastAheadMatch.BestGuess(best.candidates).cast,
+            endAt = now + CastAheadMatch.BestGuess(candidates).cast,
         }
     end
     -- Sound fires once, on the cast that needs answering - not on the timer
@@ -1569,6 +1583,10 @@ local function OnCastStop(unit, channel)
         candidates = CastAheadMatch.NarrowByEnabled(candidates, CastAheadUI and CastAheadUI.IsDisabled)
         candidates = CastAheadMatch.NarrowByLevel(candidates, state.level)
         Trace(unit, "level", candidates)
+        if tuning.targetNarrow then
+            candidates = CastAheadMatch.NarrowByTarget(candidates, state.spellTarget)
+            Trace(unit, "target", candidates)
+        end
         candidates = CastAheadMatch.NarrowByMob(candidates, KnownNPCs(state, track))
         Trace(unit, "mob", candidates)
         -- The trait match prefers its own creatures but cannot exclude: a

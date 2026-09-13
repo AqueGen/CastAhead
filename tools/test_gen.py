@@ -1,7 +1,15 @@
 """Checks for the estimators in gen.py: python tools/test_gen.py"""
 import os, random, tempfile
 
-from gen import densest, read_anchor, rotation, settle, threat
+from gen import densest, read_anchor, rotation, settle, targeted, threat
+
+
+def test_targeted_needs_a_clear_majority_and_samples():
+    assert targeted(None) is None
+    assert targeted([4, 4]) is None
+    assert targeted([40, 39]) is True
+    assert targeted([40, 1]) is False
+    assert targeted([40, 20]) is None
 
 
 def row(**fields):
@@ -45,7 +53,7 @@ def test_approx_needs_a_margin_to_flip():
 def test_anchor_reads_back_what_gen_writes():
     line = ('        { spell = 7, npc = 8, mob = "Mob", name = "Bolt", cast = 2.5, cd = { 3.6, 9.7 }, first = -0.5,'
             ' hits = nil, dmg = 0.2, kick = 0.41, cc = 0.0, n = 12, firstN = 3, level = nil, offset = 1.0,'
-            ' kickable = true, filler = true, },\n')
+            ' kickable = true, filler = true, targeted = false, },\n')
     with tempfile.NamedTemporaryFile("w", suffix=".lua", delete=False, encoding="utf-8") as f:
         f.write('CastAheadData = {\n    [9] = { name = "Zone",\n' + line + "    },\n}\n")
     try:
@@ -56,6 +64,7 @@ def test_anchor_reads_back_what_gen_writes():
     assert zones == {9: "Zone"}
     assert r["cd"] == [3.6, 9.7] and r["first"] == -0.5 and r["hits"] is None and r["samples"] == 12
     assert r["kickable"] and r["filler"] and not r["approx"] and r["level"] is None
+    assert r["targeted"] is False
 
 
 def test_densest_ignores_sample_order():

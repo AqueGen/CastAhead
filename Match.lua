@@ -359,6 +359,22 @@ function M.NarrowByLevel(candidates, level)
     return #out > 0 and out or candidates
 end
 
+-- UnitShouldDisplaySpellTargetName, read as the cast starts, says whether the
+-- cast has a target - a property of the spell, not of the creature, so it
+-- splits two spells of one mob that tie on everything else. Rows whose
+-- `targeted` was never measured are kept.
+function M.NarrowByTarget(candidates, targeted)
+    if targeted == nil then return candidates end
+    local out = {}
+    for i = 1, #candidates do
+        local rowTargeted = candidates[i].targeted
+        if rowTargeted == nil or rowTargeted == targeted then
+            out[#out + 1] = candidates[i]
+        end
+    end
+    return #out > 0 and out or candidates
+end
+
 -- Every spell in the dungeon a creature of this level could be about to cast.
 -- If they all belong to one creature, the mob is identified before it acts.
 -- `needFirst` restricts it to spells with a known opening delay, which is what

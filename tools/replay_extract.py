@@ -115,6 +115,7 @@ class Run:
             if flag is not None:
                 event["kick"] = flag
         self.events.append(event)
+        return event
 
 
 def levels_in(path):
@@ -211,8 +212,13 @@ def scan(path, runs, kickable):
                     spell = int(p[9])
                 except (ValueError, IndexError):
                     continue
-                if run.open.get(src, (None,))[0] == spell:
+                opened = run.open.get(src)
+                if opened and opened[0] == spell:
                     run.open.pop(src, None)
+                    # The game says at the start whether the cast has a target;
+                    # the log only names it when the cast lands.
+                    if opened[2] is not None:
+                        opened[2]["target"] = dst not in ("0000000000000000", "")
                     run.cast("STOP", src, spell, t)
             elif ev == "SPELL_CAST_START":
                 run.touch(src, t)
@@ -222,8 +228,7 @@ def scan(path, runs, kickable):
                     continue
                 if src in run.open:
                     run.cast("FAIL", src, run.open[src][0], t)
-                run.open[src] = (spell, t)
-                run.cast("START", src, spell, t)
+                run.open[src] = (spell, t, run.cast("START", src, spell, t))
             elif ev == "SPELL_CAST_FAILED":
                 open_spell = run.open.pop(src, (None,))[0]
                 if open_spell is not None:
@@ -247,7 +252,7 @@ def write(runs, out_path):
             for key in ("u", "level", "power", "npc", "spell"):
                 if key in e:
                     fields.append("%s = %d" % (key, e[key]))
-            for key in ("on", "kick", "dead"):
+            for key in ("on", "kick", "dead", "target"):
                 if key in e:
                     fields.append("%s = %s" % (key, "true" if e[key] else "false"))
             out.write("        { %s },\n" % ", ".join(fields))

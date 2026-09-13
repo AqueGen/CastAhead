@@ -55,6 +55,15 @@ check(M.HasOpening({ first = 5, firstN = 4 }), "a well-sampled opening delay is 
 check(not M.HasOpening({ first = 17.8, firstN = 1 }), "a single-sample one is not")
 check(not M.HasOpening({ firstN = 9 }), "and neither is a missing one")
 
+do
+    local aimed, spread, unknown = { targeted = true }, { targeted = false }, {}
+    local kept = M.NarrowByTarget({ aimed, spread, unknown }, true)
+    check(#kept == 2 and kept[1] == aimed and kept[2] == unknown,
+        "a cast with a target keeps targeted rows and rows never measured")
+    check(#M.NarrowByTarget({ aimed, spread }, nil) == 2, "an unreadable target narrows nothing")
+    check(#M.NarrowByTarget({ spread }, true) == 1, "and narrowing never empties the list")
+end
+
 -- Time to the opening cast separates candidates before any interval exists.
 check(#M.NarrowByFirst(both, 3.6) == 1, "a 3.6s opening should pick the 3.9s spell")
 check(M.NarrowByFirst(both, 3.6)[1].spell == 1, "and it should be that one")

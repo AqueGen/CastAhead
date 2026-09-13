@@ -48,6 +48,9 @@ GetInstanceInfo = function() return "d", "party", 0, "", 0, 0, false, currentIns
 -- confusions the game never has.
 local powers = {}
 UnitPowerType = function(unit) return powers[unit] or 0 end
+-- Whether the cast in flight has a target, taken from the log's cast result.
+local targets = {}
+UnitShouldDisplaySpellTargetName = function(unit) return targets[unit] end
 
 dofile("Config.lua")
 dofile(dataPath)
@@ -98,6 +101,10 @@ if os.getenv("CA_PACKS_COMPANY") == "0" then
     CastAheadCore.Tuning.packsCompany = false
     knobs[#knobs + 1] = "packsCompany=off"
 end
+if os.getenv("CA_TARGET") == "1" then
+    CastAheadCore.Tuning.targetNarrow = true
+    knobs[#knobs + 1] = "targetNarrow=on"
+end
 if #knobs > 0 then print("knobs: " .. table.concat(knobs, ", ")) end
 
 -- The narrowing steps of the cast currently being resolved, per unit.
@@ -123,6 +130,7 @@ local function blame(unit, truth)
     return "kept to the end"
 end
 local blamed = {}          -- "pair | step" -> count
+local WATCH = tonumber(os.getenv("CA_WATCH") or "")
 
 -- Which spells Data.lua knows per dungeon, so "untabled" can be told apart.
 local tabled = {}
@@ -182,6 +190,7 @@ for _, run in ipairs(CastAheadReplay) do
             hostile[unit], combat[unit], levels[unit], powers[unit], dead[unit] = nil, nil, nil, nil, nil
         elseif ev.e == "START" then
             open[unit] = ev.spell
+            targets[unit] = ev.target
             fire("UNIT_SPELLCAST_START", unit)
             -- The game says whether the cast can be kicked a moment after it
             -- starts; the extractor took the answer from MDT.
@@ -233,6 +242,23 @@ for _, run in ipairs(CastAheadReplay) do
                         names[candidates[1].spell] = candidates[1].name
                         bump(wrongPairs, ev.spell .. " -> " .. candidates[1].spell)
                         bump(blamed, blame(unit, ev.spell))
+                        -- CA_WATCH=<spellID> prints every narrowing step of the
+                        -- casts that spell was called wrong on, so a handful of
+                        -- wrong calls can be read one by one instead of as a
+                        -- tally.
+                        if WATCH == ev.spell then
+                            print(string.format("\nWATCH %d (%s) called as %d (%s), plate %s",
+                                ev.spell, tostring(row and row.name), candidates[1].spell,
+                                tostring(candidates[1].name), tostring(unit)))
+                            for _, entry in ipairs(steps[unit] or {}) do
+                                local ids = {}
+                                for id in pairs(entry.has) do ids[#ids + 1] = id end
+                                table.sort(ids)
+                                print(string.format("   %-10s %2d left  %s%s",
+                                    entry.step, entry.n, table.concat(ids, " "),
+                                    entry.has[ev.spell] and "" or "   <- truth gone"))
+                            end
+                        end
                     end
                 end
             else

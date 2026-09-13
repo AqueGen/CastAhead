@@ -28,6 +28,8 @@ CD_TOLERANCE_FLAT = 1.0  # Match.lua CD_TOLERANCE_FLAT / CD_TOLERANCE_REL
 CD_TOLERANCE_REL = 0.05
 APPROX_SUPPORT = 0.5    # fewer intervals than this share fit the schedule -> approximate
 ROTATION_GAIN = 0.10    # a rotation must predict this much more than one flat cooldown
+MIN_TARGET_SAMPLES = 5
+TARGET_MARGIN = 0.05    # a spell with a target on more than 5% and fewer than 95% of casts is left unknown
 FRESH_RUN = re.compile(r"#0\+*$")
 # The previous Data.lua is kept field by field unless a new value would change
 # what the addon does: cross one of these in-game thresholds (Match.lua,
@@ -148,6 +150,18 @@ def threat(r):
     }
 
 
+def targeted(counts):
+    """True or False when the spell always or never has a target; None when unmeasured or mixed."""
+    if not counts or counts[0] < MIN_TARGET_SAMPLES:
+        return None
+    share = counts[1] / counts[0]
+    if share >= 1 - TARGET_MARGIN:
+        return True
+    if share <= TARGET_MARGIN:
+        return False
+    return None
+
+
 def worth_showing(cast, cd, samples, t):
     """A spell earns a slot if it is rare, kicked, or hurts.
 
@@ -176,6 +190,8 @@ def lua_value(s):
         return None
     if s == "true":
         return True
+    if s == "false":
+        return False
     return float(s) if "." in s else int(s)
 
 
@@ -256,7 +272,8 @@ def settle(new, old):
     row["filler"] = not row["cd"] or min(row["cd"]) < MIN_CD
     row["kickable"] = row["mdt_kick"] if row["mdt_kick"] is not None else row["kick"] >= KICK_SHARE
     if old is not None:
-        changed += [f for f in ("approx", "filler", "kickable", "level", "mob", "name") if row[f] != old[f]]
+        changed += [f for f in ("approx", "filler", "kickable", "level", "mob", "name", "targeted")
+                    if row.get(f) != old.get(f)]
     return row, changed
 
 
@@ -270,14 +287,15 @@ def print_report(report, total):
     for sign, zone, row, old, changed in sorted(report, key=lambda e: (e[1], e[2]["mob"], e[2]["name"], e[0])):
         line = "%s %s: %s / %s" % (sign, zone, row["mob"], row["name"])
         if sign == "~":
-            line += "  " + "; ".join("%s %s -> %s" % (f, shown(old[f]), shown(row[f])) for f in changed)
+            line += "  " + "; ".join("%s %s -> %s" % (f, shown(old.get(f)), shown(row.get(f))) for f in changed)
         print(line)
     signs = [e[0] for e in report]
     print("%d rows: %d unchanged, %d changed, %d added, %d removed"
           % (total, total - signs.count("~") - signs.count("+"), signs.count("~"), signs.count("+"), signs.count("-")))
 
 
-def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path=None, fresh=False):
+def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path=None, targets_path=None,
+         fresh=False):
     data = json.load(open(casts_path, encoding="utf-8"))
     # MDT knows what the logs cannot: which creature owns a spell, whether that
     # spell is interruptible, and which creatures are bosses.
@@ -289,6 +307,9 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
     # not measurable from it; it comes from this file, our logs supply the rest.
     channels = {int(k): float(v) for k, v in
                 json.load(open(channels_path, encoding="utf-8")).items()} if channels_path else {}
+    # tools/targets.py: per spell, casts that landed and how many had a target.
+    targets = {int(k): v for k, v in
+               json.load(open(targets_path, encoding="utf-8")).items()} if targets_path else {}
 
     anchor, anchor_zones = ({}, {}) if fresh else read_anchor(out_path)
     dungeons, seen, report = {}, set(), []
@@ -361,6 +382,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                     "offset": offset,
                     "samples": len(r["cast"]) + r.get("kicked", 0),
                     "channel": is_channel,
+                    "targeted": targeted(targets.get(int(spellid))),
                     **t,
                 }, old)
                 if not forced and not worth_showing(row["cast"], row["cd"], cdn, row):
@@ -414,7 +436,9 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                            " kickable = true," if r["kickable"] else "",
                            (" filler = true," if r["filler"] else "")
                            + (" approx = true," if r["approx"] else "")
-                           + (" channel = true," if r.get("channel") else "")))
+                           + (" channel = true," if r.get("channel") else "")
+                           + ("" if r.get("targeted") is None
+                              else " targeted = %s," % ("true" if r["targeted"] else "false"))))
             f.write("    },\n")
         f.write("}\n")
 
