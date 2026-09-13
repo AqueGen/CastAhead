@@ -29,6 +29,19 @@ CD_TOLERANCE_REL = 0.05
 APPROX_SUPPORT = 0.5    # fewer intervals than this share fit the schedule -> approximate
 ROTATION_GAIN = 0.10    # a rotation must predict this much more than one flat cooldown
 FRESH_RUN = re.compile(r"#0\+*$")
+# The previous Data.lua is kept field by field unless a new value would change
+# what the addon does: cross one of these in-game thresholds (Match.lua,
+# Core.lua) or move further than the matcher's own tolerance allows.
+CC_SHARE = 0.25
+HEAVY_SINGLE = 0.15
+THIN_EVIDENCE = 5
+MIN_OPENING_SAMPLES = 3
+SHARE_MARGIN = 0.02
+SHARE_STEP = 0.10
+CAST_STEP = 0.12        # half of CAST_TOLERANCE
+FIRST_STEP = 2.0        # half of FIRST_TOLERANCE
+OFFSET_STEP = 1.0
+APPROX_MARGIN = 0.05
 
 
 def densest(xs, width):
@@ -150,7 +163,121 @@ def worth_showing(cast, cd, samples, t):
     return bool(cd) and min(cd) >= MIN_CD and samples >= MIN_SAMPLES
 
 
-def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path=None):
+ANCHOR_ZONE = re.compile(r'^\s*\[(\d+)\] = \{ name = "([^"]*)",')
+ANCHOR_ROW = re.compile(r'\{ spell = (\d+), npc = (\d+), mob = "([^"]*)", name = "([^"]*)",'
+                        r' cast = ([\d.]+), cd = \{ ([^}]*)\}, (.*)\},\s*$')
+ANCHOR_FIELD = re.compile(r"(\w+) = ([^,]+),")
+FLAGS = ("kickable", "filler", "approx", "channel")
+
+
+def lua_value(s):
+    s = s.strip()
+    if s == "nil":
+        return None
+    if s == "true":
+        return True
+    return float(s) if "." in s else int(s)
+
+
+def read_anchor(path):
+    """{(instance, spell, npc): row} and {instance: zone} from a previously generated Data.lua."""
+    rows, zones, instance = {}, {}, None
+    try:
+        lines = open(path, encoding="utf-8").read().splitlines()
+    except FileNotFoundError:
+        return rows, zones
+    for line in lines:
+        m = ANCHOR_ZONE.match(line)
+        if m:
+            instance = int(m.group(1))
+            zones[instance] = m.group(2)
+            continue
+        m = ANCHOR_ROW.search(line)
+        if not m or instance is None:
+            continue
+        row = {k: lua_value(v) for k, v in ANCHOR_FIELD.findall(m.group(7))}
+        row.update(spell=int(m.group(1)), npc=int(m.group(2)), mob=m.group(3), name=m.group(4),
+                   cast=float(m.group(5)), cd=[float(v) for v in m.group(6).split(",") if v.strip()])
+        row["samples"] = row.pop("n")
+        for flag in FLAGS:
+            row[flag] = bool(row.get(flag))
+        rows[(instance, row["spell"], row["npc"])] = row
+    return rows, zones
+
+
+def moved(old, new, step):
+    return (old is None) != (new is None) or (old is not None and abs(new - old) > step)
+
+
+def crossed(old, new, threshold, margin=SHARE_MARGIN):
+    if old is None or new is None:
+        return False
+    return new >= threshold + margin if old < threshold else new < threshold - margin
+
+
+def count_moved(old, new, threshold):
+    return new != old and ((old < threshold) != (new < threshold) or new >= 2 * old or 2 * new <= old)
+
+
+def same_cd(old, new):
+    if not old or not new:
+        return not old and not new
+    return all(abs(new[i % len(new)] - old[i % len(old)])
+               <= (CD_TOLERANCE_FLAT + old[i % len(old)] * CD_TOLERANCE_REL) / 2
+               for i in range(max(len(old), len(new))))
+
+
+def settle(new, old):
+    """(row, changed fields): the anchor's value wherever the new one would not change behaviour."""
+    row, changed = dict(new), []
+    if old is None:
+        changed.append("added")
+    else:
+        def hold(field, material):
+            if material:
+                changed.append(field)
+            else:
+                row[field] = old[field]
+
+        cd_moved = not same_cd(old["cd"], new["cd"])
+        hold("cast", abs(new["cast"] - old["cast"]) > CAST_STEP or new["channel"] != old["channel"])
+        hold("cd", cd_moved)
+        hold("first", moved(old["first"], new["first"], FIRST_STEP))
+        hold("firstN", count_moved(old["firstN"], new["firstN"], MIN_OPENING_SAMPLES))
+        hold("offset", moved(old["offset"], new["offset"], OFFSET_STEP))
+        hold("hits", moved(old["hits"], new["hits"], 1.0) or crossed(old["hits"], new["hits"], AOE_TARGETS, 0))
+        hold("dmg", moved(old["dmg"], new["dmg"], SHARE_STEP) or crossed(old["dmg"], new["dmg"], HEAVY_DAMAGE)
+             or crossed(old["dmg"], new["dmg"], HEAVY_SINGLE))
+        hold("kick", moved(old["kick"], new["kick"], SHARE_STEP) or crossed(old["kick"], new["kick"], KICK_SHARE))
+        hold("cc", moved(old["cc"], new["cc"], SHARE_STEP) or crossed(old["cc"], new["cc"], CC_SHARE))
+        hold("samples", count_moved(old["samples"], new["samples"], THIN_EVIDENCE))
+        if not cd_moved:
+            row["approx"] = new["fit"] < APPROX_SUPPORT + (APPROX_MARGIN if old["approx"] else -APPROX_MARGIN)
+    row["filler"] = not row["cd"] or min(row["cd"]) < MIN_CD
+    row["kickable"] = row["mdt_kick"] if row["mdt_kick"] is not None else row["kick"] >= KICK_SHARE
+    if old is not None:
+        changed += [f for f in ("approx", "filler", "kickable", "level", "mob", "name") if row[f] != old[f]]
+    return row, changed
+
+
+def shown(value):
+    if isinstance(value, list):
+        return "{ %s }" % ", ".join(str(v) for v in value)
+    return "nil" if value is None else str(value)
+
+
+def print_report(report, total):
+    for sign, zone, row, old, changed in sorted(report, key=lambda e: (e[1], e[2]["mob"], e[2]["name"], e[0])):
+        line = "%s %s: %s / %s" % (sign, zone, row["mob"], row["name"])
+        if sign == "~":
+            line += "  " + "; ".join("%s %s -> %s" % (f, shown(old[f]), shown(row[f])) for f in changed)
+        print(line)
+    signs = [e[0] for e in report]
+    print("%d rows: %d unchanged, %d changed, %d added, %d removed"
+          % (total, total - signs.count("~") - signs.count("+"), signs.count("~"), signs.count("+"), signs.count("-")))
+
+
+def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path=None, fresh=False):
     data = json.load(open(casts_path, encoding="utf-8"))
     # MDT knows what the logs cannot: which creature owns a spell, whether that
     # spell is interruptible, and which creatures are bosses.
@@ -163,10 +290,12 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
     channels = {int(k): float(v) for k, v in
                 json.load(open(channels_path, encoding="utf-8")).items()} if channels_path else {}
 
-    dungeons = {}
+    anchor, anchor_zones = ({}, {}) if fresh else read_anchor(out_path)
+    dungeons, seen, report = {}, set(), []
     for key, mobs in data.items():
         instance_id, zone = key.split("|", 1)
-        rows = []
+        instance_id = int(instance_id)
+        rows = dungeons.setdefault(instance_id, (zone, []))[1]
         for npcid, spells in mobs.items():
             for spellid, r in spells.items():
                 facts = mdt.get(str(npcid))
@@ -207,22 +336,21 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                         offset = round(statistics.median(offsets), 1)
                 t = threat(r)
                 forced = spellid in include
-                if not forced:
-                    if spellid in exclude:
-                        continue
-                    if not worth_showing(cast, cd, cdn, t):
-                        continue
-                rows.append({
+                if spellid in exclude and not forced:
+                    continue
+                row_key = (instance_id, int(spellid), int(npcid))
+                seen.add(row_key)
+                old = anchor.get(row_key)
+                row, changed = settle({
                     "spell": int(spellid), "npc": int(npcid),
                     "cast": round(cast, 1), "cd": cd or [], "first": first,
-                    "n": cdn, "approx": approx,
-                    "name": r["name"], "mob": r["mob"],
+                    "approx": approx, "fit": cdn / len(r["iv"]) if r["iv"] else 1.0,
+                    "name": r["name"].replace('"', "'"), "mob": r["mob"].replace('"', "'"),
                     # From MDT when MDT knows the creature: its word beats the
                     # tally (a boss spell with the same cast time once made an
                     # uninterruptible cast look kickable). For a creature MDT
                     # does not list, the tally is the only evidence there is.
-                    "kickable": (bool(facts["spells"].get(str(spellid))) if facts and facts["spells"]
-                                 else t["kick"] >= KICK_SHARE),
+                    "mdt_kick": bool(facts["spells"].get(str(spellid))) if facts and facts["spells"] else None,
                     # UnitLevel still reads off a hostile nameplate, so this
                     # narrows candidates the moment the mob enters combat.
                     "level": (facts or {}).get("level"),
@@ -232,17 +360,32 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                     "firstN": firstN,
                     "offset": offset,
                     "samples": len(r["cast"]) + r.get("kicked", 0),
-                    # A short cycle means the countdown is noise; the bar only
-                    # names such a cast while it is happening.
-                    # No rotation at all (cast once per pull) counts as filler too:
-                    # there is nothing to count down to.
-                    "filler": not cd or min(cd) < MIN_CD,
                     "channel": is_channel,
                     **t,
-                })
-        if rows:
-            rows.sort(key=lambda x: (x["cast"], x["cd"][0] if x["cd"] else 0, x["npc"], x["spell"]))
-            dungeons[int(instance_id)] = (zone, rows)
+                }, old)
+                if not forced and not worth_showing(row["cast"], row["cd"], cdn, row):
+                    if old:
+                        report.append(("-", zone, old, old, []))
+                    continue
+                rows.append(row)
+                if changed:
+                    report.append(("+" if old is None else "~", zone, row, old, changed))
+
+    for row_key, old in anchor.items():
+        if row_key in seen:
+            continue
+        instance_id, spellid, npcid = row_key
+        facts = mdt.get(str(npcid))
+        zone = dungeons.get(instance_id, (anchor_zones[instance_id],))[0]
+        if (str(spellid) in exclude or facts and (facts.get("encounter")
+                or facts["spells"] and str(spellid) not in facts["spells"])):
+            report.append(("-", zone, old, old, []))
+            continue
+        dungeons.setdefault(instance_id, (zone, []))[1].append(old)
+
+    dungeons = {i: (zone, rows) for i, (zone, rows) in dungeons.items() if rows}
+    for _, rows in dungeons.values():
+        rows.sort(key=lambda x: (x["cast"], x["cd"][0] if x["cd"] else 0, x["npc"], x["spell"]))
 
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("-- Generated from combat logs by gen.py. Do not edit by hand.\n")
@@ -277,9 +420,11 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
 
     total = sum(len(rows) for _, rows in dungeons.values())
     cycles = sum(1 for _, rows in dungeons.values() for r in rows if len(r["cd"]) > 1)
+    if anchor:
+        print_report(report, total)
     print("%d dungeons, %d spells (%d with an uneven rotation) -> %s"
           % (len(dungeons), total, cycles, out_path))
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:])
+    main(*[a for a in sys.argv[1:] if a != "--fresh"], fresh="--fresh" in sys.argv)
