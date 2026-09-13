@@ -1562,5 +1562,25 @@ CastAheadCore.Tuning.population = false
 CastAheadCore.Tuning.packsNarrow = false
 CastAheadCore.Tuning.packsCompany = false
 
+-- The probe keeps one fingerprint per hostile cast and one clock anchor per
+-- cast of the player's own, and its switch survives a reload.
+date = date or os.date
+UnitGUID = UnitGUID or function() return "Player-1" end
+CastAheadDB = {}
+CastAheadCore.Probe("on")
+enter()
+fire("UNIT_SPELLCAST_SUCCEEDED", "player", nil, 12345)
+ok, err = pcall(castFor, 3.0)
+check(ok, "a cast with the probe on must not error: " .. tostring(err))
+local session = CastAheadDB.fingerprints and CastAheadDB.fingerprints[1]
+check(session and #session.rows == 1 and #session.anchors == 1 and session.anchors[1][2] == "12345",
+    "the probe records the hostile cast and the player's own cast")
+reset()
+fire("PLAYER_ENTERING_WORLD")
+check(CastAheadCore.Probing(), "the probe stays on across a reload")
+CastAheadCore.Probe("off")
+CastAheadCore.Probe("clear")
+check(not CastAheadCore.Probing() and CastAheadDB.fingerprints == nil, "off and clear undo it")
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)
