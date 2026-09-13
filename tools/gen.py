@@ -9,8 +9,7 @@ Cooldowns come out as a rotation, not one number: many mobs cycle uneven gaps
 (4.8, 4.8, 8.7, ...), and averaging those predicts every cast wrong. Position i
 of the rotation is the median of the i-th interval across every spawn seen.
 """
-import sys, json, statistics
-from collections import defaultdict
+import sys, json, re, statistics
 
 MIN_CAST = 1.0
 MIN_CD = 8.0
@@ -18,32 +17,47 @@ MIN_SAMPLES = 4
 KICK_SHARE = 0.25       # kicked this often -> people clearly interrupt it
 AOE_TARGETS = 3         # lands on this many players -> group damage
 HEAVY_DAMAGE = 0.20     # takes this share of the victim's health -> defensive
+MIN_DAMAGE_SAMPLES = 3
 MIN_PER_POSITION = 3    # samples needed before a rotation slot is trusted
 MAX_ROTATION = 8
 FLAT_SPREAD = 0.15      # rotation this tight collapses to a single value
-SPREAD_LIMIT = 0.20     # cd samples wider than this are flagged approximate
 OFFSET_SPREAD = 8.0     # opening order this loose is still worth an estimate
+CD_WINDOW = 0.5
+FIRST_WINDOW = 1.0
+CD_TOLERANCE_FLAT = 1.0  # Match.lua CD_TOLERANCE_FLAT / CD_TOLERANCE_REL
+CD_TOLERANCE_REL = 0.05
+APPROX_SUPPORT = 0.5    # fewer intervals than this share fit the schedule -> approximate
+ROTATION_GAIN = 0.10    # a rotation must predict this much more than one flat cooldown
+FRESH_RUN = re.compile(r"#0\+*$")
 
 
-def cluster(xs):
-    """Densest 0.5s bucket -> (median, count, spread)."""
+def densest(xs, width):
+    """(median, size) of the densest window of this width, independent of sample order."""
     if not xs:
-        return None, 0, 0.0
-    buckets = defaultdict(list)
-    for v in xs:
-        buckets[round(v * 2) / 2].append(v)
-    best = max(buckets.values(), key=len)
-    if len(best) == 1 and len(xs) > 1:
-        # Nothing repeated. Every bucket holds one sample, so the "densest" one
-        # is whichever happened to be seen first, and handing it back as a
-        # schedule ships an outlier as fact. The median of everything at least
-        # sits among what was seen, and the spread marks the row approximate.
-        m = statistics.median(xs)
-        spread = (max(xs) - min(xs)) / m if m else 0.0
-        return round(m, 1), 1, spread
-    m = statistics.median(best)
-    spread = (max(best) - min(best)) / m if m else 0.0
-    return round(m, 1), len(best), spread
+        return None, 0
+    xs = sorted(xs)
+    overall = statistics.median(xs)
+    best, lo = None, 0
+    for hi in range(len(xs)):
+        while xs[hi] - xs[lo] > width:
+            lo += 1
+        mid = (xs[(lo + hi) // 2] + xs[(lo + hi + 1) // 2]) / 2
+        key = (hi - lo + 1, -abs(mid - overall), -mid)
+        if best is None or key > best[0]:
+            best = (key, mid)
+    size, mid = best[0][0], best[1]
+    if size == 1 and len(xs) > 1:
+        return round(overall, 1) + 0.0, 1
+    return round(mid, 1) + 0.0, size
+
+
+def fits(interval, cd):
+    return abs(interval - cd) <= CD_TOLERANCE_FLAT + cd * CD_TOLERANCE_REL
+
+
+def support(xs, slots):
+    """How many intervals a live matcher would accept against one of these slots."""
+    return sum(1 for x in xs if any(fits(x, s) for s in slots))
 
 
 def shortest_period(slots):
@@ -60,12 +74,17 @@ def shortest_period(slots):
 
 
 def rotation(runs, fallback):
-    """Median interval per rotation slot, across all spawns of this mob."""
+    """Median interval per rotation slot, across all spawns of this mob.
+
+    Only sequences that start at a spawn's first cast know their phase; one
+    restarted after a missed cast begins at an unknown slot.
+    """
+    fresh = [seq for key, seq in sorted(runs.items()) if FRESH_RUN.search(key)]
     slots = []
     for i in range(MAX_ROTATION):
-        column = [r[i] for r in runs if len(r) > i]
-        value, n, _ = cluster(column)
-        if value is None or n < MIN_PER_POSITION:
+        column = [r[i] for r in fresh if len(r) > i]
+        value, _ = densest(column, CD_WINDOW)
+        if value is None or support(column, [value]) < MIN_PER_POSITION:
             break
         slots.append(value)
     if not slots:
@@ -73,7 +92,20 @@ def rotation(runs, fallback):
     lo, hi = min(slots), max(slots)
     if lo and (hi - lo) / lo <= FLAT_SPREAD:
         return [round(statistics.median(slots), 1)]
-    return shortest_period(slots)
+    cycle = shortest_period(slots)
+    if fallback and positional_fit(fresh, cycle) < positional_fit(fresh, [fallback]) + ROTATION_GAIN:
+        return [fallback]
+    return cycle
+
+
+def positional_fit(runs, slots):
+    """Share of observed intervals a cycled schedule predicts within the live tolerance."""
+    total = hit = 0
+    for seq in runs:
+        for i, v in enumerate(seq):
+            total += 1
+            hit += fits(v, slots[i % len(slots)])
+    return hit / total if total else 0.0
 
 
 def threat(r):
@@ -84,8 +116,9 @@ def threat(r):
     the group was actually seen doing about it: real interrupts, versus casts
     that died some other way (a stun, a knock, a disorient).
     """
-    hits = round(statistics.median(r["hits"]), 1) if r["hits"] else None
-    dmg = round(statistics.median(r["dmg"]), 3) if r["dmg"] else None
+    measured = len(r["dmg"]) >= MIN_DAMAGE_SAMPLES
+    hits = round(float(statistics.median(r["hits"])), 1) if measured else None
+    dmg = round(statistics.median(r["dmg"]), 3) if measured else None
     finished = len(r["cast"])
     kicked = r.get("kicked", 0)
     # Channels log no START, so attempts have to be counted from what we did
@@ -156,9 +189,11 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                 is_channel = cast < MIN_CAST and int(spellid) in channels
                 if is_channel:
                     cast = channels[int(spellid)]
-                flat, cdn, spread = cluster(r["iv"])
-                cd = rotation(list(r.get("runs", {}).values()), flat)
-                first, firstN, _ = cluster(r["first"])
+                flat, _ = densest(r["iv"], CD_WINDOW)
+                cd = rotation(r.get("runs", {}), flat)
+                cdn = support(r["iv"], cd) if cd else 0
+                approx = bool(cd) and cdn < APPROX_SUPPORT * len(r["iv"])
+                first, firstN = densest(r["first"], FIRST_WINDOW)
                 # Delay from the mob's very first cast to this spell's first.
                 # Measured across all logs this is far tighter than anything
                 # counted from engage (0.4s vs 3.0s median spread), because a
@@ -180,7 +215,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                 rows.append({
                     "spell": int(spellid), "npc": int(npcid),
                     "cast": round(cast, 1), "cd": cd or [], "first": first,
-                    "n": cdn, "approx": spread > SPREAD_LIMIT,
+                    "n": cdn, "approx": approx,
                     "name": r["name"], "mob": r["mob"],
                     # From MDT when MDT knows the creature: its word beats the
                     # tally (a boss spell with the same cast time once made an
@@ -206,7 +241,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                     **t,
                 })
         if rows:
-            rows.sort(key=lambda x: (x["cast"], x["cd"][0] if x["cd"] else 0))
+            rows.sort(key=lambda x: (x["cast"], x["cd"][0] if x["cd"] else 0, x["npc"], x["spell"]))
             dungeons[int(instance_id)] = (zone, rows)
 
     with open(out_path, "w", encoding="utf-8") as f:
@@ -222,7 +257,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
             for r in rows:
                 f.write("        { spell = %d, npc = %d, mob = \"%s\", name = \"%s\", cast = %s,"
                         " cd = { %s }, first = %s, hits = %s, dmg = %s, kick = %s, cc = %s,"
-                        " n = %d, firstN = %d, level = %s, offset = %s,%s%s }, -- seen %d\n"
+                        " n = %d, firstN = %d, level = %s, offset = %s,%s%s },\n"
                         % (r["spell"], r["npc"], r["mob"].replace('"', "'"),
                            r["name"].replace('"', "'"), r["cast"],
                            ", ".join(str(v) for v in r["cd"]),
@@ -236,8 +271,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                            " kickable = true," if r["kickable"] else "",
                            (" filler = true," if r["filler"] else "")
                            + (" approx = true," if r["approx"] else "")
-                           + (" channel = true," if r.get("channel") else ""),
-                           r["samples"]))
+                           + (" channel = true," if r.get("channel") else "")))
             f.write("    },\n")
         f.write("}\n")
 
