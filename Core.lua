@@ -62,7 +62,7 @@ local recentCasts
 local StartPreview
 local RefineByNPC
 local ResolvedNPCs, LockedNPCs
-local Probe, ProbeSpeech    -- /ca probe, defined next to Debug; the event handler calls them
+local Probe                 -- /ca probe, defined next to Debug; the event handler calls it
 local Identify
 local LockNPC
 local diag = { plates = 0, casts = 0, identified = 0, shown = 0, published = 0 }
@@ -1844,12 +1844,10 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         end
     elseif event == "UNIT_SPELLCAST_START" then
         Probe(unit)
-        ProbeSpeech(unit, false)
         OnCastStart(unit, false)
     elseif event == "UNIT_SPELLCAST_STOP" then
         OnCastStop(unit, false)
     elseif event == "UNIT_SPELLCAST_CHANNEL_START" then
-        ProbeSpeech(unit, true)
         OnCastStart(unit, true)
     elseif event == "UNIT_SPELLCAST_CHANNEL_STOP" then
         -- A kicked channel is told apart from one that ran its course by the
@@ -2537,63 +2535,6 @@ function Probe(unit)
                 row.distinct = (row.distinct or 0) + 1
             end
         end
-    end
-end
-
--- Whether a hostile cast's name can be heard although the addon cannot read
--- it. In a live dungeon C_VoiceChat.SpeakText took the secret name and spoke
--- it; C_CombatAudioAlert.SpeakText refused it. PlaySoundFile has no generated
--- documentation at all, so whether it accepts a path built from the secret
--- name - which would let our own recorded voice say it - is asked here. One
--- method per attempt, announced in chat, so what is heard matches what ran.
-local SPEECH_EVERY = 3.0
-local speechAt, speechMethod = -math.huge, 0
-
-local function TallySpeech(name, ok, detail)
-    local db = CastAheadDB.probe
-    local row = db[name]
-    if not row then row = { secret = 0, readable = 0, empty = 0 } db[name] = row end
-    local shown = detail ~= nil and not IsSecret(detail) and tostring(detail) or (detail ~= nil and "secret" or "")
-    if ok then
-        row.readable = row.readable + 1
-    else
-        row.errors = (row.errors or 0) + 1
-    end
-    if row.sample == nil and shown ~= "" then row.sample = shown end
-    print(string.format("|cff33ff99CastAhead|r probe speech: %s %s %s", name,
-        ok and "ran" or "|cffff3333error|r", shown))
-end
-
-local function SpeakWithVoiceChat(text)
-    local tts = C_TTSSettings
-    local voice = tts and tts.GetVoiceOptionID and Enum.TtsVoiceType
-        and tts.GetVoiceOptionID(Enum.TtsVoiceType.Standard)
-    if not voice then
-        local voices = C_VoiceChat.GetTtsVoices()
-        voice = voices and voices[1] and voices[1].voiceID
-    end
-    C_VoiceChat.SpeakText(voice, text, tts and tts.GetSpeechRate and tts.GetSpeechRate() or 0,
-        tts and tts.GetSpeechVolume and tts.GetSpeechVolume() or 100, true)
-end
-
-function ProbeSpeech(unit, channel)
-    if not probing or not IsHostileNameplate(unit) or GetTime() - speechAt < SPEECH_EVERY then return end
-    local okName, name
-    if channel then
-        okName, name = pcall(UnitChannelInfo, unit)
-    else
-        okName, name = pcall(UnitCastingInfo, unit)
-    end
-    if not okName or name == nil then return end
-    speechAt = GetTime()
-    CastAheadDB = CastAheadDB or {}
-    CastAheadDB.probe = CastAheadDB.probe or {}
-    speechMethod = speechMethod % 2 + 1
-    if speechMethod == 1 then
-        TallySpeech("Speech PlaySoundFile(names/name.ogg)",
-            pcall(PlaySoundFile, SOUND_ROOT .. "names\\" .. name .. ".ogg", "Master"))
-    else
-        TallySpeech("Speech C_VoiceChat(name)", pcall(SpeakWithVoiceChat, name))
     end
 end
 
