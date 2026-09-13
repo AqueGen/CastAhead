@@ -2540,25 +2540,28 @@ function Probe(unit)
     end
 end
 
--- Whether the game will say a hostile cast's name aloud although the addon
--- cannot read it. C_VoiceChat.SpeakText documents its text as accepting
--- secrets from tainted code, C_CombatAudioAlert.SpeakText only from untainted
--- code; only an attempt in a live dungeon settles either. One method per
--- attempt, announced in chat, so what is heard can be matched to what ran.
+-- Whether a hostile cast's name can be heard although the addon cannot read
+-- it. In a live dungeon C_VoiceChat.SpeakText took the secret name and spoke
+-- it; C_CombatAudioAlert.SpeakText refused it. PlaySoundFile has no generated
+-- documentation at all, so whether it accepts a path built from the secret
+-- name - which would let our own recorded voice say it - is asked here. One
+-- method per attempt, announced in chat, so what is heard matches what ran.
 local SPEECH_EVERY = 3.0
 local speechAt, speechMethod = -math.huge, 0
 
-local function TallySpeech(name, ok, err)
+local function TallySpeech(name, ok, detail)
     local db = CastAheadDB.probe
     local row = db[name]
     if not row then row = { secret = 0, readable = 0, empty = 0 } db[name] = row end
+    local shown = detail ~= nil and not IsSecret(detail) and tostring(detail) or (detail ~= nil and "secret" or "")
     if ok then
         row.readable = row.readable + 1
     else
         row.errors = (row.errors or 0) + 1
-        if row.sample == nil then row.sample = tostring(err) end
     end
-    print(string.format("|cff33ff99CastAhead|r probe speech: %s %s", name, ok and "ran" or "|cffff3333error|r"))
+    if row.sample == nil and shown ~= "" then row.sample = shown end
+    print(string.format("|cff33ff99CastAhead|r probe speech: %s %s %s", name,
+        ok and "ran" or "|cffff3333error|r", shown))
 end
 
 local function SpeakWithVoiceChat(text)
@@ -2585,16 +2588,12 @@ function ProbeSpeech(unit, channel)
     speechAt = GetTime()
     CastAheadDB = CastAheadDB or {}
     CastAheadDB.probe = CastAheadDB.probe or {}
-    speechMethod = speechMethod % 3 + 1
+    speechMethod = speechMethod % 2 + 1
     if speechMethod == 1 then
-        TallySpeech("Speech C_VoiceChat(name)", pcall(SpeakWithVoiceChat, name))
-    elseif speechMethod == 2 then
-        local category = Enum.CombatAudioAlertCategory and Enum.CombatAudioAlertCategory.TargetCast
-        TallySpeech("Speech CombatAudioAlert(name)", pcall(C_CombatAudioAlert.SpeakText, name, category, true))
+        TallySpeech("Speech PlaySoundFile(names/name.ogg)",
+            pcall(PlaySoundFile, SOUND_ROOT .. "names\\" .. name .. ".ogg", "Master"))
     else
-        TallySpeech("Speech C_VoiceChat('kick, '..name)", pcall(function()
-            SpeakWithVoiceChat("kick, " .. name)
-        end))
+        TallySpeech("Speech C_VoiceChat(name)", pcall(SpeakWithVoiceChat, name))
     end
 end
 
