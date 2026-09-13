@@ -62,7 +62,7 @@ local recentCasts
 local StartPreview
 local RefineByNPC
 local ResolvedNPCs, LockedNPCs
-local Probe                 -- /ca probe, defined next to Debug; the event handler calls it
+local Probe, ProbeSpeech    -- /ca probe, defined next to Debug; the event handler calls them
 local Identify
 local LockNPC
 local diag = { plates = 0, casts = 0, identified = 0, shown = 0, published = 0 }
@@ -1844,10 +1844,12 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         end
     elseif event == "UNIT_SPELLCAST_START" then
         Probe(unit)
+        ProbeSpeech(unit, false)
         OnCastStart(unit, false)
     elseif event == "UNIT_SPELLCAST_STOP" then
         OnCastStop(unit, false)
     elseif event == "UNIT_SPELLCAST_CHANNEL_START" then
+        ProbeSpeech(unit, true)
         OnCastStart(unit, true)
     elseif event == "UNIT_SPELLCAST_CHANNEL_STOP" then
         -- A kicked channel is told apart from one that ran its course by the
@@ -2483,6 +2485,25 @@ local PROBES = {
     { "UnitAffectingCombat", function(u) return UnitAffectingCombat(u) end },
     -- Empowered casts have stages, which is a hard tell where it happens.
     { "UnitEmpoweredChannelDuration", function(u) return UnitEmpoweredChannelDuration(u) end },
+    -- How long the cast in progress runs for. Identification rests on that
+    -- length, and today it can only be measured after the cast ends, which is
+    -- why nothing is named while the bar is still filling.
+    --
+    -- UnitCastingDuration is documented SecretReturns, so this is expected to
+    -- come back secret - it is here to prove that rather than assume it.
+    -- UnitChannelDuration carries no such flag, and a channel's length is the
+    -- one thing combat logs never record, so if it reads we gain a fact we
+    -- currently ship by hand.
+    { "UnitCastingDuration", function(u) return UnitCastingDuration(u) end },
+    { "UnitCastingDuration:GetTotalDuration", function(u)
+        local d = UnitCastingDuration(u)
+        return d and d:GetTotalDuration() or nil
+    end },
+    { "UnitChannelDuration", function(u) return UnitChannelDuration(u) end },
+    { "UnitChannelDuration:GetTotalDuration", function(u)
+        local d = UnitChannelDuration(u)
+        return d and d:GetTotalDuration() or nil
+    end },
     -- Almost certainly party-only, but the check costs one call.
     { "UnitPosition.x", function(u) return (UnitPosition(u)) end },
     { "UnitDistanceSquared", function(u) return (UnitDistanceSquared(u)) end },
@@ -2519,6 +2540,64 @@ function Probe(unit)
     end
 end
 
+-- Whether the game will say a hostile cast's name aloud although the addon
+-- cannot read it. C_VoiceChat.SpeakText documents its text as accepting
+-- secrets from tainted code, C_CombatAudioAlert.SpeakText only from untainted
+-- code; only an attempt in a live dungeon settles either. One method per
+-- attempt, announced in chat, so what is heard can be matched to what ran.
+local SPEECH_EVERY = 3.0
+local speechAt, speechMethod = -math.huge, 0
+
+local function TallySpeech(name, ok, err)
+    local db = CastAheadDB.probe
+    local row = db[name]
+    if not row then row = { secret = 0, readable = 0, empty = 0 } db[name] = row end
+    if ok then
+        row.readable = row.readable + 1
+    else
+        row.errors = (row.errors or 0) + 1
+        if row.sample == nil then row.sample = tostring(err) end
+    end
+    print(string.format("|cff33ff99CastAhead|r probe speech: %s %s", name, ok and "ran" or "|cffff3333error|r"))
+end
+
+local function SpeakWithVoiceChat(text)
+    local tts = C_TTSSettings
+    local voice = tts and tts.GetVoiceOptionID and Enum.TtsVoiceType
+        and tts.GetVoiceOptionID(Enum.TtsVoiceType.Standard)
+    if not voice then
+        local voices = C_VoiceChat.GetTtsVoices()
+        voice = voices and voices[1] and voices[1].voiceID
+    end
+    C_VoiceChat.SpeakText(voice, text, tts and tts.GetSpeechRate and tts.GetSpeechRate() or 0,
+        tts and tts.GetSpeechVolume and tts.GetSpeechVolume() or 100, true)
+end
+
+function ProbeSpeech(unit, channel)
+    if not probing or not IsHostileNameplate(unit) or GetTime() - speechAt < SPEECH_EVERY then return end
+    local okName, name
+    if channel then
+        okName, name = pcall(UnitChannelInfo, unit)
+    else
+        okName, name = pcall(UnitCastingInfo, unit)
+    end
+    if not okName or name == nil then return end
+    speechAt = GetTime()
+    CastAheadDB = CastAheadDB or {}
+    CastAheadDB.probe = CastAheadDB.probe or {}
+    speechMethod = speechMethod % 3 + 1
+    if speechMethod == 1 then
+        TallySpeech("Speech C_VoiceChat(name)", pcall(SpeakWithVoiceChat, name))
+    elseif speechMethod == 2 then
+        local category = Enum.CombatAudioAlertCategory and Enum.CombatAudioAlertCategory.TargetCast
+        TallySpeech("Speech CombatAudioAlert(name)", pcall(C_CombatAudioAlert.SpeakText, name, category, true))
+    else
+        TallySpeech("Speech C_VoiceChat('kick, '..name)", pcall(function()
+            SpeakWithVoiceChat("kick, " .. name)
+        end))
+    end
+end
+
 function CastAheadCore.Probing() return probing end
 
 function CastAheadCore.Probe(command)
@@ -2540,8 +2619,8 @@ function CastAheadCore.Probe(command)
         table.sort(names)
         for _, name in ipairs(names) do
             local r = db[name]
-            print(string.format("|cff33ff99CastAhead|r %-26s readable %3d  secret %3d  nil %3d  distinct %s  e.g. %s",
-                name, r.readable, r.secret, r.empty, tostring(r.distinct or 0), tostring(r.sample)))
+            print(string.format("|cff33ff99CastAhead|r %-26s readable %3d  secret %3d  nil %3d  err %3d  distinct %s  e.g. %s",
+                name, r.readable, r.secret, r.empty, r.errors or 0, tostring(r.distinct or 0), tostring(r.sample)))
         end
         return
     end
