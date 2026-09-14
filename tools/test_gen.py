@@ -1,7 +1,15 @@
 """Checks for the estimators in gen.py: python tools/test_gen.py"""
 import os, random, tempfile
 
-from gen import densest, read_anchor, rotation, settle, targeted, threat
+from gen import choose_targeted, densest, read_anchor, rotation, settle, targeted, threat
+
+
+def test_the_game_overrules_the_log_and_a_channel_needs_the_game():
+    assert choose_targeted([40, 40], [3, 0], False) is False
+    assert choose_targeted([40, 40], None, False) is True
+    assert choose_targeted([40, 40], None, True) is None
+    assert choose_targeted([40, 40], [2, 0], True) is None
+    assert choose_targeted([40, 0], [16, 15], False) is None
 
 
 def test_targeted_needs_a_clear_majority_and_samples():

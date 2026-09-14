@@ -101,9 +101,9 @@ if os.getenv("CA_PACKS_COMPANY") == "0" then
     CastAheadCore.Tuning.packsCompany = false
     knobs[#knobs + 1] = "packsCompany=off"
 end
-if os.getenv("CA_TARGET") == "1" then
-    CastAheadCore.Tuning.targetNarrow = true
-    knobs[#knobs + 1] = "targetNarrow=on"
+if os.getenv("CA_TARGET") == "0" then
+    CastAheadCore.Tuning.targetNarrow = false
+    knobs[#knobs + 1] = "targetNarrow=off"
 end
 if #knobs > 0 then print("knobs: " .. table.concat(knobs, ", ")) end
 

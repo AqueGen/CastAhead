@@ -135,7 +135,11 @@ local tuning = {
     population = false,        -- a creature seen dying as many times as MDT places it is out
     packsNarrow = false,       -- a locked neighbour's packmates are preferred among cast candidates
     packsCompany = false,      -- ... and among trait matches, instead of the trait rows' own `co`
-    targetNarrow = false,      -- whether the cast has a target, read at its start, narrows candidates
+    --  - targetNarrow on: in a Murder Row key the game's answer matched the
+    --    log's cast target on every ordinary cast; channels did not, so their
+    --    rows only carry `targeted` once the game itself was seen answering.
+    --    Replay of our logs: 583 right / 67 wrong without it, 631 / 57 with.
+    targetNarrow = true,       -- whether the cast has a target, read at its start, narrows candidates
 }
 
 -- Population: how many of each creature MDT places in this dungeon (Packs.lua,

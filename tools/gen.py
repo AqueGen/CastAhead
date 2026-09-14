@@ -29,6 +29,7 @@ CD_TOLERANCE_REL = 0.05
 APPROX_SUPPORT = 0.5    # fewer intervals than this share fit the schedule -> approximate
 ROTATION_GAIN = 0.10    # a rotation must predict this much more than one flat cooldown
 MIN_TARGET_SAMPLES = 5
+MIN_GAME_TARGET_SAMPLES = 3
 TARGET_MARGIN = 0.05    # a spell with a target on more than 5% and fewer than 95% of casts is left unknown
 FRESH_RUN = re.compile(r"#0\+*$")
 # The previous Data.lua is kept field by field unless a new value would change
@@ -150,9 +151,9 @@ def threat(r):
     }
 
 
-def targeted(counts):
+def targeted(counts, minimum=MIN_TARGET_SAMPLES):
     """True or False when the spell always or never has a target; None when unmeasured or mixed."""
-    if not counts or counts[0] < MIN_TARGET_SAMPLES:
+    if not counts or counts[0] < minimum:
         return None
     share = counts[1] / counts[0]
     if share >= 1 - TARGET_MARGIN:
@@ -160,6 +161,14 @@ def targeted(counts):
     if share <= TARGET_MARGIN:
         return False
     return None
+
+
+def choose_targeted(logged, observed, channel):
+    """What the game said wins over the log. Channels need the game's answer: their log
+    destination disagreed with it in both directions (Fel Missiles, Summon Wyrms)."""
+    if observed and observed[0] >= MIN_GAME_TARGET_SAMPLES:
+        return targeted(observed, MIN_GAME_TARGET_SAMPLES)
+    return None if channel else targeted(logged)
 
 
 def worth_showing(cast, cd, samples, t):
@@ -295,7 +304,7 @@ def print_report(report, total):
 
 
 def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path=None, targets_path=None,
-         fresh=False):
+         game_targets_path=None, fresh=False):
     data = json.load(open(casts_path, encoding="utf-8"))
     # MDT knows what the logs cannot: which creature owns a spell, whether that
     # spell is interruptible, and which creatures are bosses.
@@ -310,6 +319,9 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
     # tools/targets.py: per spell, casts that landed and how many had a target.
     targets = {int(k): v for k, v in
                json.load(open(targets_path, encoding="utf-8")).items()} if targets_path else {}
+    # The same counts as read in game by UnitShouldDisplaySpellTargetName, joined to the log.
+    game_targets = {int(k): v for k, v in
+                    json.load(open(game_targets_path, encoding="utf-8")).items()} if game_targets_path else {}
 
     anchor, anchor_zones = ({}, {}) if fresh else read_anchor(out_path)
     dungeons, seen, report = {}, set(), []
@@ -382,7 +394,8 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                     "offset": offset,
                     "samples": len(r["cast"]) + r.get("kicked", 0),
                     "channel": is_channel,
-                    "targeted": targeted(targets.get(int(spellid))),
+                    "targeted": choose_targeted(targets.get(int(spellid)), game_targets.get(int(spellid)),
+                                                is_channel),
                     **t,
                 }, old)
                 if not forced and not worth_showing(row["cast"], row["cd"], cdn, row):
