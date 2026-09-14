@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.6.0](https://github.com/AqueGen/CastAhead/compare/v0.5.0...v0.6.0) (2026-09-14)
+
+
+### Features
+
+* hold data steady between syncs ([#16](https://github.com/AqueGen/CastAhead/issues/16)) ([08e4339](https://github.com/AqueGen/CastAhead/commit/08e4339a14a77680e6920078c249625ef96da60a))
+* probe every unit fact the game still allows ([#13](https://github.com/AqueGen/CastAhead/issues/13)) ([79d84d1](https://github.com/AqueGen/CastAhead/commit/79d84d1c19553310c9c1c9648a7fea468e23be12))
+* record what the game still says about each hostile cast ([#17](https://github.com/AqueGen/CastAhead/issues/17)) ([49c61df](https://github.com/AqueGen/CastAhead/commit/49c61df2ce53fec8fca29fba08aaee7f2fc1161a))
+* tell spells apart by whether the cast has a target ([#18](https://github.com/AqueGen/CastAhead/issues/18)) ([7b43438](https://github.com/AqueGen/CastAhead/commit/7b43438f8ac9a0784618d57d6ad02856e402bf9a))
+* track the mini-bosses standing in the trash path ([#12](https://github.com/AqueGen/CastAhead/issues/12)) ([cdaf92f](https://github.com/AqueGen/CastAhead/commit/cdaf92fcee523e2adc334f5877f52c3b6ba29985))
+
+
+### Bug Fixes
+
+* same logs, same data ([#15](https://github.com/AqueGen/CastAhead/issues/15)) ([a153ee7](https://github.com/AqueGen/CastAhead/commit/a153ee7dc35b14b541ed547cb2a8e351c13fdff1))
+
 ## [0.5.0](https://github.com/AqueGen/CastAhead/compare/v0.4.0...v0.5.0) (2026-09-08)
 
 
