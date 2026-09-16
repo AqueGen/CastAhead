@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0](https://github.com/AqueGen/CastAhead/compare/v0.6.0...v0.7.0) (2026-09-16)
+
+
+### Features
+
+* fixed icon spacing and a strata pick for the nameplate icons ([#23](https://github.com/AqueGen/CastAhead/issues/23)) ([3a0d162](https://github.com/AqueGen/CastAhead/commit/3a0d162bbc541c50e8b878f891ad973fd688b240))
+* pick a sound for a single spell, ahead of its category ([#21](https://github.com/AqueGen/CastAhead/issues/21)) ([e567e8b](https://github.com/AqueGen/CastAhead/commit/e567e8bf04c000df14a52b6347b4b393f734578f))
+
 ## [0.6.0](https://github.com/AqueGen/CastAhead/compare/v0.5.0...v0.6.0) (2026-09-14)
 
 
