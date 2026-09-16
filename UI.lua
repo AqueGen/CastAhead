@@ -219,8 +219,12 @@ local function WindowHeight()
     return math.max(WINDOW_HEIGHT, settings)
 end
 
+-- Never larger than the screen: a window that overflows it hides its own
+-- controls, the Scale dropdown included, and there is no way back.
 local function ApplyScale()
-    window:SetScale(CastAheadConfig.Number("uiScale", SCALE_DEFAULT, SCALE_MIN, SCALE_MAX) / 100)
+    local wanted = CastAheadConfig.Number("uiScale", SCALE_DEFAULT, SCALE_MIN, SCALE_MAX) / 100
+    local fits = math.min(UIParent:GetWidth() / window:GetWidth(), UIParent:GetHeight() / window:GetHeight())
+    window:SetScale(math.min(wanted, fits))
 end
 
 -- Data ---------------------------------------------------------------------
@@ -605,7 +609,7 @@ function BuildWindow()
     -- for. Bottom right next to the grip, on every page.
     local scale = CreateFrame("DropdownButton", nil, window, "WowStyle1DropdownTemplate")
     scale:SetSize(80, 20)
-    scale:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -24, 8)
+    scale:SetPoint("TOPRIGHT", window, "TOPRIGHT", -130, -28)
     scale.text = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     scale.text:SetPoint("RIGHT", scale, "LEFT", -6, 0)
     scale.text:SetText("Scale")
@@ -647,6 +651,7 @@ function BuildWindow()
     grip:SetScript("OnMouseUp", function()
         window:StopMovingOrSizing()
         RememberSize()
+        ApplyScale()
         Refresh()
     end)
     table.insert(UISpecialFrames, "CastAheadWindow")   -- Escape closes it
@@ -783,6 +788,7 @@ function BuildWindow()
     if saved and saved.width and saved.height then
         window:SetSize(math.max(saved.width, WindowWidth()), math.max(saved.height, WindowHeight()))
     end
+    ApplyScale()
     sortKey = sortKey or "n"
     if sortDescending == nil then sortDescending = true end
 end
