@@ -319,6 +319,7 @@ function BuildGeneral(panel)
                 function() CastAheadUI.SetGrowth(direction) end)
         end
     end)
+    table.insert(refreshers, function() growDropdown:GenerateMenu() end)
 
     local offsetSlider = BuildSlider(panel, {
         key = "offsetX",
@@ -349,7 +350,7 @@ function BuildGeneral(panel)
     })
 
     BuildReset(panel, { "TOPLEFT", nudgeYSlider, "BOTTOMLEFT", -6, -22 },
-        { "offsetX", "nudgeX", "nudgeY" }, Redraw)
+        { "anchor", "grow", "offsetX", "nudgeX", "nudgeY" }, Redraw)
 
     -- How big they are ----------------------------------------------------
     -- Everything drawn on a nameplate icon in one place: the icon sets the
@@ -411,6 +412,7 @@ function BuildGeneral(panel)
                 end)
         end
     end)
+    table.insert(refreshers, function() strataDropdown:GenerateMenu() end)
     strataDropdown:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText("Layer", 1, 1, 1)
