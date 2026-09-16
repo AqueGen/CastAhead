@@ -98,6 +98,8 @@ local SWITCHES = {
         tip = "Master switch for everything the addon plays." },
     voice = { label = "Voice",
         tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"interrupt\"." },
+    fixedSpacing = { label = "Fixed spacing", defaultOff = true,
+        tip = "Step sideways by the icon plus the gap below, whatever the words under the icons measure. Every row packs the same; two wide verdicts side by side may overlap." },
     fullLabels = { label = "Full labels", defaultOff = true,
         tip = "Spell the longest verdicts out under a nameplate icon - BUSTER becomes TANKBUSTER. The icons step sideways by the width of the words under them, so the full words spread the row out; off, every plate's widest word is six characters and the rows pack evenly. The cast table and the spoken call always use the whole word either way." },
     devMode = { label = "Development mode", defaultOff = true,
@@ -317,6 +319,7 @@ function BuildGeneral(panel)
                 function() CastAheadUI.SetGrowth(direction) end)
         end
     end)
+    table.insert(refreshers, function() growDropdown:GenerateMenu() end)
 
     local offsetSlider = BuildSlider(panel, {
         key = "offsetX",
@@ -347,13 +350,13 @@ function BuildGeneral(panel)
     })
 
     BuildReset(panel, { "TOPLEFT", nudgeYSlider, "BOTTOMLEFT", -6, -22 },
-        { "offsetX", "nudgeX", "nudgeY" }, Redraw)
+        { "anchor", "grow", "offsetX", "nudgeX", "nudgeY" }, Redraw)
 
     -- How big they are ----------------------------------------------------
     -- Everything drawn on a nameplate icon in one place: the icon sets the
     -- size and the two texts on it are a share of that, so changing the icon
     -- keeps them in proportion.
-    local sizes = BuildGroup(panel, "Icon size", 4, 244)
+    local sizes = BuildGroup(panel, "Icon size", 4, 396)
 
     local iconSlider = BuildSlider(panel, {
         key = "iconSize",
@@ -384,8 +387,42 @@ function BuildGeneral(panel)
         after = Redraw,
     })
 
-    BuildReset(panel, { "TOPLEFT", timeSlider, "BOTTOMLEFT", -6, -22 },
-        { "iconSize", "labelScale", "timeScale" }, Redraw)
+    local fixedSpacing = BuildSwitch(panel, "fixedSpacing", { "TOPLEFT", timeSlider, "BOTTOMLEFT", -12, -18 })
+    local gapSlider = BuildSlider(panel, {
+        key = "iconGap",
+        default = CastAheadConfig.GAP_DEFAULT, min = 0, max = CastAheadConfig.GAP_MAX, step = 1,
+        point = { "TOPLEFT", fixedSpacing, "BOTTOMLEFT", 6, -4 },
+        caption = function(value) return string.format("Gap: %d px", value) end,
+        after = Redraw,
+    })
+
+    local strataLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    strataLabel:SetPoint("TOPLEFT", gapSlider, "BOTTOMLEFT", -6, -18)
+    strataLabel:SetText("Layer (frame strata)")
+    local strataDropdown = CreateFrame("DropdownButton", nil, panel, "WowStyle1DropdownTemplate")
+    strataDropdown:SetSize(170, 24)
+    strataDropdown:SetPoint("TOPLEFT", strataLabel, "BOTTOMLEFT", 0, -4)
+    strataDropdown:SetupMenu(function(_, root)
+        for _, name in ipairs(CastAheadConfig.STRATA) do
+            root:CreateRadio(name,
+                function() return CastAheadConfig.Strata() == name end,
+                function()
+                    CastAheadConfig.Set("strata", name ~= CastAheadConfig.STRATA_DEFAULT and name or nil)
+                    Redraw()
+                end)
+        end
+    end)
+    table.insert(refreshers, function() strataDropdown:GenerateMenu() end)
+    strataDropdown:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Layer", 1, 1, 1)
+        GameTooltip:AddLine("Where the icons draw among other frames. BACKGROUND sits above every nameplate and under the rest of the UI, like a plate does; go higher if you want the icons over your bars and frames, DIALOG or above if a nameplate addon lifts its plates into the UI.", nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    strataDropdown:SetScript("OnLeave", GameTooltip_Hide)
+
+    BuildReset(panel, { "TOPLEFT", strataDropdown, "BOTTOMLEFT", -6, -14 },
+        { "iconSize", "labelScale", "timeScale", "iconGap", "fixedSpacing", "strata" }, Redraw)
 
     -- Centre call ---------------------------------------------------------
     local centre = BuildGroup(panel, "Centre call", 5, 218)

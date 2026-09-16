@@ -1608,5 +1608,27 @@ CastAheadCore.Probe("off")
 CastAheadCore.Probe("clear")
 check(not CastAheadCore.Probing() and CastAheadDB.fingerprints == nil, "off and clear undo it")
 
+-- Sideways spacing (#20): by default neighbours step far enough apart that
+-- their labels never touch; with fixed spacing they step by icon plus gap
+-- whatever the labels measure.
+local wide = { { label = { GetStringWidth = function() return 80 end }, _size = 26 },
+               { label = { GetStringWidth = function() return 80 end }, _size = 26 } }
+CastAheadDB = {}
+CastAheadCore.SpreadBars(wide, 2)
+check(wide[2]._hOffset == 88, string.format("labels keep half of each other apart by default, got %s", tostring(wide[2]._hOffset)))
+CastAheadDB = { fixedSpacing = true, iconGap = 10 }
+CastAheadCore.SpreadBars(wide, 2)
+check(wide[2]._hOffset == 36, string.format("fixed spacing steps by icon plus gap, got %s", tostring(wide[2]._hOffset)))
+CastAheadDB = { fixedSpacing = true, iconGap = 999 }
+CastAheadCore.SpreadBars(wide, 2)
+check(wide[2]._hOffset == 26 + CastAheadConfig.GAP_MAX, "the gap is clamped like every other stored number")
+
+-- Icon layer (#19): the player's strata, with BACKGROUND for anything unknown.
+CastAheadDB = { strata = "TOOLTIP" }
+check(CastAheadConfig.Strata() == "TOOLTIP", "a listed strata is used as stored")
+CastAheadDB = { strata = "PLATER" }
+check(CastAheadConfig.Strata() == "BACKGROUND", "an unknown strata falls back to BACKGROUND")
+CastAheadDB = {}
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

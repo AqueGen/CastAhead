@@ -23,6 +23,16 @@ C.LEAD_MAX = 15
 -- default UI scale; the nudge shifts the whole row off the anchor point.
 C.ICON_DEFAULT, C.ICON_MIN, C.ICON_MAX = 26, 14, 64
 C.NUDGE_MAX = 100
+-- Sideways spacing: by default each icon steps far enough that the labels
+-- under neighbours never touch. Fixed spacing steps by icon plus this gap
+-- instead, so every row packs the same and wide labels may overlap (#20).
+C.GAP_DEFAULT, C.GAP_MAX = 4, 40
+-- Where the icons draw relative to everything else. Nameplates live under
+-- WorldFrame, below all of UIParent, so even BACKGROUND clears every plate
+-- while staying under the whole UI, the way a plate does; DIALOG and above
+-- are for a Plater profile that lifts plates into UIParent (#19).
+C.STRATA = { "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP" }
+C.STRATA_DEFAULT = "BACKGROUND"
 C.CENTER_DEFAULT, C.CENTER_MIN, C.CENTER_MAX = 100, 50, 250
 -- The advice under an icon is sized from the icon, so one setting keeps them
 -- in proportion. This is the adjustment on top of that, in percent, for a
@@ -49,6 +59,19 @@ end
 
 function C.IconSize()
     return C.Number("iconSize", C.ICON_DEFAULT, C.ICON_MIN, C.ICON_MAX)
+end
+
+function C.FixedGap()
+    if C.Get("fixedSpacing") ~= true then return nil end
+    return C.Number("iconGap", C.GAP_DEFAULT, 0, C.GAP_MAX)
+end
+
+function C.Strata()
+    local value = C.Get("strata")
+    for _, name in ipairs(C.STRATA) do
+        if name == value then return value end
+    end
+    return C.STRATA_DEFAULT
 end
 
 function C.NudgeX()
