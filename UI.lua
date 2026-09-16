@@ -79,6 +79,21 @@ function CastAheadUI.SetGrowth(direction)
     return true
 end
 
+local function SpellSound(entry)
+    return CastAheadDB and CastAheadDB.spellSounds and CastAheadDB.spellSounds[entry.spell]
+end
+
+local function SetSpellSound(entry, name)
+    CastAheadDB = CastAheadDB or {}
+    CastAheadDB.spellSounds = CastAheadDB.spellSounds or {}
+    CastAheadDB.spellSounds[entry.spell] = name
+end
+
+local function CategorySound(entry)
+    local advice = CastAheadMatch.Advice(entry)
+    return advice and CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[advice.key]
+end
+
 local function SpellName(entry)
     local info = C_Spell.GetSpellInfo(entry.spell)
     return (info and info.name) or entry.name or tostring(entry.spell)
@@ -133,10 +148,6 @@ local COLUMNS = {
         end,
     },
     { key = "spell", header = "Spell", width = 130, text = SpellName, sort = SpellName },
-    -- The player's own sound for this one cast, ahead of its category's
-    -- (Sounds tab). A dropdown rather than text, so the pick is made here.
-    { key = "sound", header = "Sound", width = 110,
-      sort = function(e) return CastAheadDB and CastAheadDB.spellSounds and CastAheadDB.spellSounds[e.spell] or "" end },
     { key = "mob", header = "Mob", width = 120,
       text = function(e) return "|cff9999ff" .. (e.mob or "?") .. "|r" end,
       sort = function(e) return e.mob or "" end },
@@ -177,6 +188,10 @@ local COLUMNS = {
     { key = "cc", header = "Stop", width = 40, justify = "RIGHT",
       text = function(e) return (e.cc or 0) > 0 and string.format("%d%%", e.cc * 100) or "-" end,
       sort = function(e) return e.cc or 0 end },
+    -- Inherit ticked: the category's sound (Sounds tab), shown greyed. Unticked:
+    -- the player's own pick for this one cast, ahead of the category's.
+    { key = "sound", header = "Override", width = 22 + 110,
+      sort = function(e) return SpellSound(e) or "" end },
 }
 
 local function ColumnOffset(index)
@@ -267,8 +282,8 @@ local HEADER_TIPS = {
         "The call made when this cast starts. Grey means the cast is tracked but has earned no verdict - too rare in the logs, and not starred." },
     spell = { "Spell",
         "The cast being tracked. Hover a row for the spell tooltip." },
-    sound = { "Sound for this cast",
-        "Plays instead of the category sound from the Sounds tab, once the cast is identified as this spell. Default keeps the category sound." },
+    sound = { "Sound override",
+        "Ticked, the cast plays its category's sound from the Sounds tab. Untick to pick a sound for this one cast; it plays once the cast is identified as this spell." },
     mob = { "Caster",
         "Which creature casts it. In 12.1 a nameplate never reveals a creature's name or ID, so this comes from combat logs - the addon only guesses which of them is in front of you." },
     level = { "Mob level",
@@ -362,19 +377,28 @@ local function CreateRow(parent, index)
                 end
             end)
         elseif column.key == "sound" then
+            row.inherit = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+            row.inherit:SetSize(ROW_HEIGHT, ROW_HEIGHT)
+            row.inherit:SetPoint("LEFT", row, "LEFT", x, 0)
+            row.inherit:SetScript("OnClick", function(self)
+                local e = row.entry
+                if not e then return end
+                SetSpellSound(e, self:GetChecked() and nil or (SpellSound(e) or ""))
+                Refresh()
+            end)
             row.sound = CreateFrame("DropdownButton", nil, row, "WowStyle1DropdownTemplate")
-            row.sound:SetSize(column.width, ROW_HEIGHT)
-            row.sound:SetPoint("LEFT", row, "LEFT", x, 0)
+            row.sound:SetSize(column.width - 22, ROW_HEIGHT)
+            row.sound:SetPoint("LEFT", row, "LEFT", x + 22, 0)
             row.sound:SetupMenu(function(_, root)
                 local e = row.entry
                 if not (e and CastAheadOptions and CastAheadOptions.SoundMenu) then return end
                 CastAheadOptions.SoundMenu(root,
-                    function() return CastAheadDB and CastAheadDB.spellSounds and CastAheadDB.spellSounds[e.spell] end,
-                    function(name)
-                        CastAheadDB = CastAheadDB or {}
-                        CastAheadDB.spellSounds = CastAheadDB.spellSounds or {}
-                        CastAheadDB.spellSounds[e.spell] = name
-                    end)
+                    function()
+                        local own = SpellSound(e)
+                        if own == nil then return CategorySound(e) end
+                        return own ~= "" and own or nil
+                    end,
+                    function(name) SetSpellSound(e, name or "") end)
             end)
         elseif column.key == "icon" then
             row.icon = row:CreateTexture(nil, "ARTWORK")
@@ -460,7 +484,11 @@ function Refresh()
             row.icon:SetAlpha(alpha)
             -- Nothing to say for a row with no verdict - no speaker, no sound.
             row.hear:SetShown(CastAheadMatch.Advice(entry) ~= nil)
-            row.sound:SetShown(CastAheadMatch.Advice(entry) ~= nil)
+            local hasAdvice = CastAheadMatch.Advice(entry) ~= nil
+            row.inherit:SetShown(hasAdvice)
+            row.sound:SetShown(hasAdvice)
+            row.inherit:SetChecked(SpellSound(entry) == nil)
+            row.sound:SetEnabled(SpellSound(entry) ~= nil)
             row.sound:GenerateMenu()
             row.check:SetChecked(not IsDisabled(entry.spell))
             row.check:SetScript("OnClick", function(self)
