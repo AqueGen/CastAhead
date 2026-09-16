@@ -5,16 +5,15 @@
 -- how tight the cooldown was, where the data is thin - and to sort by any of it.
 -- Headers and cells are built from one column list, so they cannot drift apart.
 
-local ROW_HEIGHT = 20
+local ROW_HEIGHT = 24
+local WIDGET_HEIGHT = 20
 local HEADER_HEIGHT = 18
+local SCALE_MIN, SCALE_MAX, SCALE_DEFAULT = 60, 160, 100
 local LIST_WIDTH = 190
--- Wide enough for the settings page's row of groups, which is the widest
--- thing the window has to hold; the casts table wants about this much too.
-local WINDOW_WIDTH = 1330
+-- The window has one logical size, wide enough for every column and for the
+-- settings page's row of groups; the grip and the slider change its scale
+-- instead, so the content grows and shrinks with the frame.
 local WINDOW_HEIGHT = 560
--- Resize floor. The width is derived from the column list below (see
--- MinWidth), so every header still fits inside the frame.
-local BASE_MIN_HEIGHT = 420
 local COLUMN_GAP = 4
 local THIN_EVIDENCE = 5      -- fewer samples than this and the row is dimmed
 
@@ -207,20 +206,14 @@ local function TableWidth()
     return ColumnOffset(#COLUMNS + 1)
 end
 
--- Wide enough for the casts page to keep its useful columns, and for the
--- settings page's three columns of groups to sit inside the frame. Narrower
--- than the settings need, the right-hand column simply hangs outside the
--- window, since the panels do not scroll.
-local function MinWidth()
+local function WindowWidth()
     local settings = (CastAheadOptions and CastAheadOptions.MIN_WIDTH or 0) + 24
-    return math.max(LIST_WIDTH + 24 + 520, settings)
+    return math.max(LIST_WIDTH + 24 + TableWidth() + 34, settings)
 end
 
--- The settings panels sit between the tab strip and the bottom edge and do
--- not scroll, so the frame has to be tall enough for the longest column.
-local function MinHeight()
+local function WindowHeight()
     local settings = (CastAheadOptions and CastAheadOptions.MIN_HEIGHT or 0) + 68
-    return math.max(BASE_MIN_HEIGHT, settings)
+    return math.max(WINDOW_HEIGHT, settings)
 end
 
 -- Data ---------------------------------------------------------------------
@@ -368,7 +361,7 @@ local function CreateRow(parent, index)
         local x = ColumnOffset(i)
         if column.key == "check" then
             row.check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-            row.check:SetSize(ROW_HEIGHT, ROW_HEIGHT)
+            row.check:SetSize(WIDGET_HEIGHT, WIDGET_HEIGHT)
             row.check:SetPoint("LEFT", row, "LEFT", x, 0)
         elseif column.key == "hear" then
             row.hear = CreateFrame("Button", nil, row)
@@ -384,16 +377,20 @@ local function CreateRow(parent, index)
             end)
         elseif column.key == "sound" then
             row.inherit = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-            row.inherit:SetSize(ROW_HEIGHT, ROW_HEIGHT)
+            row.inherit:SetSize(WIDGET_HEIGHT, WIDGET_HEIGHT)
             row.inherit:SetPoint("LEFT", row, "LEFT", x + 12, 0)
             row.inherit:SetScript("OnClick", function(self)
                 local e = row.entry
                 if not e then return end
-                SetSpellSound(e, self:GetChecked() and nil or (SpellSound(e) or ""))
+                if self:GetChecked() then
+                    SetSpellSound(e, nil)
+                else
+                    SetSpellSound(e, SpellSound(e) or "")
+                end
                 Refresh()
             end)
             row.sound = CreateFrame("DropdownButton", nil, row, "WowStyle1DropdownTemplate")
-            row.sound:SetSize(column.width - 34, ROW_HEIGHT)
+            row.sound:SetSize(column.width - 34, WIDGET_HEIGHT)
             row.sound:SetPoint("LEFT", row, "LEFT", x + 34, 0)
             row.sound:SetupMenu(function(_, root)
                 local e = row.entry
@@ -578,7 +575,7 @@ end
 
 function BuildWindow()
     window = CreateFrame("Frame", "CastAheadWindow", UIParent, "BasicFrameTemplateWithInset")
-    window:SetSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+    window:SetSize(WindowWidth(), WindowHeight())
     window:SetPoint("CENTER")
     window:SetMovable(true)
     window:EnableMouse(true)
@@ -586,21 +583,33 @@ function BuildWindow()
     window:SetScript("OnDragStart", window.StartMoving)
     window:SetScript("OnDragStop", window.StopMovingOrSizing)
     window:SetFrameStrata("DIALOG")
-    window:SetResizable(true)
-    if window.SetResizeBounds then
-        window:SetResizeBounds(MinWidth(), MinHeight())
-    end
 
-    local function RememberSize()
-        CastAheadDB = CastAheadDB or {}
-        CastAheadDB.window = CastAheadDB.window or {}
-        CastAheadDB.window.width = window:GetWidth()
-        CastAheadDB.window.height = window:GetHeight()
+    -- Whole-window scale, text included. The slider sits bottom right next to
+    -- the grip, on every page; dragging the grip moves the same value.
+    local scale = CreateFrame("Slider", nil, window, "UISliderTemplate")
+    scale:SetSize(120, 12)
+    scale:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -28, 14)
+    scale:SetOrientation("HORIZONTAL")
+    scale:SetMinMaxValues(SCALE_MIN, SCALE_MAX)
+    scale:SetValueStep(5)
+    scale:SetObeyStepOnDrag(true)
+    scale.text = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    scale.text:SetPoint("RIGHT", scale, "LEFT", -6, 0)
+    local function ApplyScale(value)
+        window:SetScale(value / 100)
+        scale.text:SetText(string.format("Scale %d%%", value))
     end
+    scale:SetValue(CastAheadConfig.Number("uiScale", SCALE_DEFAULT, SCALE_MIN, SCALE_MAX))
+    ApplyScale(scale:GetValue())
+    scale:SetScript("OnValueChanged", function(_, value)
+        value = math.floor(value / 5 + 0.5) * 5
+        CastAheadConfig.Set("uiScale", value ~= SCALE_DEFAULT and value or nil)
+        ApplyScale(value)
+    end)
 
-    -- Grip in the bottom-right corner, as Blizzard resizable panels have. The
-    -- column widths stay fixed - resizing simply reveals more rows and more of
-    -- the columns that were cut off.
+    -- Grip in the bottom-right corner, as Blizzard resizable panels have. It
+    -- scales the window rather than resizing it: the scale that puts the right
+    -- edge under the cursor, re-read every frame while the button is held.
     local grip = CreateFrame("Button", nil, window)
     grip:SetSize(16, 16)
     grip:SetPoint("BOTTOMRIGHT", -4, 4)
@@ -610,12 +619,15 @@ function BuildWindow()
     grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
     grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
     grip:SetScript("OnMouseDown", function()
-        window:StartSizing("BOTTOMRIGHT")
+        window:SetScript("OnUpdate", function()
+            local cursorX = GetCursorPosition()
+            local leftPx = window:GetLeft() * window:GetEffectiveScale()
+            local wanted = (cursorX - leftPx) / window:GetWidth() / UIParent:GetEffectiveScale()
+            scale:SetValue(math.max(SCALE_MIN, math.min(SCALE_MAX, wanted * 100)))
+        end)
     end)
     grip:SetScript("OnMouseUp", function()
-        window:StopMovingOrSizing()
-        RememberSize()
-        Refresh()
+        window:SetScript("OnUpdate", nil)
     end)
     table.insert(UISpecialFrames, "CastAheadWindow")   -- Escape closes it
     window.TitleText:SetText("CastAhead - tracked casts")
@@ -700,8 +712,8 @@ function BuildWindow()
     local current = CurrentInstanceID()
     for i, entry in ipairs(list) do
         local button = CreateFrame("Button", nil, castsPage)
-        button:SetSize(LIST_WIDTH, ROW_HEIGHT + 2)
-        button:SetPoint("TOPLEFT", window, "TOPLEFT", 12, -82 - (i - 1) * (ROW_HEIGHT + 2))
+        button:SetSize(LIST_WIDTH, WIDGET_HEIGHT + 2)
+        button:SetPoint("TOPLEFT", window, "TOPLEFT", 12, -82 - (i - 1) * (WIDGET_HEIGHT + 2))
         button.instanceID = entry.id
         button.text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         button.text:SetPoint("LEFT", button, "LEFT", 6, 0)
@@ -747,10 +759,6 @@ function BuildWindow()
 
     rows = {}
     rowParent = content
-    local saved = CastAheadDB and CastAheadDB.window
-    if saved and saved.width and saved.height then
-        window:SetSize(math.max(saved.width, MinWidth()), math.max(saved.height, MinHeight()))
-    end
     sortKey = sortKey or "n"
     if sortDescending == nil then sortDescending = true end
 end
