@@ -488,6 +488,46 @@ local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", 
     "POISON", "CURSE", "MAGIC", "DISEASE", "BLEED", "SOOTHE", "PURGE", "SWITCH", "ALERT" }
 local SOUND_ROW_H = 26
 
+local function SpellSounds()
+    CastAheadDB = CastAheadDB or {}
+    CastAheadDB.spellSounds = CastAheadDB.spellSounds or {}
+    return CastAheadDB.spellSounds
+end
+
+local function CuratedRows()
+    local byDungeon = {}
+    for _, dungeon in pairs(CastAheadData or {}) do
+        local rows = {}
+        for _, row in ipairs(dungeon) do
+            if row.prio then rows[#rows + 1] = row end
+        end
+        if #rows > 0 then
+            table.sort(rows, function(a, b) return a.name < b.name end)
+            byDungeon[#byDungeon + 1] = { name = dungeon.name, rows = rows }
+        end
+    end
+    table.sort(byDungeon, function(a, b) return a.name < b.name end)
+    return byDungeon
+end
+
+local function RowBySpell(id)
+    for _, dungeon in pairs(CastAheadData or {}) do
+        for _, row in ipairs(dungeon) do
+            if row.spell == id then return row end
+        end
+    end
+end
+
+local function SoundMenu(root, read, write, lsm)
+    if root.SetScrollMode then root:SetScrollMode(20 * 20) end
+    root:CreateRadio("Default", function() return read() == nil end, function() write(nil) end)
+    if lsm then
+        for _, name in ipairs(lsm:List("sound")) do
+            root:CreateRadio(name, function() return read() == name end, function() write(name) end)
+        end
+    end
+end
+
 function BuildSounds(panel)
     local hint = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     hint:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -4)
@@ -534,40 +574,18 @@ function BuildSounds(panel)
     scroll:SetScrollChild(body)
 
     local lsm = LibStub and LibStub("LibSharedMedia-3.0", true)
-    for i, key in ipairs(SOUND_ROWS) do
-        local advice = CastAheadMatch.ADVICE[key]
-        local y = -(i - 1) * SOUND_ROW_H
+    local function SoundRow(y, text, advice, candidates, read, write)
         local label = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         label:SetPoint("TOPLEFT", body, "TOPLEFT", 0, y - 6)
         label:SetWidth(90)
         label:SetJustifyH("LEFT")
         label:SetText(string.format("|cff%02x%02x%02x%s|r",
-            advice.r * 255, advice.g * 255, advice.b * 255, advice.label))
+            advice.r * 255, advice.g * 255, advice.b * 255, text))
 
         local dropdown = CreateFrame("DropdownButton", nil, body, "WowStyle1DropdownTemplate")
         dropdown:SetSize(240, 22)
         dropdown:SetPoint("TOPLEFT", body, "TOPLEFT", 96, y)
-        dropdown:SetupMenu(function(_, root)
-            if root.SetScrollMode then root:SetScrollMode(20 * 20) end
-            root:CreateRadio("Default",
-                function() return (CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[key]) == nil end,
-                function()
-                    CastAheadDB = CastAheadDB or {}
-                    CastAheadDB.sounds = CastAheadDB.sounds or {}
-                    CastAheadDB.sounds[key] = nil
-                end)
-            if lsm then
-                for _, name in ipairs(lsm:List("sound")) do
-                    root:CreateRadio(name,
-                        function() return (CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[key]) == name end,
-                        function()
-                            CastAheadDB = CastAheadDB or {}
-                            CastAheadDB.sounds = CastAheadDB.sounds or {}
-                            CastAheadDB.sounds[key] = name
-                        end)
-                end
-            end
-        end)
+        dropdown:SetupMenu(function(_, root) SoundMenu(root, read, write, lsm) end)
 
         local hear = CreateFrame("Button", nil, body)
         hear:SetSize(18, 18)
@@ -575,7 +593,95 @@ function BuildSounds(panel)
         hear:SetNormalAtlas("chatframe-button-icon-speaker-on")
         hear:SetHighlightAtlas("chatframe-button-icon-speaker-on")
         hear:SetScript("OnClick", function()
-            if CastAheadCore and CastAheadCore.PreviewSound then CastAheadCore.PreviewSound(advice) end
+            if CastAheadCore and CastAheadCore.PreviewSound then CastAheadCore.PreviewSound(advice, candidates) end
         end)
+        return label, dropdown, hear
     end
+
+    for i, key in ipairs(SOUND_ROWS) do
+        SoundRow(-(i - 1) * SOUND_ROW_H, CastAheadMatch.ADVICE[key].label, CastAheadMatch.ADVICE[key], nil,
+            function() return CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[key] end,
+            function(name)
+                CastAheadDB = CastAheadDB or {}
+                CastAheadDB.sounds = CastAheadDB.sounds or {}
+                CastAheadDB.sounds[key] = name
+            end)
+    end
+
+    local spellTop = -#SOUND_ROWS * SOUND_ROW_H - 12
+    local spellHint = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    spellHint:SetPoint("TOPLEFT", body, "TOPLEFT", 0, spellTop - 6)
+    spellHint:SetText("|cffaaaaaaPer spell, ahead of its category:|r")
+
+    local spellRows = {}
+    local RebuildSpellRows
+    local add = CreateFrame("DropdownButton", nil, body, "WowStyle1DropdownTemplate")
+    add:SetSize(240, 22)
+    add:SetPoint("TOPLEFT", body, "TOPLEFT", 160, spellTop)
+    add:SetDefaultText("Add spell...")
+    add:SetupMenu(function(_, root)
+        for _, dungeon in ipairs(CuratedRows()) do
+            local sub = root:CreateButton(dungeon.name)
+            if sub.SetScrollMode then sub:SetScrollMode(20 * 20) end
+            for _, row in ipairs(dungeon.rows) do
+                local advice = CastAheadMatch.Advice(row)
+                sub:CreateButton(string.format("%s |cff888888(%s, %s)|r", row.name, row.mob, advice.label), function()
+                    if SpellSounds()[row.spell] == nil then SpellSounds()[row.spell] = "" end
+                    RebuildSpellRows()
+                end)
+            end
+        end
+    end)
+
+    local function SpellRow(i)
+        local set = { advice = CastAheadMatch.ADVICE.ALERT }
+        local y = spellTop - i * SOUND_ROW_H
+        set.label, set.dropdown, set.hear = SoundRow(y, "", set.advice, nil,
+            function()
+                local name = SpellSounds()[set.id]
+                return name ~= "" and name or nil
+            end,
+            function(name) SpellSounds()[set.id] = name or "" end)
+        set.label:SetWidth(150)
+        set.dropdown:ClearAllPoints()
+        set.dropdown:SetPoint("TOPLEFT", body, "TOPLEFT", 160, y)
+        set.dropdown:SetSize(176, 22)
+        set.hear:SetScript("OnClick", function()
+            if CastAheadCore and CastAheadCore.PreviewSound then
+                CastAheadCore.PreviewSound(set.advice, set.row and { set.row } or nil)
+            end
+        end)
+        set.remove = CreateFrame("Button", nil, body, "UIPanelCloseButtonNoScripts")
+        set.remove:SetSize(22, 22)
+        set.remove:SetPoint("LEFT", set.hear, "RIGHT", 4, 0)
+        set.remove:SetScript("OnClick", function()
+            SpellSounds()[set.id] = nil
+            RebuildSpellRows()
+        end)
+        return set
+    end
+
+    function RebuildSpellRows()
+        local ids = {}
+        for id in pairs(SpellSounds()) do ids[#ids + 1] = id end
+        table.sort(ids)
+        for i, id in ipairs(ids) do
+            local set = spellRows[i] or SpellRow(i)
+            spellRows[i] = set
+            set.id = id
+            set.row = RowBySpell(id)
+            set.advice = set.row and CastAheadMatch.Advice(set.row) or CastAheadMatch.ADVICE.ALERT
+            set.label:SetText(string.format("|cff%02x%02x%02x%s|r",
+                set.advice.r * 255, set.advice.g * 255, set.advice.b * 255, set.row and set.row.name or id))
+            set.dropdown:GenerateMenu()
+            for _, w in ipairs({ set.label, set.dropdown, set.hear, set.remove }) do w:Show() end
+        end
+        for i = #ids + 1, #spellRows do
+            local set = spellRows[i]
+            for _, w in ipairs({ set.label, set.dropdown, set.hear, set.remove }) do w:Hide() end
+        end
+        body:SetHeight(-spellTop + (#ids + 1) * SOUND_ROW_H)
+    end
+    RebuildSpellRows()
+    table.insert(refreshers, RebuildSpellRows)
 end

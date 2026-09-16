@@ -484,6 +484,32 @@ advance(3)
 check(Alerts() == 1, string.format("one alert per identified dangerous cast, got %d", Alerts()))
 reset()
 
+-- A sound picked for one spell wins over its category's, and only once the
+-- cast is that spell rather than one of several candidates.
+local lastFile
+local playFile = PlaySoundFile
+PlaySoundFile = function(path, ...) lastFile = path return playFile(path, ...) end
+LibStub = function() return { Fetch = function(_, _, name) return "custom/" .. name end } end
+CastAheadDB = { leadSeconds = 5, sounds = { AOE = "Horn" }, spellSounds = { [100] = "Bell" } }
+enter()
+castFor(3.0)
+advance(17)
+castFor(3.0)
+advance(3)
+check(lastFile == "custom/Bell", "the spell's own sound plays, got " .. tostring(lastFile))
+reset()
+CastAheadDB.spellSounds[100] = ""
+lastFile = nil
+enter()
+castFor(3.0)
+advance(17)
+castFor(3.0)
+advance(3)
+check(lastFile == "custom/Horn", "an empty spell pick falls back to the category sound, got " .. tostring(lastFile))
+reset()
+PlaySoundFile, LibStub = playFile, nil
+CastAheadDB = { leadSeconds = 5 }
+
 -- A predicted cast warns ahead of time, once, and then alerts again when it
 -- actually starts.
 sounds, spoken, clips = 0, 0, 0
