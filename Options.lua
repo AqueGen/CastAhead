@@ -490,13 +490,31 @@ local SOUND_ROW_H = 26
 
 -- Default plus every sound LibSharedMedia knows. Shared with the casts
 -- table, where each row offers the same list for its own spell.
-function CastAheadOptions.SoundMenu(root, read, write)
+-- Each entry carries a speaker on its right (Blizzard's own pattern, see
+-- CooldownViewerUtil.AddSoundAlertRadio), so a sound can be heard before it
+-- is picked. `advice` is what Default stands for here.
+function CastAheadOptions.SoundMenu(root, read, write, advice)
     local lsm = LibStub and LibStub("LibSharedMedia-3.0", true)
     if root.SetScrollMode then root:SetScrollMode(20 * 20) end
-    root:CreateRadio("Default", function() return read() == nil end, function() write(nil) end)
+    local function Speaker(radio, name)
+        if not (MenuTemplates and MenuTemplates.AttachUtilityButton) then return end
+        radio:AddInitializer(function(button)
+            local play = MenuTemplates.AttachUtilityButton(button)
+            play.Texture:Hide()
+            play:SetNormalTexture("common-icon-sound")
+            play:SetPushedTexture("common-icon-sound-pressed")
+            play:SetHighlightTexture("common-icon-sound", "ADD")
+            MenuTemplates.SetUtilityButtonAnchor(play, MenuVariants.GearButtonAnchor, button, 0, 0)
+            MenuTemplates.SetUtilityButtonClickHandler(play, function()
+                if CastAheadCore and CastAheadCore.PreviewMedia then CastAheadCore.PreviewMedia(name, advice) end
+            end)
+            if button.Layout then button:Layout() end
+        end)
+    end
+    Speaker(root:CreateRadio("Default", function() return read() == nil end, function() write(nil) end), nil)
     if lsm then
         for _, name in ipairs(lsm:List("sound")) do
-            root:CreateRadio(name, function() return read() == name end, function() write(name) end)
+            Speaker(root:CreateRadio(name, function() return read() == name end, function() write(name) end), name)
         end
     end
 end
@@ -565,7 +583,7 @@ function BuildSounds(panel)
                     CastAheadDB = CastAheadDB or {}
                     CastAheadDB.sounds = CastAheadDB.sounds or {}
                     CastAheadDB.sounds[key] = name
-                end)
+                end, advice)
         end)
 
         local hear = CreateFrame("Button", nil, body)

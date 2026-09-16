@@ -399,7 +399,8 @@ local function CreateRow(parent, index)
                         if own == nil then return CategorySound(e) end
                         return own ~= "" and own or nil
                     end,
-                    function(name) SetSpellSound(e, name or "") end)
+                    function(name) SetSpellSound(e, name or "") end,
+                    CastAheadMatch.Advice(e))
             end)
             local dash = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             dash:SetPoint("LEFT", row, "LEFT", x + 12, 0)

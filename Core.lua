@@ -2272,6 +2272,19 @@ function CastAheadCore.PreviewSound(advice, candidates)
     if advice then Beep(advice, candidates) end
 end
 
+-- One entry of the sound picker, before it is picked: a shared-media sound by
+-- name, or the category's own beep for the Default entry.
+function CastAheadCore.PreviewMedia(name, advice)
+    if not name then
+        if advice then Beep(advice) end
+        return
+    end
+    local lsm = LibStub and LibStub("LibSharedMedia-3.0", true)
+    local sound = lsm and lsm:Fetch("sound", name, true)
+    if not sound then return end
+    if type(sound) == "number" then PlaySound(sound, "Master") else PlaySoundFile(sound, "Master") end
+end
+
 -- Test drive: /ca test (or the window's Test button). Runs a scripted
 -- sequence of predicted casts through the real display pipeline - countdown
 -- icons, lead warning, voice/sound at "cast", timeline events - without a
