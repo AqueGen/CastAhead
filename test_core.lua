@@ -138,7 +138,7 @@ Enum.EncounterEventIconmask = { TankRole = 128, HealerRole = 256, DpsRole = 512,
 Enum.EncounterEventSeverity = { Low = 0, Medium = 1, High = 2 }
 
 SOUNDKIT = { RAID_WARNING = 1, ALARM_CLOCK_WARNING_3 = 2, ALARM_CLOCK_WARNING_2 = 3,
-             UI_RAID_BOSS_WHISPER_WARNING = 4 }
+             ALARM_CLOCK_WARNING_1 = 4 }
 PlaySound = function() sounds = sounds + 1 end
 
 local framesMade, shownCount = 0, 0

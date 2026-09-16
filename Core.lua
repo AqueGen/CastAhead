@@ -212,7 +212,9 @@ local ADVICE_SOUND = {           -- keyed by CastAheadMatch.ADVICE key
     KICK = "RAID_WARNING",
     TANK = "ALARM_CLOCK_WARNING_3",
     AOE = "ALARM_CLOCK_WARNING_2",
-    CC = "UI_RAID_BOSS_WHISPER_WARNING",
+    -- Not UI_RAID_BOSS_WHISPER_WARNING: DBM mutes that file (876098) with its
+    -- boss-emote option, and the STUN row went silent for every DBM user.
+    CC = "ALARM_CLOCK_WARNING_1",
     -- Curated categories share one fallback beep; the voice line carries the
     -- distinction when the combat TTS is available.
     DODGE = "RAID_WARNING",
