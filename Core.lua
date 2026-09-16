@@ -782,6 +782,11 @@ local function ApplyBarSize(bar)
     local size = CastAheadConfig.IconSize()
     local labelScale = CastAheadConfig.LabelScale()
     local timeScale = CastAheadConfig.TimeScale()
+    local strata = CastAheadConfig.Strata()
+    if bar._strata ~= strata then
+        bar._strata = strata
+        bar:SetFrameStrata(strata)
+    end
     if bar._size == size and bar._labelScale == labelScale
         and bar._timeScale == timeScale then
         return size
@@ -812,8 +817,8 @@ local function GetBar(state, index)
     bar:SetSize(ICON_SIZE, ICON_SIZE)
     bar:EnableMouse(false)
     -- Nameplate addons draw at their own strata; without pinning ours above
-    -- them the icon disappears behind the plate it belongs to.
-    bar:SetFrameStrata("DIALOG")
+    -- them the icon disappears behind the plate it belongs to. The strata
+    -- itself is the player's (ApplyBarSize), fixed so no parent moves it.
     if bar.SetFixedFrameStrata then bar:SetFixedFrameStrata(true) end
     bar:SetFrameLevel(6200)
     if bar.SetFixedFrameLevel then bar:SetFixedFrameLevel(true) end
@@ -899,10 +904,13 @@ CastAheadGrowth = GROW
 -- the icon itself, for the case where both labels are short or empty.
 local function SpreadBars(bars, count)
     local offset, previous = 0, 0
+    local fixed = CastAheadConfig.FixedGap()
     for i = 1, count do
         local bar = bars[i]
         local width = bar.label:GetStringWidth() or 0
-        if i > 1 then
+        if i > 1 and fixed then
+            offset = offset + (bar._size or ICON_SIZE) + fixed
+        elseif i > 1 then
             offset = offset + math.max((bar._size or ICON_SIZE) + ICON_GAP,
                 (previous + width) / 2 + LABEL_GAP)
         end
@@ -2284,6 +2292,7 @@ CastAheadCore = {}
 CastAheadCore.LastCandidates = LastCandidates   -- replay harness only
 CastAheadCore.SetTrace = function(fn) narrowTrace = fn end
 CastAheadCore.Tuning = tuning
+CastAheadCore.SpreadBars = SpreadBars
 CastAheadCore.Population = function() return killed, exhausted end
 CastAheadCore.MoveCenter = ToggleMoveCenter
 
