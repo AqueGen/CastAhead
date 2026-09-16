@@ -24,7 +24,7 @@ local window, body, dungeonButtons, rows, rowParent, headers
 local selectedInstanceID, sortKey, sortDescending, searchText
 -- The window is a book: the casts page (dungeon list, search, table) and one
 -- page per settings group, built by Options.lua into `settingsHost`.
-local castsPage, settingsHost, tabButtons, testButton
+local castsPage, settingsHost, tabButtons, testButton, listButton
 -- Forward declaration: RefreshTabs falls back to another page when the
 -- Development tab is switched off, and it is defined above ShowTab.
 local ShowTab
@@ -542,6 +542,7 @@ function CastAheadUI.RefreshTest()
     if not testButton then return end
     local running = CastAheadCore and CastAheadCore.Testing and CastAheadCore.Testing()
     testButton:SetText(running and "Stop test" or "Test drive")
+    listButton:SetText(running and "Stop" or "Play list")
 end
 
 -- The Development page is the last tab and is off by default, so hiding its
@@ -675,6 +676,20 @@ function BuildWindow()
         GameTooltip:Show()
     end)
     testButton:SetScript("OnLeave", GameTooltip_Hide)
+
+    listButton = CreateFrame("Button", nil, body, "UIPanelButtonTemplate")
+    listButton:SetSize(90, 20)
+    listButton:SetPoint("RIGHT", testButton, "LEFT", -4, 0)
+    listButton:SetScript("OnClick", function()
+        if CastAheadCore and CastAheadCore.Test then CastAheadCore.Test(selectedInstanceID, SortedRows()) end
+    end)
+    listButton:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:SetText("Play list", 1, 1, 1)
+        GameTooltip:AddLine("Play every cast in the table, top to bottom in its current order, one at a time: the countdown, the call, the voice and the sound each one is set to. Click again to stop.", nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    listButton:SetScript("OnLeave", GameTooltip_Hide)
     CastAheadUI.RefreshTest()
 
     -- Tab strip: General first, then the casts table, then the other settings pages.

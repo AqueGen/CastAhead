@@ -2382,13 +2382,16 @@ local function DemoAnchor(e, i)
         e.bar._demoStep = step
         e.bar:ClearAllPoints()
         e.bar:SetPoint("CENTER", UIParent, "CENTER",
-            (i - 1) * step - (#demo.entries - 1) * step / 2, -160)
+            (i - 1) * step - ((demo.shown or #demo.entries) - 1) * step / 2, -160)
     end
 
     e.bar:Show()
 end
 
-function CastAheadCore.Test(instanceID)
+-- With `list` (the table's rows, in its order) every one of them is played
+-- in turn, one call at a time and never on plates: that is for hearing each
+-- cast's sound rather than judging the layout.
+function CastAheadCore.Test(instanceID, list)
     if demo then StopTest() return end
     local id = instanceID
     if not (id and CastAheadData[id]) then
@@ -2406,11 +2409,11 @@ function CastAheadCore.Test(instanceID)
     -- One row per distinct call, the way a pull mixes them; the current
     -- filters apply, so the test previews exactly what a run would show.
     local picked, seen = {}, {}
-    for i = 1, #rows do
-        local row = rows[i]
+    for i = 1, #(list or rows) do
+        local row = (list or rows)[i]
         local advice = CastAheadMatch.Advice(row)
-        local important = not ImportantOnly() or CastAheadMatch.Important(row)
-        if advice and important and #picked < 4 and not seen[advice.label]
+        local important = list or not ImportantOnly() or CastAheadMatch.Important(row)
+        if advice and important and (list or (#picked < 4 and not seen[advice.label]))
             and not (CastAheadUI and CastAheadUI.IsDisabled and CastAheadUI.IsDisabled(row.spell)) then
             seen[advice.label] = true
             picked[#picked + 1] = row
@@ -2427,11 +2430,14 @@ function CastAheadCore.Test(instanceID)
     local units = {}
     for i = 1, 40 do
         local token = "nameplate" .. i
-        if IsHostileNameplate(token) and C_NamePlate.GetNamePlateForUnit(token) then
+        if not list and IsHostileNameplate(token) and C_NamePlate.GetNamePlateForUnit(token) then
             units[#units + 1] = token
         end
     end
     demo = { frame = CreateFrame("Frame"), entries = {}, state = { bars = {} } }
+    -- One call at a time: the one counting down and the one going out.
+    local gap = list and (CastAheadConfig.Lead() + 3) or nil
+    if list then demo.shown = 2 end
     local now = GetTime()
     -- Several calls per plate, always: one icon per plate tells the player
     -- nothing about the spacing between them, which is the thing a test drive
@@ -2448,15 +2454,16 @@ function CastAheadCore.Test(instanceID)
         slots[unit or 0] = (slots[unit or 0] or 0) + 1
         local e = {
             row = row, candidates = { row },
-            endAt = now + 2 + i * (CastAheadConfig.Lead() + 2) / math.max(1, math.ceil(total / 4)),
+            endAt = gap and (now + 2 + (i - 1) * gap)
+                or (now + 2 + i * (CastAheadConfig.Lead() + 2) / math.max(1, math.ceil(total / 4))),
             track = {},
             unit = unit, slot = slots[unit or 0],
         }
         e.bar = GetBar(demo.state, i)
         PaintBar(e.bar, e)
         DemoAnchor(e, i)
-        e.bar:Show()
-        if CastAheadTimeline then
+        e.bar:SetShown(not gap or i == 1)
+        if CastAheadTimeline and not gap then
             CastAheadTimeline.Sync(e.track, e.endAt, row,
                 CastAheadMatch.Advice(row), true)
         end
@@ -2473,12 +2480,16 @@ function CastAheadCore.Test(instanceID)
         -- A call finished on the previous tick: close the row up before
         -- anything is placed again.
         if demo.repack then DemoLayout() end
-        local alive = 0
+        local alive, shown = 0, 0
         for i = 1, #demo.entries do
             local e = demo.entries[i]
-            if not e.done then
+            if not e.done and gap and e.endAt - t > gap then
                 alive = alive + 1
-                DemoAnchor(e, i)
+                e.bar:Hide()
+            elseif not e.done then
+                alive = alive + 1
+                shown = shown + 1
+                DemoAnchor(e, gap and shown or i)
                 if e.casting then
                     if t >= e.castEnd then
                         e.done = true
