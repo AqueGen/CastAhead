@@ -1623,11 +1623,11 @@ CastAheadDB = { fixedSpacing = true, iconGap = 999 }
 CastAheadCore.SpreadBars(wide, 2)
 check(wide[2]._hOffset == 26 + CastAheadConfig.GAP_MAX, "the gap is clamped like every other stored number")
 
--- Icon layer (#19): the player's strata, with HIGH for anything unknown.
+-- Icon layer (#19): the player's strata, with BACKGROUND for anything unknown.
 CastAheadDB = { strata = "TOOLTIP" }
 check(CastAheadConfig.Strata() == "TOOLTIP", "a listed strata is used as stored")
 CastAheadDB = { strata = "PLATER" }
-check(CastAheadConfig.Strata() == "HIGH", "an unknown strata falls back to HIGH")
+check(CastAheadConfig.Strata() == "BACKGROUND", "an unknown strata falls back to BACKGROUND")
 CastAheadDB = {}
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
