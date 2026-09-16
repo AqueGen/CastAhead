@@ -579,13 +579,15 @@ function BuildWindow()
     testButton:SetScript("OnLeave", GameTooltip_Hide)
     CastAheadUI.RefreshTest()
 
-    -- Tab strip: the casts table first, then one page per settings group.
+    -- Tab strip: General first, then the casts table, then the other settings pages.
     tabButtons = {}
     local previousTab
-    local names = { CASTS_TAB }
+    local names = {}
     for _, name in ipairs(CastAheadOptions and CastAheadOptions.TABS or {}) do
         names[#names + 1] = name
+        if #names == 1 then names[#names + 1] = CASTS_TAB end
     end
+    if #names == 0 then names[1] = CASTS_TAB end
     for _, name in ipairs(names) do
         local button = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
         button:SetSize(78, 20)
