@@ -8,7 +8,7 @@
 local ROW_HEIGHT = 24
 local WIDGET_HEIGHT = 20
 local HEADER_HEIGHT = 18
-local SCALE_STEPS = { 75, 90, 100, 110, 125, 150, 175, 200 }
+local SCALE_STEPS = { 75, 100, 125, 150, 175, 200 }
 local SCALE_MIN, SCALE_MAX, SCALE_DEFAULT = 75, 200, 100
 local TITLE_HEIGHT = 22
 local LIST_WIDTH = 190
@@ -19,7 +19,7 @@ local WINDOW_HEIGHT = 560
 local COLUMN_GAP = 4
 local THIN_EVIDENCE = 5      -- fewer samples than this and the row is dimmed
 
-local window, body, dungeonButtons, rows, rowParent, headers
+local window, body, hscroll, hslider, dungeonButtons, rows, rowParent, headers
 local selectedInstanceID, sortKey, sortDescending, searchText
 -- The window is a book: the casts page (dungeon list, search, table) and one
 -- page per settings group, built by Options.lua into `settingsHost`.
@@ -218,10 +218,20 @@ local function WindowHeight()
     return math.max(WINDOW_HEIGHT, settings)
 end
 
+-- The body is at least as big as the columns and the settings page need;
+-- when that is more than the window shows at this scale, a slider along the
+-- bottom edge scrolls it sideways and the template's bar scrolls it down.
 local function LayoutBody()
     local scale = CastAheadConfig.Number("uiScale", SCALE_DEFAULT, SCALE_MIN, SCALE_MAX) / 100
     body:SetScale(scale)
-    body:SetSize(window:GetWidth() / scale, (window:GetHeight() - TITLE_HEIGHT) / scale)
+    local shown = window:GetWidth() / scale
+    body:SetSize(math.max(shown, WindowWidth()),
+        math.max((window:GetHeight() - TITLE_HEIGHT) / scale, WindowHeight() - TITLE_HEIGHT))
+    local overflow = (body:GetWidth() - shown) * scale
+    hslider:SetShown(overflow > 1)
+    hslider:SetMinMaxValues(0, math.max(overflow, 0))
+    hslider:SetValue(math.min(hslider:GetValue(), math.max(overflow, 0)))
+    hscroll:SetHorizontalScroll(hslider:GetValue())
 end
 
 -- Data ---------------------------------------------------------------------
@@ -596,9 +606,20 @@ function BuildWindow()
         window:SetResizeBounds(400, 240)
     end
 
-    body = CreateFrame("Frame", nil, window)
-    body:SetPoint("TOPLEFT", window, "TOPLEFT", 0, -TITLE_HEIGHT)
-    if body.SetClipsChildren then body:SetClipsChildren(true) end
+    hscroll = CreateFrame("ScrollFrame", nil, window, "UIPanelScrollFrameTemplate")
+    hscroll:SetPoint("TOPLEFT", window, "TOPLEFT", 0, -TITLE_HEIGHT)
+    hscroll:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -24, 4)
+    body = CreateFrame("Frame", nil, hscroll)
+    hscroll:SetScrollChild(body)
+
+    hslider = CreateFrame("Slider", nil, window, "UISliderTemplate")
+    hslider:SetOrientation("HORIZONTAL")
+    hslider:SetHeight(10)
+    hslider:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", 8, 2)
+    hslider:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -200, 2)
+    hslider:SetValueStep(1)
+    hslider:SetValue(0)
+    hslider:SetScript("OnValueChanged", function(_, value) hscroll:SetHorizontalScroll(value) end)
     window:SetScript("OnSizeChanged", LayoutBody)
 
     -- Content scale, text included, for anyone the default is too small for.
@@ -638,6 +659,11 @@ function BuildWindow()
     grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
     grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
     grip:SetScript("OnMouseDown", function()
+        -- Pin the top-left corner first: a CENTER-anchored frame grows from
+        -- the middle, so the first drag frame jumped the window's size.
+        local left, top = window:GetLeft(), window:GetTop()
+        window:ClearAllPoints()
+        window:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
         window:StartSizing("BOTTOMRIGHT")
     end)
     grip:SetScript("OnMouseUp", function()
