@@ -212,7 +212,9 @@ local ADVICE_SOUND = {           -- keyed by CastAheadMatch.ADVICE key
     KICK = "RAID_WARNING",
     TANK = "ALARM_CLOCK_WARNING_3",
     AOE = "ALARM_CLOCK_WARNING_2",
-    CC = "UI_RAID_BOSS_WHISPER_WARNING",
+    -- Not UI_RAID_BOSS_WHISPER_WARNING: DBM mutes that file (876098) with its
+    -- boss-emote option, and the STUN row went silent for every DBM user.
+    CC = "ALARM_CLOCK_WARNING_1",
     -- Curated categories share one fallback beep; the voice line carries the
     -- distinction when the combat TTS is available.
     DODGE = "RAID_WARNING",
@@ -347,6 +349,28 @@ do
                 lsm:Register("sound", "CastAhead: " .. advice.say, SOUND_ROOT .. "en\\" .. advice.file .. ".ogg")
             end
         end
+        -- The game's own alert kits, so the picker has a spread of beeps even
+        -- with no sound pack installed. Stored as kit numbers; Beep plays those.
+        local GAME_SOUNDS = {
+            { "Raid warning", "RAID_WARNING" },
+            { "Alarm clock 1", "ALARM_CLOCK_WARNING_1" },
+            { "Alarm clock 2", "ALARM_CLOCK_WARNING_2" },
+            { "Alarm clock 3", "ALARM_CLOCK_WARNING_3" },
+            { "Ready check", "READY_CHECK" },
+            { "Raid boss emote", "RAID_BOSS_EMOTE_WARNING" },
+            { "GM chat", "GM_CHAT_WARNING" },
+            { "LFG role check", "LFG_ROLE_CHECK" },
+            { "LFG denied", "LFG_DENIED" },
+            { "PvP queue pop", "PVP_THROUGH_QUEUE" },
+            { "Power aura", "UI_POWER_AURA_GENERIC" },
+            { "Battle.net toast", "UI_BNET_TOAST" },
+            { "Auto quest complete", "UI_AUTO_QUEST_COMPLETE" },
+            { "Tutorial popup", "TUTORIAL_POPUP" },
+        }
+        for _, entry in ipairs(GAME_SOUNDS) do
+            local kit = SOUNDKIT and SOUNDKIT[entry[2]]
+            if kit then lsm:Register("sound", "Game: " .. entry[1], kit) end
+        end
     end
 end
 
@@ -372,41 +396,62 @@ local function Voice(advice, lead)
     return PlayClip(advice, lead) or Speak(text)
 end
 
--- The player's own pick for this category, from LibSharedMedia (every sound
--- any installed addon registered); nil when left on the default.
-local function CustomSound(advice)
-    local name = CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[advice.key]
+-- The player's own pick for this spell, else for this category, from
+-- LibSharedMedia (every sound any installed addon registered); nil when left
+-- on Voice. A spell pick counts only once the cast is that one spell.
+local function SpellSound(candidates)
+    local picks = CastAheadDB and CastAheadDB.spellSounds
+    if not (picks and candidates) then return nil end
+    local name
+    for _, row in ipairs(candidates) do
+        local pick = picks[row.spell]
+        if not pick or pick == "" or (name and pick ~= name) then return nil end
+        name = pick
+    end
+    return name
+end
+
+local function CustomSound(advice, candidates)
+    local name = SpellSound(candidates)
+        or CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[advice.key]
     if not name or name == "" then return nil end
     local lsm = LibStub and LibStub("LibSharedMedia-3.0", true)
     return lsm and lsm:Fetch("sound", name, true) or nil
 end
 
+-- Master, not SFX: the point is to be heard over a busy pull.
+local function PlayMedia(sound)
+    if type(sound) == "number" then PlaySound(sound, "Master") else PlaySoundFile(sound, "Master") end
+end
+
 local function Beep(advice)
-    local custom = CustomSound(advice)
-    if custom then
-        -- Master, not SFX: the point is to be heard over a busy pull.
-        if type(custom) == "number" then PlaySound(custom, "Master") else PlaySoundFile(custom, "Master") end
-        return
-    end
     if not SOUNDKIT then return end
     local kit = SOUNDKIT[ADVICE_SOUND[advice.key] or ""]
     if kit then PlaySound(kit, "Master") end
 end
 
--- `lead` is spoken before the cast ("tank buster soon"), nothing at cast time.
--- A category with a sound of the player's own choosing plays it every time,
--- alongside the voice; the stock beep only stands in when nothing spoke.
-local function PlayAdviceSound(advice, lead)
+-- One alert per call, either the voice or a sound. A sound picked for the
+-- spell or its category replaces the voice; on Voice, the line is spoken
+-- (`lead` = "tank buster soon" before the cast) and the stock beep stands in
+-- only when nothing could speak. `voice` false skips speaking, for the
+-- General switch and for previews of just the sound.
+local function Alert(advice, lead, candidates, voice)
+    local custom = CustomSound(advice, candidates)
+    if custom then
+        PlayMedia(custom)
+        return
+    end
+    if voice and Voice(advice, lead) then return end
+    Beep(advice)
+end
+
+local function PlayAdviceSound(advice, lead, candidates)
     if not advice then return end
     if not CastAheadConfig.Enabled("sound") then return end
     -- The heads-up is a number of seconds now; 0 means the player does not
     -- want it at all.
     if lead and CastAheadConfig.Lead() <= 0 then return end
-    local said = false
-    if CastAheadConfig.Enabled("voice") then
-        said = Voice(advice, lead)
-    end
-    if not said or CustomSound(advice) then Beep(advice) end
+    Alert(advice, lead, candidates, CastAheadConfig.Enabled("voice"))
 end
 
 -- Creature identity ---------------------------------------------------------
@@ -1459,7 +1504,8 @@ local function OnCastStart(unit, channel)
     -- Sound fires once, on the cast that needs answering - not on the timer
     -- that led up to it.
     if state.casting and Announceable(state.casting.candidates) then
-        PlayAdviceSound(CastAheadMatch.ConsensusAdvice(state.casting.candidates, state.interruptible))
+        PlayAdviceSound(CastAheadMatch.ConsensusAdvice(state.casting.candidates, state.interruptible),
+            nil, state.casting.candidates)
     end
     -- Repaint either way: an unrecognised cast must not leave the previous
     -- countdown on screen as if nothing were happening.
@@ -1907,7 +1953,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
                 local advice = CastAheadMatch.ConsensusAdvice(state.casting.candidates, state.interruptible)
                 if advice and advice.label == "KICK" and advice ~= before
                     and Announceable(state.casting.candidates) then
-                    PlayAdviceSound(advice)
+                    PlayAdviceSound(advice, nil, state.casting.candidates)
                 end
             end
             RefreshBar(unit, state)
@@ -2173,7 +2219,7 @@ frame:SetScript("OnUpdate", function()
                             and entry.track and not entry.track.warned then
                             entry.track.warned = true
                             PlayAdviceSound(
-                                CastAheadMatch.ConsensusAdvice(entry.candidates), true)
+                                CastAheadMatch.ConsensusAdvice(entry.candidates), true, entry.candidates)
                         end
                         -- Tenths only in the last few seconds, where they
                         -- matter; whole numbers stay readable at a glance.
@@ -2241,18 +2287,24 @@ CastAheadCore.Tuning = tuning
 CastAheadCore.Population = function() return killed, exhausted end
 CastAheadCore.MoveCenter = ToggleMoveCenter
 
--- The options window's speaker buttons: hear a category's call on demand.
+-- The window's speaker buttons: hear a call exactly as it would play.
 -- Deliberately ignores the sound/voice mute switches - an explicit click
 -- wants to hear it.
-function CastAheadCore.PreviewAdvice(advice)
-    if not advice then return end
-    local said = Voice(advice)
-    if not said or CustomSound(advice) then Beep(advice) end
+function CastAheadCore.PreviewAdvice(advice, candidates)
+    if advice then Alert(advice, nil, candidates, true) end
 end
+CastAheadCore.PreviewSound = CastAheadCore.PreviewAdvice
 
--- The sound picker's own preview: just the chosen sound, no voice.
-function CastAheadCore.PreviewSound(advice)
-    if advice then Beep(advice) end
+-- One entry of the sound picker, before it is picked: a shared-media sound by
+-- name, or the spoken call for the Voice entry.
+function CastAheadCore.PreviewMedia(name, advice)
+    if not name then
+        if advice and not Voice(advice) then Beep(advice) end
+        return
+    end
+    local lsm = LibStub and LibStub("LibSharedMedia-3.0", true)
+    local sound = lsm and lsm:Fetch("sound", name, true)
+    if sound then PlayMedia(sound) end
 end
 
 -- Test drive: /ca test (or the window's Test button). Runs a scripted
@@ -2301,7 +2353,7 @@ local function DemoLayout()
     for key in pairs(demoPlates) do demoPlates[key] = nil end
     for i = 1, #demo.entries do
         local e = demo.entries[i]
-        if not e.done then
+        if not e.done and not e.hidden then
             local key = e.unit or "loose"
             local list = demoPlates[key]
             if not list then
@@ -2319,7 +2371,10 @@ local function DemoLayout()
 end
 
 local function DemoAnchor(e, i)
-    if e.unit and AnchorBar(e.unit, e.bar, e.slot) then return end
+    if e.unit and AnchorBar(e.unit, e.bar, e.slot) then
+        e.bar:Show()
+        return
+    end
     -- No plate (or it went away): park the icon mid-screen instead.
     e.unit = nil
     -- Wide enough for the advice under the icon, and never narrower than the
@@ -2330,13 +2385,16 @@ local function DemoAnchor(e, i)
         e.bar._demoStep = step
         e.bar:ClearAllPoints()
         e.bar:SetPoint("CENTER", UIParent, "CENTER",
-            (i - 1) * step - (#demo.entries - 1) * step / 2, -160)
+            (i - 1) * step - ((demo.shown or #demo.entries) - 1) * step / 2, -160)
     end
 
     e.bar:Show()
 end
 
-function CastAheadCore.Test(instanceID)
+-- With `list` (the table's rows, in its order) every one of them is played
+-- in turn, one call at a time on the first hostile plate around: that is for
+-- hearing each cast's sound rather than judging the layout.
+function CastAheadCore.Test(instanceID, list)
     if demo then StopTest() return end
     local id = instanceID
     if not (id and CastAheadData[id]) then
@@ -2354,11 +2412,11 @@ function CastAheadCore.Test(instanceID)
     -- One row per distinct call, the way a pull mixes them; the current
     -- filters apply, so the test previews exactly what a run would show.
     local picked, seen = {}, {}
-    for i = 1, #rows do
-        local row = rows[i]
+    for i = 1, #(list or rows) do
+        local row = (list or rows)[i]
         local advice = CastAheadMatch.Advice(row)
-        local important = not ImportantOnly() or CastAheadMatch.Important(row)
-        if advice and important and #picked < 4 and not seen[advice.label]
+        local important = list or not ImportantOnly() or CastAheadMatch.Important(row)
+        if advice and important and (list or (#picked < 4 and not seen[advice.label]))
             and not (CastAheadUI and CastAheadUI.IsDisabled and CastAheadUI.IsDisabled(row.spell)) then
             seen[advice.label] = true
             picked[#picked + 1] = row
@@ -2380,6 +2438,9 @@ function CastAheadCore.Test(instanceID)
         end
     end
     demo = { frame = CreateFrame("Frame"), entries = {}, state = { bars = {} } }
+    -- One call at a time: the one counting down and the one going out.
+    local gap = list and (CastAheadConfig.Lead() + 3) or nil
+    if list then demo.shown = 2 end
     local now = GetTime()
     -- Several calls per plate, always: one icon per plate tells the player
     -- nothing about the spacing between them, which is the thing a test drive
@@ -2387,8 +2448,8 @@ function CastAheadCore.Test(instanceID)
     -- spread across the screen while the timeline stacks every one of them
     -- into a single column, so a room full of training dummies filled it top
     -- to bottom.
-    local plates = math.min(#units, DEMO_PLATES)
-    local total = math.max(#picked, plates * DEMO_PER_PLATE)
+    local plates = math.min(#units, list and 1 or DEMO_PLATES)
+    local total = list and #picked or math.max(#picked, plates * DEMO_PER_PLATE)
     local slots = {}
     for i = 1, total do
         local row = picked[(i - 1) % #picked + 1]
@@ -2396,15 +2457,17 @@ function CastAheadCore.Test(instanceID)
         slots[unit or 0] = (slots[unit or 0] or 0) + 1
         local e = {
             row = row, candidates = { row },
-            endAt = now + 2 + i * (CastAheadConfig.Lead() + 2) / math.max(1, math.ceil(total / 4)),
+            endAt = gap and (now + 2 + (i - 1) * gap)
+                or (now + 2 + i * (CastAheadConfig.Lead() + 2) / math.max(1, math.ceil(total / 4))),
             track = {},
             unit = unit, slot = slots[unit or 0],
+            hidden = (gap and i > 1) or nil,
         }
         e.bar = GetBar(demo.state, i)
         PaintBar(e.bar, e)
         DemoAnchor(e, i)
-        e.bar:Show()
-        if CastAheadTimeline then
+        e.bar:SetShown(not gap or i == 1)
+        if CastAheadTimeline and not gap then
             CastAheadTimeline.Sync(e.track, e.endAt, row,
                 CastAheadMatch.Advice(row), true)
         end
@@ -2421,12 +2484,20 @@ function CastAheadCore.Test(instanceID)
         -- A call finished on the previous tick: close the row up before
         -- anything is placed again.
         if demo.repack then DemoLayout() end
-        local alive = 0
+        local alive, shown = 0, 0
         for i = 1, #demo.entries do
             local e = demo.entries[i]
-            if not e.done then
+            if not e.done and gap and e.endAt - t > gap then
                 alive = alive + 1
-                DemoAnchor(e, i)
+                e.bar:Hide()
+            elseif not e.done then
+                alive = alive + 1
+                shown = shown + 1
+                if e.hidden then
+                    e.hidden = nil
+                    demo.repack = true
+                end
+                DemoAnchor(e, gap and shown or i)
                 if e.casting then
                     if t >= e.castEnd then
                         e.done = true
@@ -2439,14 +2510,14 @@ function CastAheadCore.Test(instanceID)
                     e.castEnd = t + (e.row.cast or 2)
                     PaintBar(e.bar, e)
                     e.bar.time:SetText("")
-                    PlayAdviceSound(CastAheadMatch.Advice(e.row))
+                    PlayAdviceSound(CastAheadMatch.Advice(e.row), nil, { e.row })
                     if CastAheadTimeline then CastAheadTimeline.Finish(e.track) end
                 else
                     local remaining = e.endAt - t
                     local lead = CastAheadConfig.Lead()
                     if lead > 0 and remaining <= lead and not e.warned then
                         e.warned = true
-                        PlayAdviceSound(CastAheadMatch.Advice(e.row), true)
+                        PlayAdviceSound(CastAheadMatch.Advice(e.row), true, { e.row })
                     end
                     e.bar.time:SetFormattedText(remaining < ESTIMATE_NOW and "%.1f" or "%.0f", remaining)
                 end

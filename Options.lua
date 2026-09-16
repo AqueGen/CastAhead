@@ -488,19 +488,48 @@ local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", 
     "POISON", "CURSE", "MAGIC", "DISEASE", "BLEED", "SOOTHE", "PURGE", "SWITCH", "ALERT" }
 local SOUND_ROW_H = 26
 
+-- Default plus every sound LibSharedMedia knows. Shared with the casts
+-- table, where each row offers the same list for its own spell.
+-- Each entry carries a speaker on its right (Blizzard's own pattern, see
+-- CooldownViewerUtil.AddSoundAlertRadio), so a sound can be heard before it
+-- is picked. `advice` is what Default stands for here.
+function CastAheadOptions.SoundMenu(root, read, write, advice)
+    local lsm = LibStub and LibStub("LibSharedMedia-3.0", true)
+    if root.SetScrollMode then root:SetScrollMode(20 * 20) end
+    local function Speaker(radio, name)
+        if not (MenuTemplates and MenuTemplates.AttachUtilityButton) then return end
+        radio:AddInitializer(function(button)
+            local play = MenuTemplates.AttachUtilityButton(button)
+            play.Texture:Hide()
+            play:SetNormalAtlas("chatframe-button-icon-speaker-on")
+            play:SetHighlightAtlas("chatframe-button-icon-speaker-on")
+            MenuTemplates.SetUtilityButtonAnchor(play, MenuVariants.GearButtonAnchor, button, 0, 0)
+            MenuTemplates.SetUtilityButtonClickHandler(play, function()
+                if CastAheadCore and CastAheadCore.PreviewMedia then CastAheadCore.PreviewMedia(name, advice) end
+            end)
+            if button.Layout then button:Layout() end
+        end)
+    end
+    Speaker(root:CreateRadio("Voice", function() return read() == nil end, function() write(nil) end), nil)
+    if lsm then
+        for _, name in ipairs(lsm:List("sound")) do
+            Speaker(root:CreateRadio(name, function() return read() == name end, function() write(name) end), name)
+        end
+    end
+end
+
 function BuildSounds(panel)
     local hint = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     hint:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -4)
-    hint:SetText("|cffaaaaaaDefault = stock beep, only when nothing spoke. A chosen sound always plays.|r")
+    hint:SetText("|cffaaaaaaVoice = the spoken call (a stock beep when it cannot speak). A sound plays instead of the voice.|r")
 
     -- Off by default: the shipped clips speak unless this is on. Gated on the
     -- game's own Combat Audio Alerts setting, which it cannot work without.
     local tts = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
     tts:SetSize(22, 22)
-    tts:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -4, -2)
+    tts:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", -4, -4)
     tts.text = tts:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    tts.text:SetPoint("RIGHT", tts, "LEFT", -4, 0)
-    tts.text:SetJustifyH("RIGHT")
+    tts.text:SetPoint("LEFT", tts, "RIGHT", 2, 0)
     local function PaintTTS()
         local api = C_CombatAudioAlert
         local gameOn = api and api.IsEnabled and api.IsEnabled()
@@ -527,13 +556,12 @@ function BuildSounds(panel)
     end)
 
     local scroll = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0, -8)
+    scroll:SetPoint("TOPLEFT", tts, "BOTTOMLEFT", 4, -8)
     scroll:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -26, 4)
     local body = CreateFrame("Frame", nil, scroll)
     body:SetSize(400, #SOUND_ROWS * SOUND_ROW_H)
     scroll:SetScrollChild(body)
 
-    local lsm = LibStub and LibStub("LibSharedMedia-3.0", true)
     for i, key in ipairs(SOUND_ROWS) do
         local advice = CastAheadMatch.ADVICE[key]
         local y = -(i - 1) * SOUND_ROW_H
@@ -548,25 +576,13 @@ function BuildSounds(panel)
         dropdown:SetSize(240, 22)
         dropdown:SetPoint("TOPLEFT", body, "TOPLEFT", 96, y)
         dropdown:SetupMenu(function(_, root)
-            if root.SetScrollMode then root:SetScrollMode(20 * 20) end
-            root:CreateRadio("Default",
-                function() return (CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[key]) == nil end,
-                function()
+            CastAheadOptions.SoundMenu(root,
+                function() return CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[key] end,
+                function(name)
                     CastAheadDB = CastAheadDB or {}
                     CastAheadDB.sounds = CastAheadDB.sounds or {}
-                    CastAheadDB.sounds[key] = nil
-                end)
-            if lsm then
-                for _, name in ipairs(lsm:List("sound")) do
-                    root:CreateRadio(name,
-                        function() return (CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[key]) == name end,
-                        function()
-                            CastAheadDB = CastAheadDB or {}
-                            CastAheadDB.sounds = CastAheadDB.sounds or {}
-                            CastAheadDB.sounds[key] = name
-                        end)
-                end
-            end
+                    CastAheadDB.sounds[key] = name
+                end, advice)
         end)
 
         local hear = CreateFrame("Button", nil, body)

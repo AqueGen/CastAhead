@@ -138,7 +138,7 @@ Enum.EncounterEventIconmask = { TankRole = 128, HealerRole = 256, DpsRole = 512,
 Enum.EncounterEventSeverity = { Low = 0, Medium = 1, High = 2 }
 
 SOUNDKIT = { RAID_WARNING = 1, ALARM_CLOCK_WARNING_3 = 2, ALARM_CLOCK_WARNING_2 = 3,
-             UI_RAID_BOSS_WHISPER_WARNING = 4 }
+             ALARM_CLOCK_WARNING_1 = 4 }
 PlaySound = function() sounds = sounds + 1 end
 
 local framesMade, shownCount = 0, 0
@@ -483,6 +483,32 @@ castFor(3.0)
 advance(3)
 check(Alerts() == 1, string.format("one alert per identified dangerous cast, got %d", Alerts()))
 reset()
+
+-- A sound picked for one spell wins over its category's, and only once the
+-- cast is that spell rather than one of several candidates.
+local lastFile
+local playFile = PlaySoundFile
+PlaySoundFile = function(path, ...) lastFile = path return playFile(path, ...) end
+LibStub = function() return { Fetch = function(_, _, name) return "custom/" .. name end } end
+CastAheadDB = { leadSeconds = 5, sounds = { AOE = "Horn" }, spellSounds = { [100] = "Bell" } }
+enter()
+castFor(3.0)
+advance(17)
+castFor(3.0)
+advance(3)
+check(lastFile == "custom/Bell", "the spell's own sound plays, got " .. tostring(lastFile))
+reset()
+CastAheadDB.spellSounds[100] = ""
+lastFile = nil
+enter()
+castFor(3.0)
+advance(17)
+castFor(3.0)
+advance(3)
+check(lastFile == "custom/Horn", "an empty spell pick falls back to the category sound, got " .. tostring(lastFile))
+reset()
+PlaySoundFile, LibStub = playFile, nil
+CastAheadDB = { leadSeconds = 5 }
 
 -- A predicted cast warns ahead of time, once, and then alerts again when it
 -- actually starts.
@@ -1418,8 +1444,8 @@ check(clips == 1 and sounds == 0, string.format("voiceTTS with a mute game voice
 C_CombatAudioAlert.SpeakText = realSpeak
 CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
--- A sound the player picked for a category (LibSharedMedia name) plays every
--- time, on top of the voice; the stock beep stays a fallback only.
+-- A sound the player picked for a category (LibSharedMedia name) replaces
+-- the voice; on Voice the line is spoken and the stock beep stays a fallback.
 LibStub = function(name, silent)
     if name == "LibSharedMedia-3.0" then
         return { Fetch = function(_, kind, key) return kind == "sound" and key == "Gong" and "Interface\\\\Gong.ogg" or nil end }
@@ -1429,7 +1455,7 @@ end
 CastAheadDB = { sounds = { TANK = "Gong" } }
 sounds, spoken, clips = 0, 0, 0
 CastAheadCore.PreviewAdvice(CastAheadMatch.ADVICE.TANK)
-check(clips == 2 and sounds == 0, string.format("a chosen sound plays alongside the voice clip, got files=%d beeps=%d", clips, sounds))
+check(clips == 1 and spoken == 0 and sounds == 0, string.format("a chosen sound plays instead of the voice, got files=%d spoken=%d beeps=%d", clips, spoken, sounds))
 sounds, spoken, clips = 0, 0, 0
 CastAheadCore.PreviewAdvice(CastAheadMatch.ADVICE.AOE)
 check(clips == 1 and sounds == 0, string.format("a category without a chosen sound plays only its voice, got files=%d beeps=%d", clips, sounds))

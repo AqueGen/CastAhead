@@ -5,24 +5,26 @@
 -- how tight the cooldown was, where the data is thin - and to sort by any of it.
 -- Headers and cells are built from one column list, so they cannot drift apart.
 
-local ROW_HEIGHT = 20
+local ROW_HEIGHT = 24
+local WIDGET_HEIGHT = 20
 local HEADER_HEIGHT = 18
+local SCALE_STEPS = { 75, 100, 125, 150 }
+local SCALE_MIN, SCALE_MAX, SCALE_DEFAULT = 75, 150, 100
+local TITLE_HEIGHT = 22
 local LIST_WIDTH = 190
--- Wide enough for the settings page's row of groups, which is the widest
--- thing the window has to hold; the casts table wants about this much too.
-local WINDOW_WIDTH = 1330
+-- Default and minimum window size: wide enough for every column and for the
+-- settings page's row of groups, so nothing is ever cut off. The grip resizes
+-- the window within that floor (more rows); the Scale dropdown scales the
+-- whole frame, text and chrome alike, the way Details and Plater do it.
 local WINDOW_HEIGHT = 560
--- Resize floor. The width is derived from the column list below (see
--- MinWidth), so every header still fits inside the frame.
-local BASE_MIN_HEIGHT = 420
 local COLUMN_GAP = 4
 local THIN_EVIDENCE = 5      -- fewer samples than this and the row is dimmed
 
-local window, dungeonButtons, rows, rowParent, headers
+local window, body, dungeonButtons, rows, rowParent, headers
 local selectedInstanceID, sortKey, sortDescending, searchText
 -- The window is a book: the casts page (dungeon list, search, table) and one
 -- page per settings group, built by Options.lua into `settingsHost`.
-local castsPage, settingsHost, tabButtons, testButton
+local castsPage, settingsHost, tabButtons, testButton, listButton
 -- Forward declaration: RefreshTabs falls back to another page when the
 -- Development tab is switched off, and it is defined above ShowTab.
 local ShowTab
@@ -77,6 +79,21 @@ function CastAheadUI.SetGrowth(direction)
     CastAheadDB.grow = direction ~= "auto" and direction or nil
     if CastAheadCore and CastAheadCore.Reapply then CastAheadCore.Reapply() end
     return true
+end
+
+local function SpellSound(entry)
+    return CastAheadDB and CastAheadDB.spellSounds and CastAheadDB.spellSounds[entry.spell]
+end
+
+local function SetSpellSound(entry, name)
+    CastAheadDB = CastAheadDB or {}
+    CastAheadDB.spellSounds = CastAheadDB.spellSounds or {}
+    CastAheadDB.spellSounds[entry.spell] = name
+end
+
+local function CategorySound(entry)
+    local advice = CastAheadMatch.Advice(entry)
+    return advice and CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[advice.key]
 end
 
 local function SpellName(entry)
@@ -173,6 +190,11 @@ local COLUMNS = {
     { key = "cc", header = "Stop", width = 40, justify = "RIGHT",
       text = function(e) return (e.cc or 0) > 0 and string.format("%d%%", e.cc * 100) or "-" end,
       sort = function(e) return e.cc or 0 end },
+    -- Inherit ticked: the category's alert (Sounds tab), shown greyed. Unticked:
+    -- the player's own pick for this one cast, ahead of the category's.
+    { key = "sound", header = "Sound override", width = 12 + 22 + 110,
+      text = function(e) return CastAheadMatch.Advice(e) and "" or "|cff555555-|r" end,
+      sort = function(e) return SpellSound(e) or "" end },
 }
 
 local function ColumnOffset(index)
@@ -187,20 +209,22 @@ local function TableWidth()
     return ColumnOffset(#COLUMNS + 1)
 end
 
--- Wide enough for the casts page to keep its useful columns, and for the
--- settings page's three columns of groups to sit inside the frame. Narrower
--- than the settings need, the right-hand column simply hangs outside the
--- window, since the panels do not scroll.
-local function MinWidth()
+local function WindowWidth()
     local settings = (CastAheadOptions and CastAheadOptions.MIN_WIDTH or 0) + 24
-    return math.max(LIST_WIDTH + 24 + 520, settings)
+    return math.max(LIST_WIDTH + 24 + TableWidth() + 34, settings)
 end
 
--- The settings panels sit between the tab strip and the bottom edge and do
--- not scroll, so the frame has to be tall enough for the longest column.
-local function MinHeight()
+local function WindowHeight()
     local settings = (CastAheadOptions and CastAheadOptions.MIN_HEIGHT or 0) + 68
-    return math.max(BASE_MIN_HEIGHT, settings)
+    return math.max(WINDOW_HEIGHT, settings)
+end
+
+-- Never larger than the screen: a window that overflows it hides its own
+-- controls, the Scale dropdown included, and there is no way back.
+local function ApplyScale()
+    local wanted = CastAheadConfig.Number("uiScale", SCALE_DEFAULT, SCALE_MIN, SCALE_MAX) / 100
+    local fits = math.min(UIParent:GetWidth() / window:GetWidth(), UIParent:GetHeight() / window:GetHeight())
+    window:SetScale(math.min(wanted, fits))
 end
 
 -- Data ---------------------------------------------------------------------
@@ -263,6 +287,8 @@ local HEADER_TIPS = {
         "The call made when this cast starts. Grey means the cast is tracked but has earned no verdict - too rare in the logs, and not starred." },
     spell = { "Spell",
         "The cast being tracked. Hover a row for the spell tooltip." },
+    sound = { "Sound override",
+        "Ticked, the cast is announced like its category (Sounds tab): the voice, or the sound chosen there. Untick to pick a sound for this one cast instead of the voice; it plays once the cast is identified as this spell." },
     mob = { "Caster",
         "Which creature casts it. In 12.1 a nameplate never reveals a creature's name or ID, so this comes from combat logs - the addon only guesses which of them is in front of you." },
     level = { "Mob level",
@@ -295,9 +321,14 @@ local function CreateHeader(parent, index, column)
     local button = CreateFrame("Button", nil, parent)
     button:SetSize(column.width, HEADER_HEIGHT)
     button:SetPoint("TOPLEFT", parent, "TOPLEFT", ColumnOffset(index), 0)
+    if column.header then
+        local bg = button:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        bg:SetColorTexture(1, 1, 1, 0.07)
+    end
     button.text = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     button.text:SetAllPoints()
-    button.text:SetJustifyH(column.justify or "LEFT")
+    button.text:SetJustifyH("CENTER")
 
     local tip = HEADER_TIPS[column.key]
     if tip then
@@ -341,7 +372,7 @@ local function CreateRow(parent, index)
         local x = ColumnOffset(i)
         if column.key == "check" then
             row.check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-            row.check:SetSize(ROW_HEIGHT, ROW_HEIGHT)
+            row.check:SetSize(WIDGET_HEIGHT, WIDGET_HEIGHT)
             row.check:SetPoint("LEFT", row, "LEFT", x, 0)
         elseif column.key == "hear" then
             row.hear = CreateFrame("Button", nil, row)
@@ -352,9 +383,41 @@ local function CreateRow(parent, index)
             row.hear:SetScript("OnClick", function(self)
                 local e = self:GetParent().entry
                 if e and CastAheadCore and CastAheadCore.PreviewAdvice then
-                    CastAheadCore.PreviewAdvice(CastAheadMatch.Advice(e))
+                    CastAheadCore.PreviewAdvice(CastAheadMatch.Advice(e), { e })
                 end
             end)
+        elseif column.key == "sound" then
+            row.inherit = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+            row.inherit:SetSize(WIDGET_HEIGHT, WIDGET_HEIGHT)
+            row.inherit:SetPoint("LEFT", row, "LEFT", x + 12, 0)
+            row.inherit:SetScript("OnClick", function(self)
+                local e = row.entry
+                if not e then return end
+                if self:GetChecked() then
+                    SetSpellSound(e, nil)
+                else
+                    SetSpellSound(e, SpellSound(e) or "")
+                end
+                Refresh()
+            end)
+            row.sound = CreateFrame("DropdownButton", nil, row, "WowStyle1DropdownTemplate")
+            row.sound:SetSize(column.width - 34, WIDGET_HEIGHT)
+            row.sound:SetPoint("LEFT", row, "LEFT", x + 34, 0)
+            row.sound:SetupMenu(function(_, root)
+                local e = row.entry
+                if not (e and CastAheadOptions and CastAheadOptions.SoundMenu) then return end
+                CastAheadOptions.SoundMenu(root,
+                    function()
+                        local own = SpellSound(e)
+                        if own == nil then return CategorySound(e) end
+                        return own ~= "" and own or nil
+                    end,
+                    function(name) SetSpellSound(e, name or "") end,
+                    CastAheadMatch.Advice(e))
+            end)
+            local dash = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            dash:SetPoint("LEFT", row, "LEFT", x + 12, 0)
+            row.cells[column.key] = dash
         elseif column.key == "icon" then
             row.icon = row:CreateTexture(nil, "ARTWORK")
             row.icon:SetSize(16, 16)
@@ -437,8 +500,14 @@ function Refresh()
                 end
             end
             row.icon:SetAlpha(alpha)
-            -- Nothing to say for a row with no verdict - no speaker either.
+            -- Nothing to say for a row with no verdict - no speaker, no sound.
             row.hear:SetShown(CastAheadMatch.Advice(entry) ~= nil)
+            local hasAdvice = CastAheadMatch.Advice(entry) ~= nil
+            row.inherit:SetShown(hasAdvice)
+            row.sound:SetShown(hasAdvice)
+            row.inherit:SetChecked(SpellSound(entry) == nil)
+            row.sound:SetEnabled(SpellSound(entry) ~= nil)
+            row.sound:GenerateMenu()
             row.check:SetChecked(not IsDisabled(entry.spell))
             row.check:SetScript("OnClick", function(self)
                 SetDisabled(entry.spell, not self:GetChecked())
@@ -473,6 +542,7 @@ function CastAheadUI.RefreshTest()
     if not testButton then return end
     local running = CastAheadCore and CastAheadCore.Testing and CastAheadCore.Testing()
     testButton:SetText(running and "Stop test" or "Test drive")
+    listButton:SetText(running and "Stop" or "Play list")
 end
 
 -- The Development page is the last tab and is off by default, so hiding its
@@ -517,7 +587,7 @@ end
 
 function BuildWindow()
     window = CreateFrame("Frame", "CastAheadWindow", UIParent, "BasicFrameTemplateWithInset")
-    window:SetSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+    window:SetSize(WindowWidth(), WindowHeight())
     window:SetPoint("CENTER")
     window:SetMovable(true)
     window:EnableMouse(true)
@@ -527,8 +597,31 @@ function BuildWindow()
     window:SetFrameStrata("DIALOG")
     window:SetResizable(true)
     if window.SetResizeBounds then
-        window:SetResizeBounds(MinWidth(), MinHeight())
+        window:SetResizeBounds(WindowWidth(), WindowHeight())
     end
+    ApplyScale()
+
+    body = CreateFrame("Frame", nil, window)
+    body:SetPoint("TOPLEFT", window, "TOPLEFT", 0, -TITLE_HEIGHT)
+    body:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", 0, 0)
+
+    -- Whole-window scale, text included, for anyone the default is too small
+    -- for. Bottom right next to the grip, on every page.
+    local scale = CreateFrame("DropdownButton", nil, window, "WowStyle1DropdownTemplate")
+    scale:SetSize(80, 20)
+    scale:SetPoint("TOPRIGHT", window, "TOPRIGHT", -130, -28)
+    scale.text = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    scale.text:SetPoint("RIGHT", scale, "LEFT", -6, 0)
+    scale.text:SetText("Scale")
+    local function Scale() return CastAheadConfig.Number("uiScale", SCALE_DEFAULT, SCALE_MIN, SCALE_MAX) end
+    scale:SetupMenu(function(_, root)
+        for _, value in ipairs(SCALE_STEPS) do
+            root:CreateRadio(value .. "%", function() return Scale() == value end, function()
+                CastAheadConfig.Set("uiScale", value ~= SCALE_DEFAULT and value or nil)
+                ApplyScale()
+            end)
+        end
+    end)
 
     local function RememberSize()
         CastAheadDB = CastAheadDB or {}
@@ -537,9 +630,8 @@ function BuildWindow()
         CastAheadDB.window.height = window:GetHeight()
     end
 
-    -- Grip in the bottom-right corner, as Blizzard resizable panels have. The
-    -- column widths stay fixed - resizing simply reveals more rows and more of
-    -- the columns that were cut off.
+    -- Grip in the bottom-right corner, as Blizzard resizable panels have.
+    -- Resizing reveals more rows; the floor keeps every column on screen.
     local grip = CreateFrame("Button", nil, window)
     grip:SetSize(16, 16)
     grip:SetPoint("BOTTOMRIGHT", -4, 4)
@@ -549,11 +641,17 @@ function BuildWindow()
     grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
     grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
     grip:SetScript("OnMouseDown", function()
+        -- Pin the top-left corner first: a CENTER-anchored frame grows from
+        -- the middle, so the first drag frame jumped the window's size.
+        local left, top = window:GetLeft(), window:GetTop()
+        window:ClearAllPoints()
+        window:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
         window:StartSizing("BOTTOMRIGHT")
     end)
     grip:SetScript("OnMouseUp", function()
         window:StopMovingOrSizing()
         RememberSize()
+        ApplyScale()
         Refresh()
     end)
     table.insert(UISpecialFrames, "CastAheadWindow")   -- Escape closes it
@@ -564,9 +662,9 @@ function BuildWindow()
     -- the tab row, which is the one strip visible on every page, and it says
     -- which half of the toggle it is rather than leaving the player guessing
     -- whether the run started.
-    testButton = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+    testButton = CreateFrame("Button", nil, body, "UIPanelButtonTemplate")
     testButton:SetSize(110, 20)
-    testButton:SetPoint("TOPRIGHT", window, "TOPRIGHT", -14, -28)
+    testButton:SetPoint("TOPRIGHT", body, "TOPRIGHT", -14, -6)
     testButton:SetScript("OnClick", function()
         if CastAheadCore and CastAheadCore.Test then CastAheadCore.Test(selectedInstanceID) end
     end)
@@ -577,22 +675,40 @@ function BuildWindow()
         GameTooltip:Show()
     end)
     testButton:SetScript("OnLeave", GameTooltip_Hide)
+
+    listButton = CreateFrame("Button", nil, body, "UIPanelButtonTemplate")
+    listButton:SetSize(90, 20)
+    listButton:SetPoint("RIGHT", testButton, "LEFT", -4, 0)
+    scale:ClearAllPoints()
+    scale:SetPoint("RIGHT", listButton, "LEFT", -12, 0)
+    listButton:SetScript("OnClick", function()
+        if CastAheadCore and CastAheadCore.Test then CastAheadCore.Test(selectedInstanceID, SortedRows()) end
+    end)
+    listButton:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:SetText("Play list", 1, 1, 1)
+        GameTooltip:AddLine("Play every cast in the table, top to bottom in its current order, one at a time: the countdown, the call, the voice and the sound each one is set to. Click again to stop.", nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    listButton:SetScript("OnLeave", GameTooltip_Hide)
     CastAheadUI.RefreshTest()
 
-    -- Tab strip: the casts table first, then one page per settings group.
+    -- Tab strip: General first, then the casts table, then the other settings pages.
     tabButtons = {}
     local previousTab
-    local names = { CASTS_TAB }
+    local names = {}
     for _, name in ipairs(CastAheadOptions and CastAheadOptions.TABS or {}) do
         names[#names + 1] = name
+        if #names == 1 then names[#names + 1] = CASTS_TAB end
     end
+    if #names == 0 then names[1] = CASTS_TAB end
     for _, name in ipairs(names) do
-        local button = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+        local button = CreateFrame("Button", nil, body, "UIPanelButtonTemplate")
         button:SetSize(78, 20)
         if previousTab then
             button:SetPoint("LEFT", previousTab, "RIGHT", 4, 0)
         else
-            button:SetPoint("TOPLEFT", window, "TOPLEFT", 12, -28)
+            button:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -6)
         end
         button:SetText(name)
         button:SetScript("OnClick", function() ShowTab(name) end)
@@ -603,28 +719,28 @@ function BuildWindow()
 
     -- The two pages. Both fill the area under the tab strip; the settings
     -- panels are built into the host on first use.
-    castsPage = CreateFrame("Frame", nil, window)
-    castsPage:SetPoint("TOPLEFT", window, "TOPLEFT", 0, -52)
-    castsPage:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", 0, 0)
+    castsPage = CreateFrame("Frame", nil, body)
+    castsPage:SetPoint("TOPLEFT", body, "TOPLEFT", 0, -30)
+    castsPage:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", 0, 0)
 
-    settingsHost = CreateFrame("Frame", nil, window)
-    settingsHost:SetPoint("TOPLEFT", window, "TOPLEFT", 12, -56)
-    settingsHost:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -12, 12)
+    settingsHost = CreateFrame("Frame", nil, body)
+    settingsHost:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -34)
+    settingsHost:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", -12, 12)
     settingsHost:Hide()
 
     window.summary = castsPage:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    window.summary:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", 16, 12)
+    window.summary:SetPoint("BOTTOMLEFT", body, "BOTTOMLEFT", 16, 12)
 
     -- Author's mark. Bottom centre because the left corner is the summary and the
     -- right one is the resize grip, and it belongs to the window rather than to a
     -- page so it stays put when the pages swap.
-    window.madeIn = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    window.madeIn:SetPoint("BOTTOM", window, "BOTTOM", 0, 12)
+    window.madeIn = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    window.madeIn:SetPoint("BOTTOM", body, "BOTTOM", 0, 12)
     window.madeIn:SetText("|cFF0057B7Made|r |cFFFFD700in Ukraine|r")
 
     local search = CreateFrame("EditBox", nil, castsPage, "SearchBoxTemplate")
     search:SetSize(LIST_WIDTH - 8, 20)
-    search:SetPoint("TOPLEFT", window, "TOPLEFT", 16, -56)
+    search:SetPoint("TOPLEFT", body, "TOPLEFT", 16, -34)
     search:SetAutoFocus(false)
     search:SetScript("OnTextChanged", function(self)
         SearchBoxTemplate_OnTextChanged(self)
@@ -637,8 +753,8 @@ function BuildWindow()
     local current = CurrentInstanceID()
     for i, entry in ipairs(list) do
         local button = CreateFrame("Button", nil, castsPage)
-        button:SetSize(LIST_WIDTH, ROW_HEIGHT + 2)
-        button:SetPoint("TOPLEFT", window, "TOPLEFT", 12, -82 - (i - 1) * (ROW_HEIGHT + 2))
+        button:SetSize(LIST_WIDTH, WIDGET_HEIGHT + 2)
+        button:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -60 - (i - 1) * (WIDGET_HEIGHT + 2))
         button.instanceID = entry.id
         button.text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         button.text:SetPoint("LEFT", button, "LEFT", 6, 0)
@@ -658,13 +774,18 @@ function BuildWindow()
     -- rightmost columns are simply cut off at the frame edge instead of
     -- hanging outside it. Nothing forces the window to stay table-wide.
     local clip = CreateFrame("Frame", nil, castsPage)
-    clip:SetPoint("TOPLEFT", window, "TOPLEFT", LIST_WIDTH + 24, -58)
-    clip:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -8, 34)   -- above the summary line
+    clip:SetPoint("TOPLEFT", body, "TOPLEFT", LIST_WIDTH + 24, -36)
+    clip:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", -8, 34)   -- above the summary line
     if clip.SetClipsChildren then clip:SetClipsChildren(true) end
 
     local headerStrip = CreateFrame("Frame", nil, clip)
     headerStrip:SetSize(TableWidth(), HEADER_HEIGHT)
     headerStrip:SetPoint("TOPLEFT", clip, "TOPLEFT", 0, 0)
+    local rule = headerStrip:CreateTexture(nil, "ARTWORK")
+    rule:SetPoint("TOPLEFT", headerStrip, "BOTTOMLEFT", 0, -1)
+    rule:SetPoint("TOPRIGHT", headerStrip, "BOTTOMRIGHT", 0, -1)
+    rule:SetHeight(1)
+    rule:SetColorTexture(1, 1, 1, 0.25)
     headers = {}
     for i = 1, #COLUMNS do
         headers[i] = CreateHeader(headerStrip, i, COLUMNS[i])
@@ -681,8 +802,9 @@ function BuildWindow()
     rowParent = content
     local saved = CastAheadDB and CastAheadDB.window
     if saved and saved.width and saved.height then
-        window:SetSize(math.max(saved.width, MinWidth()), math.max(saved.height, MinHeight()))
+        window:SetSize(math.max(saved.width, WindowWidth()), math.max(saved.height, WindowHeight()))
     end
+    ApplyScale()
     sortKey = sortKey or "n"
     if sortDescending == nil then sortDescending = true end
 end
