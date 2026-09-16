@@ -349,6 +349,28 @@ do
                 lsm:Register("sound", "CastAhead: " .. advice.say, SOUND_ROOT .. "en\\" .. advice.file .. ".ogg")
             end
         end
+        -- The game's own alert kits, so the picker has a spread of beeps even
+        -- with no sound pack installed. Stored as kit numbers; Beep plays those.
+        local GAME_SOUNDS = {
+            { "Raid warning", "RAID_WARNING" },
+            { "Alarm clock 1", "ALARM_CLOCK_WARNING_1" },
+            { "Alarm clock 2", "ALARM_CLOCK_WARNING_2" },
+            { "Alarm clock 3", "ALARM_CLOCK_WARNING_3" },
+            { "Ready check", "READY_CHECK" },
+            { "Raid boss emote", "RAID_BOSS_EMOTE_WARNING" },
+            { "GM chat", "GM_CHAT_WARNING" },
+            { "LFG role check", "LFG_ROLE_CHECK" },
+            { "LFG denied", "LFG_DENIED" },
+            { "PvP queue pop", "PVP_THROUGH_QUEUE" },
+            { "Power aura", "UI_POWER_AURA_GENERIC" },
+            { "Battle.net toast", "UI_BNET_TOAST" },
+            { "Auto quest complete", "UI_AUTO_QUEST_COMPLETE" },
+            { "Tutorial popup", "TUTORIAL_POPUP" },
+        }
+        for _, entry in ipairs(GAME_SOUNDS) do
+            local kit = SOUNDKIT and SOUNDKIT[entry[2]]
+            if kit then lsm:Register("sound", "Game: " .. entry[1], kit) end
+        end
     end
 end
 
