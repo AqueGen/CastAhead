@@ -12,14 +12,15 @@ local SCALE_STEPS = { 75, 100, 125, 150, 175, 200 }
 local SCALE_MIN, SCALE_MAX, SCALE_DEFAULT = 75, 200, 100
 local TITLE_HEIGHT = 22
 local LIST_WIDTH = 190
--- Default window size: wide enough for every column and for the settings
--- page's row of groups. The grip resizes the window; the content lives in
--- `body`, scaled by the slider and sized to fill the window at that scale.
+-- Default and minimum window size: wide enough for every column and for the
+-- settings page's row of groups, so nothing is ever cut off. The grip resizes
+-- the window within that floor (more rows); the Scale dropdown scales the
+-- whole frame, text and chrome alike, the way Details and Plater do it.
 local WINDOW_HEIGHT = 560
 local COLUMN_GAP = 4
 local THIN_EVIDENCE = 5      -- fewer samples than this and the row is dimmed
 
-local window, body, hscroll, hslider, dungeonButtons, rows, rowParent, headers
+local window, body, dungeonButtons, rows, rowParent, headers
 local selectedInstanceID, sortKey, sortDescending, searchText
 -- The window is a book: the casts page (dungeon list, search, table) and one
 -- page per settings group, built by Options.lua into `settingsHost`.
@@ -218,20 +219,8 @@ local function WindowHeight()
     return math.max(WINDOW_HEIGHT, settings)
 end
 
--- The body is at least as big as the columns and the settings page need;
--- when that is more than the window shows at this scale, a slider along the
--- bottom edge scrolls it sideways and the template's bar scrolls it down.
-local function LayoutBody()
-    local scale = CastAheadConfig.Number("uiScale", SCALE_DEFAULT, SCALE_MIN, SCALE_MAX) / 100
-    body:SetScale(scale)
-    local shown = window:GetWidth() / scale
-    body:SetSize(math.max(shown, WindowWidth()),
-        math.max((window:GetHeight() - TITLE_HEIGHT) / scale, WindowHeight() - TITLE_HEIGHT))
-    local overflow = (body:GetWidth() - shown) * scale
-    hslider:SetShown(overflow > 1)
-    hslider:SetMinMaxValues(0, math.max(overflow, 0))
-    hslider:SetValue(math.min(hslider:GetValue(), math.max(overflow, 0)))
-    hscroll:SetHorizontalScroll(hslider:GetValue())
+local function ApplyScale()
+    window:SetScale(CastAheadConfig.Number("uiScale", SCALE_DEFAULT, SCALE_MIN, SCALE_MAX) / 100)
 end
 
 -- Data ---------------------------------------------------------------------
@@ -601,33 +590,20 @@ function BuildWindow()
     window:SetScript("OnDragStart", window.StartMoving)
     window:SetScript("OnDragStop", window.StopMovingOrSizing)
     window:SetFrameStrata("DIALOG")
+    window:SetClampedToScreen(true)
     window:SetResizable(true)
     if window.SetResizeBounds then
-        window:SetResizeBounds(400, 240)
+        window:SetResizeBounds(WindowWidth(), WindowHeight())
     end
+    ApplyScale()
 
-    hscroll = CreateFrame("ScrollFrame", nil, window, "UIPanelScrollFrameTemplate")
-    hscroll:SetPoint("TOPLEFT", window, "TOPLEFT", 0, -TITLE_HEIGHT)
-    hscroll:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -24, 4)
-    body = CreateFrame("Frame", nil, hscroll)
-    hscroll:SetScrollChild(body)
+    body = CreateFrame("Frame", nil, window)
+    body:SetPoint("TOPLEFT", window, "TOPLEFT", 0, -TITLE_HEIGHT)
+    body:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", 0, 0)
 
-    hslider = CreateFrame("Slider", nil, window, "UISliderTemplate")
-    hslider:SetFrameLevel(window:GetFrameLevel() + 20)
-    hslider:SetOrientation("HORIZONTAL")
-    hslider:SetHeight(10)
-    hslider:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", 8, 2)
-    hslider:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -200, 2)
-    hslider:SetValueStep(1)
-    hslider:SetValue(0)
-    hslider:SetScript("OnValueChanged", function(_, value) hscroll:SetHorizontalScroll(value) end)
-    window:SetScript("OnSizeChanged", LayoutBody)
-
-    -- Content scale, text included, for anyone the default is too small for.
-    -- Bottom right next to the grip, on every page, and on the window rather
-    -- than in `body` so it does not move with what it scales.
+    -- Whole-window scale, text included, for anyone the default is too small
+    -- for. Bottom right next to the grip, on every page.
     local scale = CreateFrame("DropdownButton", nil, window, "WowStyle1DropdownTemplate")
-    scale:SetFrameLevel(window:GetFrameLevel() + 20)
     scale:SetSize(80, 20)
     scale:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -24, 8)
     scale.text = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -638,7 +614,7 @@ function BuildWindow()
         for _, value in ipairs(SCALE_STEPS) do
             root:CreateRadio(value .. "%", function() return Scale() == value end, function()
                 CastAheadConfig.Set("uiScale", value ~= SCALE_DEFAULT and value or nil)
-                LayoutBody()
+                ApplyScale()
             end)
         end
     end)
@@ -651,7 +627,7 @@ function BuildWindow()
     end
 
     -- Grip in the bottom-right corner, as Blizzard resizable panels have.
-    -- Resizing reveals more of the content; the slider zooms it.
+    -- Resizing reveals more rows; the floor keeps every column on screen.
     local grip = CreateFrame("Button", nil, window)
     grip:SetSize(16, 16)
     grip:SetPoint("BOTTOMRIGHT", -4, 4)
@@ -805,9 +781,8 @@ function BuildWindow()
     rowParent = content
     local saved = CastAheadDB and CastAheadDB.window
     if saved and saved.width and saved.height then
-        window:SetSize(math.max(saved.width, 400), math.max(saved.height, 240))
+        window:SetSize(math.max(saved.width, WindowWidth()), math.max(saved.height, WindowHeight()))
     end
-    LayoutBody()
     sortKey = sortKey or "n"
     if sortDescending == nil then sortDescending = true end
 end
