@@ -613,6 +613,7 @@ function BuildWindow()
     hscroll:SetScrollChild(body)
 
     hslider = CreateFrame("Slider", nil, window, "UISliderTemplate")
+    hslider:SetFrameLevel(window:GetFrameLevel() + 20)
     hslider:SetOrientation("HORIZONTAL")
     hslider:SetHeight(10)
     hslider:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", 8, 2)
@@ -626,6 +627,7 @@ function BuildWindow()
     -- Bottom right next to the grip, on every page, and on the window rather
     -- than in `body` so it does not move with what it scales.
     local scale = CreateFrame("DropdownButton", nil, window, "WowStyle1DropdownTemplate")
+    scale:SetFrameLevel(window:GetFrameLevel() + 20)
     scale:SetSize(80, 20)
     scale:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -24, 8)
     scale.text = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
