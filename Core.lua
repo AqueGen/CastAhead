@@ -2261,10 +2261,10 @@ CastAheadCore.MoveCenter = ToggleMoveCenter
 -- The options window's speaker buttons: hear a category's call on demand.
 -- Deliberately ignores the sound/voice mute switches - an explicit click
 -- wants to hear it.
-function CastAheadCore.PreviewAdvice(advice)
+function CastAheadCore.PreviewAdvice(advice, candidates)
     if not advice then return end
     local said = Voice(advice)
-    if not said or CustomSound(advice) then Beep(advice) end
+    if not said or CustomSound(advice, candidates) then Beep(advice, candidates) end
 end
 
 -- The sound picker's own preview: just the chosen sound, no voice.
