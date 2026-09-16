@@ -2371,7 +2371,10 @@ local function DemoLayout()
 end
 
 local function DemoAnchor(e, i)
-    if e.unit and AnchorBar(e.unit, e.bar, e.slot) then return end
+    if e.unit and AnchorBar(e.unit, e.bar, e.slot) then
+        e.bar:Show()
+        return
+    end
     -- No plate (or it went away): park the icon mid-screen instead.
     e.unit = nil
     -- Wide enough for the advice under the icon, and never narrower than the

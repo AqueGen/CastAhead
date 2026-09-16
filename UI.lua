@@ -595,7 +595,6 @@ function BuildWindow()
     window:SetScript("OnDragStart", window.StartMoving)
     window:SetScript("OnDragStop", window.StopMovingOrSizing)
     window:SetFrameStrata("DIALOG")
-    window:SetClampedToScreen(true)
     window:SetResizable(true)
     if window.SetResizeBounds then
         window:SetResizeBounds(WindowWidth(), WindowHeight())
