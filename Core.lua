@@ -398,7 +398,7 @@ end
 
 -- The player's own pick for this spell, else for this category, from
 -- LibSharedMedia (every sound any installed addon registered); nil when left
--- on the default. A spell pick counts only once the cast is that one spell.
+-- on Voice. A spell pick counts only once the cast is that one spell.
 local function SpellSound(candidates)
     local picks = CastAheadDB and CastAheadDB.spellSounds
     if not (picks and candidates) then return nil end
@@ -419,32 +419,39 @@ local function CustomSound(advice, candidates)
     return lsm and lsm:Fetch("sound", name, true) or nil
 end
 
-local function Beep(advice, candidates)
-    local custom = CustomSound(advice, candidates)
-    if custom then
-        -- Master, not SFX: the point is to be heard over a busy pull.
-        if type(custom) == "number" then PlaySound(custom, "Master") else PlaySoundFile(custom, "Master") end
-        return
-    end
+-- Master, not SFX: the point is to be heard over a busy pull.
+local function PlayMedia(sound)
+    if type(sound) == "number" then PlaySound(sound, "Master") else PlaySoundFile(sound, "Master") end
+end
+
+local function Beep(advice)
     if not SOUNDKIT then return end
     local kit = SOUNDKIT[ADVICE_SOUND[advice.key] or ""]
     if kit then PlaySound(kit, "Master") end
 end
 
--- `lead` is spoken before the cast ("tank buster soon"), nothing at cast time.
--- A category with a sound of the player's own choosing plays it every time,
--- alongside the voice; the stock beep only stands in when nothing spoke.
+-- One alert per call, either the voice or a sound. A sound picked for the
+-- spell or its category replaces the voice; on Voice, the line is spoken
+-- (`lead` = "tank buster soon" before the cast) and the stock beep stands in
+-- only when nothing could speak. `voice` false skips speaking, for the
+-- General switch and for previews of just the sound.
+local function Alert(advice, lead, candidates, voice)
+    local custom = CustomSound(advice, candidates)
+    if custom then
+        PlayMedia(custom)
+        return
+    end
+    if voice and Voice(advice, lead) then return end
+    Beep(advice)
+end
+
 local function PlayAdviceSound(advice, lead, candidates)
     if not advice then return end
     if not CastAheadConfig.Enabled("sound") then return end
     -- The heads-up is a number of seconds now; 0 means the player does not
     -- want it at all.
     if lead and CastAheadConfig.Lead() <= 0 then return end
-    local said = false
-    if CastAheadConfig.Enabled("voice") then
-        said = Voice(advice, lead)
-    end
-    if not said or CustomSound(advice, candidates) then Beep(advice, candidates) end
+    Alert(advice, lead, candidates, CastAheadConfig.Enabled("voice"))
 end
 
 -- Creature identity ---------------------------------------------------------
@@ -2280,31 +2287,24 @@ CastAheadCore.Tuning = tuning
 CastAheadCore.Population = function() return killed, exhausted end
 CastAheadCore.MoveCenter = ToggleMoveCenter
 
--- The options window's speaker buttons: hear a category's call on demand.
+-- The window's speaker buttons: hear a call exactly as it would play.
 -- Deliberately ignores the sound/voice mute switches - an explicit click
 -- wants to hear it.
 function CastAheadCore.PreviewAdvice(advice, candidates)
-    if not advice then return end
-    local said = Voice(advice)
-    if not said or CustomSound(advice, candidates) then Beep(advice, candidates) end
+    if advice then Alert(advice, nil, candidates, true) end
 end
-
--- The sound picker's own preview: just the chosen sound, no voice.
-function CastAheadCore.PreviewSound(advice, candidates)
-    if advice then Beep(advice, candidates) end
-end
+CastAheadCore.PreviewSound = CastAheadCore.PreviewAdvice
 
 -- One entry of the sound picker, before it is picked: a shared-media sound by
--- name, or the category's own beep for the Default entry.
+-- name, or the spoken call for the Voice entry.
 function CastAheadCore.PreviewMedia(name, advice)
     if not name then
-        if advice then Beep(advice) end
+        if advice and not Voice(advice) then Beep(advice) end
         return
     end
     local lsm = LibStub and LibStub("LibSharedMedia-3.0", true)
     local sound = lsm and lsm:Fetch("sound", name, true)
-    if not sound then return end
-    if type(sound) == "number" then PlaySound(sound, "Master") else PlaySoundFile(sound, "Master") end
+    if sound then PlayMedia(sound) end
 end
 
 -- Test drive: /ca test (or the window's Test button). Runs a scripted

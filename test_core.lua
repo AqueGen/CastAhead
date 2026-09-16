@@ -1444,8 +1444,8 @@ check(clips == 1 and sounds == 0, string.format("voiceTTS with a mute game voice
 C_CombatAudioAlert.SpeakText = realSpeak
 CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
--- A sound the player picked for a category (LibSharedMedia name) plays every
--- time, on top of the voice; the stock beep stays a fallback only.
+-- A sound the player picked for a category (LibSharedMedia name) replaces
+-- the voice; on Voice the line is spoken and the stock beep stays a fallback.
 LibStub = function(name, silent)
     if name == "LibSharedMedia-3.0" then
         return { Fetch = function(_, kind, key) return kind == "sound" and key == "Gong" and "Interface\\\\Gong.ogg" or nil end }
@@ -1455,7 +1455,7 @@ end
 CastAheadDB = { sounds = { TANK = "Gong" } }
 sounds, spoken, clips = 0, 0, 0
 CastAheadCore.PreviewAdvice(CastAheadMatch.ADVICE.TANK)
-check(clips == 2 and sounds == 0, string.format("a chosen sound plays alongside the voice clip, got files=%d beeps=%d", clips, sounds))
+check(clips == 1 and spoken == 0 and sounds == 0, string.format("a chosen sound plays instead of the voice, got files=%d spoken=%d beeps=%d", clips, spoken, sounds))
 sounds, spoken, clips = 0, 0, 0
 CastAheadCore.PreviewAdvice(CastAheadMatch.ADVICE.AOE)
 check(clips == 1 and sounds == 0, string.format("a category without a chosen sound plays only its voice, got files=%d beeps=%d", clips, sounds))

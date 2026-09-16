@@ -510,7 +510,7 @@ function CastAheadOptions.SoundMenu(root, read, write, advice)
             if button.Layout then button:Layout() end
         end)
     end
-    Speaker(root:CreateRadio("Default", function() return read() == nil end, function() write(nil) end), nil)
+    Speaker(root:CreateRadio("Voice", function() return read() == nil end, function() write(nil) end), nil)
     if lsm then
         for _, name in ipairs(lsm:List("sound")) do
             Speaker(root:CreateRadio(name, function() return read() == name end, function() write(name) end), name)
@@ -521,7 +521,7 @@ end
 function BuildSounds(panel)
     local hint = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     hint:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -4)
-    hint:SetText("|cffaaaaaaDefault = stock beep, only when nothing spoke. A chosen sound always plays.|r")
+    hint:SetText("|cffaaaaaaVoice = the spoken call (a stock beep when it cannot speak). A sound plays instead of the voice.|r")
 
     -- Off by default: the shipped clips speak unless this is on. Gated on the
     -- game's own Combat Audio Alerts setting, which it cannot work without.

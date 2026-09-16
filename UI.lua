@@ -190,7 +190,7 @@ local COLUMNS = {
     { key = "cc", header = "Stop", width = 40, justify = "RIGHT",
       text = function(e) return (e.cc or 0) > 0 and string.format("%d%%", e.cc * 100) or "-" end,
       sort = function(e) return e.cc or 0 end },
-    -- Inherit ticked: the category's sound (Sounds tab), shown greyed. Unticked:
+    -- Inherit ticked: the category's alert (Sounds tab), shown greyed. Unticked:
     -- the player's own pick for this one cast, ahead of the category's.
     { key = "sound", header = "Sound override", width = 12 + 22 + 110,
       text = function(e) return CastAheadMatch.Advice(e) and "" or "|cff555555-|r" end,
@@ -288,7 +288,7 @@ local HEADER_TIPS = {
     spell = { "Spell",
         "The cast being tracked. Hover a row for the spell tooltip." },
     sound = { "Sound override",
-        "Ticked, the cast plays its category's sound from the Sounds tab. Untick to pick a sound for this one cast; it plays once the cast is identified as this spell." },
+        "Ticked, the cast is announced like its category (Sounds tab): the voice, or the sound chosen there. Untick to pick a sound for this one cast instead of the voice; it plays once the cast is identified as this spell." },
     mob = { "Caster",
         "Which creature casts it. In 12.1 a nameplate never reveals a creature's name or ID, so this comes from combat logs - the addon only guesses which of them is in front of you." },
     level = { "Mob level",
