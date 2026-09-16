@@ -190,7 +190,8 @@ local COLUMNS = {
       sort = function(e) return e.cc or 0 end },
     -- Inherit ticked: the category's sound (Sounds tab), shown greyed. Unticked:
     -- the player's own pick for this one cast, ahead of the category's.
-    { key = "sound", header = "Override", width = 22 + 110,
+    { key = "sound", header = "Sound override", width = 12 + 22 + 110,
+      text = function(e) return CastAheadMatch.Advice(e) and "" or "|cff555555-|r" end,
       sort = function(e) return SpellSound(e) or "" end },
 }
 
@@ -379,7 +380,7 @@ local function CreateRow(parent, index)
         elseif column.key == "sound" then
             row.inherit = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
             row.inherit:SetSize(ROW_HEIGHT, ROW_HEIGHT)
-            row.inherit:SetPoint("LEFT", row, "LEFT", x, 0)
+            row.inherit:SetPoint("LEFT", row, "LEFT", x + 12, 0)
             row.inherit:SetScript("OnClick", function(self)
                 local e = row.entry
                 if not e then return end
@@ -387,8 +388,8 @@ local function CreateRow(parent, index)
                 Refresh()
             end)
             row.sound = CreateFrame("DropdownButton", nil, row, "WowStyle1DropdownTemplate")
-            row.sound:SetSize(column.width - 22, ROW_HEIGHT)
-            row.sound:SetPoint("LEFT", row, "LEFT", x + 22, 0)
+            row.sound:SetSize(column.width - 34, ROW_HEIGHT)
+            row.sound:SetPoint("LEFT", row, "LEFT", x + 34, 0)
             row.sound:SetupMenu(function(_, root)
                 local e = row.entry
                 if not (e and CastAheadOptions and CastAheadOptions.SoundMenu) then return end
@@ -400,6 +401,9 @@ local function CreateRow(parent, index)
                     end,
                     function(name) SetSpellSound(e, name or "") end)
             end)
+            local dash = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            dash:SetPoint("LEFT", row, "LEFT", x + 12, 0)
+            row.cells[column.key] = dash
         elseif column.key == "icon" then
             row.icon = row:CreateTexture(nil, "ARTWORK")
             row.icon:SetSize(16, 16)
