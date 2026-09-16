@@ -8,8 +8,8 @@
 local ROW_HEIGHT = 24
 local WIDGET_HEIGHT = 20
 local HEADER_HEIGHT = 18
-local SCALE_STEPS = { 75, 100, 125, 150, 175, 200 }
-local SCALE_MIN, SCALE_MAX, SCALE_DEFAULT = 75, 200, 100
+local SCALE_STEPS = { 75, 100, 125, 150 }
+local SCALE_MIN, SCALE_MAX, SCALE_DEFAULT = 75, 150, 100
 local TITLE_HEIGHT = 22
 local LIST_WIDTH = 190
 -- Default and minimum window size: wide enough for every column and for the
