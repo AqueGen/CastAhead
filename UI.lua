@@ -8,16 +8,17 @@
 local ROW_HEIGHT = 24
 local WIDGET_HEIGHT = 20
 local HEADER_HEIGHT = 18
-local SCALE_MIN, SCALE_MAX, SCALE_DEFAULT = 60, 160, 100
+local SCALE_MIN, SCALE_MAX, SCALE_DEFAULT = 60, 200, 100
+local TITLE_HEIGHT = 22
 local LIST_WIDTH = 190
--- The window has one logical size, wide enough for every column and for the
--- settings page's row of groups; the grip and the slider change its scale
--- instead, so the content grows and shrinks with the frame.
+-- Default window size: wide enough for every column and for the settings
+-- page's row of groups. The grip resizes the window; the content lives in
+-- `body`, scaled by the slider and sized to fill the window at that scale.
 local WINDOW_HEIGHT = 560
 local COLUMN_GAP = 4
 local THIN_EVIDENCE = 5      -- fewer samples than this and the row is dimmed
 
-local window, dungeonButtons, rows, rowParent, headers
+local window, body, dungeonButtons, rows, rowParent, headers
 local selectedInstanceID, sortKey, sortDescending, searchText
 -- The window is a book: the casts page (dungeon list, search, table) and one
 -- page per settings group, built by Options.lua into `settingsHost`.
@@ -214,6 +215,12 @@ end
 local function WindowHeight()
     local settings = (CastAheadOptions and CastAheadOptions.MIN_HEIGHT or 0) + 68
     return math.max(WINDOW_HEIGHT, settings)
+end
+
+local function LayoutBody()
+    local scale = CastAheadConfig.Number("uiScale", SCALE_DEFAULT, SCALE_MIN, SCALE_MAX) / 100
+    body:SetScale(scale)
+    body:SetSize(window:GetWidth() / scale, (window:GetHeight() - TITLE_HEIGHT) / scale)
 end
 
 -- Data ---------------------------------------------------------------------
@@ -583,33 +590,46 @@ function BuildWindow()
     window:SetScript("OnDragStart", window.StartMoving)
     window:SetScript("OnDragStop", window.StopMovingOrSizing)
     window:SetFrameStrata("DIALOG")
+    window:SetResizable(true)
+    if window.SetResizeBounds then
+        window:SetResizeBounds(400, 240)
+    end
 
-    -- Whole-window scale, text included. The slider sits bottom right next to
-    -- the grip, on every page; dragging the grip moves the same value.
-    local scale = CreateFrame("Slider", nil, window, "UISliderTemplate")
+    body = CreateFrame("Frame", nil, window)
+    body:SetPoint("TOPLEFT", window, "TOPLEFT", 0, -TITLE_HEIGHT)
+    if body.SetClipsChildren then body:SetClipsChildren(true) end
+    window:SetScript("OnSizeChanged", LayoutBody)
+
+    -- Content scale, text included, for anyone the default is too small for.
+    -- Bottom right next to the grip, on every page. The window keeps its size;
+    -- the content inside zooms.
+    local scale = CreateFrame("Slider", nil, body, "UISliderTemplate")
     scale:SetSize(120, 12)
-    scale:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -28, 14)
+    scale:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", -28, 14)
     scale:SetOrientation("HORIZONTAL")
     scale:SetMinMaxValues(SCALE_MIN, SCALE_MAX)
     scale:SetValueStep(5)
     scale:SetObeyStepOnDrag(true)
-    scale.text = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    scale.text = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     scale.text:SetPoint("RIGHT", scale, "LEFT", -6, 0)
-    local function ApplyScale(value)
-        window:SetScale(value / 100)
-        scale.text:SetText(string.format("Scale %d%%", value))
-    end
     scale:SetValue(CastAheadConfig.Number("uiScale", SCALE_DEFAULT, SCALE_MIN, SCALE_MAX))
-    ApplyScale(scale:GetValue())
+    scale.text:SetText(string.format("Scale %d%%", scale:GetValue()))
     scale:SetScript("OnValueChanged", function(_, value)
         value = math.floor(value / 5 + 0.5) * 5
         CastAheadConfig.Set("uiScale", value ~= SCALE_DEFAULT and value or nil)
-        ApplyScale(value)
+        scale.text:SetText(string.format("Scale %d%%", value))
+        LayoutBody()
     end)
 
-    -- Grip in the bottom-right corner, as Blizzard resizable panels have. It
-    -- scales the window rather than resizing it: the scale that puts the right
-    -- edge under the cursor, re-read every frame while the button is held.
+    local function RememberSize()
+        CastAheadDB = CastAheadDB or {}
+        CastAheadDB.window = CastAheadDB.window or {}
+        CastAheadDB.window.width = window:GetWidth()
+        CastAheadDB.window.height = window:GetHeight()
+    end
+
+    -- Grip in the bottom-right corner, as Blizzard resizable panels have.
+    -- Resizing reveals more of the content; the slider zooms it.
     local grip = CreateFrame("Button", nil, window)
     grip:SetSize(16, 16)
     grip:SetPoint("BOTTOMRIGHT", -4, 4)
@@ -619,15 +639,12 @@ function BuildWindow()
     grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
     grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
     grip:SetScript("OnMouseDown", function()
-        window:SetScript("OnUpdate", function()
-            local cursorX = GetCursorPosition()
-            local leftPx = window:GetLeft() * window:GetEffectiveScale()
-            local wanted = (cursorX - leftPx) / window:GetWidth() / UIParent:GetEffectiveScale()
-            scale:SetValue(math.max(SCALE_MIN, math.min(SCALE_MAX, wanted * 100)))
-        end)
+        window:StartSizing("BOTTOMRIGHT")
     end)
     grip:SetScript("OnMouseUp", function()
-        window:SetScript("OnUpdate", nil)
+        window:StopMovingOrSizing()
+        RememberSize()
+        Refresh()
     end)
     table.insert(UISpecialFrames, "CastAheadWindow")   -- Escape closes it
     window.TitleText:SetText("CastAhead - tracked casts")
@@ -637,9 +654,9 @@ function BuildWindow()
     -- the tab row, which is the one strip visible on every page, and it says
     -- which half of the toggle it is rather than leaving the player guessing
     -- whether the run started.
-    testButton = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+    testButton = CreateFrame("Button", nil, body, "UIPanelButtonTemplate")
     testButton:SetSize(110, 20)
-    testButton:SetPoint("TOPRIGHT", window, "TOPRIGHT", -14, -28)
+    testButton:SetPoint("TOPRIGHT", body, "TOPRIGHT", -14, -6)
     testButton:SetScript("OnClick", function()
         if CastAheadCore and CastAheadCore.Test then CastAheadCore.Test(selectedInstanceID) end
     end)
@@ -662,12 +679,12 @@ function BuildWindow()
     end
     if #names == 0 then names[1] = CASTS_TAB end
     for _, name in ipairs(names) do
-        local button = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+        local button = CreateFrame("Button", nil, body, "UIPanelButtonTemplate")
         button:SetSize(78, 20)
         if previousTab then
             button:SetPoint("LEFT", previousTab, "RIGHT", 4, 0)
         else
-            button:SetPoint("TOPLEFT", window, "TOPLEFT", 12, -28)
+            button:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -6)
         end
         button:SetText(name)
         button:SetScript("OnClick", function() ShowTab(name) end)
@@ -678,28 +695,28 @@ function BuildWindow()
 
     -- The two pages. Both fill the area under the tab strip; the settings
     -- panels are built into the host on first use.
-    castsPage = CreateFrame("Frame", nil, window)
-    castsPage:SetPoint("TOPLEFT", window, "TOPLEFT", 0, -52)
-    castsPage:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", 0, 0)
+    castsPage = CreateFrame("Frame", nil, body)
+    castsPage:SetPoint("TOPLEFT", body, "TOPLEFT", 0, -30)
+    castsPage:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", 0, 0)
 
-    settingsHost = CreateFrame("Frame", nil, window)
-    settingsHost:SetPoint("TOPLEFT", window, "TOPLEFT", 12, -56)
-    settingsHost:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -12, 12)
+    settingsHost = CreateFrame("Frame", nil, body)
+    settingsHost:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -34)
+    settingsHost:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", -12, 12)
     settingsHost:Hide()
 
     window.summary = castsPage:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    window.summary:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", 16, 12)
+    window.summary:SetPoint("BOTTOMLEFT", body, "BOTTOMLEFT", 16, 12)
 
     -- Author's mark. Bottom centre because the left corner is the summary and the
     -- right one is the resize grip, and it belongs to the window rather than to a
     -- page so it stays put when the pages swap.
-    window.madeIn = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    window.madeIn:SetPoint("BOTTOM", window, "BOTTOM", 0, 12)
+    window.madeIn = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    window.madeIn:SetPoint("BOTTOM", body, "BOTTOM", 0, 12)
     window.madeIn:SetText("|cFF0057B7Made|r |cFFFFD700in Ukraine|r")
 
     local search = CreateFrame("EditBox", nil, castsPage, "SearchBoxTemplate")
     search:SetSize(LIST_WIDTH - 8, 20)
-    search:SetPoint("TOPLEFT", window, "TOPLEFT", 16, -56)
+    search:SetPoint("TOPLEFT", body, "TOPLEFT", 16, -34)
     search:SetAutoFocus(false)
     search:SetScript("OnTextChanged", function(self)
         SearchBoxTemplate_OnTextChanged(self)
@@ -713,7 +730,7 @@ function BuildWindow()
     for i, entry in ipairs(list) do
         local button = CreateFrame("Button", nil, castsPage)
         button:SetSize(LIST_WIDTH, WIDGET_HEIGHT + 2)
-        button:SetPoint("TOPLEFT", window, "TOPLEFT", 12, -82 - (i - 1) * (WIDGET_HEIGHT + 2))
+        button:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -60 - (i - 1) * (WIDGET_HEIGHT + 2))
         button.instanceID = entry.id
         button.text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         button.text:SetPoint("LEFT", button, "LEFT", 6, 0)
@@ -733,8 +750,8 @@ function BuildWindow()
     -- rightmost columns are simply cut off at the frame edge instead of
     -- hanging outside it. Nothing forces the window to stay table-wide.
     local clip = CreateFrame("Frame", nil, castsPage)
-    clip:SetPoint("TOPLEFT", window, "TOPLEFT", LIST_WIDTH + 24, -58)
-    clip:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -8, 34)   -- above the summary line
+    clip:SetPoint("TOPLEFT", body, "TOPLEFT", LIST_WIDTH + 24, -36)
+    clip:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", -8, 34)   -- above the summary line
     if clip.SetClipsChildren then clip:SetClipsChildren(true) end
 
     local headerStrip = CreateFrame("Frame", nil, clip)
@@ -759,6 +776,11 @@ function BuildWindow()
 
     rows = {}
     rowParent = content
+    local saved = CastAheadDB and CastAheadDB.window
+    if saved and saved.width and saved.height then
+        window:SetSize(math.max(saved.width, 400), math.max(saved.height, 240))
+    end
+    LayoutBody()
     sortKey = sortKey or "n"
     if sortDescending == nil then sortDescending = true end
 end
