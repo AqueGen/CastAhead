@@ -680,6 +680,8 @@ function BuildWindow()
     listButton = CreateFrame("Button", nil, body, "UIPanelButtonTemplate")
     listButton:SetSize(90, 20)
     listButton:SetPoint("RIGHT", testButton, "LEFT", -4, 0)
+    scale:ClearAllPoints()
+    scale:SetPoint("RIGHT", listButton, "LEFT", -12, 0)
     listButton:SetScript("OnClick", function()
         if CastAheadCore and CastAheadCore.Test then CastAheadCore.Test(selectedInstanceID, SortedRows()) end
     end)
