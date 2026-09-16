@@ -8,7 +8,8 @@
 local ROW_HEIGHT = 24
 local WIDGET_HEIGHT = 20
 local HEADER_HEIGHT = 18
-local SCALE_MIN, SCALE_MAX, SCALE_DEFAULT = 60, 200, 100
+local SCALE_STEPS = { 75, 90, 100, 110, 125, 150, 175, 200 }
+local SCALE_MIN, SCALE_MAX, SCALE_DEFAULT = 75, 200, 100
 local TITLE_HEIGHT = 22
 local LIST_WIDTH = 190
 -- Default window size: wide enough for every column and for the settings
@@ -601,24 +602,22 @@ function BuildWindow()
     window:SetScript("OnSizeChanged", LayoutBody)
 
     -- Content scale, text included, for anyone the default is too small for.
-    -- Bottom right next to the grip, on every page. The window keeps its size;
-    -- the content inside zooms.
-    local scale = CreateFrame("Slider", nil, body, "UISliderTemplate")
-    scale:SetSize(120, 12)
-    scale:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", -28, 14)
-    scale:SetOrientation("HORIZONTAL")
-    scale:SetMinMaxValues(SCALE_MIN, SCALE_MAX)
-    scale:SetValueStep(5)
-    scale:SetObeyStepOnDrag(true)
-    scale.text = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    -- Bottom right next to the grip, on every page, and on the window rather
+    -- than in `body` so it does not move with what it scales.
+    local scale = CreateFrame("DropdownButton", nil, window, "WowStyle1DropdownTemplate")
+    scale:SetSize(80, 20)
+    scale:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -24, 8)
+    scale.text = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     scale.text:SetPoint("RIGHT", scale, "LEFT", -6, 0)
-    scale:SetValue(CastAheadConfig.Number("uiScale", SCALE_DEFAULT, SCALE_MIN, SCALE_MAX))
-    scale.text:SetText(string.format("Scale %d%%", scale:GetValue()))
-    scale:SetScript("OnValueChanged", function(_, value)
-        value = math.floor(value / 5 + 0.5) * 5
-        CastAheadConfig.Set("uiScale", value ~= SCALE_DEFAULT and value or nil)
-        scale.text:SetText(string.format("Scale %d%%", value))
-        LayoutBody()
+    scale.text:SetText("Scale")
+    local function Scale() return CastAheadConfig.Number("uiScale", SCALE_DEFAULT, SCALE_MIN, SCALE_MAX) end
+    scale:SetupMenu(function(_, root)
+        for _, value in ipairs(SCALE_STEPS) do
+            root:CreateRadio(value .. "%", function() return Scale() == value end, function()
+                CastAheadConfig.Set("uiScale", value ~= SCALE_DEFAULT and value or nil)
+                LayoutBody()
+            end)
+        end
     end)
 
     local function RememberSize()
