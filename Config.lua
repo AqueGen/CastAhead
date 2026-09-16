@@ -27,11 +27,12 @@ C.NUDGE_MAX = 100
 -- under neighbours never touch. Fixed spacing steps by icon plus this gap
 -- instead, so every row packs the same and wide labels may overlap (#20).
 C.GAP_DEFAULT, C.GAP_MAX = 4, 40
--- Where the icons draw relative to everything else. DIALOG clears every
--- nameplate addon's frames; lower keeps them under popups, higher beats a
+-- Where the icons draw relative to everything else. Nameplates live under
+-- WorldFrame, below all of UIParent, so HIGH already clears every plate and
+-- the normal UI while staying under popups; DIALOG and above are for a
 -- Plater profile that lifts plates into UIParent (#19).
 C.STRATA = { "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP" }
-C.STRATA_DEFAULT = "DIALOG"
+C.STRATA_DEFAULT = "HIGH"
 C.CENTER_DEFAULT, C.CENTER_MIN, C.CENTER_MAX = 100, 50, 250
 -- The advice under an icon is sized from the icon, so one setting keeps them
 -- in proportion. This is the adjustment on top of that, in percent, for a

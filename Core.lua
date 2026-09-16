@@ -785,7 +785,10 @@ local function ApplyBarSize(bar)
     local strata = CastAheadConfig.Strata()
     if bar._strata ~= strata then
         bar._strata = strata
+        -- Unfix, set, fix again: a fixed strata also ignores our own SetFrameStrata.
+        if bar.SetFixedFrameStrata then bar:SetFixedFrameStrata(false) end
         bar:SetFrameStrata(strata)
+        if bar.SetFixedFrameStrata then bar:SetFixedFrameStrata(true) end
     end
     if bar._size == size and bar._labelScale == labelScale
         and bar._timeScale == timeScale then

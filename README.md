@@ -31,7 +31,7 @@ Everything lives in the addon window, next to the cast table. **General** holds 
 
 The early warning ("tank buster soon") is a slider in seconds, off by default: on top of the real call it can read as two separate casts.
 
-Icon rows step sideways by the words under them, so labels never touch; **Fixed spacing** in the Icon size group steps by icon plus a gap instead, for rows that pack identically every time. **Layer** in the same group is the icons' frame strata, DIALOG by default: lower keeps them under popups, higher beats a nameplate addon that lifts its plates above DIALOG.
+Icon rows step sideways by the words under them, so labels never touch; **Fixed spacing** in the Icon size group steps by icon plus a gap instead, for rows that pack identically every time. **Layer** in the same group is the icons' frame strata, HIGH by default: above every nameplate and the normal UI, under popups; go higher only if a nameplate addon lifts its plates above HIGH.
 
 ## Where the data comes from
 
