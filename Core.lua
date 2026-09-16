@@ -2353,7 +2353,7 @@ local function DemoLayout()
     for key in pairs(demoPlates) do demoPlates[key] = nil end
     for i = 1, #demo.entries do
         local e = demo.entries[i]
-        if not e.done then
+        if not e.done and not e.hidden then
             local key = e.unit or "loose"
             local list = demoPlates[key]
             if not list then
@@ -2389,8 +2389,8 @@ local function DemoAnchor(e, i)
 end
 
 -- With `list` (the table's rows, in its order) every one of them is played
--- in turn, one call at a time and never on plates: that is for hearing each
--- cast's sound rather than judging the layout.
+-- in turn, one call at a time on the first hostile plate around: that is for
+-- hearing each cast's sound rather than judging the layout.
 function CastAheadCore.Test(instanceID, list)
     if demo then StopTest() return end
     local id = instanceID
@@ -2430,7 +2430,7 @@ function CastAheadCore.Test(instanceID, list)
     local units = {}
     for i = 1, 40 do
         local token = "nameplate" .. i
-        if not list and IsHostileNameplate(token) and C_NamePlate.GetNamePlateForUnit(token) then
+        if IsHostileNameplate(token) and C_NamePlate.GetNamePlateForUnit(token) then
             units[#units + 1] = token
         end
     end
@@ -2445,8 +2445,8 @@ function CastAheadCore.Test(instanceID, list)
     -- spread across the screen while the timeline stacks every one of them
     -- into a single column, so a room full of training dummies filled it top
     -- to bottom.
-    local plates = math.min(#units, DEMO_PLATES)
-    local total = math.max(#picked, plates * DEMO_PER_PLATE)
+    local plates = math.min(#units, list and 1 or DEMO_PLATES)
+    local total = list and #picked or math.max(#picked, plates * DEMO_PER_PLATE)
     local slots = {}
     for i = 1, total do
         local row = picked[(i - 1) % #picked + 1]
@@ -2458,6 +2458,7 @@ function CastAheadCore.Test(instanceID, list)
                 or (now + 2 + i * (CastAheadConfig.Lead() + 2) / math.max(1, math.ceil(total / 4))),
             track = {},
             unit = unit, slot = slots[unit or 0],
+            hidden = (gap and i > 1) or nil,
         }
         e.bar = GetBar(demo.state, i)
         PaintBar(e.bar, e)
@@ -2489,6 +2490,10 @@ function CastAheadCore.Test(instanceID, list)
             elseif not e.done then
                 alive = alive + 1
                 shown = shown + 1
+                if e.hidden then
+                    e.hidden = nil
+                    demo.repack = true
+                end
                 DemoAnchor(e, gap and shown or i)
                 if e.casting then
                     if t >= e.castEnd then
