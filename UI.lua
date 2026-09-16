@@ -317,9 +317,14 @@ local function CreateHeader(parent, index, column)
     local button = CreateFrame("Button", nil, parent)
     button:SetSize(column.width, HEADER_HEIGHT)
     button:SetPoint("TOPLEFT", parent, "TOPLEFT", ColumnOffset(index), 0)
+    if column.header then
+        local bg = button:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        bg:SetColorTexture(1, 1, 1, 0.07)
+    end
     button.text = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     button.text:SetAllPoints()
-    button.text:SetJustifyH(column.justify or "LEFT")
+    button.text:SetJustifyH("CENTER")
 
     local tip = HEADER_TIPS[column.key]
     if tip then
@@ -723,6 +728,11 @@ function BuildWindow()
     local headerStrip = CreateFrame("Frame", nil, clip)
     headerStrip:SetSize(TableWidth(), HEADER_HEIGHT)
     headerStrip:SetPoint("TOPLEFT", clip, "TOPLEFT", 0, 0)
+    local rule = headerStrip:CreateTexture(nil, "ARTWORK")
+    rule:SetPoint("TOPLEFT", headerStrip, "BOTTOMLEFT", 0, -1)
+    rule:SetPoint("TOPRIGHT", headerStrip, "BOTTOMRIGHT", 0, -1)
+    rule:SetHeight(1)
+    rule:SetColorTexture(1, 1, 1, 0.25)
     headers = {}
     for i = 1, #COLUMNS do
         headers[i] = CreateHeader(headerStrip, i, COLUMNS[i])
