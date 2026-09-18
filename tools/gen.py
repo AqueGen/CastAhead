@@ -276,6 +276,8 @@ def settle(new, old):
         hold("kick", moved(old["kick"], new["kick"], SHARE_STEP) or crossed(old["kick"], new["kick"], KICK_SHARE))
         hold("cc", moved(old["cc"], new["cc"], SHARE_STEP) or crossed(old["cc"], new["cc"], CC_SHARE))
         hold("samples", count_moved(old["samples"], new["samples"], THIN_EVIDENCE))
+        if row["targeted"] is None:
+            row["targeted"] = old.get("targeted")
         if not cd_moved:
             row["approx"] = new["fit"] < APPROX_SUPPORT + (APPROX_MARGIN if old["approx"] else -APPROX_MARGIN)
     row["filler"] = not row["cd"] or min(row["cd"]) < MIN_CD
