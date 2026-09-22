@@ -248,7 +248,7 @@ def same_cd(old, new):
     if not old or not new:
         return not old and not new
     return all(abs(new[i % len(new)] - old[i % len(old)])
-               <= (CD_TOLERANCE_FLAT + old[i % len(old)] * CD_TOLERANCE_REL) / 2
+               <= CD_TOLERANCE_FLAT + old[i % len(old)] * CD_TOLERANCE_REL
                for i in range(max(len(old), len(new))))
 
 
@@ -276,6 +276,8 @@ def settle(new, old):
         hold("kick", moved(old["kick"], new["kick"], SHARE_STEP) or crossed(old["kick"], new["kick"], KICK_SHARE))
         hold("cc", moved(old["cc"], new["cc"], SHARE_STEP) or crossed(old["cc"], new["cc"], CC_SHARE))
         hold("samples", count_moved(old["samples"], new["samples"], THIN_EVIDENCE))
+        if row["targeted"] is None:
+            row["targeted"] = old.get("targeted")
         if not cd_moved:
             row["approx"] = new["fit"] < APPROX_SUPPORT + (APPROX_MARGIN if old["approx"] else -APPROX_MARGIN)
     row["filler"] = not row["cd"] or min(row["cd"]) < MIN_CD

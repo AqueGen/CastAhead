@@ -23,7 +23,8 @@ def test_targeted_needs_a_clear_majority_and_samples():
 def row(**fields):
     base = dict(spell=1, npc=2, mob="Mob", name="Bolt", cast=2.5, cd=[20.0], first=5.0, firstN=10,
                 offset=0.0, hits=1.0, dmg=0.3, kick=0.1, cc=0.05, samples=100, level=90,
-                approx=False, filler=False, kickable=False, channel=False, fit=0.9, mdt_kick=None)
+                approx=False, filler=False, kickable=False, channel=False, fit=0.9, mdt_kick=None,
+                targeted=None)
     base.update(fields)
     return base
 
@@ -48,6 +49,13 @@ def test_cooldown_compared_as_a_cycle():
     _, changed = settle(row(cd=[20.0, 20.2]), row(cd=[20.0]))
     assert changed == []
     _, changed = settle(row(cd=[20.0, 27.0]), row(cd=[20.0]))
+    assert changed == ["cd"]
+
+
+def test_a_cooldown_drifting_one_delay_step_keeps_the_anchor():
+    _, changed = settle(row(cd=[21.5]), row(cd=[20.0]))
+    assert changed == []
+    _, changed = settle(row(cd=[24.0]), row(cd=[20.0]))
     assert changed == ["cd"]
 
 
