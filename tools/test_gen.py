@@ -53,10 +53,17 @@ def test_cooldown_compared_as_a_cycle():
 
 
 def test_a_cooldown_drifting_one_delay_step_keeps_the_anchor():
-    _, changed = settle(row(cd=[21.5]), row(cd=[20.0]))
-    assert changed == []
-    _, changed = settle(row(cd=[24.0]), row(cd=[20.0]))
-    assert changed == ["cd"]
+    settled, changed = settle(row(cd=[21.5]), row(cd=[20.0]))
+    assert changed == [] and settled["cd"] == [20.0]
+    settled, changed = settle(row(cd=[24.0]), row(cd=[20.0]))
+    assert changed == ["cd"] and settled["cd"] == [24.0]
+
+
+def test_thin_target_evidence_keeps_the_anchor_verdict():
+    settled, _ = settle(row(targeted=None), row(targeted=True))
+    assert settled["targeted"] is True
+    settled, _ = settle(row(targeted=False), row(targeted=True))
+    assert settled["targeted"] is False
 
 
 def test_approx_needs_a_margin_to_flip():
@@ -140,6 +147,17 @@ def test_client_channel_replaces_channels_json_when_the_log_saw_no_start_at_all(
         casts = {"1|Zone": {"10": {"1000": _base_cast_record(cast=[], starts=0)}}}
         lua, _ = _run_gen(tmp, casts, spell_times={"1000": {"cast": 0, "channel": 5.0}},
                           channels={"1000": 99.0}, overrides={"include": ["1000"]})
+        assert "cast = 5.0" in lua and "channel = true" in lua
+
+
+def test_a_channel_longer_than_its_own_cooldown_is_not_a_channel_row():
+    with tempfile.TemporaryDirectory() as tmp:
+        casts = {"1|Zone": {"10": {"1000": _base_cast_record(cast=[], starts=0, iv=[20.0] * 6)}}}
+        lua, _ = _run_gen(tmp, casts, spell_times={"1000": {"cast": 0, "channel": 30.0}},
+                          overrides={"include": ["1000"]})
+        assert "channel = true" not in lua
+        lua, _ = _run_gen(tmp, casts, spell_times={"1000": {"cast": 0, "channel": 5.0}},
+                          overrides={"include": ["1000"]})
         assert "cast = 5.0" in lua and "channel = true" in lua
 
 

@@ -375,6 +375,8 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                           % (r["mob"], r["name"], spellid, client["cast"], measured))
                 flat, _ = densest(r["iv"], CD_WINDOW)
                 cd = rotation(r.get("runs", {}), flat)
+                if is_channel and cd and cast >= min(cd):
+                    cast, is_channel = measured, False
                 cdn = support(r["iv"], cd) if cd else 0
                 approx = bool(cd) and cdn < APPROX_SUPPORT * len(r["iv"])
                 first, firstN = densest(r["first"], FIRST_WINDOW)
