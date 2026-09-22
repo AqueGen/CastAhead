@@ -140,6 +140,7 @@ local tuning = {
     --    rows only carry `targeted` once the game itself was seen answering.
     --    Replay of our logs: 583 right / 67 wrong without it, 631 / 57 with.
     targetNarrow = true,       -- whether the cast has a target, read at its start, narrows candidates
+    observedBelowOnly = true,  -- an observed interval replaces the tabled cooldown only when shorter
 }
 
 -- Population: how many of each creature MDT places in this dungeon (Packs.lua,
@@ -1609,7 +1610,9 @@ local function OnCastStop(unit, channel)
             -- own cooldown, so adopt what it did instead of dropping the match -
             -- but only for a single-slot cooldown: one noisy gap must not
             -- flatten a {4.8, 4.8, 8.7} rotation into a scalar.
-            if #candidates[1].cd == 1 then track.observedCD = measured end
+            if #candidates[1].cd == 1 then
+                track.observedCD = (not tuning.observedBelowOnly or measured < tabled) and measured or nil
+            end
         else
             -- Nowhere near this spell's schedule: it was never this spell, and
             -- the re-identification below must not hand it straight back.
@@ -1723,7 +1726,8 @@ local function OnCastStop(unit, channel)
             -- Only a spell allowed a countdown may pin one from observation,
             -- or fillers smuggle their 3.6s bar back in through this path.
             track.observedCD = (CastAheadMatch.HasSchedule(candidates[1])
-                and #candidates[1].cd == 1) and measured or nil
+                and #candidates[1].cd == 1
+                and (not tuning.observedBelowOnly or measured < candidates[1].cd[1])) and measured or nil
         end
     end
 
@@ -2293,6 +2297,7 @@ end
 -- how far identification got on each one.
 CastAheadCore = {}
 CastAheadCore.LastCandidates = LastCandidates   -- replay harness only
+CastAheadCore.Tracks = function(unit) return plates[unit] and plates[unit].tracks end
 CastAheadCore.SetTrace = function(fn) narrowTrace = fn end
 CastAheadCore.Tuning = tuning
 CastAheadCore.SpreadBars = SpreadBars
