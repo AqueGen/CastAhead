@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.0](https://github.com/AqueGen/CastAhead/compare/v0.7.0...v0.8.0) (2026-09-22)
+
+
+### Features
+
+* data sync from the 15-18 September logs ([#24](https://github.com/AqueGen/CastAhead/issues/24)) ([4b840f1](https://github.com/AqueGen/CastAhead/commit/4b840f14194bd71238cff763fc792de3da2b8e88))
+* ten channels the log could not time, from client spell data ([#27](https://github.com/AqueGen/CastAhead/issues/27)) ([9747e49](https://github.com/AqueGen/CastAhead/commit/9747e499e8bf1f867bf14365c2708a8d6b08e1e0))
+* the centre call is off until asked for ([#25](https://github.com/AqueGen/CastAhead/issues/25)) ([5d65748](https://github.com/AqueGen/CastAhead/commit/5d657488c9d6e3cbbd3687bd98ee146d8588a136))
+
+
+### Bug Fixes
+
+* adopt an observed cooldown only when the mob came back sooner ([#26](https://github.com/AqueGen/CastAhead/issues/26)) ([fe9918b](https://github.com/AqueGen/CastAhead/commit/fe9918b154810254f87af73b607f62d2c3eddda4))
+* review follow-ups before 0.8.0 ([#29](https://github.com/AqueGen/CastAhead/issues/29)) ([4d4753f](https://github.com/AqueGen/CastAhead/commit/4d4753f1f3e31a08701fff667844458af3f7959c))
+
 ## [0.7.0](https://github.com/AqueGen/CastAhead/compare/v0.6.0...v0.7.0) (2026-09-16)
 
 
