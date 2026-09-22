@@ -248,7 +248,7 @@ def same_cd(old, new):
     if not old or not new:
         return not old and not new
     return all(abs(new[i % len(new)] - old[i % len(old)])
-               <= (CD_TOLERANCE_FLAT + old[i % len(old)] * CD_TOLERANCE_REL) / 2
+               <= CD_TOLERANCE_FLAT + old[i % len(old)] * CD_TOLERANCE_REL
                for i in range(max(len(old), len(new))))
 
 
