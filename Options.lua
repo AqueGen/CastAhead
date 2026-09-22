@@ -90,7 +90,7 @@ local SWITCHES = {
         tip = "Hide calls this character cannot act on: dispels you do not have, tank busters for tanks and healers." },
     nameplates = { label = "Show icons on nameplates",
         tip = "Countdown icons next to enemy nameplates." },
-    centerText = { label = "Show the centre call",
+    centerText = { label = "Show the centre call", defaultOff = true,
         tip = "The response in words, big, near the middle of the screen while an important cast goes out." },
     timeline = { label = "Feed the Blizzard timeline",
         tip = "Feed confident predictions to the game's own encounter timeline." },

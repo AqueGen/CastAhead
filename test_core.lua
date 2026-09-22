@@ -302,14 +302,14 @@ IsInInstance = function() return true, instanceKind end
 GetInstanceInfo = function() return "d", instanceKind, 0, "", 0, 0, false, 1877 end
 
 CastAheadDB = nil
-CastAheadConfig.SetEnabled("centerText", false)
-check(CastAheadConfig.Enabled("centerText") == false, "an option switched off reads back off")
-CastAheadConfig.SetEnabled("centerText", true)
-check(CastAheadConfig.Enabled("centerText") == true, "switching it back on is honored")
-check(CastAheadDB.centerText == nil, "and stores nothing, so a later default change still applies")
+CastAheadConfig.SetEnabled("nameplates", false)
+check(CastAheadConfig.Enabled("nameplates") == false, "an option switched off reads back off")
+CastAheadConfig.SetEnabled("nameplates", true)
+check(CastAheadConfig.Enabled("nameplates") == true, "switching it back on is honored")
+check(CastAheadDB.nameplates == nil, "and stores nothing, so a later default change still applies")
 
 instanceKind = "raid"
-check(CastAheadConfig.Enabled("centerText") == true, "settings do not change with the instance kind")
+check(CastAheadConfig.Enabled("nameplates") == true, "settings do not change with the instance kind")
 CastAheadConfig.Set("anchor", "top")
 check(CastAheadDB.anchor == "top", "values are stored flat")
 
@@ -343,6 +343,21 @@ CastAheadDB = {}
 CastAheadConfig.Migrate()
 check(CastAheadDB.leadSeconds == nil, "a fresh profile leaves leadSeconds unset")
 check(CastAheadConfig.Lead() == 0, "so a fresh profile gets the documented default of off")
+
+CastAheadDB = nil
+CastAheadConfig.Migrate()
+check(not CastAheadConfig.CenterText(), "a new install starts with the centre call off")
+CastAheadConfig.Migrate()
+check(not CastAheadConfig.CenterText(), "and a later zone-in does not switch it on")
+CastAheadDB = { anchor = "left" }
+CastAheadConfig.Migrate()
+check(CastAheadConfig.CenterText(), "a profile from before the centre call became opt-in keeps it on")
+CastAheadDB.centerText = nil
+CastAheadConfig.Migrate()
+check(not CastAheadConfig.CenterText(), "switching it off afterwards survives the next zone-in")
+CastAheadDB = { centerText = false }
+CastAheadConfig.Migrate()
+check(not CastAheadConfig.CenterText(), "an old profile that had it off keeps it off")
 
 -- Entering the world migrates an old profile exactly once.
 CastAheadDB = { voice = false }
@@ -1473,7 +1488,7 @@ local function CenterFrameStub()
     end
     return nil
 end
-CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { leadSeconds = 5, centerText = true }
 -- castFor completes a cast in one call, so drive START by hand to catch the
 -- frame mid-cast. Spell 100 (curated AOE, 3.0s, cd 20) identifies the plate
 -- on its own, and its predicted repeat is what the START below resolves to.
@@ -1498,7 +1513,16 @@ advance(0.5)
 local hidden = CenterFrameStub()
 check(not (hidden and hidden.shown), "centerText = false keeps the centre call hidden")
 reset()
-CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
+CastAheadDB = { schema = 2 }
+enter()
+castFor(3.0)
+advance(17.0)
+fire("UNIT_SPELLCAST_START", unit)
+advance(0.5)
+local fresh = CenterFrameStub()
+check(not (fresh and fresh.shown), "a new profile draws no centre call")
+reset()
+CastAheadDB = { leadSeconds = 5, centerText = true }
 
 -- A tie whose candidates disagree names both calls instead of nothing: the
 -- player is told a cast is out and which two answers are in play. Spell 300

@@ -1978,7 +1978,7 @@ end)
 -- Centre-screen call: while an important cast is going out, its icon, the
 -- response in words and the seconds left, big, where the eyes already are.
 -- One at a time - the cast ending soonest - since two lines of shouting help
--- nobody. `CastAheadDB.centerText = false` switches it off; `centerY` shifts it.
+-- nobody. Off until `CastAheadDB.centerText = true`; `centerY` shifts it.
 local CENTER_Y = -120
 local center
 local centerUnlocked = false   -- /ca move: the block is being dragged
@@ -2153,7 +2153,7 @@ end
 
 local function UpdateCenter(now)
     if centerUnlocked then return end     -- being dragged: leave the sample alone
-    local picks = CastAheadConfig.Enabled("centerText") and CenterPick(now) or nil
+    local picks = CastAheadConfig.CenterText() and CenterPick(now) or nil
     if not picks or #picks == 0 then
         HideCenter()
         return

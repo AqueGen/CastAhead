@@ -113,6 +113,10 @@ function C.ShortLabels()
     return C.Get("fullLabels") ~= true
 end
 
+function C.CenterText()
+    return C.Get("centerText") == true
+end
+
 function C.Set(key, value)
     CastAheadDB = CastAheadDB or {}
     CastAheadDB[key] = value
@@ -150,10 +154,12 @@ function C.AdoptOldName()
     end
 end
 
--- One-shot, run at login. Two older profile shapes exist and both would
--- otherwise read as a reset: the per-context one (CastAheadDB.ctx.key) and
--- the flat one from before the early warning became a number.
+-- Run on every zone-in. Three older profile shapes exist and each would
+-- otherwise read as a reset: the per-context one (CastAheadDB.ctx.key), the
+-- flat one from before the early warning became a number, and any profile
+-- from before the centre call became opt-in, which keeps it on.
 function C.Migrate()
+    local existing = CastAheadDB ~= nil
     CastAheadDB = CastAheadDB or {}
     if type(CastAheadDB.ctx) == "table" then
         -- The key context was the one that ever fired; the raid one is
@@ -170,4 +176,8 @@ function C.Migrate()
         end
         CastAheadDB.leadWarning = nil
     end
+    if existing and CastAheadDB.schema == nil and CastAheadDB.centerText == nil then
+        CastAheadDB.centerText = true
+    end
+    CastAheadDB.schema = 2
 end
