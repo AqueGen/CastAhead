@@ -1,7 +1,7 @@
 """Checks for the estimators in gen.py: python tools/test_gen.py"""
-import os, random, tempfile
+import contextlib, io, json, os, random, tempfile
 
-from gen import choose_targeted, densest, read_anchor, rotation, settle, targeted, threat
+from gen import choose_targeted, densest, main as gen_main, read_anchor, rotation, settle, targeted, threat
 
 
 def test_the_game_overrules_the_log_and_a_channel_needs_the_game():
@@ -101,6 +101,66 @@ def test_densest_without_a_repeat_falls_back_to_the_median():
 def test_densest_never_writes_negative_zero():
     value, _ = densest([-0.1, 0.0, 0.0, 0.1], 0.5)
     assert str(value) == "0.0"
+
+
+def _base_cast_record(**overrides):
+    r = dict(cast=[2.6, 2.6, 2.6, 2.6, 2.6], iv=[], first=[], name="Bolt", mob="Mob",
+              hits=[], dmg=[], kicked=0, starts=0)
+    r.update(overrides)
+    return r
+
+
+def _run_gen(tmp, casts, spell_times=None, channels=None, overrides=None):
+    """Write the given fixtures to tmp and run gen.main; returns (Data.lua text, printed output)."""
+    casts_path, out_path = os.path.join(tmp, "casts.json"), os.path.join(tmp, "Data.lua")
+    json.dump(casts, open(casts_path, "w", encoding="utf-8"))
+    paths = {}
+    for name, value in (("spell_times", spell_times), ("channels", channels), ("overrides", overrides)):
+        if value is not None:
+            paths[name] = os.path.join(tmp, name + ".json")
+            json.dump(value, open(paths[name], "w", encoding="utf-8"))
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        gen_main(casts_path, out_path, None, paths.get("overrides"), paths.get("channels"), None, None,
+                  paths.get("spell_times"))
+    return open(out_path, encoding="utf-8").read(), buf.getvalue()
+
+
+def test_log_measured_cast_wins_when_the_log_saw_enough_starts_but_reports_the_disagreement():
+    with tempfile.TemporaryDirectory() as tmp:
+        casts = {"1|Zone": {"10": {"1000": _base_cast_record(starts=5)}}}
+        lua, out = _run_gen(tmp, casts, spell_times={"1000": {"cast": 3.5, "channel": None}},
+                            overrides={"include": ["1000"]})
+        assert "cast = 2.6" in lua and "channel = true" not in lua
+        assert "1000" in out and "3.5" in out and "2.6" in out
+
+
+def test_client_channel_replaces_channels_json_when_the_log_saw_no_start_at_all():
+    with tempfile.TemporaryDirectory() as tmp:
+        casts = {"1|Zone": {"10": {"1000": _base_cast_record(cast=[], starts=0)}}}
+        lua, _ = _run_gen(tmp, casts, spell_times={"1000": {"cast": 0, "channel": 5.0}},
+                          channels={"1000": 99.0}, overrides={"include": ["1000"]})
+        assert "cast = 5.0" in lua and "channel = true" in lua
+
+
+def test_client_cast_with_no_start_at_all_is_a_triggered_cast_and_keeps_todays_behaviour():
+    with tempfile.TemporaryDirectory() as tmp:
+        casts = {"1|Zone": {"10": {"1000": _base_cast_record(starts=0)}}}
+        with_client, out = _run_gen(tmp, casts, spell_times={"1000": {"cast": 3.5, "channel": None}},
+                                    overrides={"include": ["1000"]})
+        without_client, _ = _run_gen(tmp, casts, overrides={"include": ["1000"]})
+        assert with_client == without_client
+        assert "cast = 2.6" in with_client
+        assert "disagrees" not in out
+
+
+def test_spell_absent_from_client_data_keeps_todays_behaviour():
+    with tempfile.TemporaryDirectory() as tmp:
+        casts = {"1|Zone": {"10": {"1000": _base_cast_record()}}}
+        without, _ = _run_gen(tmp, casts, overrides={"include": ["1000"]})
+        with_other, _ = _run_gen(tmp, casts, spell_times={"999": {"cast": 9.9, "channel": None}},
+                                 overrides={"include": ["1000"]})
+        assert without == with_other
 
 
 def test_rotation_ignores_sequences_restarted_after_a_miss():
