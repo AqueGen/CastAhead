@@ -41,6 +41,7 @@ THIN_EVIDENCE = 5
 MIN_OPENING_SAMPLES = 3
 SHARE_MARGIN = 0.02
 SHARE_STEP = 0.10
+CAST_TOLERANCE = 0.25   # Match.lua CAST_TOLERANCE
 CAST_STEP = 0.12        # half of CAST_TOLERANCE
 FIRST_STEP = 2.0        # half of FIRST_TOLERANCE
 OFFSET_STEP = 1.0
@@ -306,7 +307,7 @@ def print_report(report, total):
 
 
 def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path=None, targets_path=None,
-         game_targets_path=None, fresh=False):
+         game_targets_path=None, spell_times_path=None, fresh=False):
     data = json.load(open(casts_path, encoding="utf-8"))
     # MDT knows what the logs cannot: which creature owns a spell, whether that
     # spell is interruptible, and which creatures are bosses.
@@ -324,6 +325,11 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
     # The same counts as read in game by UnitShouldDisplaySpellTargetName, joined to the log.
     game_targets = {int(k): v for k, v in
                     json.load(open(game_targets_path, encoding="utf-8")).items()} if game_targets_path else {}
+    # Client spell data: cast/channel lengths read off the game's own tables. It only fills
+    # in what the log cannot see - a pure channel with no SPELL_CAST_START at all - and
+    # otherwise the log's own measurement still wins (the game doesn't always cast at DB2's
+    # nominal length, and a triggered cast has no bar to measure).
+    spell_times = json.load(open(spell_times_path, encoding="utf-8")) if spell_times_path else {}
 
     anchor, anchor_zones = ({}, {}) if fresh else read_anchor(out_path)
     dungeons, seen, report = {}, set(), []
@@ -349,10 +355,24 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                 if facts and facts["spells"] and str(spellid) not in facts["spells"]:
                     # The logs attributed a spell this creature does not own.
                     continue
-                cast = statistics.median(r["cast"]) if r["cast"] else 0.0
+                measured = statistics.median(r["cast"]) if r["cast"] else 0.0
+                cast = measured
                 is_channel = cast < MIN_CAST and int(spellid) in channels
                 if is_channel:
                     cast = channels[int(spellid)]
+                starts = r.get("starts", 0)
+                client = spell_times.get(spellid)
+                if client and starts == 0 and not client.get("cast") and client.get("channel"):
+                    # No SPELL_CAST_START at all: the log cannot measure this cast (a pure
+                    # channel), so the client's channel length is the only evidence there is.
+                    cast, is_channel = client["channel"], True
+                elif (client and client.get("cast") and starts >= MIN_SAMPLES
+                      and abs(client["cast"] - measured) > CAST_TOLERANCE):
+                    # The log saw plenty of real casts, so it - not the client's listed
+                    # length - decides the bar (haste, a hotfix, a triggered cast under
+                    # DB2's nominal length). Still worth flagging when they disagree.
+                    print("client data disagrees with the log: %s / %s (spell %s): client %.1fs vs measured %.1fs"
+                          % (r["mob"], r["name"], spellid, client["cast"], measured))
                 flat, _ = densest(r["iv"], CD_WINDOW)
                 cd = rotation(r.get("runs", {}), flat)
                 cdn = support(r["iv"], cd) if cd else 0
