@@ -18,14 +18,6 @@
 -- between them, so a single per-nameplate timer would measure the gap between
 -- *different* spells and predict nonsense.
 
--- Updating the addon in place and typing /reload does not re-scan the TOC, so
--- a client that started before Config.lua joined the file list loads this file
--- but not that one. The fallback keeps the addon alive until the next full
--- restart, behaving as it did before the settings file existed.
-CastAheadConfig = CastAheadConfig or { LEAD_DEFAULT = 0, LEAD_MAX = 15,
-    Get = function() end, Set = function() end, SetEnabled = function() end,
-    Enabled = function() return true end, Lead = function() return 0 end, Migrate = function() end }
-
 local ICON_SIZE = 26
 local BAR_GAP = 6        -- distance from the plate's left edge
 local LABEL_HEIGHT = 11  -- one line of advice under the icon; two are measured
