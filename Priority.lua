@@ -128,12 +128,6 @@ CastAheadPriority = {
 }
 
 CastAheadExtra = {
-    [1762] = {
-        { spell = 269928, npc = 134158, mob = "Shadow-Borne Champion", cast = 1, cd = { 18.3 }, first = 11.7, n = 0, approx = true, },
-    },
-    [2521] = {
-        { spell = 1306366, npc = 197535, mob = "High Channeler Ryvati", cast = 2, cd = { 25.8 }, first = 20.4, n = 0, approx = true, },
-    },
     [2923] = {
         { spell = 1233472, npc = 263228, mob = "Agitated Voidscythe", cast = 2.5, cd = { 20.2 }, first = 15.3, n = 0, approx = true, },
     },
