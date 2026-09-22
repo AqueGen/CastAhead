@@ -18,14 +18,6 @@
 -- between them, so a single per-nameplate timer would measure the gap between
 -- *different* spells and predict nonsense.
 
--- Updating the addon in place and typing /reload does not re-scan the TOC, so
--- a client that started before Config.lua joined the file list loads this file
--- but not that one. The fallback keeps the addon alive until the next full
--- restart, behaving as it did before the settings file existed.
-CastAheadConfig = CastAheadConfig or { LEAD_DEFAULT = 0, LEAD_MAX = 15,
-    Get = function() end, Set = function() end, SetEnabled = function() end,
-    Enabled = function() return true end, Lead = function() return 0 end, Migrate = function() end }
-
 local ICON_SIZE = 26
 local BAR_GAP = 6        -- distance from the plate's left edge
 local LABEL_HEIGHT = 11  -- one line of advice under the icon; two are measured
@@ -1867,11 +1859,14 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         end
         return
     end
+    if event == "ADDON_LOADED" then
+        if unit == "CastAhead" then
+            CastAheadConfig.AdoptOldName()
+            CastAheadConfig.Migrate()
+        end
+        return
+    end
     if event == "PLAYER_ENTERING_WORLD" then
-        -- Order matters: the profile saved under the addon's old name is
-        -- adopted before anything reads or writes settings.
-        if CastAheadConfig.AdoptOldName then CastAheadConfig.AdoptOldName() end
-        CastAheadConfig.Migrate()
         ProbeRestore()
         wipe(seenAuras)
         wipe(recentCasts)
@@ -2271,7 +2266,7 @@ persist:SetScript("OnEvent", function()
 end)
 
 for _, event in ipairs({
-    "PLAYER_ENTERING_WORLD", "PLAYER_SPECIALIZATION_CHANGED", "SPELLS_CHANGED",
+    "ADDON_LOADED", "PLAYER_ENTERING_WORLD", "PLAYER_SPECIALIZATION_CHANGED", "SPELLS_CHANGED",
     "ENCOUNTER_START", "ENCOUNTER_END", "CHALLENGE_MODE_START",
     "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH",
     "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP",

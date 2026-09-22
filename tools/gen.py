@@ -9,7 +9,7 @@ Cooldowns come out as a rotation, not one number: many mobs cycle uneven gaps
 (4.8, 4.8, 8.7, ...), and averaging those predicts every cast wrong. Position i
 of the rotation is the median of the i-th interval across every spawn seen.
 """
-import sys, json, re, statistics
+import sys, json, math, re, statistics
 
 MIN_CAST = 1.0
 MIN_CD = 8.0
@@ -31,6 +31,7 @@ ROTATION_GAIN = 0.10    # a rotation must predict this much more than one flat c
 MIN_TARGET_SAMPLES = 5
 MIN_GAME_TARGET_SAMPLES = 3
 TARGET_MARGIN = 0.05    # a spell with a target on more than 5% and fewer than 95% of casts is left unknown
+MIXED = "mixed"
 FRESH_RUN = re.compile(r"#0\+*$")
 # The previous Data.lua is kept field by field unless a new value would change
 # what the addon does: cross one of these in-game thresholds (Match.lua,
@@ -153,7 +154,7 @@ def threat(r):
 
 
 def targeted(counts, minimum=MIN_TARGET_SAMPLES):
-    """True or False when the spell always or never has a target; None when unmeasured or mixed."""
+    """True or False when the spell always or never has a target; None when unmeasured, MIXED when measured and mixed."""
     if not counts or counts[0] < minimum:
         return None
     share = counts[1] / counts[0]
@@ -161,7 +162,7 @@ def targeted(counts, minimum=MIN_TARGET_SAMPLES):
         return True
     if share <= TARGET_MARGIN:
         return False
-    return None
+    return MIXED
 
 
 def choose_targeted(logged, observed, channel):
@@ -250,7 +251,7 @@ def same_cd(old, new):
         return not old and not new
     return all(abs(new[i % len(new)] - old[i % len(old)])
                <= CD_TOLERANCE_FLAT + old[i % len(old)] * CD_TOLERANCE_REL
-               for i in range(max(len(old), len(new))))
+               for i in range(math.lcm(len(old), len(new))))
 
 
 def settle(new, old):
@@ -281,6 +282,8 @@ def settle(new, old):
             row["targeted"] = old.get("targeted")
         if not cd_moved:
             row["approx"] = new["fit"] < APPROX_SUPPORT + (APPROX_MARGIN if old["approx"] else -APPROX_MARGIN)
+    if row["targeted"] == MIXED:
+        row["targeted"] = None
     row["filler"] = not row["cd"] or min(row["cd"]) < MIN_CD
     row["kickable"] = row["mdt_kick"] if row["mdt_kick"] is not None else row["kick"] >= KICK_SHARE
     if old is not None:
@@ -375,6 +378,8 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                           % (r["mob"], r["name"], spellid, client["cast"], measured))
                 flat, _ = densest(r["iv"], CD_WINDOW)
                 cd = rotation(r.get("runs", {}), flat)
+                if is_channel and cd and cast >= min(cd):
+                    cast, is_channel = measured, False
                 cdn = support(r["iv"], cd) if cd else 0
                 approx = bool(cd) and cdn < APPROX_SUPPORT * len(r["iv"])
                 first, firstN = densest(r["first"], FIRST_WINDOW)

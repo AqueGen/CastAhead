@@ -359,14 +359,21 @@ CastAheadDB = { centerText = false }
 CastAheadConfig.Migrate()
 check(not CastAheadConfig.CenterText(), "an old profile that had it off keeps it off")
 
--- Entering the world migrates an old profile exactly once.
-CastAheadDB = { voice = false }
+CastAheadDB = nil
+fire("ADDON_LOADED", "CastAhead")
+CastAheadDB = CastAheadDB or {}
+CastAheadDB.minimap = CastAheadDB.minimap or {}
 fire("PLAYER_ENTERING_WORLD")
-check(CastAheadDB.voice == false and CastAheadDB.ctx == nil,
-    "entering the world migrates a per-context profile")
-CastAheadDB.voice = nil
+check(not CastAheadConfig.CenterText(),
+    "a new install keeps the centre call off although the minimap icon creates the profile at login")
+CastAheadDB = { ctx = { key = { voice = false } } }
+fire("ADDON_LOADED", "CastAhead")
+check(CastAheadDB.voice == false and CastAheadDB.ctx == nil and CastAheadConfig.CenterText(),
+    "loading an old profile migrates it and keeps its centre call")
+CastAheadDB = { anchor = "left" }
+fire("ADDON_LOADED", "SomeOtherAddon")
 fire("PLAYER_ENTERING_WORLD")
-check(CastAheadDB.voice == nil, "migration does not run twice over a live profile")
+check(CastAheadDB.schema == nil, "another addon loading, or a zone-in, does not migrate")
 
 -- The UI helpers write where the accessor reads.
 CastAheadDB = nil
@@ -1671,6 +1678,11 @@ end
 local late, early = IntervalAfterRepeat(18), IntervalAfterRepeat(15)
 check(late and math.abs(late - 20.0) < 1e-6, "a late 21s gap keeps the tabled 20s, got " .. tostring(late))
 check(early and math.abs(early - 18.0) < 1e-6, "an early 18s gap is adopted, got " .. tostring(early))
+local farLate, farEarly = IntervalAfterRepeat(21), IntervalAfterRepeat(12)
+check(farLate and math.abs(farLate - 20.0) < 1e-6,
+    "a 24s gap outside the strict tolerance keeps the tabled 20s, got " .. tostring(farLate))
+check(farEarly and math.abs(farEarly - 15.0) < 1e-6,
+    "a 15s gap outside the strict tolerance is adopted, got " .. tostring(farEarly))
 CastAheadCore.Tuning.observedBelowOnly = false
 local adopted = IntervalAfterRepeat(18)
 check(adopted and math.abs(adopted - 21.0) < 1e-6, "with the switch off a late gap is adopted, got " .. tostring(adopted))

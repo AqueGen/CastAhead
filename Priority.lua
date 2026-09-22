@@ -128,7 +128,13 @@ CastAheadPriority = {
 }
 
 CastAheadExtra = {
+    [1762] = {
+        { spell = 1309385, npc = 138489, mob = "Shadow of Zul", cast = 4, cd = { 28 }, first = 14, n = 0, approx = true, channel = true, },
+    },
+    [2521] = {
+        { spell = 384139, npc = 190034, mob = "Blazebound Destroyer", cast = 1.5, cd = {  }, first = 5.2, n = 0, approx = true, },
+    },
     [2923] = {
-        { spell = 1233472, npc = 263228, mob = "Agitated Voidscythe", cast = 2.5, cd = { 20.2 }, first = 15.3, n = 0, approx = true, },
+        { spell = 1233472, npc = 263228, mob = "Agitated Voidscythe", cast = 6, cd = { 20.2 }, first = 15.3, n = 0, approx = true, channel = true, },
     },
 }
