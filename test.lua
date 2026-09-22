@@ -147,7 +147,7 @@ for instanceID, rowsForMap in pairs(CastAheadData) do
         -- only hurts when their cooldowns differ - then the bar shows the wrong
         -- time, not merely the wrong name.
         local same = M.HasSchedule(row)
-            and M.NarrowByInterval(M.ByCastTime(rowsForMap, row.cast), row.cd[1]) or {}
+            and M.NarrowByInterval(M.ByCastTime(rowsForMap, row.cast, row.channel), row.cd[1]) or {}
         for j = 1, #same do
             if same[j].spell ~= row.spell and same[j].npc ~= row.npc and M.HasSchedule(same[j])
                 and math.abs(M.CDAt(same[j], 1) - row.cd[1]) > 2.0 then
@@ -166,7 +166,7 @@ for _, rowsForMap in pairs(CastAheadData) do
     for i = 1, #rowsForMap do
         local row = rowsForMap[i]
         local same = M.HasSchedule(row)
-            and M.NarrowByInterval(M.ByCastTime(rowsForMap, row.cast), row.cd[1]) or {}
+            and M.NarrowByInterval(M.ByCastTime(rowsForMap, row.cast, row.channel), row.cd[1]) or {}
         if #same > 1 and #M.NarrowByMob(same, { [row.npc] = true }) < #same then
             rescued = rescued + 1
         end

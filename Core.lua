@@ -1859,11 +1859,14 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         end
         return
     end
+    if event == "ADDON_LOADED" then
+        if unit == "CastAhead" then
+            CastAheadConfig.AdoptOldName()
+            CastAheadConfig.Migrate()
+        end
+        return
+    end
     if event == "PLAYER_ENTERING_WORLD" then
-        -- Order matters: the profile saved under the addon's old name is
-        -- adopted before anything reads or writes settings.
-        if CastAheadConfig.AdoptOldName then CastAheadConfig.AdoptOldName() end
-        CastAheadConfig.Migrate()
         ProbeRestore()
         wipe(seenAuras)
         wipe(recentCasts)
@@ -2263,7 +2266,7 @@ persist:SetScript("OnEvent", function()
 end)
 
 for _, event in ipairs({
-    "PLAYER_ENTERING_WORLD", "PLAYER_SPECIALIZATION_CHANGED", "SPELLS_CHANGED",
+    "ADDON_LOADED", "PLAYER_ENTERING_WORLD", "PLAYER_SPECIALIZATION_CHANGED", "SPELLS_CHANGED",
     "ENCOUNTER_START", "ENCOUNTER_END", "CHALLENGE_MODE_START",
     "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH",
     "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP",
