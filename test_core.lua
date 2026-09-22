@@ -1654,5 +1654,27 @@ CastAheadDB = { strata = "PLATER" }
 check(CastAheadConfig.Strata() == "BACKGROUND", "an unknown strata falls back to BACKGROUND")
 CastAheadDB = {}
 
+local function IntervalAfterRepeat(gap)
+    enter()
+    castFor(3.0)
+    advance(gap)
+    castFor(3.0)
+    local found
+    for _, track in pairs(CastAheadCore.Tracks(unit) or {}) do
+        if track.candidates and track.candidates[1].spell == 100 and not track.projected then
+            found = track.nextAt - track.lastStartAt
+        end
+    end
+    reset()
+    return found
+end
+local late, early = IntervalAfterRepeat(18), IntervalAfterRepeat(15)
+check(late and math.abs(late - 20.0) < 1e-6, "a late 21s gap keeps the tabled 20s, got " .. tostring(late))
+check(early and math.abs(early - 18.0) < 1e-6, "an early 18s gap is adopted, got " .. tostring(early))
+CastAheadCore.Tuning.observedBelowOnly = false
+local adopted = IntervalAfterRepeat(18)
+check(adopted and math.abs(adopted - 21.0) < 1e-6, "with the switch off a late gap is adopted, got " .. tostring(adopted))
+CastAheadCore.Tuning.observedBelowOnly = true
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

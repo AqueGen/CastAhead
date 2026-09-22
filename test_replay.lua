@@ -105,6 +105,10 @@ if os.getenv("CA_TARGET") == "0" then
     CastAheadCore.Tuning.targetNarrow = false
     knobs[#knobs + 1] = "targetNarrow=off"
 end
+if os.getenv("CA_OBSERVED_BELOW") == "0" then
+    CastAheadCore.Tuning.observedBelowOnly = false
+    knobs[#knobs + 1] = "observedBelowOnly=off"
+end
 if #knobs > 0 then print("knobs: " .. table.concat(knobs, ", ")) end
 
 -- The narrowing steps of the cast currently being resolved, per unit.
