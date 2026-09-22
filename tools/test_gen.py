@@ -1,7 +1,7 @@
 """Checks for the estimators in gen.py: python tools/test_gen.py"""
 import contextlib, io, json, os, random, tempfile
 
-from gen import choose_targeted, densest, main as gen_main, read_anchor, rotation, settle, targeted, threat
+from gen import MIXED, choose_targeted, densest, main as gen_main, read_anchor, rotation, settle, targeted, threat
 
 
 def test_the_game_overrules_the_log_and_a_channel_needs_the_game():
@@ -9,7 +9,7 @@ def test_the_game_overrules_the_log_and_a_channel_needs_the_game():
     assert choose_targeted([40, 40], None, False) is True
     assert choose_targeted([40, 40], None, True) is None
     assert choose_targeted([40, 40], [2, 0], True) is None
-    assert choose_targeted([40, 0], [16, 15], False) is None
+    assert choose_targeted([40, 0], [16, 15], False) == MIXED
 
 
 def test_targeted_needs_a_clear_majority_and_samples():
@@ -17,7 +17,7 @@ def test_targeted_needs_a_clear_majority_and_samples():
     assert targeted([4, 4]) is None
     assert targeted([40, 39]) is True
     assert targeted([40, 1]) is False
-    assert targeted([40, 20]) is None
+    assert targeted([40, 20]) == MIXED
 
 
 def row(**fields):
@@ -50,6 +50,8 @@ def test_cooldown_compared_as_a_cycle():
     assert changed == []
     _, changed = settle(row(cd=[20.0, 27.0]), row(cd=[20.0]))
     assert changed == ["cd"]
+    _, changed = settle(row(cd=[5.0, 9.0, 5.0]), row(cd=[5.0, 9.0]))
+    assert "cd" in changed
 
 
 def test_a_cooldown_drifting_one_delay_step_keeps_the_anchor():
@@ -64,6 +66,10 @@ def test_thin_target_evidence_keeps_the_anchor_verdict():
     assert settled["targeted"] is True
     settled, _ = settle(row(targeted=False), row(targeted=True))
     assert settled["targeted"] is False
+    settled, changed = settle(row(targeted=MIXED), row(targeted=True))
+    assert settled["targeted"] is None and "targeted" in changed
+    settled, _ = settle(row(targeted=MIXED), None)
+    assert settled["targeted"] is None
 
 
 def test_approx_needs_a_margin_to_flip():
