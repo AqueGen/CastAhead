@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/AqueGen/CastAhead/compare/v0.8.0...v0.9.0) (2026-09-25)
+
+
+### Features
+
+* pack data from the 25 September MDT update ([#30](https://github.com/AqueGen/CastAhead/issues/30)) ([f98be07](https://github.com/AqueGen/CastAhead/commit/f98be07a7b7d54737cd201f9c42cb356bb198d2b))
+
 ## [0.8.0](https://github.com/AqueGen/CastAhead/compare/v0.7.0...v0.8.0) (2026-09-22)
 
 
