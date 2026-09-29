@@ -15,9 +15,9 @@ local function check(ok, msg)
 end
 
 local rows = {
-    { spell = 1, npc = 10, cast = 2.5, cd = { 8.5 }, first = 3.9, firstN = 6 },
-    { spell = 2, npc = 20, cast = 2.5, cd = { 29.1 }, first = 20.6, firstN = 6 },
-    { spell = 3, npc = 20, cast = 4.5, cd = { 21.9, 27.9, 19.5 }, first = 6.1, firstN = 6 },
+    { spell = 1, npc = 10, cast = 2.5, cd = { 8.5 }, first = 3.9, firstN = 12 },
+    { spell = 2, npc = 20, cast = 2.5, cd = { 29.1 }, first = 20.6, firstN = 12 },
+    { spell = 3, npc = 20, cast = 4.5, cd = { 21.9, 27.9, 19.5 }, first = 6.1, firstN = 12 },
 }
 
 -- Cast time picks the field of candidates.
@@ -50,8 +50,8 @@ check(M.CDAt(rows[3], 4) == 21.9, "rotation wraps around")
 check(M.CDAt(rows[1], 7) == 8.5, "a single-value rotation is constant")
 check(M.ConsensusCD(both, 1) == 8.5, "consensus cooldown is the shortest one")
 
--- An opening delay backed by one sample must not be used at all.
-check(M.HasOpening({ first = 5, firstN = 4 }), "a well-sampled opening delay is usable")
+check(M.HasOpening({ first = 5, firstN = 8 }), "a well-sampled opening delay is usable")
+check(not M.HasOpening({ first = 2.7, firstN = 7 }), "one seen seven times is still too thin to claim openers")
 check(not M.HasOpening({ first = 17.8, firstN = 1 }), "a single-sample one is not")
 check(not M.HasOpening({ firstN = 9 }), "and neither is a missing one")
 
