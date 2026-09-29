@@ -67,7 +67,7 @@ CastAheadData = {
         { spell = 272655, npc = 134629, mob = "Sand-Sworn Rider", name = "Scouring Sand", cast = 4.5, cd = { 20.6 }, first = 8.3, hits = 1.0, dmg = 0.289, kick = 0.0, cc = 0.06, n = 2204, firstN = 59, level = 91, offset = 0.0, targeted = false, },
         { spell = 272655, npc = 134686, mob = "Krolusk Matriarch", name = "Scouring Sand", cast = 4.5, cd = { 20.9 }, first = 25.6, hits = nil, dmg = nil, kick = 0.0, cc = 0.14, n = 420, firstN = 16, level = 91, offset = 0.0, targeted = false, },
         { spell = 1293307, npc = 134364, mob = "Faithless Subjugator", name = "Addle Mind", cast = 5.0, cd = { 25.9 }, first = 9.8, hits = nil, dmg = nil, kick = 0.52, cc = 0.41, n = 788, firstN = 16, level = 90, offset = 0.0, kickable = true, targeted = true, },
-        { spell = 1308113, npc = 134600, mob = "Sandswept Hunter", name = "Arrow Barrage", cast = 9.0, cd = { 26.7 }, first = 10.7, hits = 1.0, dmg = 0.089, kick = 0.0, cc = 0.0, n = 3428, firstN = 93, level = 90, offset = 5.2, channel = true, targeted = false, },
+        { spell = 1308113, npc = 134600, mob = "Sandswept Hunter", name = "Arrow Barrage", cast = 9.0, cd = { 26.7 }, first = 10.7, hits = 1.0, dmg = 0.089, kick = 0.0, cc = 0.0, n = 3428, firstN = 93, level = 90, offset = 5.2, channel = true, soleChannel = true, targeted = false, },
     },
     [2521] = { name = "Ruby Life Pools",
         { spell = 372047, npc = 187897, mob = "Defier Draghar", name = "Steel Barrage", cast = 1.0, cd = { 20.6 }, first = 8.3, hits = 5.0, dmg = 0.122, kick = 0.0, cc = 0.01, n = 966, firstN = 22, level = 91, offset = 0.0, targeted = true, },
@@ -214,6 +214,6 @@ CastAheadData = {
         { spell = 1307567, npc = 261557, mob = "High Evolutionist", name = "Mass Envenom", cast = 3.5, cd = { 3.7 }, first = 0.0, hits = 4.0, dmg = 0.165, kick = 0.0, cc = 0.46, n = 455, firstN = 11, level = 90, offset = nil, kickable = true, filler = true, targeted = false, },
         { spell = 1310666, npc = 262398, mob = "Uncoiled Writhe", name = "Toxic Atrophy", cast = 4.0, cd = {  }, first = 7.6, hits = nil, dmg = nil, kick = 0.5, cc = 0.48, n = 477, firstN = 21, level = 92, offset = 0.0, kickable = true, filler = true, },
         { spell = 1294557, npc = 261560, mob = "Primal Serpent", name = "Piercing Hiss", cast = 4.0, cd = { 24.3 }, first = 10.9, hits = 5.0, dmg = 0.362, kick = 0.71, cc = 0.24, n = 4944, firstN = 259, level = 90, offset = 8.5, kickable = true, targeted = false, },
-        { spell = 1306385, npc = 261557, mob = "High Evolutionist", name = "Evolve", cast = 6.0, cd = { 30.4 }, first = 24.0, hits = 1.0, dmg = 0.132, kick = 0.0, cc = 0.0, n = 2360, firstN = 76, level = 90, offset = nil, channel = true, targeted = true, },
+        { spell = 1306385, npc = 261557, mob = "High Evolutionist", name = "Evolve", cast = 6.0, cd = { 30.4 }, first = 24.0, hits = 1.0, dmg = 0.132, kick = 0.0, cc = 0.0, n = 2360, firstN = 76, level = 90, offset = nil, channel = true, soleChannel = true, targeted = true, },
     },
 }

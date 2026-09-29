@@ -47,6 +47,7 @@ CAST_STEP = 0.12        # half of CAST_TOLERANCE
 FIRST_STEP = 2.0        # half of FIRST_TOLERANCE
 OFFSET_STEP = 1.0
 APPROX_MARGIN = 0.05
+SOLE_CHANNEL_SHARE = 0.98
 
 
 def densest(xs, width):
@@ -336,6 +337,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
 
     anchor, anchor_zones = ({}, {}) if fresh else read_anchor(out_path)
     dungeons, seen, report = {}, set(), []
+    channel_casts = {}
     for key, mobs in data.items():
         instance_id, zone = key.split("|", 1)
         instance_id = int(instance_id)
@@ -355,6 +357,9 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                     # which our own logs show casting outside every
                     # ENCOUNTER_START window.
                     continue
+                if r.get("starts", 0) == 0 and (spell_times.get(spellid) or {}).get("channel"):
+                    counts = channel_casts.setdefault(instance_id, {})
+                    counts[(int(spellid), int(npcid))] = counts.get((int(spellid), int(npcid)), 0) + len(r["cast"])
                 if facts and facts["spells"] and str(spellid) not in facts["spells"]:
                     # The logs attributed a spell this creature does not own.
                     continue
@@ -446,6 +451,14 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
         dungeons.setdefault(instance_id, (zone, []))[1].append(old)
 
     dungeons = {i: (zone, rows) for i, (zone, rows) in dungeons.items() if rows}
+    for instance_id, (zone, rows) in sorted(dungeons.items()):
+        counts = channel_casts.get(instance_id, {})
+        total = sum(counts.values())
+        for r in rows:
+            n = counts.get((r["spell"], r["npc"]), 0)
+            r["soleChannel"] = bool(r.get("channel")) and total > 0 and n / total >= SOLE_CHANNEL_SHARE
+            if r["soleChannel"]:
+                print("sole channel: %s / %s / %s (%d of %d)" % (zone, r["mob"], r["name"], n, total))
     for _, rows in dungeons.values():
         rows.sort(key=lambda x: (x["cast"], x["cd"][0] if x["cd"] else 0, x["npc"], x["spell"]))
 
@@ -477,6 +490,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                            (" filler = true," if r["filler"] else "")
                            + (" approx = true," if r["approx"] else "")
                            + (" channel = true," if r.get("channel") else "")
+                           + (" soleChannel = true," if r.get("soleChannel") else "")
                            + ("" if r.get("targeted") is None
                               else " targeted = %s," % ("true" if r["targeted"] else "false"))))
             f.write("    },\n")

@@ -1397,6 +1397,37 @@ end
 check(stillDue, "an interrupted channel does not advance a cast track's rotation")
 reset()
 
+local soleRow
+for _, row in ipairs(CastAheadData[1877]) do
+    if row.spell == 610 then soleRow = row end
+end
+local function ChannelNextIn(length, kicker)
+    enter()
+    local startAt = now
+    fire("UNIT_SPELLCAST_CHANNEL_START", unit)
+    advance(length)
+    fire("UNIT_SPELLCAST_CHANNEL_STOP", unit, nil, nil, kicker)
+    local found
+    for _, track in pairs(CastAheadCore.Tracks(unit) or {}) do
+        if track.candidates and #track.candidates == 1 and track.candidates[1].spell == 610
+            and track.lastStartAt == startAt and track.nextAt then
+            found = track.nextAt - startAt
+        end
+    end
+    reset()
+    return found
+end
+local function Is22(v) return v ~= nil and math.abs(v - 22.0) < 1e-6 end
+soleRow.soleChannel = true
+check(Is22(ChannelNextIn(3.5)), "a cut channel is the dungeon's sole channel, next cast at start + cd")
+check(Is22(ChannelNextIn(3.5, "Kicker")), "a kicked cut channel is the sole channel too")
+check(Is22(ChannelNextIn(6.0)), "a full-length sole channel is identified as before")
+check(ChannelNextIn(6.5) == nil, "a channel longer than the sole channel is not claimed")
+soleRow.soleChannel = nil
+check(ChannelNextIn(3.5) == nil, "without the flag a cut channel stays unidentified")
+check(ChannelNextIn(3.5, "Kicker") == nil, "without the flag a kicked cut channel stays unidentified")
+check(Is22(ChannelNextIn(6.0)), "without the flag a full-length channel is identified")
+
 -- Slash routing: the sub-command is the first word of the message, so an
 -- argument that happens to name another sub-command cannot steal it.
 CastAheadDB = nil

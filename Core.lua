@@ -1516,6 +1516,24 @@ local function OnCastStart(unit, channel)
     RefreshBar(unit, state)
 end
 
+-- Only tracks of the kind that was in flight may be the fallback: a kicked
+-- channel that matched nothing has no business advancing a cast track's
+-- rotation just because it happens to be the plate's only one.
+local function ExpectedTrack(state, startAt)
+    local channel = state.channelling == true
+    local count, only = 0, nil
+    for _, track in pairs(state.tracks) do
+        if (track.channel == true) == channel then
+            count = count + 1
+            only = track
+        end
+    end
+    if count == 1 and only.nextAt and math.abs(startAt - only.nextAt) <= PREDICTION_MATCH_WINDOW then
+        return only
+    end
+    return nil
+end
+
 -- Advances the schedule for a cast that was stopped before it finished. Its
 -- length is unknown, so it can only be attributed when the plate tracks exactly
 -- one spell and the timing matches what we were waiting for.
@@ -1528,23 +1546,7 @@ local function ResolveInterrupted(unit, state, startAt, matched)
     -- only track, and then only when the timing says it really was that spell:
     -- a kicked filler leaves no track of its own, so without the check its
     -- interrupt would re-anchor an unrelated spell's schedule.
-    local only = matched
-    if not only then
-        -- Only tracks of the kind that was in flight may be the fallback: a
-        -- kicked channel that matched nothing has no business advancing a cast
-        -- track's rotation just because it happens to be the plate's only one.
-        local channel = state.channelling == true
-        local count = 0
-        for _, track in pairs(state.tracks) do
-            if (track.channel == true) == channel then
-                count = count + 1
-                only = track
-            end
-        end
-        local expected = count == 1 and only.nextAt
-            and math.abs(startAt - only.nextAt) <= PREDICTION_MATCH_WINDOW
-        if not expected then only = nil end
-    end
+    local only = matched or ExpectedTrack(state, startAt)
     if only and only.candidates and #only.candidates == 1
         and CastAheadMatch.HasSchedule(only.candidates[1]) then
         only.index = (only.index or 0) + 1
@@ -1578,6 +1580,8 @@ local function OnCastStop(unit, channel)
 
     diag.casts = diag.casts + 1
     local duration = GetTime() - startAt
+    local sole = channel and CastAheadMatch.SoleChannel(dungeon, duration)
+    if sole then duration = sole.cast end
     local track, trackKey = GetTrack(state, duration, channel)
     local candidates = track.candidates
     -- A projected sibling's lastStartAt is the anchor it was laid out from, not
@@ -1772,9 +1776,14 @@ local function OnCastInterrupted(unit)
     if not state or not state.castStartAt then return end
     local startAt = state.castStartAt
     local matched = state.casting and state.casting.track or nil
+    state.interrupted = true
+    if state.channelling and not matched and not ExpectedTrack(state, startAt)
+        and CastAheadMatch.SoleChannel(dungeon, GetTime() - startAt) then
+        OnCastStop(unit, true)
+        return
+    end
     state.castStartAt = nil
     state.casting = nil
-    state.interrupted = true
     ResolveInterrupted(unit, state, startAt, matched)
 end
 

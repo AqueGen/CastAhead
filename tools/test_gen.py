@@ -187,6 +187,48 @@ def test_spell_absent_from_client_data_keeps_todays_behaviour():
         assert without == with_other
 
 
+def _channel_dungeon(tabled, untabled):
+    return {"1|Zone": {"10": {"1000": _base_cast_record(cast=[0.0] * tabled, starts=0)},
+                       "11": {"2000": _base_cast_record(cast=[0.0] * untabled, starts=0)}}}
+
+
+CHANNEL_TIMES = {"1000": {"cast": 0, "channel": 9.0}, "2000": {"cast": 0, "channel": 3.0}}
+
+
+def test_a_channel_with_98_percent_of_the_dungeons_channel_casts_is_its_sole_channel():
+    with tempfile.TemporaryDirectory() as tmp:
+        lua, _ = _run_gen(tmp, _channel_dungeon(49, 1), spell_times=CHANNEL_TIMES,
+                          overrides={"include": ["1000"]})
+        assert "spell = 2000" not in lua
+        assert "channel = true, soleChannel = true," in lua
+        lua, _ = _run_gen(tmp, _channel_dungeon(49, 1), spell_times=CHANNEL_TIMES,
+                          overrides={"include": ["1000"]})
+        assert "soleChannel = true" in lua
+
+
+def test_an_untabled_channel_below_the_share_withholds_the_flag():
+    with tempfile.TemporaryDirectory() as tmp:
+        lua, _ = _run_gen(tmp, _channel_dungeon(48, 2), spell_times=CHANNEL_TIMES,
+                          overrides={"include": ["1000"]})
+        assert "spell = 2000" not in lua
+        assert "channel = true" in lua and "soleChannel" not in lua
+
+
+def test_a_flag_from_the_anchor_is_dropped_once_the_share_falls():
+    with tempfile.TemporaryDirectory() as tmp:
+        _run_gen(tmp, _channel_dungeon(49, 0), spell_times=CHANNEL_TIMES, overrides={"include": ["1000"]})
+        lua, _ = _run_gen(tmp, _channel_dungeon(49, 5), spell_times=CHANNEL_TIMES,
+                          overrides={"include": ["1000"]})
+        assert "channel = true" in lua and "soleChannel" not in lua
+
+
+def test_no_sole_channel_without_client_spell_data():
+    with tempfile.TemporaryDirectory() as tmp:
+        lua, _ = _run_gen(tmp, _channel_dungeon(50, 0), channels={"1000": 9.0},
+                          overrides={"include": ["1000"]})
+        assert "channel = true" in lua and "soleChannel" not in lua
+
+
 def test_rotation_ignores_sequences_restarted_after_a_miss():
     fresh = {"a@0#0": [5.0, 9.0, 5.0, 9.0], "b@0#0": [5.0, 9.0, 5.0], "c@0#0": [5.0, 9.0, 5.0, 9.0]}
     broken = {"a@0#1": [9.0, 5.0, 9.0], "b@0#1": [9.0, 5.0, 9.0], "c@0#1+": [9.0, 5.0]}
