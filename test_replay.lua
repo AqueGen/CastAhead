@@ -156,6 +156,7 @@ local perDungeon = {}
 local wrongPairs = {}      -- "truth -> guess" -> count
 local missed = {}          -- truth spell -> count of none/ambiguous
 local names = {}
+local startRight, startWrong, startWrongPairs = 0, 0, {}
 
 local function bump(t, key) t[key] = (t[key] or 0) + 1 end
 
@@ -196,6 +197,19 @@ for _, run in ipairs(CastAheadReplay) do
             open[unit] = ev.spell
             targets[unit] = ev.target
             fire("UNIT_SPELLCAST_START", unit)
+            local claim = CastAheadCore.Casting(unit)
+            if claim and claim.row then
+                local truth = tabled[run.instance] and tabled[run.instance][ev.spell]
+                names[claim.row.spell] = claim.row.name
+                if truth then names[ev.spell] = truth.name end
+                if truth and (claim.row.spell == ev.spell
+                    or CastAheadMatch.Advice(truth) == CastAheadMatch.Advice(claim.row)) then
+                    startRight = startRight + 1
+                else
+                    startWrong = startWrong + 1
+                    bump(startWrongPairs, ev.spell .. " -> " .. claim.row.spell)
+                end
+            end
             -- The game says whether the cast can be kicked a moment after it
             -- starts; the extractor took the answer from MDT.
             if ev.kick == true then
@@ -337,3 +351,6 @@ top(wrongPairs, 12, "wrong calls, most frequent first:")
 top(blamed, 10, "where the real spell was lost (step before > step that dropped it):")
 top(missed, 12, "left unidentified (ambiguous or none), most frequent first:")
 top(untabledSpells, 12, "cast but absent from Data.lua, most frequent first:")
+print("")
+print(string.format("claimed at cast start: %d with the right call, %d with a wrong one", startRight, startWrong))
+top(startWrongPairs, 12, "wrong calls at cast start, most frequent first:")

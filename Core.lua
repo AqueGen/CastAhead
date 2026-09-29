@@ -1467,7 +1467,8 @@ local function OnCastStart(unit, channel)
         -- landing where a cast was predicted is not that cast: taking it
         -- finished the cast's timeline event early, drew its bar, voiced its
         -- call, and handed its track to the interrupt path afterwards.
-        if track.candidates and (track.channel == true) == (channel == true) then
+        if track.candidates and (track.channel == true) == (channel == true)
+            and not (tuning.targetNarrow and CastAheadMatch.TargetRulesOut(track.candidates, state.spellTarget)) then
             identified, identifiedCount = track, identifiedCount + 1
             if track.nextAt then
                 local delta = math.abs(now - track.nextAt)
@@ -2302,6 +2303,7 @@ end
 CastAheadCore = {}
 CastAheadCore.LastCandidates = LastCandidates   -- replay harness only
 CastAheadCore.Tracks = function(unit) return plates[unit] and plates[unit].tracks end
+CastAheadCore.Casting = function(unit) return plates[unit] and plates[unit].casting end
 CastAheadCore.SetTrace = function(fn) narrowTrace = fn end
 CastAheadCore.Tuning = tuning
 CastAheadCore.SpreadBars = SpreadBars

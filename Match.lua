@@ -386,6 +386,15 @@ function M.NarrowByTarget(candidates, targeted)
     return #out > 0 and out or candidates
 end
 
+function M.TargetRulesOut(candidates, targeted)
+    if targeted == nil or not candidates or #candidates == 0 then return false end
+    for i = 1, #candidates do
+        local rowTargeted = candidates[i].targeted
+        if rowTargeted == nil or rowTargeted == targeted then return false end
+    end
+    return true
+end
+
 -- Every spell in the dungeon a creature of this level could be about to cast.
 -- If they all belong to one creature, the mob is identified before it acts.
 -- `needFirst` restricts it to spells with a known opening delay, which is what
