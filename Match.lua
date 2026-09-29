@@ -247,6 +247,17 @@ function M.ByCastTime(rows, duration, channel)
     return out
 end
 
+function M.SoleChannel(rows, duration)
+    if type(rows) ~= "table" or #M.ByCastTime(rows, duration, true) > 0 then return nil end
+    for i = 1, #rows do
+        local row = rows[i]
+        if row.soleChannel and row.channel and duration <= row.cast + M.CAST_TOLERANCE then
+            return row
+        end
+    end
+    return nil
+end
+
 -- The interval a mob actually showed us separates candidates that share a cast
 -- time. If nothing matches, the observation was off (interrupt, lag) - keep the
 -- candidates rather than throwing the identification away.
