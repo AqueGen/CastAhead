@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.10.0](https://github.com/AqueGen/CastAhead/compare/v0.9.0...v0.10.0) (2026-09-29)
+
+
+### Features
+
+* data sync from the 25-29 September logs, and a firmer opening threshold ([#32](https://github.com/AqueGen/CastAhead/issues/32)) ([c33f822](https://github.com/AqueGen/CastAhead/commit/c33f82240c4ea658d299313a3c018952b4dbd2cc))
+* identify a cut-short channel where it is the dungeon's only one ([#33](https://github.com/AqueGen/CastAhead/issues/33)) ([b6d5fbd](https://github.com/AqueGen/CastAhead/commit/b6d5fbdd678b7eb66e547a5f48774a0a97ff7fb7))
+
+
+### Bug Fixes
+
+* a cast with a target is not taken for a predicted untargeted spell ([#35](https://github.com/AqueGen/CastAhead/issues/35)) ([81cb8d5](https://github.com/AqueGen/CastAhead/commit/81cb8d570462b802ed875ce59d76c94d3db6eb6a))
+
 ## [0.9.0](https://github.com/AqueGen/CastAhead/compare/v0.8.0...v0.9.0) (2026-09-25)
 
 
