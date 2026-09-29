@@ -134,7 +134,7 @@ function M.Advice(row, interruptible)
     return nil
 end
 
-M.MIN_OPENING_SAMPLES = 3
+M.MIN_OPENING_SAMPLES = 8
 
 -- The opening delay is the loosest number in the table, so a thin one is worse
 -- than none: Primal Juggernaut's rested on a single sample and claimed 17.8s
