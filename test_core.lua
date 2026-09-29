@@ -1719,5 +1719,31 @@ local adopted = IntervalAfterRepeat(18)
 check(adopted and math.abs(adopted - 21.0) < 1e-6, "with the switch off a late gap is adopted, got " .. tostring(adopted))
 CastAheadCore.Tuning.observedBelowOnly = true
 
+local targetShown
+UnitShouldDisplaySpellTargetName = function() return targetShown end
+table.insert(CastAheadData[1877], { spell = 971, npc = 12, mob = "Totem Speaker", name = "Totem", cast = 3.3,
+                          cd = { 30.0 }, first = 5.0, firstN = 20, n = 400, kick = 0, cc = 0, prio = "SWITCH",
+                          targeted = false })
+table.insert(CastAheadData[1877], { spell = 972, npc = 12, mob = "Totem Speaker", name = "Bolt", cast = 2.2,
+                          cd = { 3.6 }, first = 0.0, firstN = 20, n = 900, kick = 0.8, cc = 0, kickable = true,
+                          filler = true, targeted = true })
+CastAheadDB = { leadSeconds = 0 }
+targetShown = false
+enter()
+castFor(3.3)
+advance(27.0)
+sounds, spoken, clips = 0, 0, 0
+targetShown = true
+castFor(2.2)
+check(Alerts() == 0, string.format("a cast with a target is not taken for a due untargeted spell, got %d", Alerts()))
+advance(0.8)
+targetShown = false
+castFor(3.3)
+check(Alerts() == 1, string.format("the untargeted spell is announced once when it comes, got %d", Alerts()))
+reset()
+table.remove(CastAheadData[1877])
+table.remove(CastAheadData[1877])
+UnitShouldDisplaySpellTargetName = nil
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)
