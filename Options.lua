@@ -104,6 +104,8 @@ local SWITCHES = {
         tip = "Spell the longest verdicts out under a nameplate icon - BUSTER becomes TANKBUSTER. The icons step sideways by the width of the words under them, so the full words spread the row out; off, every plate's widest word is six characters and the rows pack evenly. The cast table and the spoken call always use the whole word either way." },
     devMode = { label = "Development mode", defaultOff = true,
         tip = "Adds a Development tab with the data-collection tools. Nothing here changes what the addon calls out - it is for finding out what the game still lets an addon read." },
+    autoCombatLog = { label = "Combat log in dungeons", defaultOff = true,
+        tip = "Turns the game's combat log on, with advanced logging, whenever you enter a dungeon, and off again when you leave - unless you had switched it on yourself. The log is what the cast timings, first casts and damage are measured from. Only while Development mode is on." },
 }
 
 local function SwitchOn(key)
@@ -258,6 +260,7 @@ function BuildGeneral(panel)
         { "TOPLEFT", audio, "BOTTOMLEFT", 0, -12 })
     BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
         if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
+        if CastAheadCore and CastAheadCore.SyncCombatLog then CastAheadCore.SyncCombatLog() end
     end)
 
     -- Where the icons go --------------------------------------------------
@@ -518,6 +521,12 @@ function BuildDevelopment(panel)
     clear:SetText("Clear")
     clear:SetScript("OnClick", function()
         if CastAheadCore and CastAheadCore.Probe then CastAheadCore.Probe("clear") end
+    end)
+
+    local logGroup = BuildGroup(panel, "Combat log", 1, 62,
+        { "TOPLEFT", group, "BOTTOMLEFT", 0, -12 })
+    BuildSwitch(panel, "autoCombatLog", { "TOPLEFT", logGroup, "TOPLEFT", 10, -26 }, function()
+        if CastAheadCore and CastAheadCore.SyncCombatLog then CastAheadCore.SyncCombatLog() end
     end)
 end
 
