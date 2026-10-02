@@ -1762,5 +1762,33 @@ table.remove(CastAheadData[1877])
 table.remove(CastAheadData[1877])
 UnitShouldDisplaySpellTargetName = nil
 
+-- Development mode keeps the combat log running inside dungeons only, and
+-- never stops a log the player started.
+local logging, cvars = false, {}
+LoggingCombat = function(on)
+    if on ~= nil then logging = on end
+    return logging
+end
+C_CVar = { SetCVar = function(name, value) cvars[name] = value end }
+local where = "party"
+local savedIsInInstance = IsInInstance
+IsInInstance = function() return where ~= "none", where end
+CastAheadDB = { devMode = true, autoCombatLog = true }
+fire("PLAYER_ENTERING_WORLD")
+check(logging, "entering a dungeon starts the combat log")
+check(cvars.advancedCombatLogging == "1", "with advanced logging")
+where = "none"
+fire("PLAYER_ENTERING_WORLD")
+check(not logging, "leaving the dungeon stops the log it started")
+logging = true
+fire("PLAYER_ENTERING_WORLD")
+check(logging, "a log the player started is left running")
+logging, where = false, "party"
+CastAheadDB.devMode = nil
+fire("PLAYER_ENTERING_WORLD")
+check(not logging, "nothing is logged outside Development mode")
+IsInInstance, LoggingCombat, C_CVar = savedIsInInstance, nil, nil
+CastAheadDB = nil
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

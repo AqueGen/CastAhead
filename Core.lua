@@ -1873,6 +1873,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     end
     if event == "PLAYER_ENTERING_WORLD" then
         ProbeRestore()
+        CastAheadCore.SyncCombatLog()
         wipe(seenAuras)
         wipe(recentCasts)
         for _, state in pairs(plates) do
@@ -2819,6 +2820,27 @@ function ProbeCast(unit, channel)
 end
 
 function CastAheadCore.Probing() return probing end
+
+function CastAheadCore.SyncCombatLog()
+    if not (LoggingCombat and CastAheadDB) then return end
+    local _, kind = IsInInstance()
+    local want = kind == "party" and CastAheadConfig.Get("devMode") == true
+        and CastAheadConfig.Get("autoCombatLog") == true
+    if want then
+        if C_CVar and C_CVar.SetCVar then C_CVar.SetCVar("advancedCombatLogging", "1") end
+        if not LoggingCombat() then
+            LoggingCombat(true)
+            CastAheadDB.combatLogOurs = true
+            print("|cff33ff99CastAhead|r combat log on for this dungeon")
+        end
+    elseif CastAheadDB.combatLogOurs then
+        CastAheadDB.combatLogOurs = nil
+        if LoggingCombat() then
+            LoggingCombat(false)
+            print("|cff33ff99CastAhead|r combat log off")
+        end
+    end
+end
 
 function CastAheadCore.Probe(command)
     if command == "off" then
