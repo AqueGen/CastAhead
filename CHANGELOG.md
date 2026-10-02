@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/AqueGen/CastAhead/compare/v0.10.0...v0.11.0) (2026-10-02)
+
+
+### Features
+
+* put well-measured first casts on the Blizzard timeline ([#36](https://github.com/AqueGen/CastAhead/issues/36)) ([0557997](https://github.com/AqueGen/CastAhead/commit/0557997284c651904dcd53dac51591a160f87e8f))
+
 ## [0.10.0](https://github.com/AqueGen/CastAhead/compare/v0.9.0...v0.10.0) (2026-09-29)
 
 
