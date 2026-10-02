@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.0](https://github.com/AqueGen/CastAhead/compare/v0.11.0...v0.12.0) (2026-10-02)
+
+
+### Features
+
+* development switch that keeps the combat log running in dungeons ([#40](https://github.com/AqueGen/CastAhead/issues/40)) ([c684637](https://github.com/AqueGen/CastAhead/commit/c6846371356c5a6eff83e270acd5c4378b03eddb))
+* measure first casts from each mob's own engage, plus a data sync ([#38](https://github.com/AqueGen/CastAhead/issues/38)) ([908b44f](https://github.com/AqueGen/CastAhead/commit/908b44f97f0748eb782eb0925650bd597c1ba3e7))
+
 ## [0.11.0](https://github.com/AqueGen/CastAhead/compare/v0.10.0...v0.11.0) (2026-10-02)
 
 
