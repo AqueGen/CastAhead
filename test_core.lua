@@ -1072,6 +1072,23 @@ end
 check(tenLeft, "the sibling keeps its tabled 18s cooldown, not the 12s anchor gap")
 reset()
 
+-- A first cast projected from the mob's kit reaches the timeline once its
+-- opening is measured well enough, and stays off it while it is not.
+local sibling = CastAheadData[1877][2]
+local savedSibling = { n = sibling.n, firstN = sibling.firstN, prio = sibling.prio }
+sibling.n, sibling.prio = 40, "AOE"
+for _, case in ipairs({ { firstN = 12, added = true }, { firstN = 3, added = false } }) do
+    sibling.firstN = case.firstN
+    timeline.last = nil
+    enter()
+    castFor(3.0)                   -- identifies 100; sibling 101 projected
+    local published = timeline.last ~= nil and timeline.last.spellID == 101
+    check(published == case.added, string.format("a projected first cast with firstN=%d is %s the timeline",
+        case.firstN, case.added and "on" or "off"))
+    reset()
+end
+sibling.n, sibling.firstN, sibling.prio = savedSibling.n, savedSibling.firstN, savedSibling.prio
+
 -- A kick on a mob with several tracked spells must still advance the schedule
 -- of the spell that was matched at START - the old "exactly one track" proxy
 -- never fired once ProjectSiblings had laid out the rest of the kit.

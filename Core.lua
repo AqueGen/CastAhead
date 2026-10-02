@@ -32,17 +32,6 @@ local PREDICTION_MATCH_WINDOW = 4.0  -- how far off a predicted cast may start
 local ESTIMATE_NOW = 2.0             -- an estimate this close just reads as "now"
 local STALE_PREDICTION = 60.0        -- an overdue cast this old is abandoned
 local THIN_EVIDENCE = 5              -- rows backed by less are always estimates
-
--- Only a prediction this solid is worth putting on Blizzard's timeline: one
--- candidate, a real measured schedule, enough observations, and not projected
--- from another spell's opening order. Everything softer stays on the nameplate,
--- where an estimate can be shown as one.
-local function IsConfident(track)
-    if not track or track.projected or track.ambiguous then return false end
-    local row = track.candidates and #track.candidates == 1 and track.candidates[1]
-    return row and CastAheadMatch.HasSchedule(row) and (row.n or 0) >= THIN_EVIDENCE
-        and not row.approx and row or false
-end
 local COMBAT_POLL_INTERVAL = 0.1
 local MAX_NAMEPLATES = 40
 
@@ -233,6 +222,30 @@ end
 
 local function Announceable(candidates)
     return not ImportantOnly() or CastAheadMatch.AnyImportant(candidates)
+end
+
+-- Only a prediction this solid is worth putting on Blizzard's timeline: one
+-- candidate, enough observations behind its time - a measured schedule for a
+-- repeat cast, a measured opening for a first cast projected from the mob's
+-- kit. Everything softer stays on the nameplate, where an estimate can be
+-- shown as one.
+local function ConfidentRow(track)
+    local candidates = track.candidates
+    if track.ambiguous or #candidates ~= 1 then return nil end
+    local row = candidates[1]
+    if row.filler or row.approx or (row.n or 0) < THIN_EVIDENCE then return nil end
+    if track.projected then
+        return CastAheadMatch.HasOpening(row) and row or nil
+    end
+    return CastAheadMatch.HasSchedule(row) and row or nil
+end
+
+-- A nil time cancels: unimportant casts stay off the timeline.
+local function SyncTimeline(track)
+    if not (CastAheadTimeline and track and track.candidates) then return end
+    local row = ConfidentRow(track)
+    CastAheadTimeline.Sync(track, Announceable(track.candidates) and track.nextAt or nil,
+        row or track.candidates[1], CastAheadMatch.ConsensusAdvice(track.candidates), row ~= nil)
 end
 
 -- Role filter (default on): the priority set is trimmed to what the current
@@ -621,15 +634,8 @@ function LockNPC(unit, state, npc, source)
         -- The lock may have come from a neighbour's cast, with nothing on this
         -- plate repainting: its tracks just changed, so its icons and timeline
         -- events must follow now, not at its next cast.
-        if CastAheadTimeline then
-            for _, track in pairs(state.tracks) do
-                if track.candidates then
-                    local confident = IsConfident(track)
-                    CastAheadTimeline.Sync(track, Announceable(track.candidates) and track.nextAt or nil,
-                        confident or track.candidates[1],
-                        CastAheadMatch.ConsensusAdvice(track.candidates), confident and true or false)
-                end
-            end
+        for _, track in pairs(state.tracks) do
+            SyncTimeline(track)
         end
         RefreshBar(unit, state)
     else
@@ -1091,6 +1097,7 @@ local function ProjectSiblings(state, row, startAt, now)
                     track.projected = true
                     track.lastStartAt = anchor
                     track.nextAt = at
+                    SyncTimeline(track)
                 end
                 -- Whether or not it could be timed, the icon is shown: the mob
                 -- is identified, so the player should see its whole dangerous
@@ -1557,13 +1564,7 @@ local function ResolveInterrupted(unit, state, startAt, matched)
         only.projected = nil     -- anchored on a real cast start from here on
         local cd = only.observedCD or CastAheadMatch.CDAt(only.candidates[1], only.index)
         only.nextAt = cd and (startAt + cd) or nil
-        if CastAheadTimeline then
-            local sure = IsConfident(only)
-            -- A nil time cancels: unimportant casts stay off the timeline.
-            CastAheadTimeline.Sync(only, Announceable(only.candidates) and only.nextAt or nil,
-                sure or only.candidates[1],
-                CastAheadMatch.ConsensusAdvice(only.candidates), sure and true or false)
-        end
+        SyncTimeline(only)
     end
     RefreshBar(unit, state)
 end
@@ -1759,13 +1760,7 @@ local function OnCastStop(unit, channel)
     end
     local cd = track.observedCD or CastAheadMatch.ConsensusCD(candidates, index)
     track.nextAt = cd and (startAt + cd) or nil
-    local confident = IsConfident(track)
-    if CastAheadTimeline then
-        -- A nil time cancels: unimportant casts stay off the timeline.
-        CastAheadTimeline.Sync(track, Announceable(candidates) and track.nextAt or nil,
-            confident or candidates[1],
-            CastAheadMatch.ConsensusAdvice(candidates), confident and true or false)
-    end
+    SyncTimeline(track)
     RefreshBar(unit, state)
 end
 
@@ -2987,13 +2982,10 @@ function CastAheadCore.Reapply()
                 and #CastAheadMatch.NarrowByEnabled(track.candidates, isDisabled) == 0 then
                 if CastAheadTimeline then CastAheadTimeline.Cancel(track) end
                 state.tracks[key] = nil
-            elseif CastAheadTimeline and track.candidates then
+            else
                 -- Sync both ways: a switched-off timeline or an unimportant
                 -- cast is cancelled, a re-enabled one is put back.
-                local confident = IsConfident(track)
-                CastAheadTimeline.Sync(track, Announceable(track.candidates) and track.nextAt or nil,
-                    confident or track.candidates[1],
-                    CastAheadMatch.ConsensusAdvice(track.candidates), confident and true or false)
+                SyncTimeline(track)
             end
         end
         RefreshBar(unit, state)
