@@ -103,7 +103,7 @@ local SWITCHES = {
     fullLabels = { label = "Full labels", defaultOff = true,
         tip = "Spell the longest verdicts out under a nameplate icon - BUSTER becomes TANKBUSTER. The icons step sideways by the width of the words under them, so the full words spread the row out; off, every plate's widest word is six characters and the rows pack evenly. The cast table and the spoken call always use the whole word either way." },
     devMode = { label = "Development mode", defaultOff = true,
-        tip = "Adds a Development tab with the data-collection tools. Nothing here changes what the addon calls out - it is for finding out what the game still lets an addon read." },
+        tip = "Adds a Development tab with the data-collection tools. Switching it off stops every one of them, whatever their own switches say. Nothing here changes what the addon calls out - it is for finding out what the game still lets an addon read." },
     keyJournal = { label = "Key journal and mark panel", defaultOff = true,
         tip = "Keeps a journal of each key and shows a panel to mark a wrong call on a mob you pick, with an optional note. /ca report gives the text to paste into a GitHub issue or a CurseForge comment. No names of people are recorded. Only while Development mode is on." },
     autoCombatLog = { label = "Combat log in dungeons", defaultOff = true,
@@ -191,7 +191,7 @@ local function BuildReset(panel, point, keys, after)
 end
 
 function CastAheadOptions.DevMode()
-    return CastAheadConfig.Get("devMode") == true
+    return CastAheadConfig.Dev()
 end
 
 -- Built once, the first time a settings tab is opened, as children of the
@@ -261,9 +261,7 @@ function BuildGeneral(panel)
     local extra = BuildGroup(panel, "Advanced", 2, 62,
         { "TOPLEFT", audio, "BOTTOMLEFT", 0, -12 })
     BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
-        if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
-        if CastAheadCore and CastAheadCore.SyncCombatLog then CastAheadCore.SyncCombatLog() end
-        if CastAheadReport then CastAheadReport.Refresh() end
+        if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
     end)
 
     -- Where the icons go --------------------------------------------------

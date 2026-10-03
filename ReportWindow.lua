@@ -140,6 +140,7 @@ end
 function W.Refresh()
     local want = CastAheadRecorder and CastAheadRecorder.Enabled()
         and ((IsInInstance and IsInInstance()) or (UnitAffectingCombat and UnitAffectingCombat("player")))
+    if window and not (CastAheadRecorder and CastAheadRecorder.Enabled()) then window:Hide() end
     if want and not panel then Build() end
     if not panel then return end
     panel:SetShown(want and true or false)

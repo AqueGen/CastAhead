@@ -842,11 +842,16 @@ SLASH_CASTAHEAD2 = "/ca"
 -- the addon was renamed, and nothing else claims them.
 SLASH_CASTAHEAD3 = "/forecast"
 SLASH_CASTAHEAD4 = "/fcast"
+local DEV_COMMANDS = { probe = true, report = true, mark = true, note = true }
 SlashCmdList.CASTAHEAD = function(msg)
     msg = msg and msg:lower() or ""
     -- The sub-command is the FIRST word: `msg:find` anywhere in the string
     -- meant "/ca anchor center" was answered by the `center` branch.
     local word = msg:match("^%s*(%a+)") or ""
+    if DEV_COMMANDS[word] and not CastAheadConfig.Dev() then
+        print("|cff33ff99Cast Ahead|r /ca " .. word .. " needs Development mode (/ca options, Advanced)")
+        return
+    end
     if word == "probe" then
         if CastAheadCore and CastAheadCore.Probe then
             CastAheadCore.Probe(msg:match("^%s*%a+%s+(%a+)"))

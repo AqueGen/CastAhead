@@ -27,7 +27,7 @@ local function Journal()
 end
 
 function R.Enabled()
-    return CastAheadConfig.Get("devMode") == true and CastAheadConfig.Get("keyJournal") == true
+    return CastAheadConfig.Dev("keyJournal")
 end
 
 local function Hash(h, text)
@@ -66,6 +66,7 @@ end
 function R.Keys() return Journal().keys end
 
 function R.Current()
+    if not R.Enabled() then return end
     local keys = Journal().keys
     local last = keys[#keys]
     if last and not last.ended then return last end
@@ -95,6 +96,7 @@ local function Disposable(key)
 end
 
 function R.EndKey(result)
+    if not R.Enabled() then return end
     local key = R.Current()
     if not key then return end
     key.ended, key.endedAt = result or "completed", GetTime()
@@ -107,6 +109,7 @@ function R.EndKey(result)
 end
 
 function R.StartKey(info)
+    if not R.Enabled() then return end
     local keys = Journal().keys
     local open = R.Current()
     if open and (#open.lines == 0 or Disposable(open)) then
@@ -131,6 +134,7 @@ function R.StartKey(info)
 end
 
 function R.EnsureKey()
+    if not R.Enabled() then return end
     if R.Current() then return R.Current() end
     local name, _, _, _, _, _, _, instance = GetInstanceInfo()
     R.StartKey({ instance = instance, name = name, level = 0 })
@@ -139,6 +143,7 @@ function R.EnsureKey()
 end
 
 function R.Restore()
+    if not R.Enabled() then return end
     local key = R.Current()
     if not key then return end
     local _, _, _, _, _, _, _, instance = GetInstanceInfo()
@@ -244,6 +249,7 @@ local function Write(key, kind, id, fields)
 end
 
 function R.Note(kind, slot, ...)
+    if not R.Enabled() then return end
     local key = R.Current()
     if not key then return end
     local fields = {}
@@ -316,6 +322,7 @@ local function KeyWithMark(n)
 end
 
 function R.AddNote(n, text, key)
+    if not R.Enabled() then return false end
     n = tonumber(n)
     if not n or not text or text:match("^%s*$") then return false end
     key = key or KeyWithMark(n)

@@ -2922,7 +2922,7 @@ end
 
 -- Loading the documentation mid-pull would stall the frame the pull starts on.
 function ProbeRestore()
-    probing = CastAheadDB ~= nil and CastAheadDB.probing == true
+    probing = CastAheadConfig.Dev("probing")
     if probing and not sweep then BuildSweep() end
 end
 
@@ -3000,8 +3000,7 @@ function CastAheadCore.Probing() return probing end
 function CastAheadCore.SyncCombatLog()
     if not (LoggingCombat and CastAheadDB) then return end
     local _, kind = IsInInstance()
-    local want = kind == "party" and CastAheadConfig.Get("devMode") == true
-        and CastAheadConfig.Get("autoCombatLog") == true
+    local want = kind == "party" and CastAheadConfig.Dev("autoCombatLog")
     if want then
         if C_CVar and C_CVar.SetCVar then C_CVar.SetCVar("advancedCombatLogging", "1") end
         if not LoggingCombat() then
@@ -3016,6 +3015,13 @@ function CastAheadCore.SyncCombatLog()
             print("|cff33ff99Cast Ahead|r combat log off")
         end
     end
+end
+
+function CastAheadCore.ApplyDevMode()
+    ProbeRestore()
+    CastAheadCore.SyncCombatLog()
+    if CastAheadReport then CastAheadReport.Refresh() end
+    if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
 end
 
 function CastAheadCore.Probe(command)

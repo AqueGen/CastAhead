@@ -1703,7 +1703,7 @@ CastAheadCore.Tuning.packsCompany = false
 -- cast of the player's own, and its switch survives a reload.
 date = date or os.date
 UnitGUID = UnitGUID or function() return "Player-1" end
-CastAheadDB = {}
+CastAheadDB = { devMode = true }
 CastAheadCore.Probe("on")
 enter()
 fire("UNIT_SPELLCAST_SUCCEEDED", "player", nil, 12345)
@@ -2091,6 +2091,65 @@ ok, err = pcall(function()
 end)
 check(ok, "Core works without the recorder: " .. tostring(err))
 CastAheadRecorder, CastAheadReport = recorder, report
+CastAheadDB = nil
+
+-- Development mode off: no development tool runs whatever its own switch says.
+local function Copy(t)
+    if type(t) ~= "table" then return t end
+    local out = {}
+    for k, v in pairs(t) do out[k] = Copy(v) end
+    return out
+end
+local function Same(a, b)
+    if type(a) ~= "table" or type(b) ~= "table" then return a == b end
+    for k, v in pairs(a) do if not Same(v, b[k]) then return false end end
+    for k in pairs(b) do if a[k] == nil then return false end end
+    return true
+end
+local devLogging, savedInInstanceDev = false, IsInInstance
+LoggingCombat = function(on)
+    if on ~= nil then devLogging = on end
+    return devLogging
+end
+C_CVar = { SetCVar = function() end }
+IsInInstance = function() return true, "party" end
+CastAheadDB = { keyJournal = true, autoCombatLog = true, probing = true, importantOnly = false,
+    journal = { keys = { { startedAt = now, lines = {}, marks = 0, mobs = 0 } } } }
+local devBefore = Copy(CastAheadDB)
+Quiet()
+enter()
+fire("CHALLENGE_MODE_START")
+fire("PLAYER_REGEN_DISABLED")
+castFor(3.0)
+advance(17)
+castFor(3.0)
+fire("UNIT_SPELLCAST_SUCCEEDED", "player", nil, 12345)
+fire("PLAYER_REGEN_ENABLED")
+fire("CHALLENGE_MODE_COMPLETED")
+for _, command in ipairs({ "probe on", "probe show", "probe clear", "report", "mark wrong call", "note 1 text" }) do
+    SlashCmdList.CASTAHEAD(command)
+end
+CastAheadReport.Mark(true)
+reset()
+Loud()
+check(Same(devBefore, CastAheadDB), "with Development mode off a whole key leaves the saved variables untouched")
+check(not devLogging, "and never starts the combat log")
+check(not CastAheadCore.Probing(), "nor the probe")
+local leaked
+for _, line in ipairs(printed) do
+    if not line:match("needs Development mode") then leaked = line end
+end
+check(not leaked, "and prints nothing but the refusals, got " .. tostring(leaked))
+
+CastAheadDB.devMode = true
+CastAheadCore.ApplyDevMode()
+check(devLogging and CastAheadCore.Probing() and CastAheadRecorder.Enabled(),
+    "Development mode on brings back every tool whose own switch is on")
+CastAheadDB.devMode = nil
+CastAheadCore.ApplyDevMode()
+check(not devLogging and not CastAheadCore.Probing() and not CastAheadRecorder.Enabled(),
+    "and switching it off turns all of them off at once")
+IsInInstance, LoggingCombat, C_CVar = savedInInstanceDev, nil, nil
 CastAheadDB = nil
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
