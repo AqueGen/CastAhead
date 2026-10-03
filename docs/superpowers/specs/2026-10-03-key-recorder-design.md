@@ -95,7 +95,7 @@ CastAhead-Report end lines=<n>
 Two inputs, one report:
 
 1. Owner audit: SavedVariables journal plus the combat log. Clock alignment uses the player's own casts in both (the method `fingerprint_join.py` already uses: player cast anchors recorded in the journal on `UNIT_SPELLCAST_SUCCEEDED` for the player). For every cast: real spell from the log vs claimed spell and call; for every prediction: error in seconds against the real start; for every plate: addon `ENGAGE` vs first damage taken in the log, so `first` can be checked. Marks first, each with what was on screen and what really happened.
-2. Issue text without a log: parse the export, load `Data.lua` at the matching checksum (from git history by version tag), re-run the candidate narrowing offline for each marked cast from the recorded measured length, level and history, and report whether the true spell (from the player's note, or each candidate in turn) was among the candidates and which step dropped it.
+2. Issue text without a log: parse the export, load `Data.lua` at the matching checksum (from git history by version tag), and for each marked cast read the narrowing steps the game itself recorded (`STEP` lines), check the measured length against every row, and report whether the true spell (from the player's note, or each candidate in turn) was among the candidates and which step dropped it. Reading the recorded steps is preferred over re-running the narrowing offline: it shows exactly what happened on the player's machine, including traits and neighbour locks an offline re-run could not reproduce.
 
 Output: Markdown in `F:\claude-data\castahead-audit\<date>-<instance>.md` for the owner audit, Markdown to stdout for an issue (ready to paste as a reply).
 
