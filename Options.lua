@@ -467,6 +467,24 @@ function BuildGeneral(panel)
         { "centerScale", "centerTextScale", "centerX", "centerY" }, centerScale)
 end
 
+local function DevButton(panel, label, width, point, command, tip)
+    local button = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    button:SetSize(width, 22)
+    button:SetPoint(unpack(point))
+    button:SetText(label)
+    button:SetScript("OnClick", function()
+        SlashCmdList.CASTAHEAD(type(command) == "function" and command() or command)
+    end)
+    button:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(label, 1, 1, 1)
+        GameTooltip:AddLine(tip, nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    button:SetScript("OnLeave", GameTooltip_Hide)
+    return button
+end
+
 -- The tools that collect data rather than change what is called out. Behind
 -- the Development mode switch: useful after a patch, noise the rest of the
 -- time.
@@ -508,21 +526,12 @@ function BuildDevelopment(panel)
         probe:SetChecked(CastAheadCore and CastAheadCore.Probing and CastAheadCore.Probing() or false)
     end)
 
-    local show = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-    show:SetSize(120, 22)
-    show:SetPoint("TOPLEFT", probe, "BOTTOMLEFT", 6, -8)
-    show:SetText("Show results")
-    show:SetScript("OnClick", function()
-        if CastAheadCore and CastAheadCore.Probe then CastAheadCore.Probe("show") end
-    end)
-
-    local clear = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-    clear:SetSize(60, 22)
-    clear:SetPoint("LEFT", show, "RIGHT", 4, 0)
-    clear:SetText("Clear")
-    clear:SetScript("OnClick", function()
-        if CastAheadCore and CastAheadCore.Probe then CastAheadCore.Probe("clear") end
-    end)
+    local show = DevButton(panel, "Show", 70, { "TOPLEFT", probe, "BOTTOMLEFT", 6, -8 },
+        "probe show", "Print which facts each unit API returned readable, secret or empty. /ca probe show")
+    local sweep = DevButton(panel, "Sweep", 70, { "LEFT", show, "RIGHT", 4, 0 },
+        "probe sweep", "Print every Unit* function that returned something readable. /ca probe sweep")
+    DevButton(panel, "Clear", 60, { "LEFT", sweep, "RIGHT", 4, 0 },
+        "probe clear", "Forget the collected probe results. /ca probe clear")
 
     local logGroup = BuildGroup(panel, "Combat log", 1, 62,
         { "TOPLEFT", group, "BOTTOMLEFT", 0, -12 })
@@ -530,10 +539,35 @@ function BuildDevelopment(panel)
         if CastAheadCore and CastAheadCore.SyncCombatLog then CastAheadCore.SyncCombatLog() end
     end)
 
-    local journalGroup = BuildGroup(panel, "Key journal", 1, 62,
-        { "TOPLEFT", logGroup, "BOTTOMLEFT", 0, -12 })
-    BuildSwitch(panel, "keyJournal", { "TOPLEFT", journalGroup, "TOPLEFT", 10, -26 }, function()
+    local journalGroup = BuildGroup(panel, "Key journal", 2, 124,
+        { "TOPLEFT", group, "TOPRIGHT", COL_GAP, 0 })
+    local journal = BuildSwitch(panel, "keyJournal", { "TOPLEFT", journalGroup, "TOPLEFT", 10, -26 }, function()
         if CastAheadReport then CastAheadReport.Refresh() end
+        for _, refresh in ipairs(refreshers) do refresh() end
+    end)
+    local report = DevButton(panel, "Report", 90, { "TOPLEFT", journal, "BOTTOMLEFT", 6, -8 },
+        "report", "Open the text of a key to paste into a GitHub issue or a CurseForge comment. /ca report")
+    local mark = DevButton(panel, "Mark", 70, { "LEFT", report, "RIGHT", 4, 0 },
+        "mark", "Mark a wrong call now, on the mob picked in the mark panel. /ca mark")
+    local number = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
+    number:SetSize(30, 20)
+    number:SetPoint("TOPLEFT", report, "BOTTOMLEFT", 6, -10)
+    number:SetAutoFocus(false)
+    number:SetNumeric(true)
+    number:SetMaxLetters(3)
+    local text = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
+    text:SetSize(118, 20)
+    text:SetPoint("LEFT", number, "RIGHT", 10, 0)
+    text:SetAutoFocus(false)
+    local note = DevButton(panel, "Note", 50, { "LEFT", text, "RIGHT", 6, 0 }, function()
+        if number:GetText() == "" or text:GetText():match("^%s*$") then
+            return "note"
+        end
+        return "note " .. number:GetText() .. " " .. text:GetText()
+    end, "Add a note to an earlier mark: its number on the left, the note next to it. /ca note <mark> <text>")
+    table.insert(refreshers, function()
+        local on = SwitchOn("keyJournal")
+        for _, widget in ipairs({ report, mark, note, number, text }) do widget:SetEnabled(on) end
     end)
 end
 
