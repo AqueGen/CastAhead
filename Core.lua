@@ -127,13 +127,14 @@ local tuning = {
     --    often as a right one. Replays with game-read targets, voiced start
     --    calls right/wrong: public 2129/341 -> 1992/124, own keys 149/19 ->
     --    142/6; completed-cast identification improved slightly.
-    --  - claimMargin 1: two of one creature's predictions within 1 s of each
-    --    other with different calls (Devour and Dreadbellow, both untargeted)
-    --    were settled by whichever was nearer. Public replay -13 right / -11
-    --    wrong, own Voidscar keys -0 / -1.
+    --  - claimMargin 1: when two of one creature's predictions with different
+    --    calls are almost equally close to the start (their distances to it
+    --    differ by under 1 s - Devour and Dreadbellow, both untargeted), the
+    --    nearer one used to win. Public replay -13 right / -11 wrong, own
+    --    Voidscar keys -0 / -1.
     claimWindow = 2.0,         -- how far from its prediction a start may be claimed by it
     lateClaimMax = 4.0,        -- how long an overdue prediction may still claim a start
-    claimMargin = 1.0,         -- a rival with another call this close in time leaves the start unclaimed
+    claimMargin = 1.0,         -- a rival with another call almost as close to the start leaves it unclaimed
 }
 
 -- Population: how many of each creature MDT places in this dungeon (Packs.lua,
