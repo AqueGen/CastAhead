@@ -1762,6 +1762,13 @@ table.remove(CastAheadData[1877])
 table.remove(CastAheadData[1877])
 UnitShouldDisplaySpellTargetName = nil
 
+-- A sound picked from our own clips under the old display name still plays.
+CastAheadDB = { sounds = { TANK = "CastAhead: tank buster", AOE = "Horn" }, spellSounds = { [100] = "CastAhead: dodge" } }
+CastAheadConfig.Migrate()
+check(CastAheadDB.sounds.TANK == "Cast Ahead: tank buster" and CastAheadDB.sounds.AOE == "Horn"
+    and CastAheadDB.spellSounds[100] == "Cast Ahead: dodge", "sound picks follow the renamed clips")
+CastAheadDB = nil
+
 -- Development mode keeps the combat log running inside dungeons only, and
 -- never stops a log the player started.
 local logging, cvars = false, {}

@@ -181,5 +181,12 @@ function C.Migrate()
     if existing and CastAheadDB.schema == nil and CastAheadDB.centerText == nil then
         CastAheadDB.centerText = true
     end
+    for _, picks in ipairs({ CastAheadDB.sounds, CastAheadDB.spellSounds }) do
+        for key, name in pairs(type(picks) == "table" and picks or {}) do
+            if type(name) == "string" and name:sub(1, 11) == "CastAhead: " then
+                picks[key] = "Cast Ahead: " .. name:sub(12)
+            end
+        end
+    end
     CastAheadDB.schema = 2
 end

@@ -11,6 +11,7 @@ if not (LDB and LDBIcon) then return end
 
 local broker = LDB:NewDataObject("CastAhead", {
     type = "launcher",
+    label = "Cast Ahead",
     -- An eye: the addon's whole job is seeing what a mob is about to cast. The
     -- button draws about twenty pixels across, masked to a circle, among a row
     -- of other addons' buttons, so what matters is a silhouette nobody else
@@ -25,7 +26,7 @@ local broker = LDB:NewDataObject("CastAhead", {
         end
     end,
     OnTooltipShow = function(tooltip)
-        tooltip:AddLine("CastAhead")
+        tooltip:AddLine("Cast Ahead")
         tooltip:AddLine("Left click: browse tracked casts", 0.8, 0.8, 0.8)
         tooltip:AddLine("Right click: print status to chat", 0.6, 0.6, 0.6)
     end,

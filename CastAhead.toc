@@ -1,5 +1,5 @@
 ## Interface: 120100
-## Title: CastAhead
+## Title: Cast Ahead
 ## Notes: Predicts trash casts in Mythic+ and tells you what to do about them.
 ## Author: AqueGen
 # x-release-please-start-version

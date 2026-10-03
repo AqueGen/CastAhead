@@ -655,7 +655,7 @@ function BuildWindow()
         Refresh()
     end)
     table.insert(UISpecialFrames, "CastAheadWindow")   -- Escape closes it
-    window.TitleText:SetText("CastAhead - tracked casts")
+    window.TitleText:SetText("Cast Ahead - tracked casts")
 
     -- Dry run of the selected dungeon's calls: icons, sounds, timeline. It sat
     -- squeezed against the close button, where nobody found it - it belongs on
@@ -888,10 +888,10 @@ SlashCmdList.CASTAHEAD = function(msg)
         CastAheadDB = CastAheadDB or {}
         CastAheadDB.offsetX = tonumber(offset)
         if CastAheadCore and CastAheadCore.Reapply then CastAheadCore.Reapply() end
-        print("|cff33ff99CastAhead|r icons offset by " .. offset .. " px")
+        print("|cff33ff99Cast Ahead|r icons offset by " .. offset .. " px")
         return
     elseif word == "offset" then
-        print("|cff33ff99CastAhead|r usage: /ca offset <pixels>  (current "
+        print("|cff33ff99Cast Ahead|r usage: /ca offset <pixels>  (current "
             .. tostring(CastAheadDB and CastAheadDB.offsetX or 0) .. ")")
         return
     end
@@ -901,28 +901,28 @@ SlashCmdList.CASTAHEAD = function(msg)
     if centerY then
         CastAheadDB = CastAheadDB or {}
         CastAheadDB.centerY = tonumber(centerY)
-        print("|cff33ff99CastAhead|r centre call shifted by " .. centerY .. " px")
+        print("|cff33ff99Cast Ahead|r centre call shifted by " .. centerY .. " px")
         return
     elseif word == "center" then
-        print("|cff33ff99CastAhead|r usage: /ca center <pixels>  (current "
+        print("|cff33ff99Cast Ahead|r usage: /ca center <pixels>  (current "
             .. tostring(CastAheadDB and CastAheadDB.centerY or 0) .. ")")
         return
     end
     local side = msg:match("^%s*anchor%s+(%a+)")
     if side and CastAheadUI.SetAnchor(side) then
-        print("|cff33ff99CastAhead|r icons anchored to the " .. side .. " of the nameplate")
+        print("|cff33ff99Cast Ahead|r icons anchored to the " .. side .. " of the nameplate")
         return
     elseif word == "anchor" then
-        print("|cff33ff99CastAhead|r usage: /ca anchor topleft|top|topright|left|center|right|bottomleft|bottom|bottomright  (current "
+        print("|cff33ff99Cast Ahead|r usage: /ca anchor topleft|top|topright|left|center|right|bottomleft|bottom|bottomright  (current "
             .. tostring(CastAheadDB and CastAheadDB.anchor or "left") .. ")")
         return
     end
     local grow = msg:match("^%s*grow%s+(%a+)")
     if grow and CastAheadUI.SetGrowth(grow) then
-        print("|cff33ff99CastAhead|r icons grow " .. grow)
+        print("|cff33ff99Cast Ahead|r icons grow " .. grow)
         return
     elseif word == "grow" then
-        print("|cff33ff99CastAhead|r usage: /ca grow left|down|right|up|auto  (current "
+        print("|cff33ff99Cast Ahead|r usage: /ca grow left|down|right|up|auto  (current "
             .. tostring(CastAheadDB and CastAheadDB.grow or "auto") .. ")")
         return
     end
@@ -942,24 +942,24 @@ local function RegisterSettingsCategory()
     if not (Settings and Settings.RegisterCanvasLayoutCategory) then return end
 
     local panel = CreateFrame("Frame")
-    panel.name = "CastAhead"
+    panel.name = "Cast Ahead"
 
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 16, -16)
-    title:SetText("CastAhead")
+    title:SetText("Cast Ahead")
 
     local blurb = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     blurb:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
     blurb:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
     blurb:SetJustifyH("LEFT")
-    blurb:SetText("Everything CastAhead has is in its own window: the tracked casts, "
+    blurb:SetText("Everything Cast Ahead has is in its own window: the tracked casts, "
         .. "what gets called out, where it is drawn and how it sounds.\n\n"
         .. "Open it with |cffffd100/ca|r, the minimap button, or the button below.")
 
     local open = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     open:SetSize(180, 24)
     open:SetPoint("TOPLEFT", blurb, "BOTTOMLEFT", 0, -16)
-    open:SetText("Open CastAhead")
+    open:SetText("Open Cast Ahead")
     open:SetScript("OnClick", function()
         -- Close the game's settings first: our window would otherwise open
         -- behind it, which reads as the button doing nothing.
@@ -969,7 +969,7 @@ local function RegisterSettingsCategory()
         if not (window and window:IsShown()) then CastAhead_Toggle() end
     end)
 
-    local category = Settings.RegisterCanvasLayoutCategory(panel, "CastAhead")
+    local category = Settings.RegisterCanvasLayoutCategory(panel, "Cast Ahead")
     category.ID = "CastAhead"
     Settings.RegisterAddOnCategory(category)
 end
