@@ -12,6 +12,13 @@ def test_the_game_overrules_the_log_and_a_channel_needs_the_game():
     assert choose_targeted([40, 0], [16, 15], False) == MIXED
 
 
+def test_the_curated_flag_sits_between_the_game_and_the_log():
+    assert choose_targeted([23, 23], None, False, False) is False
+    assert choose_targeted([26, 0], None, False, True) is True
+    assert choose_targeted([8, 8], None, True, False) is False
+    assert choose_targeted([23, 23], [5, 5], False, False) is True
+
+
 def test_targeted_needs_a_clear_majority_and_samples():
     assert targeted(None) is None
     assert targeted([4, 4]) is None
