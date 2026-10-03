@@ -123,6 +123,11 @@ local function Build()
     markNote:SetPoint("LEFT", mark, "RIGHT", 4, 0)
     markNote:SetText("Mark + note")
     markNote:SetScript("OnClick", function() W.Mark(true) end)
+    local report = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    report:SetSize(80, 20)
+    report:SetPoint("LEFT", markNote, "RIGHT", 4, 0)
+    report:SetText("Report")
+    report:SetScript("OnClick", function() W.Toggle() end)
 
     noteBox = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
     noteBox:SetSize(280, 20)
@@ -139,8 +144,7 @@ end
 
 function W.Refresh()
     local want = CastAheadRecorder and CastAheadRecorder.Enabled()
-        and ((IsInInstance and IsInInstance()) or (UnitAffectingCombat and UnitAffectingCombat("player")))
-    if window and not (CastAheadRecorder and CastAheadRecorder.Enabled()) then window:Hide() end
+    if window and not want then window:Hide() end
     if want and not panel then Build() end
     if not panel then return end
     panel:SetShown(want and true or false)

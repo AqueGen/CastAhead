@@ -105,7 +105,7 @@ local SWITCHES = {
     devMode = { label = "Development mode", defaultOff = true,
         tip = "Adds a Development tab with the data-collection tools. Switching it off stops every one of them, whatever their own switches say. Nothing here changes what the addon calls out - it is for finding out what the game still lets an addon read." },
     keyJournal = { label = "Key journal and mark panel", defaultOff = true,
-        tip = "Keeps a journal of each key and shows a panel to mark a wrong call on a mob you pick, with an optional note. /ca report gives the text to paste into a GitHub issue or a CurseForge comment. No names of people are recorded. Only while Development mode is on." },
+        tip = "Keeps a journal of each key and shows a panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. /ca report gives the text to paste into a GitHub issue or a CurseForge comment. No names of people are recorded. Only while Development mode is on." },
     autoCombatLog = { label = "Combat log in dungeons", defaultOff = true,
         tip = "Turns the game's combat log on, with advanced logging, whenever you enter a dungeon, and off again when you leave - unless you had switched it on yourself. The log is what the cast timings, first casts and damage are measured from. Only while Development mode is on." },
 }
@@ -539,35 +539,10 @@ function BuildDevelopment(panel)
         if CastAheadCore and CastAheadCore.SyncCombatLog then CastAheadCore.SyncCombatLog() end
     end)
 
-    local journalGroup = BuildGroup(panel, "Key journal", 2, 124,
+    local journalGroup = BuildGroup(panel, "Key journal", 2, 62,
         { "TOPLEFT", group, "TOPRIGHT", COL_GAP, 0 })
-    local journal = BuildSwitch(panel, "keyJournal", { "TOPLEFT", journalGroup, "TOPLEFT", 10, -26 }, function()
+    BuildSwitch(panel, "keyJournal", { "TOPLEFT", journalGroup, "TOPLEFT", 10, -26 }, function()
         if CastAheadReport then CastAheadReport.Refresh() end
-        for _, refresh in ipairs(refreshers) do refresh() end
-    end)
-    local report = DevButton(panel, "Report", 90, { "TOPLEFT", journal, "BOTTOMLEFT", 6, -8 },
-        "report", "Open the text of a key to paste into a GitHub issue or a CurseForge comment. /ca report")
-    local mark = DevButton(panel, "Mark", 70, { "LEFT", report, "RIGHT", 4, 0 },
-        "mark", "Mark a wrong call now, on the mob picked in the mark panel. /ca mark")
-    local number = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
-    number:SetSize(30, 20)
-    number:SetPoint("TOPLEFT", report, "BOTTOMLEFT", 6, -10)
-    number:SetAutoFocus(false)
-    number:SetNumeric(true)
-    number:SetMaxLetters(3)
-    local text = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
-    text:SetSize(118, 20)
-    text:SetPoint("LEFT", number, "RIGHT", 10, 0)
-    text:SetAutoFocus(false)
-    local note = DevButton(panel, "Note", 50, { "LEFT", text, "RIGHT", 6, 0 }, function()
-        if number:GetText() == "" or text:GetText():match("^%s*$") then
-            return "note"
-        end
-        return "note " .. number:GetText() .. " " .. text:GetText()
-    end, "Add a note to an earlier mark: its number on the left, the note next to it. /ca note <mark> <text>")
-    table.insert(refreshers, function()
-        local on = SwitchOn("keyJournal")
-        for _, widget in ipairs({ report, mark, note, number, text }) do widget:SetEnabled(on) end
     end)
 end
 
