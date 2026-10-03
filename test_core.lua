@@ -1991,11 +1991,30 @@ Quiet()
 R.EndKey("completed")
 R.selected = "4.2"
 R.Mark()
-check(Find("|MARK|%-|1|4%.2$"), "a mark with no open key keeps the selected mob")
+local lastKey = R.Keys()[#R.Keys()]
+check(lastKey.lines[#lastKey.lines]:match("|MARK|%-|%d+|4%.2$"), "a mark with no open key keeps the selected mob")
 R.EndKey("completed")
 fire("PLAYER_REGEN_DISABLED")
 check(R.Current() and Find("|PULL|%-|in$"), "entering combat with no key open starts one")
 fire("PLAYER_REGEN_ENABLED")
+Loud()
+
+-- Pseudo-keys without marks never crowd real keys out of the journal.
+Quiet()
+CastAheadDB.journal = nil
+fire("PLAYER_ENTERING_WORLD")
+fire("UNIT_SPELLCAST_SUCCEEDED", "player", nil, 555)
+fire("CHALLENGE_MODE_START")
+check(#R.Keys() == 1, "a pre-key pseudo-key with no marks is replaced by the real key, got " .. #R.Keys())
+R.EndKey("completed")
+fire("PLAYER_ENTERING_WORLD")
+fire("UNIT_SPELLCAST_SUCCEEDED", "player", nil, 555)
+R.EndKey("left")
+check(#R.Keys() == 1, "an unmarked pseudo-key is dropped when it ends, got " .. #R.Keys())
+local afterEnd = R.Mark()
+check(afterEnd and #R.Keys() == 1 and R.Keys()[1].lines[#R.Keys()[1].lines]:match("|MARK|"),
+    "a mark right after a key ended lands in that key")
+R.EndKey("completed")
 Loud()
 
 -- A cast the addon ignores (out of combat) leaves no START behind.

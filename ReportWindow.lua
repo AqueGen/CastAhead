@@ -57,7 +57,7 @@ function W.Mark(withNote)
     SaveNote()
     local n, key = CastAheadRecorder.Mark()
     Paint()
-    if withNote and n and noteBox then
+    if withNote and n and noteBox and panel and panel:IsVisible() then
         pendingMark = { n = n, key = key }
         noteBox:Show()
         noteBox:SetFocus()

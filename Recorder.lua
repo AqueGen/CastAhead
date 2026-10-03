@@ -90,17 +90,26 @@ function R.Summary(key)
         casts, calls, key.marks or 0)
 end
 
+local function Disposable(key)
+    return key.pseudo and (key.marks or 0) == 0
+end
+
 function R.EndKey(result)
     local key = R.Current()
     if not key then return end
     key.ended, key.endedAt = result or "completed", GetTime()
+    if Disposable(key) then
+        local keys = Journal().keys
+        table.remove(keys, #keys)
+        return
+    end
     if key.ended == "completed" then print(R.Summary(key)) end
 end
 
 function R.StartKey(info)
     local keys = Journal().keys
     local open = R.Current()
-    if open and #open.lines == 0 then
+    if open and (#open.lines == 0 or Disposable(open)) then
         table.remove(keys)
     elseif open then
         R.EndKey("reset")
@@ -111,7 +120,13 @@ function R.StartKey(info)
         affixes = info.affixes or "", role = info.role or "NONE",
         startedAt = GetTime(), mobs = 0, marks = 0, lines = {},
     }
-    while #keys > R.MAX_KEYS do table.remove(keys, 1) end
+    while #keys > R.MAX_KEYS do
+        local victim = 1
+        for i = 1, #keys - 1 do
+            if (keys[i].marks or 0) == 0 then victim = i break end
+        end
+        table.remove(keys, victim)
+    end
     Forget()
 end
 
@@ -119,6 +134,7 @@ function R.EnsureKey()
     if R.Current() then return R.Current() end
     local name, _, _, _, _, _, _, instance = GetInstanceInfo()
     R.StartKey({ instance = instance, name = name, level = 0 })
+    R.Current().pseudo = true
     return R.Current()
 end
 
@@ -257,11 +273,20 @@ function R.Select(id)
     R.selected = (R.selected ~= id) and id or nil
 end
 
+local function MarkTarget()
+    local open = R.Current()
+    if open then return open end
+    local keys = Journal().keys
+    local last = keys[#keys]
+    if last and last.endedAt and GetTime() - last.endedAt <= R.RECENT_WINDOW then return last end
+end
+
 function R.Mark()
     if not R.Enabled() then return end
     local selected = R.selected or "-"
-    local snapshot = R.Current() and R.Recent() or {}
-    local key = R.EnsureKey()
+    local key = MarkTarget()
+    local snapshot = key and R.Recent() or {}
+    key = key or R.EnsureKey()
     key.marks = (key.marks or 0) + 1
     local n = key.marks
     if not Write(key, "MARK", "-", { tostring(n), selected }) then return end
@@ -335,6 +360,7 @@ local function Windows(key, marks)
         if t then
             for m, mark in ipairs(marks) do
                 if (t >= mark.t - R.MARK_WINDOW * 1000 and t <= mark.t)
+                    or (id == mark.selected)
                     or (mark.mobs[id] and t <= mark.t)
                     or (kind == "NOTE" and tonumber(rest:match("^(%d+)")) == mark.n)
                     or (kind == "SNAP" and t == mark.t and i > mark.index) then
@@ -371,7 +397,10 @@ end
 function R.Export(key)
     local marks = Marks(key)
     local picked, size, droppedMarks, droppedLines = {}, 0, 0, 0
-    local budget = R.EXPORT_LIMIT - 400 - #marks * 160
+    local summaries = {}
+    for m, mark in ipairs(marks) do summaries[m] = MarkSummary(key, mark) end
+    local budget = R.EXPORT_LIMIT - 400
+    for m = 1, #summaries do budget = budget - #summaries[m] - 1 end
     if #marks == 0 then
         for i = #key.lines, 1, -1 do
             local cost = #key.lines[i] + 1
@@ -413,7 +442,7 @@ function R.Export(key)
         key.truncated and (" truncated=" .. key.truncated) or "",
         droppedMarks > 0 and (" droppedMarks=" .. droppedMarks) or "",
         droppedLines > 0 and (" droppedLines=" .. droppedLines) or "") }
-    for m = droppedMarks + 1, #marks do out[#out + 1] = MarkSummary(key, marks[m]) end
+    for m = droppedMarks + 1, #marks do out[#out + 1] = summaries[m] end
     for _, line in ipairs(body) do out[#out + 1] = line end
     out[#out + 1] = "CastAhead-Report end lines=" .. #body
     return table.concat(out, "\n")

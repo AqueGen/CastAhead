@@ -1986,6 +1986,9 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
             CastAheadRecorder.EnsureKey()
         end
         Record("PULL", nil, event == "PLAYER_REGEN_DISABLED" and "in" or "out")
+        if event == "PLAYER_REGEN_ENABLED" and CastAheadRecorder and not IsInInstance() then
+            CastAheadRecorder.EndKey("left")
+        end
         if CastAheadReport then CastAheadReport.Refresh() end
         return
     end
