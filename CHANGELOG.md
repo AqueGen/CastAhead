@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.13.0](https://github.com/AqueGen/CastAhead/compare/v0.12.0...v0.13.0) (2026-10-03)
+
+
+### Features
+
+* show the addon as Cast Ahead ([#43](https://github.com/AqueGen/CastAhead/issues/43)) ([8ea6ef0](https://github.com/AqueGen/CastAhead/commit/8ea6ef0e324c03ac38d9cdd9936108111fd2bcc4))
+* the probe keeps the call made at each cast start ([#41](https://github.com/AqueGen/CastAhead/issues/41)) ([66589c9](https://github.com/AqueGen/CastAhead/commit/66589c9100547860023cd6e28b36e8a6416e4bb3))
+
+
+### Bug Fixes
+
+* carry per-spell sound picks over when no category sound was picked ([#45](https://github.com/AqueGen/CastAhead/issues/45)) ([2b7c69d](https://github.com/AqueGen/CastAhead/commit/2b7c69dce6484d97fc04f67ecbf874bad358be72))
+* claim a cast start only near its prediction, and drop openings their samples do not back ([#47](https://github.com/AqueGen/CastAhead/issues/47)) ([f7b00ab](https://github.com/AqueGen/CastAhead/commit/f7b00ab0c7881dcb13ec9a5f7c78de5347d1d8e3))
+* take the cast-target flag from a game reading before the log ([#42](https://github.com/AqueGen/CastAhead/issues/42)) ([3811f21](https://github.com/AqueGen/CastAhead/commit/3811f21aa803117fe76c068d7f0c14b551ef79ee))
+
 ## [0.12.0](https://github.com/AqueGen/CastAhead/compare/v0.11.0...v0.12.0) (2026-10-02)
 
 
