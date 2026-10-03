@@ -1777,6 +1777,10 @@ CastAheadDB = { sounds = { TANK = "CastAhead: tank buster", AOE = "Horn" }, spel
 CastAheadConfig.Migrate()
 check(CastAheadDB.sounds.TANK == "Cast Ahead: tank buster" and CastAheadDB.sounds.AOE == "Horn"
     and CastAheadDB.spellSounds[100] == "Cast Ahead: dodge", "sound picks follow the renamed clips")
+CastAheadDB = { spellSounds = { [100] = "CastAhead: dodge" } }
+CastAheadConfig.Migrate()
+check(CastAheadDB.spellSounds[100] == "Cast Ahead: dodge",
+    "per-spell picks follow the rename when no category was ever picked")
 CastAheadDB = nil
 
 -- Development mode keeps the combat log running inside dungeons only, and
