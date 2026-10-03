@@ -166,11 +166,15 @@ def targeted(counts, minimum=MIN_TARGET_SAMPLES):
     return MIXED
 
 
-def choose_targeted(logged, observed, channel):
+def choose_targeted(logged, observed, channel, curated=None):
     """What the game said wins over the log. Channels need the game's answer: their log
-    destination disagreed with it in both directions (Fel Missiles, Summon Wyrms)."""
+    destination disagreed with it in both directions (Fel Missiles, Summon Wyrms). The
+    curated flag is a game reading too; the log names a creature as the target of a cast
+    the game shows without one (Devour)."""
     if observed and observed[0] >= MIN_GAME_TARGET_SAMPLES:
         return targeted(observed, MIN_GAME_TARGET_SAMPLES)
+    if curated is not None:
+        return curated
     return None if channel else targeted(logged)
 
 
@@ -311,7 +315,7 @@ def print_report(report, total):
 
 
 def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path=None, targets_path=None,
-         game_targets_path=None, spell_times_path=None, fresh=False):
+         game_targets_path=None, spell_times_path=None, curated_targets_path=None, fresh=False):
     data = json.load(open(casts_path, encoding="utf-8"))
     # MDT knows what the logs cannot: which creature owns a spell, whether that
     # spell is interruptible, and which creatures are bosses.
@@ -329,6 +333,8 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
     # The same counts as read in game by UnitShouldDisplaySpellTargetName, joined to the log.
     game_targets = {int(k): v for k, v in
                     json.load(open(game_targets_path, encoding="utf-8")).items()} if game_targets_path else {}
+    curated_targets = {int(k): v for k, v in
+                       json.load(open(curated_targets_path, encoding="utf-8")).items()} if curated_targets_path else {}
     # Client spell data: cast/channel lengths read off the game's own tables. It only fills
     # in what the log cannot see - a pure channel with no SPELL_CAST_START at all - and
     # otherwise the log's own measurement still wins (the game doesn't always cast at DB2's
@@ -427,7 +433,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                     "samples": len(r["cast"]) + r.get("kicked", 0),
                     "channel": is_channel,
                     "targeted": choose_targeted(targets.get(int(spellid)), game_targets.get(int(spellid)),
-                                                is_channel),
+                                                is_channel, curated_targets.get(int(spellid))),
                     **t,
                 }, old)
                 if not forced and not worth_showing(row["cast"], row["cd"], cdn, row):
