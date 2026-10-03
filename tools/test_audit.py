@@ -1,0 +1,69 @@
+import pathlib
+
+from audit import issue_report, load_data_rows, owner_audit, parse_export, parse_line, read_journal
+
+HERE = pathlib.Path(__file__).parent
+SAMPLE = (HERE / "fixtures" / "export_sample.txt").read_text(encoding="utf-8")
+ROWS = {100: {"name": "Big", "mob": "Caster", "cast": 3.0, "channel": False, "npc": 1}}
+
+
+def test_the_export_written_by_the_addon_parses_completely():
+    report = parse_export(SAMPLE)
+    assert report.complete
+    assert report.header["instance"] == "1877"
+    assert [l.fields[0] for l in report.lines if l.kind == "MARK"] == ["1", "2", "3"]
+
+
+def test_a_lost_tail_is_reported_not_taken_as_complete():
+    report = parse_export("\n".join(SAMPLE.splitlines()[:-3]))
+    assert not report.complete
+    assert any("footer" in p for p in report.problems)
+
+
+def test_a_missing_line_is_caught_by_the_footer_count():
+    lines = SAMPLE.splitlines()
+    report = parse_export("\n".join(lines[:-2] + [lines[-1]]))
+    assert not report.complete
+
+
+def test_rows_are_read_from_data_lua():
+    rows = load_data_rows('CastAheadData = {\n    [1877] = { name = "T",\n        { spell = 100, npc = 1, mob = "Caster", name = "Big", cast = 3.0, cd = { 20.0 }, first = 5.0, n = 9, firstN = 9, level = 91, offset = 0.0, },\n    },\n}\n')
+    assert rows[100]["name"] == "Big" and rows[100]["cast"] == 3.0 and not rows[100]["channel"]
+
+
+def test_the_issue_report_walks_the_marked_mob_with_its_note():
+    text = issue_report(parse_export(SAMPLE), ROWS)
+    assert "Mark 1" in text and "tank buster was called swap" in text
+    assert "Mark 2 at 00:23.0 on 1.1" in text
+    assert "stop after 3000 ms -> Big (100)" in text
+    assert "rows of that length: Big (100)" in text
+
+
+def test_the_owner_audit_lines_up_with_the_log_and_scores_calls(tmp_path):
+    mob = "Creature-0-1-2-3-200-0000000001"
+    log = []
+    for i in range(5):
+        log.append('10/3/2026 12:00:%02d.000  SPELL_CAST_SUCCESS,Player-1-1,"Me",0x511,0x0,0000000000000000,nil,0x0,0x0,555,"Bolt",0x1' % (10 + i))
+    log.append('10/3/2026 12:00:20.000  SPELL_DAMAGE,Player-1-1,"Me",0x511,0x0,%s,"Mob",0xa48,0x0,555,"Bolt",0x1' % mob)
+    log.append('10/3/2026 12:00:22.000  SPELL_CAST_START,%s,"Mob",0xa48,0x0,0000000000000000,nil,0x0,0x0,100,"Big",0x1' % mob)
+    log.append('10/3/2026 12:00:42.500  SPELL_CAST_START,%s,"Mob",0xa48,0x0,0000000000000000,nil,0x0,0x0,100,"Big",0x1' % mob)
+    path = tmp_path / "log.txt"
+    path.write_text("\n".join(log) + "\n", encoding="utf-8")
+    journal = [parse_line(s) for s in (
+        "0|SELF|-|555", "1000|SELF|-|555", "2000|SELF|-|555", "3000|SELF|-|555", "4000|SELF|-|555",
+        "11000|ENGAGE|1.1",
+        "12000|START|1.1|0|100|AOE|100|0",
+        "15000|PRED|1.1|100|32000|0|repeat",
+        "32500|START|1.1|0|101|TANK|101|1",
+    )]
+    text = owner_audit(journal, str(path), {100: {"name": "Big", "cast": 3.0, "channel": False}})
+    assert "start claims: 1 right, 1 wrong" in text
+    assert "claimed 101, really Big (100)" in text
+    assert "Big (100): n 1, median +0.5" in text
+    assert "mob 1.1: +1.0" in text
+
+
+def test_the_journal_is_read_back_from_saved_variables():
+    sv = 'CastAheadDB = {\n["journal"] = {\n["keys"] = {\n{\n["lines"] = {\n"0|PULL|-|in",\n"1500|START|1.1|0|100|AOE|100|1",\n},\n},\n},\n},\n}\n'
+    lines = read_journal(sv)
+    assert [l.kind for l in lines] == ["PULL", "START"] and lines[1].mob == "1.1"

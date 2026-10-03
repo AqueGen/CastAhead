@@ -292,6 +292,8 @@ GameTooltip = setmetatable({}, { __index = function() return function() end end 
 GameTooltip_Hide = function() end
 dofile("UI.lua")
 dofile("Core.lua")
+dofile("Recorder.lua")
+dofile("ReportWindow.lua")
 
 local function fire(event, ...) eventHandler(nil, event, ...) end
 
@@ -1809,6 +1811,136 @@ CastAheadDB.devMode = nil
 fire("PLAYER_ENTERING_WORLD")
 check(not logging, "nothing is logged outside Development mode")
 IsInInstance, LoggingCombat, C_CVar = savedIsInInstance, nil, nil
+CastAheadDB = nil
+
+-- Key journal ------------------------------------------------------------------
+local R = CastAheadRecorder
+local function Lines() return R.Current() and R.Current().lines or {} end
+local function Find(pattern)
+    for _, line in ipairs(Lines()) do if line:match(pattern) then return line end end
+end
+local realPrint = print
+local printed = {}
+local function Quiet()
+    printed = {}
+    print = function(text)
+        if tostring(text):match("^FAIL") then realPrint(text) end
+        printed[#printed + 1] = tostring(text)
+    end
+end
+local function Loud() print = realPrint end
+
+CastAheadDB = { keyJournal = true }
+check(not R.Enabled(), "the journal stays off without Development mode")
+CastAheadDB = { keyJournal = true, devMode = true, importantOnly = false }
+check(R.Enabled(), "Development mode plus the journal switch turns it on")
+
+R.StartKey({ instance = 1877, name = "Test", level = 12, affixes = "9,10", role = "HEALER" })
+advance(1.5)
+R.Note("PULL", nil, "in")
+check(Lines()[1] == "1500|PULL|-|in", "lines carry ms, type, '-' for no mob, fields; got " .. tostring(Lines()[1]))
+R.Note("STEP", "nameplate9", "length", { 100, 200 })
+check(Lines()[2] == "1500|STEP|9|length|100,200", "an unnumbered slot is the bare number and lists join with commas; got " .. tostring(Lines()[2]))
+R.Note("NOTE", nil, 1, "a|b\nc")
+check(Lines()[3] == "1500|NOTE|-|1|a b c", "field separators and newlines never reach a line; got " .. tostring(Lines()[3]))
+check(R.Checksum():match("^%x%x%x%x%x%x%x%x$") and R.Current().data == R.Checksum(), "the key carries an 8-digit data checksum")
+
+local saved = CastAheadDB
+CastAheadRecorder = nil
+dofile("Recorder.lua")
+CastAheadDB = saved
+CastAheadRecorder.Restore()
+R = CastAheadRecorder
+check(R.Current() == saved.journal.keys[#saved.journal.keys], "after a reload the open key continues")
+R.Note("PULL", nil, "out")
+check(#Lines() == 4, "and new lines land in it")
+
+Quiet()
+for i = 1, 6 do
+    R.EndKey("completed")
+    R.StartKey({ instance = 1877, name = "Test", level = i })
+end
+Loud()
+check(#R.Keys() == 5, "only five keys are kept, got " .. #R.Keys())
+local savedMax = R.MAX_LINES
+R.MAX_LINES = 3
+R.Note("PULL", nil, "in") R.Note("PULL", nil, "out") R.Note("PULL", nil, "in") R.Note("PULL", nil, "out")
+check(#Lines() == 4 and Lines()[4]:match("|TRIM|") and R.Current().truncated, "the line cap writes one TRIM line and flags the key")
+R.MAX_LINES = savedMax
+
+-- The journal follows a real pull, and each appearance of a mob gets its own number.
+Quiet()
+enter()
+fire("CHALLENGE_MODE_START")
+fire("PLAYER_REGEN_DISABLED")
+castFor(3.0)
+advance(17)
+castFor(3.0)
+fire("UNIT_SPELLCAST_SUCCEEDED", "player", nil, 12345)
+for _, kind in ipairs({ "PLATE", "ENGAGE", "START", "STEP", "STOP", "PRED", "PULL", "SELF" }) do
+    check(Find("^%d+|" .. kind .. "|"), "the journal records " .. kind)
+end
+check(Find("^%d+|PLATE|1%.1|added|"), "the plate is mob 1.1")
+check(Find("^%d+|STOP|1%.1|0|3000|"), "a stop carries the measured length in ms on mob 1.1")
+reset()
+check(Find("^%d+|PLATE|1%.1|removed|gone$"), "a dropped plate is journalled")
+hostile[unit], combat[unit] = true, true
+fire("NAME_PLATE_UNIT_ADDED", unit)
+check(Find("^%d+|PLATE|1%.2|added|"), "a recycled plate token is a new mob, 1.2")
+reset()
+
+-- Marks: at any moment, on a picked mob or on everything, with notes arriving later.
+local n1 = R.Mark()
+check(Find("^%d+|MARK|%-|" .. n1 .. "|%-$"), "a mark with nothing selected records '-'")
+check(Find("^%d+|SNAP|1%.1|gone|"), "the snapshot keeps the mob that already left")
+R.Select("1.1")
+local n2 = R.Mark()
+check(Find("^%d+|MARK|%-|" .. n2 .. "|1%.1$"), "a mark on a mob that left the screen still names it")
+R.AddNote(n1, "tank buster was called swap")
+check(Find("^%d+|NOTE|%-|" .. n1 .. "|tank buster was called swap$"), "a late note points at its mark")
+advance(300)
+local n3 = R.Mark()
+check(n3 == n2 + 1 and Lines()[#Lines()]:match("|MARK|%-|" .. n3 .. "|%-$"),
+    "a mark long after keeps working, and mobs older than two minutes are no longer snapshotted")
+Loud()
+check(printed[#printed] and printed[#printed]:find("Cast Ahead", 1, true), "every mark is confirmed in chat")
+
+-- Export: header, one summary per mark, the windows, a footer that counts lines.
+local text = R.Export(R.Current())
+local rows = {}
+for line in text:gmatch("[^\n]+") do rows[#rows + 1] = line end
+check(rows[1]:match("^CastAhead%-Report 1 addon=.- data=%x+ instance=1877 level=%d+ "), "the header names format, addon, data, instance; got " .. rows[1])
+check(text:find("\n# mark 1 at ", 1, true) and text:find("note: tank buster was called swap", 1, true), "each mark gets a summary with its note")
+local body = 0
+for _, l in ipairs(rows) do if l:match("^%d+|") then body = body + 1 end end
+check(rows[#rows] == "CastAhead-Report end lines=" .. body, "the footer counts the event lines")
+check(text:find("|STOP|1.1|0|3000|", 1, true), "the selected mob's whole history is in the export")
+local limit = R.EXPORT_LIMIT
+R.EXPORT_LIMIT = #text - 1
+local cut = R.Export(R.Current())
+check(cut:match("dropped=%d+"), "an export over the limit drops the oldest marks and says so")
+R.EXPORT_LIMIT = limit
+if os.getenv("CA_WRITE_FIXTURE") == "1" then
+    local f = assert(io.open("tools/fixtures/export_sample.txt", "w"))
+    f:write(text) f:close()
+end
+
+-- The panel, the bindings' entry point and the slash commands run in the stubs.
+ok, err = pcall(CastAheadReport.Mark, true)
+check(ok, "Mark + note runs: " .. tostring(err))
+ok, err = pcall(CastAheadReport.Mark, false)
+check(ok, "a mark while the note input is open runs: " .. tostring(err))
+Quiet()
+ok, err = pcall(SlashCmdList.CASTAHEAD, "mark slash note")
+Loud()
+check(ok and Find("|NOTE|%-|%d+|slash note$"), "/ca mark <note> marks and notes: " .. tostring(err))
+ok, err = pcall(SlashCmdList.CASTAHEAD, "report")
+check(ok, "/ca report opens: " .. tostring(err))
+ok, err = pcall(CastAheadReport.Refresh)
+check(ok, "the panel refreshes: " .. tostring(err))
+Quiet()
+R.EndKey("completed")
+Loud()
 CastAheadDB = nil
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))

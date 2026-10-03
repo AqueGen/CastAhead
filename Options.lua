@@ -104,6 +104,8 @@ local SWITCHES = {
         tip = "Spell the longest verdicts out under a nameplate icon - BUSTER becomes TANKBUSTER. The icons step sideways by the width of the words under them, so the full words spread the row out; off, every plate's widest word is six characters and the rows pack evenly. The cast table and the spoken call always use the whole word either way." },
     devMode = { label = "Development mode", defaultOff = true,
         tip = "Adds a Development tab with the data-collection tools. Nothing here changes what the addon calls out - it is for finding out what the game still lets an addon read." },
+    keyJournal = { label = "Key journal and mark panel", defaultOff = true,
+        tip = "Keeps a journal of each key and shows a panel to mark a wrong call on a mob you pick, with an optional note. /ca report gives the text to paste into a GitHub issue or a CurseForge comment. No names of people are recorded. Only while Development mode is on." },
     autoCombatLog = { label = "Combat log in dungeons", defaultOff = true,
         tip = "Turns the game's combat log on, with advanced logging, whenever you enter a dungeon, and off again when you leave - unless you had switched it on yourself. The log is what the cast timings, first casts and damage are measured from. Only while Development mode is on." },
 }
@@ -261,6 +263,7 @@ function BuildGeneral(panel)
     BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
         if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
         if CastAheadCore and CastAheadCore.SyncCombatLog then CastAheadCore.SyncCombatLog() end
+        if CastAheadReport then CastAheadReport.Refresh() end
     end)
 
     -- Where the icons go --------------------------------------------------
@@ -527,6 +530,12 @@ function BuildDevelopment(panel)
         { "TOPLEFT", group, "BOTTOMLEFT", 0, -12 })
     BuildSwitch(panel, "autoCombatLog", { "TOPLEFT", logGroup, "TOPLEFT", 10, -26 }, function()
         if CastAheadCore and CastAheadCore.SyncCombatLog then CastAheadCore.SyncCombatLog() end
+    end)
+
+    local journalGroup = BuildGroup(panel, "Key journal", 1, 62,
+        { "TOPLEFT", logGroup, "BOTTOMLEFT", 0, -12 })
+    BuildSwitch(panel, "keyJournal", { "TOPLEFT", journalGroup, "TOPLEFT", 10, -26 }, function()
+        if CastAheadReport then CastAheadReport.Refresh() end
     end)
 end
 

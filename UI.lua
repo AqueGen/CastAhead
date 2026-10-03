@@ -853,6 +853,17 @@ SlashCmdList.CASTAHEAD = function(msg)
         end
         return
     end
+    if word == "report" then
+        if CastAheadReport then CastAheadReport.Toggle() end
+        return
+    end
+    if word == "mark" then
+        if CastAheadRecorder and CastAheadRecorder.Enabled() then
+            local n = CastAheadRecorder.Mark()
+            CastAheadRecorder.AddNote(n, msg:match("^%s*%a+%s+(.+)$"))
+        end
+        return
+    end
     if word == "debug" then
         if CastAheadCore and CastAheadCore.Debug then CastAheadCore.Debug() end
         return
