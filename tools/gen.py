@@ -24,6 +24,8 @@ FLAT_SPREAD = 0.15      # rotation this tight collapses to a single value
 OFFSET_SPREAD = 8.0     # opening order this loose is still worth an estimate
 CD_WINDOW = 0.5
 FIRST_WINDOW = 1.0
+FIRST_TOLERANCE = 4.0  # Match.lua FIRST_TOLERANCE
+OPENING_SUPPORT = 0.5  # an opening covering fewer first casts than this is no opening
 CD_TOLERANCE_FLAT = 1.0  # Match.lua CD_TOLERANCE_FLAT / CD_TOLERANCE_REL
 CD_TOLERANCE_REL = 0.05
 APPROX_SUPPORT = 0.5    # fewer intervals than this share fit the schedule -> approximate
@@ -286,7 +288,9 @@ def settle(new, old):
         if row["targeted"] is None:
             row["targeted"] = old.get("targeted")
         if not cd_moved:
-            row["approx"] = new["fit"] < APPROX_SUPPORT + (APPROX_MARGIN if old["approx"] else -APPROX_MARGIN)
+            intervals = new.get("iv")
+            fit = support(intervals, row["cd"]) / len(intervals) if intervals and row["cd"] else new["fit"]
+            row["approx"] = fit < APPROX_SUPPORT + (APPROX_MARGIN if old["approx"] else -APPROX_MARGIN)
     if row["targeted"] == MIXED:
         row["targeted"] = None
     row["filler"] = not row["cd"] or min(row["cd"]) < MIN_CD
@@ -394,6 +398,9 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                 cdn = support(r["iv"], cd) if cd else 0
                 approx = bool(cd) and cdn < APPROX_SUPPORT * len(r["iv"])
                 first, firstN = densest(r["first"], FIRST_WINDOW)
+                if first is not None and sum(1 for x in r["first"] if abs(x - first) <= FIRST_TOLERANCE) \
+                        < OPENING_SUPPORT * len(r["first"]):
+                    first, firstN = None, 0
                 # Delay from the mob's very first cast to this spell's first.
                 # Measured across all logs this is far tighter than anything
                 # counted from engage (0.4s vs 3.0s median spread), because a
@@ -415,7 +422,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                 row, changed = settle({
                     "spell": int(spellid), "npc": int(npcid),
                     "cast": round(cast, 1), "cd": cd or [], "first": first,
-                    "approx": approx, "fit": cdn / len(r["iv"]) if r["iv"] else 1.0,
+                    "approx": approx, "fit": cdn / len(r["iv"]) if r["iv"] else 1.0, "iv": r["iv"],
                     "name": r["name"].replace('"', "'"), "mob": r["mob"].replace('"', "'"),
                     # From MDT when MDT knows the creature: its word beats the
                     # tally (a boss spell with the same cast time once made an

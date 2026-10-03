@@ -570,9 +570,9 @@ CastAheadDB = { leadSeconds = 0 }
 sounds, spoken, clips = 0, 0, 0
 enter()
 castFor(3.0)
-advance(14.0)                      -- inside the lead, nothing said
+advance(15.5)                      -- inside the lead, nothing said
 check(Alerts() == 0, string.format("no heads-up while leadSeconds is 0, got %d", Alerts()))
-castFor(3.0)                       -- the predicted cast itself still alerts
+castFor(3.0)                       -- the predicted cast itself, 1.5s early, still alerts
 check(Alerts() == 1, string.format("the cast-start call is unaffected, got %d", Alerts()))
 reset()
 CastAheadDB = { leadSeconds = 5 }
@@ -1237,15 +1237,45 @@ check(not IconShown(101), "a disabled spell is not laid out as a sibling")
 reset()
 CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
--- A prediction kept as overdue ("!") must still recognise the cast when it
--- finally starts, well outside the usual four-second window.
+-- Two of the creature's predictions due together with different calls: the
+-- start is not voiced as either.
+local siblingRow = CastAheadData[1877][2]
+local savedCd, savedPrio, savedN = siblingRow.cd, siblingRow.prio, siblingRow.n
+siblingRow.cd, siblingRow.prio, siblingRow.n = { 8.0 }, "TANK", 40
+CastAheadDB = { leadSeconds = 0, importantOnly = false }
+enter()
+castFor(3.0)                       -- 100 at t0, next at +20
+advance(9.0)                       -- +12
+castFor(4.5)                       -- 101 at +12, next at +20
+advance(3.5)                       -- +20: both due
+sounds, spoken, clips = 0, 0, 0
+fire("UNIT_SPELLCAST_START", unit)
+check(Alerts() == 0, string.format("a start between two siblings with different calls stays silent, got %d", Alerts()))
+advance(3)
+fire("UNIT_SPELLCAST_STOP", unit)
+reset()
+siblingRow.cd, siblingRow.prio, siblingRow.n = savedCd, savedPrio, savedN
+CastAheadDB = { leadSeconds = 5 }
+
+-- A prediction kept as overdue ("!") still recognises a cast a few seconds
+-- late, past the two-second window; one much later is not taken for it.
 enter()
 castFor(3.0)                       -- next 100 at +20
 advance(17)
-advance(8)                         -- +28: overdue, marked due
+advance(3)                         -- +23: three seconds overdue, marked due
 sounds, spoken, clips = 0, 0, 0
 fire("UNIT_SPELLCAST_START", unit)
 check(Alerts() == 1, string.format("a late cast on an overdue prediction is recognised and alerted, got %d", Alerts()))
+advance(3)
+fire("UNIT_SPELLCAST_STOP", unit)
+reset()
+enter()
+castFor(3.0)                       -- next 100 at +20
+advance(17)
+advance(8)                         -- +28: eight seconds overdue
+sounds, spoken, clips = 0, 0, 0
+fire("UNIT_SPELLCAST_START", unit)
+check(Alerts() == 0, string.format("a start long after an overdue prediction is not voiced as it, got %d", Alerts()))
 advance(3)
 fire("UNIT_SPELLCAST_STOP", unit)
 reset()
@@ -1597,7 +1627,7 @@ for i = 1, #allFrames do
     if f.shown and IsBar(f) and f.labelValue and f.labelValue:find("\n", 1, true) then splitLabel = f.labelValue end
 end
 check(splitLabel == "DODGE\nKICK", "a disagreeing tie is labelled with both calls, got " .. tostring(splitLabel))
-advance(17.0)                          -- the tie comes round again: a live cast
+advance(3.0)                           -- the tie comes round again on its 4.8s slot: a live cast
 fire("UNIT_SPELLCAST_START", unit)
 advance(0.5)
 local splitCenter = CenterFrameStub()
