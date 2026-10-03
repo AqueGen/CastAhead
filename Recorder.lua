@@ -13,6 +13,8 @@ R.RECENT_MAX = 8
 R.MARK_WINDOW = 60
 R.EXPORT_LIMIT = 60000
 
+local UNCAPPED = { MARK = true, SNAP = true, NOTE = true }
+
 local checksum
 local mobOf = {}
 local recent = {}
@@ -75,19 +77,6 @@ local function Forget()
     R.selected = nil
 end
 
-function R.StartKey(info)
-    if R.Current() then R.EndKey("reset") end
-    local keys = Journal().keys
-    keys[#keys + 1] = {
-        format = R.FORMAT, addon = AddonVersion(), data = R.Checksum(),
-        instance = info.instance or 0, name = info.name or "?", level = info.level or 0,
-        affixes = info.affixes or "", role = info.role or "NONE",
-        startedAt = GetTime(), mobs = 0, marks = 0, lines = {},
-    }
-    while #keys > R.MAX_KEYS do table.remove(keys, 1) end
-    Forget()
-end
-
 local function Kind(line) return line:match("^%d+|(%u+)|") end
 
 function R.Summary(key)
@@ -108,6 +97,31 @@ function R.EndKey(result)
     if key.ended == "completed" then print(R.Summary(key)) end
 end
 
+function R.StartKey(info)
+    local keys = Journal().keys
+    local open = R.Current()
+    if open and #open.lines == 0 then
+        table.remove(keys)
+    elseif open then
+        R.EndKey("reset")
+    end
+    keys[#keys + 1] = {
+        format = R.FORMAT, addon = AddonVersion(), data = R.Checksum(),
+        instance = info.instance or 0, name = info.name or "?", level = info.level or 0,
+        affixes = info.affixes or "", role = info.role or "NONE",
+        startedAt = GetTime(), mobs = 0, marks = 0, lines = {},
+    }
+    while #keys > R.MAX_KEYS do table.remove(keys, 1) end
+    Forget()
+end
+
+function R.EnsureKey()
+    if R.Current() then return R.Current() end
+    local name, _, _, _, _, _, _, instance = GetInstanceInfo()
+    R.StartKey({ instance = instance, name = name, level = 0 })
+    return R.Current()
+end
+
 function R.Restore()
     local key = R.Current()
     if not key then return end
@@ -116,7 +130,8 @@ function R.Restore()
     if instance ~= key.instance or age < 0 or age > R.RESUME_WINDOW then
         R.EndKey("left")
     end
-    Forget()
+    wipe(mobOf)
+    wipe(recent)
 end
 
 local function Clean(text)
@@ -153,10 +168,13 @@ local function Ms(key, at)
     return math.floor(((at or GetTime()) - key.startedAt) * 1000 + 0.5)
 end
 
+local TOUCHES = { START = true, STOP = true, CUT = true, ENGAGE = true, PRED = true, LOCK = true, PLATE = true }
+
 local function Touch(id, kind, fields, now)
-    if id == "-" or kind == "SNAP" then return end
+    if id == "-" or not TOUCHES[kind] then return end
     local entry = recent[id]
     if not entry then
+        if kind == "PLATE" then return end
         entry = { id = id, state = "seen" }
         recent[id] = entry
     end
@@ -165,10 +183,10 @@ local function Touch(id, kind, fields, now)
         entry.state = "casting"
         if fields[2] ~= "-" then entry.spell = fields[2] end
         entry.call = fields[3]
-    elseif kind == "STOP" then
+    elseif kind == "STOP" or kind == "CUT" then
         entry.state = "seen"
-        if fields[3] ~= "" and not fields[3]:find(",", 1, true) then entry.spell = fields[3] end
-        entry.call = fields[4]
+        if kind == "STOP" and fields[3] ~= "" and not fields[3]:find(",", 1, true) then entry.spell = fields[3] end
+        if kind == "STOP" then entry.call = fields[4] end
     elseif kind == "PRED" then
         entry.spell = entry.spell or fields[1]
     elseif kind == "PLATE" and fields[1] == "removed" then
@@ -191,19 +209,22 @@ local function Prune(now)
     end
 end
 
-local function Write(kind, id, fields)
-    local key = R.Current()
-    if not key or key.truncated then return end
+local function Write(key, kind, id, fields)
+    if not key then return false end
     local lines = key.lines
     local now = GetTime()
     local t = Ms(key, now)
-    if #lines >= R.MAX_LINES then
-        lines[#lines + 1] = t .. "|TRIM|-|" .. #lines
-        key.truncated = t
-        return
+    if not UNCAPPED[kind] then
+        if key.truncated then return false end
+        if #lines >= R.MAX_LINES then
+            lines[#lines + 1] = t .. "|TRIM|-|" .. #lines
+            key.truncated = t
+            return false
+        end
     end
     lines[#lines + 1] = t .. "|" .. kind .. "|" .. id .. (#fields > 0 and ("|" .. table.concat(fields, "|")) or "")
-    Touch(id, kind, fields, now)
+    if key == R.Current() then Touch(id, kind, fields, now) end
+    return true
 end
 
 function R.Note(kind, slot, ...)
@@ -216,7 +237,7 @@ function R.Note(kind, slot, ...)
         key.mobs = (key.mobs or 0) + 1
         mobOf[n] = key.mobs
     end
-    Write(kind, MobId(slot), fields)
+    Write(key, kind, MobId(slot), fields)
     if kind == "PLATE" and fields[1] == "removed" and n then mobOf[n] = nil end
 end
 
@@ -236,42 +257,45 @@ function R.Select(id)
     R.selected = (R.selected ~= id) and id or nil
 end
 
-local function EnsureKey()
-    if R.Current() then return R.Current() end
-    local name, _, _, _, _, _, _, instance = GetInstanceInfo()
-    R.StartKey({ instance = instance, name = name, level = 0 })
-    return R.Current()
-end
-
 function R.Mark()
     if not R.Enabled() then return end
-    local key = EnsureKey()
+    local selected = R.selected or "-"
+    local snapshot = R.Current() and R.Recent() or {}
+    local key = R.EnsureKey()
     key.marks = (key.marks or 0) + 1
     local n = key.marks
-    local selected = R.selected or "-"
-    R.Note("MARK", nil, n, selected)
+    if not Write(key, "MARK", "-", { tostring(n), selected }) then return end
     local live = {}
     for _, entry in ipairs(CastAheadCore and CastAheadCore.Snapshot and CastAheadCore.Snapshot() or {}) do
         live[MobId(entry.slot)] = entry
     end
-    for _, entry in ipairs(R.Recent()) do
+    for _, entry in ipairs(snapshot) do
         local now = live[entry.id] or {}
         local casting = now.casting or {}
         local preds = {}
         for i, p in ipairs(now.preds or {}) do preds[i] = p[1] .. "@" .. p[2] .. "~" .. p[3] end
-        Write("SNAP", entry.id, { Field(entry.state), Field(casting.claimed or entry.spell or "-"),
+        Write(key, "SNAP", entry.id, { Field(entry.state), Field(casting.claimed or entry.spell or "-"),
             Field(casting.call or entry.call or "-"), Field(casting.candidates or {}),
             Field(casting.sinceMs or "-"), Field(table.concat(preds, ",")) })
     end
     R.selected = nil
     print("|cff33ff99Cast Ahead|r mark " .. n .. " recorded" .. (selected ~= "-" and (" on " .. selected) or ""))
-    return n
+    return n, key
 end
 
-function R.AddNote(n, text)
-    if not n or not text or text:match("^%s*$") then return end
-    if not R.Current() then return end
-    R.Note("NOTE", nil, n, text)
+local function KeyWithMark(n)
+    local keys = Journal().keys
+    for i = #keys, 1, -1 do
+        if (keys[i].marks or 0) >= n then return keys[i] end
+    end
+end
+
+function R.AddNote(n, text, key)
+    n = tonumber(n)
+    if not n or not text or text:match("^%s*$") then return false end
+    key = key or KeyWithMark(n)
+    if not key then return false end
+    return Write(key, "NOTE", "-", { tostring(n), Field(text) })
 end
 
 local function Clock(ms)
@@ -284,39 +308,51 @@ local function Parse(line)
     return tonumber(t), kind, id, rest
 end
 
-local function MarkWindows(key)
+local function Marks(key)
     local marks = {}
     for i, line in ipairs(key.lines) do
         local t, kind, _, rest = Parse(line)
         if kind == "MARK" then
             local n, selected = rest:match("^(%d+)|(.*)$")
-            marks[#marks + 1] = { index = i, t = t, n = tonumber(n), selected = selected }
+            local mobs = {}
+            for j = i + 1, #key.lines do
+                local tj, kj, idj = Parse(key.lines[j])
+                if kj ~= "SNAP" or tj ~= t then break end
+                if selected == "-" or idj == selected then mobs[idj] = true end
+            end
+            if selected ~= "-" then mobs[selected] = true end
+            marks[#marks + 1] = { index = i, t = t, n = tonumber(n), selected = selected, mobs = mobs }
         end
     end
     return marks
 end
 
-local function WindowLines(key, mark)
-    local picked = {}
+local function Windows(key, marks)
+    local windows = {}
+    for m, mark in ipairs(marks) do windows[m] = {} end
     for i, line in ipairs(key.lines) do
         local t, kind, id, rest = Parse(line)
-        if t and ((t >= mark.t - R.MARK_WINDOW * 1000 and t <= mark.t)
-            or (mark.selected ~= "-" and id == mark.selected)
-            or (kind == "NOTE" and tonumber(rest:match("^(%d+)")) == mark.n)
-            or (i > mark.index and kind == "SNAP" and t == mark.t)) then
-            picked[i] = true
+        if t then
+            for m, mark in ipairs(marks) do
+                if (t >= mark.t - R.MARK_WINDOW * 1000 and t <= mark.t)
+                    or (mark.mobs[id] and t <= mark.t)
+                    or (kind == "NOTE" and tonumber(rest:match("^(%d+)")) == mark.n)
+                    or (kind == "SNAP" and t == mark.t and i > mark.index) then
+                    windows[m][i] = true
+                end
+            end
         end
     end
-    return picked
+    return windows
 end
 
 local function MarkSummary(key, mark)
     local claim, call, note = "-", "-", {}
     for i = mark.index + 1, #key.lines do
-        local _, kind, id, rest = Parse(key.lines[i])
-        if kind ~= "SNAP" then break end
-        if mark.selected == "-" or id == mark.selected then
-            local _, c, k = rest:match("^([^|]*)|([^|]*)|([^|]*)")
+        local t, kind, id, rest = Parse(key.lines[i])
+        if kind ~= "SNAP" or t ~= mark.t then break end
+        local _, c, k = rest:match("^([^|]*)|([^|]*)|([^|]*)")
+        if (mark.selected ~= "-" and id == mark.selected) or (mark.selected == "-" and c and c ~= "-") then
             claim, call = c or "-", k or "-"
             break
         end
@@ -333,38 +369,52 @@ local function MarkSummary(key, mark)
 end
 
 function R.Export(key)
-    local marks = MarkWindows(key)
-    local dropped = 0
-    local function Build(from)
-        local picked = {}
-        if #marks == 0 then
-            for i = from, #key.lines do picked[i] = true end
-        else
-            for m = from, #marks do
-                for i in pairs(WindowLines(key, marks[m])) do picked[i] = true end
+    local marks = Marks(key)
+    local picked, size, droppedMarks, droppedLines = {}, 0, 0, 0
+    local budget = R.EXPORT_LIMIT - 400 - #marks * 160
+    if #marks == 0 then
+        for i = #key.lines, 1, -1 do
+            local cost = #key.lines[i] + 1
+            if size + cost > budget then
+                droppedLines = i
+                break
+            end
+            picked[i], size = true, size + cost
+        end
+    else
+        local windows = Windows(key, marks)
+        for m = #marks, 1, -1 do
+            local extra = 0
+            for i in pairs(windows[m]) do
+                if not picked[i] then extra = extra + #key.lines[i] + 1 end
+            end
+            if size + extra > budget and m < #marks then
+                droppedMarks = m
+                break
+            end
+            for i in pairs(windows[m]) do picked[i] = true end
+            size = size + extra
+        end
+    end
+    local body = {}
+    for i = 1, #key.lines do
+        if picked[i] then
+            if size > budget then
+                size = size - #key.lines[i] - 1
+                droppedLines = droppedLines + 1
+            else
+                body[#body + 1] = key.lines[i]
             end
         end
-        local body = {}
-        for i = 1, #key.lines do
-            if picked[i] then body[#body + 1] = key.lines[i] end
-        end
-        local out = { string.format("CastAhead-Report %d addon=%s data=%s instance=%s level=%s affixes=%s role=%s len=%d marks=%d%s%s",
-            key.format, key.addon, key.data, key.instance, key.level, key.affixes ~= "" and key.affixes or "-",
-            key.role, Ms(key, key.endedAt), key.marks or 0,
-            key.truncated and (" truncated=" .. key.truncated) or "",
-            dropped > 0 and (" dropped=" .. dropped) or "") }
-        for m = from, #marks do out[#out + 1] = MarkSummary(key, marks[m]) end
-        for _, line in ipairs(body) do out[#out + 1] = line end
-        out[#out + 1] = "CastAhead-Report end lines=" .. #body
-        return table.concat(out, "\n")
     end
-    local from = 1
-    local text = Build(from)
-    local last = #marks > 0 and #marks or #key.lines
-    while #text > R.EXPORT_LIMIT and from < last do
-        from = from + 1
-        dropped = from - 1
-        text = Build(from)
-    end
-    return text
+    local out = { string.format("CastAhead-Report %d addon=%s data=%s instance=%s level=%s affixes=%s role=%s len=%d marks=%d%s%s%s",
+        key.format, key.addon, key.data, key.instance, key.level, key.affixes ~= "" and key.affixes or "-",
+        key.role, Ms(key, key.endedAt), key.marks or 0,
+        key.truncated and (" truncated=" .. key.truncated) or "",
+        droppedMarks > 0 and (" droppedMarks=" .. droppedMarks) or "",
+        droppedLines > 0 and (" droppedLines=" .. droppedLines) or "") }
+    for m = droppedMarks + 1, #marks do out[#out + 1] = MarkSummary(key, marks[m]) end
+    for _, line in ipairs(body) do out[#out + 1] = line end
+    out[#out + 1] = "CastAhead-Report end lines=" .. #body
+    return table.concat(out, "\n")
 end

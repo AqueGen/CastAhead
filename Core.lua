@@ -1883,6 +1883,7 @@ end
 -- castGUID, spellID and, on CHANNEL_STOP, interruptedBy.
 local function RecordStart(unit, channel)
     local state = plates[unit]
+    if not (state and state.castStartAt == GetTime()) then return end
     local casting = state and state.casting
     local advice = casting and Announceable(casting.candidates)
         and CastAheadMatch.ConsensusAdvice(casting.candidates, state.interruptible)
@@ -1908,7 +1909,7 @@ end
 frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     if unit == "player" and (event == "UNIT_SPELLCAST_SUCCEEDED" or event == "UNIT_SPELLCAST_START") then
         ProbeAnchor(arg3)
-        if event == "UNIT_SPELLCAST_SUCCEEDED" then Record("SELF", nil, arg3) end
+        if event == "UNIT_SPELLCAST_SUCCEEDED" and not IsSecret(arg3) then Record("SELF", nil, arg3) end
         if event == "UNIT_SPELLCAST_SUCCEEDED" then return end
     end
     if event == "UNIT_AURA" then
@@ -1933,7 +1934,10 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     end
     if event == "PLAYER_ENTERING_WORLD" then
         ProbeRestore()
-        if CastAheadRecorder then CastAheadRecorder.Restore() end
+        if CastAheadRecorder then
+            CastAheadRecorder.Restore()
+            if CastAheadRecorder.Enabled() and IsInInstance() then CastAheadRecorder.EnsureKey() end
+        end
         if CastAheadReport then CastAheadReport.Refresh() end
         CastAheadCore.SyncCombatLog()
         wipe(seenAuras)
@@ -1978,6 +1982,9 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         return
     end
     if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
+        if event == "PLAYER_REGEN_DISABLED" and CastAheadRecorder and CastAheadRecorder.Enabled() then
+            CastAheadRecorder.EnsureKey()
+        end
         Record("PULL", nil, event == "PLAYER_REGEN_DISABLED" and "in" or "out")
         if CastAheadReport then CastAheadReport.Refresh() end
         return

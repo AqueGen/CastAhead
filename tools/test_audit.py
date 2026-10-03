@@ -26,6 +26,23 @@ def test_a_missing_line_is_caught_by_the_footer_count():
     assert not report.complete
 
 
+def test_channel_rows_and_dungeons_are_read_from_data_lua():
+    data = ('CastAheadData = {\n    [1877] = { name = "T",\n'
+            '        { spell = 100, npc = 1, mob = "A", name = "Big", cast = 3.0, cd = { 20.0 }, first = 5.0, n = 9, firstN = 9, level = 91, offset = 0.0, },\n'
+            '        { spell = 101, npc = 1, mob = "A", name = "Beam", cast = 6.0, cd = { 30.0 }, first = nil, n = 9, firstN = 0, level = 91, offset = nil, channel = true, },\n'
+            '    },\n    [2923] = { name = "V",\n'
+            '        { spell = 100, npc = 9, mob = "B", name = "Other", cast = 2.0, cd = { 10.0 }, first = 1.0, n = 9, firstN = 9, level = 91, offset = 0.0, },\n'
+            '    },\n}\n')
+    rows = load_data_rows(data, 1877)
+    assert rows[101]["channel"] and not rows[100]["channel"] and rows[100]["name"] == "Big"
+    assert load_data_rows(data, 2923)[100]["name"] == "Other"
+
+
+def test_a_paste_with_its_newlines_collapsed_still_parses():
+    report = parse_export(" ".join(SAMPLE.splitlines()))
+    assert report.complete and len(report.lines) == len(parse_export(SAMPLE).lines)
+
+
 def test_rows_are_read_from_data_lua():
     rows = load_data_rows('CastAheadData = {\n    [1877] = { name = "T",\n        { spell = 100, npc = 1, mob = "Caster", name = "Big", cast = 3.0, cd = { 20.0 }, first = 5.0, n = 9, firstN = 9, level = 91, offset = 0.0, },\n    },\n}\n')
     assert rows[100]["name"] == "Big" and rows[100]["cast"] == 3.0 and not rows[100]["channel"]
@@ -47,6 +64,9 @@ def test_the_owner_audit_lines_up_with_the_log_and_scores_calls(tmp_path):
     log.append('10/3/2026 12:00:20.000  SPELL_DAMAGE,Player-1-1,"Me",0x511,0x0,%s,"Mob",0xa48,0x0,555,"Bolt",0x1' % mob)
     log.append('10/3/2026 12:00:22.000  SPELL_CAST_START,%s,"Mob",0xa48,0x0,0000000000000000,nil,0x0,0x0,100,"Big",0x1' % mob)
     log.append('10/3/2026 12:00:42.500  SPELL_CAST_START,%s,"Mob",0xa48,0x0,0000000000000000,nil,0x0,0x0,100,"Big",0x1' % mob)
+    for k in range(3):
+        log.insert(0, '10/3/2026 11:%02d:00.000  SPELL_CAST_SUCCESS,Player-1-1,"Me",0x511,0x0,0000000000000000,nil,0x0,0x0,555,"Bolt",0x1' % (10 * k))
+    log.append('10/3/2026 12:00:11.000  SPELL_CAST_SUCCESS,Player-1-2,"Friend",0x512,0x0,0000000000000000,nil,0x0,0x0,555,"Bolt",0x1')
     path = tmp_path / "log.txt"
     path.write_text("\n".join(log) + "\n", encoding="utf-8")
     journal = [parse_line(s) for s in (

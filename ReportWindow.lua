@@ -24,8 +24,8 @@ local function StateText(entry)
 end
 
 local function SaveNote()
-    if noteBox and noteBox:IsShown() then
-        CastAheadRecorder.AddNote(pendingMark, noteBox:GetText())
+    if noteBox and noteBox:IsShown() and pendingMark then
+        CastAheadRecorder.AddNote(pendingMark.n, noteBox:GetText(), pendingMark.key)
         noteBox:SetText("")
         noteBox:ClearFocus()
         noteBox:Hide()
@@ -55,10 +55,10 @@ end
 function W.Mark(withNote)
     if not (CastAheadRecorder and CastAheadRecorder.Enabled()) then return end
     SaveNote()
-    local n = CastAheadRecorder.Mark()
+    local n, key = CastAheadRecorder.Mark()
     Paint()
     if withNote and n and noteBox then
-        pendingMark = n
+        pendingMark = { n = n, key = key }
         noteBox:Show()
         noteBox:SetFocus()
     end
@@ -139,7 +139,7 @@ end
 
 function W.Refresh()
     local want = CastAheadRecorder and CastAheadRecorder.Enabled()
-        and ((IsInInstance and IsInInstance()) or (InCombatLockdown and InCombatLockdown()))
+        and ((IsInInstance and IsInInstance()) or (UnitAffectingCombat and UnitAffectingCombat("player")))
     if want and not panel then Build() end
     if not panel then return end
     panel:SetShown(want and true or false)

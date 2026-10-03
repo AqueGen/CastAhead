@@ -859,8 +859,17 @@ SlashCmdList.CASTAHEAD = function(msg)
     end
     if word == "mark" then
         if CastAheadRecorder and CastAheadRecorder.Enabled() then
-            local n = CastAheadRecorder.Mark()
-            CastAheadRecorder.AddNote(n, msg:match("^%s*%a+%s+(.+)$"))
+            local n, key = CastAheadRecorder.Mark()
+            CastAheadRecorder.AddNote(n, msg:match("^%s*%a+%s+(.+)$"), key)
+        end
+        return
+    end
+    if word == "note" then
+        local n, text = msg:match("^%s*%a+%s+(%d+)%s+(.+)$")
+        if CastAheadRecorder and n and CastAheadRecorder.AddNote(n, text) then
+            print("|cff33ff99Cast Ahead|r note added to mark " .. n)
+        else
+            print("|cff33ff99Cast Ahead|r usage: /ca note <mark number> <text>")
         end
         return
     end

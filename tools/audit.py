@@ -14,7 +14,11 @@ from dataclasses import dataclass, field
 
 HEADER = re.compile(r"^CastAhead-Report (\d+) (.*)$")
 FOOTER = re.compile(r"^CastAhead-Report end lines=(\d+)$")
-ROW = re.compile(r'\{ spell = (\d+), npc = (\d+), mob = "([^"]*)", name = "([^"]*)", cast = ([\d.]+),(.*?)\},')
+ROW = re.compile(r'\{ spell = (\d+), npc = (\d+), mob = "([^"]*)", name = "([^"]*)", cast = ([\d.]+),(.*)\},\s*$')
+DUNGEON = re.compile(r'^\s*\[(\d+)\] = \{ name = ')
+RECORD = re.compile(r"\s+(?=\d+\|[A-Z]+\||# mark |CastAhead-Report end)")
+ANCHOR_BIN_MS = 250
+AFFILIATION_MINE = 0x1
 LENGTH_SLACK = 0.25
 
 
@@ -37,11 +41,12 @@ class Report:
 
 def parse_line(text):
     parts = text.split("|")
-    return Line(int(parts[0]), parts[1], parts[2], parts[3:])
+    return Line(int(parts[0]), parts[1], parts[2], parts[3:] + [""] * 6)
 
 
 def parse_export(text):
     report = Report()
+    text = RECORD.sub("\n", text)
     rows = [r.strip() for r in text.splitlines() if r.strip()]
     if not rows or not HEADER.match(rows[0]):
         report.problems.append("no CastAhead-Report header")
@@ -51,8 +56,8 @@ def parse_export(text):
     report.header["format"] = version
     footer = FOOTER.match(rows[-1])
     for row in (rows[1:-1] if footer else rows[1:]):
-        if row.startswith("# "):
-            report.summaries.append(row[2:])
+        if row.startswith("# ") or re.match(r"^mark \d+ at ", row):
+            report.summaries.append(row[2:] if row.startswith("# ") else row)
         elif re.match(r"^\d+\|", row):
             report.lines.append(parse_line(row))
         else:
@@ -63,17 +68,26 @@ def parse_export(text):
         report.problems.append("footer says %s lines, %d arrived" % (footer.group(1), len(report.lines)))
     if "truncated" in report.header:
         report.problems.append("the journal hit its line cap at %s ms" % report.header["truncated"])
-    if "dropped" in report.header:
-        report.problems.append("%s older marks were left out to fit the size limit" % report.header["dropped"])
+    if "droppedMarks" in report.header:
+        report.problems.append("the oldest %s marks were left out to fit the size limit" % report.header["droppedMarks"])
+    if "droppedLines" in report.header:
+        report.problems.append("the oldest %s lines were left out to fit the size limit" % report.header["droppedLines"])
     report.complete = not any(p.startswith(("no CastAhead", "footer", "unreadable")) for p in report.problems)
     return report
 
 
-def load_data_rows(text):
-    rows = {}
-    for m in ROW.finditer(text):
-        rows[int(m.group(1))] = {"npc": int(m.group(2)), "mob": m.group(3), "name": m.group(4),
-                                 "cast": float(m.group(5)), "channel": "channel = true" in m.group(6)}
+def load_data_rows(text, instance=None):
+    rows, current = {}, None
+    for line in text.splitlines():
+        d = DUNGEON.match(line)
+        if d:
+            current = d.group(1)
+            continue
+        m = ROW.search(line)
+        if not m or (instance is not None and current != str(instance)):
+            continue
+        rows.setdefault(int(m.group(1)), {"npc": int(m.group(2)), "mob": m.group(3), "name": m.group(4),
+                                          "cast": float(m.group(5)), "channel": "channel = true" in m.group(6)})
     return rows
 
 
@@ -173,17 +187,21 @@ def owner_audit(lines, log_path, rows):
     selfs = [l for l in lines if l.kind == "SELF"]
     player_casts, creature_starts, first_hit = [], [], {}
     for ms, p in log_events(log_path):
-        if p[0] == "SPELL_CAST_SUCCESS" and p[1].startswith("Player-"):
+        if p[0] == "SPELL_CAST_SUCCESS" and p[1].startswith("Player-") and int(p[3], 16) & AFFILIATION_MINE:
             player_casts.append((ms, p[9]))
         elif p[0] == "SPELL_CAST_START" and p[1].startswith("Creature-"):
             creature_starts.append((ms, p[1], int(p[9])))
         elif p[0].endswith("_DAMAGE") and len(p) > 5 and p[5].startswith("Creature-"):
             first_hit.setdefault(p[5], ms)
-    offsets = sorted(ms - s.t for s in selfs for ms, spell in player_casts if spell == s.fields[0])
-    if len(offsets) < 5:
-        return "Not enough player casts to line the journal up with the log (%d)." % len(offsets)
-    base = statistics.median(offsets)
-    out = ["## Owner audit", "clock offset from %d player-cast anchors" % len(offsets)]
+    offsets = [ms - s.t for s in selfs for ms, spell in player_casts if spell == s.fields[0]]
+    bins = {}
+    for o in offsets:
+        bins.setdefault(round(o / ANCHOR_BIN_MS), []).append(o)
+    best = max(bins.values(), key=len, default=[])
+    if len(best) < 5:
+        return "Not enough player casts to line the journal up with the log (%d agree)." % len(best)
+    base = statistics.median(best)
+    out = ["## Owner audit", "clock offset agreed by %d of %d player casts" % (len(best), len(selfs))]
     right = wrong = 0
     guid_of = {}
     for start in (l for l in lines if l.kind == "START"):
@@ -233,10 +251,12 @@ def main(argv):
     b.add_argument("--data", default=str(pathlib.Path(__file__).resolve().parent.parent / "Data.lua"))
     b.add_argument("--out")
     args = ap.parse_args(argv)
-    rows = load_data_rows(pathlib.Path(args.data).read_text(encoding="utf-8"))
+    data = pathlib.Path(args.data).read_text(encoding="utf-8")
     if args.mode == "issue":
-        print(issue_report(parse_export(pathlib.Path(args.export).read_text(encoding="utf-8")), rows))
+        report = parse_export(pathlib.Path(args.export).read_text(encoding="utf-8"))
+        print(issue_report(report, load_data_rows(data, report.header.get("instance"))))
         return
+    rows = load_data_rows(data)
     lines = read_journal(pathlib.Path(args.saved).read_text(encoding="utf-8"), args.key)
     text = owner_audit(lines, args.log, rows)
     if args.out:

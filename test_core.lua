@@ -1918,11 +1918,16 @@ check(text:find("|STOP|1.1|0|3000|", 1, true), "the selected mob's whole history
 local limit = R.EXPORT_LIMIT
 R.EXPORT_LIMIT = #text - 1
 local cut = R.Export(R.Current())
-check(cut:match("dropped=%d+"), "an export over the limit drops the oldest marks and says so")
+check(cut:match("droppedMarks=%d+"), "an export over the limit drops the oldest marks and says so")
 R.EXPORT_LIMIT = limit
 if os.getenv("CA_WRITE_FIXTURE") == "1" then
     local f = assert(io.open("tools/fixtures/export_sample.txt", "w"))
     f:write(text) f:close()
+else
+    local f = io.open("tools/fixtures/export_sample.txt")
+    local golden = f and f:read("*a")
+    if f then f:close() end
+    check(golden == text, "tools/fixtures/export_sample.txt matches what Recorder.lua exports (regenerate with CA_WRITE_FIXTURE=1)")
 end
 
 -- The panel, the bindings' entry point and the slash commands run in the stubs.
@@ -1941,6 +1946,102 @@ check(ok, "the panel refreshes: " .. tostring(err))
 Quiet()
 R.EndKey("completed")
 Loud()
+
+-- Notes belong to the key of their mark, even after it ended or after a reload.
+Quiet()
+R.StartKey({ instance = 1877, name = "Test", level = 7 })
+local endedKey = R.Current()
+local noteMark, noteKey = R.Mark()
+R.EndKey("completed")
+R.StartKey({ instance = 1877, name = "Test", level = 8 })
+check(R.AddNote(noteMark, "typed after the key ended", noteKey), "a note after its key ended is still written")
+check(endedKey.lines[#endedKey.lines]:match("|NOTE|%-|" .. noteMark .. "|typed after the key ended$"), "into the key that holds its mark")
+check(#Lines() == 0, "and not into the new key")
+ok, err = pcall(SlashCmdList.CASTAHEAD, "note " .. noteMark .. " after a reload")
+check(ok and endedKey.lines[#endedKey.lines]:match("after a reload$"), "/ca note <n> reaches an old mark: " .. tostring(err))
+Loud()
+
+-- An unselected mark long after the pull still carries the history of the mobs it snapshots.
+Quiet()
+R.StartKey({ instance = 1877, name = "Test", level = 9 })
+enter()
+fire("PLAYER_REGEN_DISABLED")
+castFor(3.0)
+fire("PLAYER_REGEN_ENABLED")
+reset()
+advance(70)
+R.Mark()
+local late = R.Export(R.Current())
+check(late:find("|STOP|", 1, true), "a mark 70 s after the pull, nothing selected, exports the mob's casts")
+Loud()
+
+-- A mark after the line cap is still recorded, and only a written mark is confirmed.
+Quiet()
+R.StartKey({ instance = 1877, name = "Test", level = 10 })
+local capped = R.MAX_LINES
+R.MAX_LINES = 1
+R.Note("PULL", nil, "in") R.Note("PULL", nil, "out")
+local cappedMark = R.Mark()
+R.MAX_LINES = capped
+check(cappedMark and Find("|MARK|%-|" .. cappedMark .. "|"), "a mark after the line cap is still written")
+Loud()
+
+-- The selection survives a mark with no open key, and combat opens a key on its own.
+Quiet()
+R.EndKey("completed")
+R.selected = "4.2"
+R.Mark()
+check(Find("|MARK|%-|1|4%.2$"), "a mark with no open key keeps the selected mob")
+R.EndKey("completed")
+fire("PLAYER_REGEN_DISABLED")
+check(R.Current() and Find("|PULL|%-|in$"), "entering combat with no key open starts one")
+fire("PLAYER_REGEN_ENABLED")
+Loud()
+
+-- A cast the addon ignores (out of combat) leaves no START behind.
+local before = #Lines()
+hostile[unit], combat[unit] = true, false
+fire("NAME_PLATE_UNIT_ADDED", unit)
+fire("UNIT_SPELLCAST_START", unit)
+check(not Find("|START|"), "an ignored out-of-combat cast is not journalled as a start")
+fire("UNIT_SPELLCAST_STOP", unit)
+reset()
+check(#Lines() >= before, "the plate itself is still journalled")
+
+-- Export stays fast on a full-size key.
+Quiet()
+R.StartKey({ instance = 1877, name = "Test", level = 11 })
+for i = 1, 20000 do R.Note("STEP", "nameplate" .. (i % 30 + 1), "length", { 100, 200, 300 }) end
+for i = 1, 30 do R.Mark() end
+local started = os.clock()
+local big = R.Export(R.Current())
+Loud()
+check(os.clock() - started < 2.0, string.format("a 20000-line export with 30 marks takes under 2 s, took %.2f", os.clock() - started))
+check(#big <= R.EXPORT_LIMIT, "and fits the size limit, got " .. #big)
+R.StartKey({ instance = 1877, name = "Test", level = 12 })
+for i = 1, 12000 do R.Note("STEP", "nameplate1", "length", { 100 }) end
+started = os.clock()
+big = R.Export(R.Current())
+check(os.clock() - started < 2.0 and big:match("droppedLines=%d+"), "a long key with no marks exports its tail quickly")
+Quiet()
+R.EndKey("completed")
+Loud()
+CastAheadDB = nil
+
+-- Core runs with no recorder loaded at all.
+local recorder, report = CastAheadRecorder, CastAheadReport
+CastAheadRecorder, CastAheadReport = nil, nil
+CastAheadDB = { keyJournal = true, devMode = true }
+ok, err = pcall(function()
+    enter()
+    fire("CHALLENGE_MODE_START")
+    fire("PLAYER_REGEN_DISABLED")
+    castFor(3.0)
+    fire("PLAYER_REGEN_ENABLED")
+    reset()
+end)
+check(ok, "Core works without the recorder: " .. tostring(err))
+CastAheadRecorder, CastAheadReport = recorder, report
 CastAheadDB = nil
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
