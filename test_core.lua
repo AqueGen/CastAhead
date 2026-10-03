@@ -1237,6 +1237,26 @@ check(not IconShown(101), "a disabled spell is not laid out as a sibling")
 reset()
 CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
+-- Two of the creature's predictions due together with different calls: the
+-- start is not voiced as either.
+local siblingRow = CastAheadData[1877][2]
+local savedCd, savedPrio, savedN = siblingRow.cd, siblingRow.prio, siblingRow.n
+siblingRow.cd, siblingRow.prio, siblingRow.n = { 8.0 }, "TANK", 40
+CastAheadDB = { leadSeconds = 0, importantOnly = false }
+enter()
+castFor(3.0)                       -- 100 at t0, next at +20
+advance(9.0)                       -- +12
+castFor(4.5)                       -- 101 at +12, next at +20
+advance(3.5)                       -- +20: both due
+sounds, spoken, clips = 0, 0, 0
+fire("UNIT_SPELLCAST_START", unit)
+check(Alerts() == 0, string.format("a start between two siblings with different calls stays silent, got %d", Alerts()))
+advance(3)
+fire("UNIT_SPELLCAST_STOP", unit)
+reset()
+siblingRow.cd, siblingRow.prio, siblingRow.n = savedCd, savedPrio, savedN
+CastAheadDB = { leadSeconds = 5 }
+
 -- A prediction kept as overdue ("!") still recognises a cast a few seconds
 -- late, past the two-second window; one much later is not taken for it.
 enter()

@@ -127,8 +127,13 @@ local tuning = {
     --    often as a right one. Replays with game-read targets, voiced start
     --    calls right/wrong: public 2129/341 -> 1992/124, own keys 149/19 ->
     --    142/6; completed-cast identification improved slightly.
+    --  - claimMargin 1: two of one creature's predictions within 1 s of each
+    --    other with different calls (Devour and Dreadbellow, both untargeted)
+    --    were settled by whichever was nearer. Public replay -13 right / -11
+    --    wrong, own Voidscar keys -0 / -1.
     claimWindow = 2.0,         -- how far from its prediction a start may be claimed by it
     lateClaimMax = 4.0,        -- how long an overdue prediction may still claim a start
+    claimMargin = 1.0,         -- a rival with another call this close in time leaves the start unclaimed
 }
 
 -- Population: how many of each creature MDT places in this dungeon (Packs.lua,
@@ -1475,6 +1480,7 @@ local function OnCastStart(unit, channel)
     -- Which spell is this? The one we predicted for about now. Cast length is
     -- Secret, so the bar's length comes from the table instead.
     local best, bestDelta
+    local eligible = {}
     local identified, identifiedCount = nil, 0
     for _, track in pairs(state.tracks) do
         -- Only tracks of the kind that just started may claim it. A channel
@@ -1490,8 +1496,11 @@ local function OnCastStart(unit, channel)
                 -- icon is kept precisely so a late cast is recognised.
                 local late = track.due and now >= track.nextAt
                     and (not tuning.lateClaimMax or now - track.nextAt <= tuning.lateClaimMax)
-                if (delta <= tuning.claimWindow or late) and (not bestDelta or delta < bestDelta) then
-                    best, bestDelta = track, delta
+                if delta <= tuning.claimWindow or late then
+                    eligible[#eligible + 1] = { track = track, delta = delta }
+                    if not bestDelta or delta < bestDelta then
+                        best, bestDelta = track, delta
+                    end
                 end
             end
         end
@@ -1504,6 +1513,16 @@ local function OnCastStart(unit, channel)
     -- anyway finished its timeline event early and voiced the wrong call.
     if not best and identifiedCount == 1 and not identified.nextAt then
         best = identified
+    end
+    if best and tuning.claimMargin then
+        local call = CastAheadMatch.ConsensusAdvice(best.candidates)
+        for _, rival in ipairs(eligible) do
+            if rival.track ~= best and rival.delta - bestDelta < tuning.claimMargin
+                and CastAheadMatch.ConsensusAdvice(rival.track.candidates) ~= call then
+                best = nil
+                break
+            end
+        end
     end
     if best then
         if CastAheadTimeline then CastAheadTimeline.Finish(best) end

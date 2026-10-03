@@ -130,6 +130,10 @@ if os.getenv("CA_LATE_MAX") then
     CastAheadCore.Tuning.lateClaimMax = tonumber(os.getenv("CA_LATE_MAX"))
     knobs[#knobs + 1] = "lateClaimMax=" .. os.getenv("CA_LATE_MAX")
 end
+if os.getenv("CA_CLAIM_MARGIN") then
+    CastAheadCore.Tuning.claimMargin = tonumber(os.getenv("CA_CLAIM_MARGIN"))
+    knobs[#knobs + 1] = "claimMargin=" .. os.getenv("CA_CLAIM_MARGIN")
+end
 if os.getenv("CA_TARGET") == "0" then
     CastAheadCore.Tuning.targetNarrow = false
     knobs[#knobs + 1] = "targetNarrow=off"
