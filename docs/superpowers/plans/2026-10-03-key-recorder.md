@@ -10,6 +10,16 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-03-key-recorder-design.md`
 
+## Revision (2026-10-03, after the spec revision) - wins over the tasks below where they differ
+
+- Switches: `reportCalls` is renamed `keyJournal` and lives on the Development tab; `CastAheadRecorder.Enabled()` is `devMode and keyJournal`. No `markScreenshot`, no `Screenshot()` call, no screenshot field on `MARK`.
+- Mob identity: `Note` writes the slot field as `<slot>.<mob number>`. The recorder keeps `mobOf[slot]`; a `PLATE added` line assigns the next number for that key (`key.mobs = key.mobs + 1`); lines for a slot with no number yet use the bare slot.
+- Recent mobs: the recorder keeps `recent[mobId] = { id, slot, lastAt, state = "casting"|"seen"|"dead", spell, call }` updated from START/STOP/PLATE/PRED lines, pruned to 120 s and 8 entries (a selected one is kept).
+- Marks: `CastAheadRecorder.Mark(selected)` writes `MARK|-|n|selected or -` then `SNAP` per recent mob; `CastAheadRecorder.Note(n, text)`... is named `AddNote(n, text)` and writes `NOTE|-|n|text`. Bindings: `CASTAHEAD_MARK` and `CASTAHEAD_MARK_NOTE`.
+- Panel (`ReportWindow.lua`): rows from `CastAheadRecorder.Recent()`, click selects or clears; buttons "Mark" and "Mark + note"; the note input is a one-line EditBox focused on open, Enter saves via `AddNote`, Escape closes; a new mark while it is open first saves what was typed. Shown only while `Enabled()` and the player is in an instance or in combat; refreshed on a 0.5 s ticker while shown.
+- Export: windows instead of pulls - for each mark, all lines of the selected mob id plus every line from 60 s before the mark to the mark (all snapshotted mobs when nothing is selected), merged, in time order; `Pulls()` is dropped. Above 60000 characters the oldest marks' windows are dropped and the header gets `dropped=<n>`.
+- Dropped: CPU benchmark step, `/ca report <pull>`.
+
 ## Global Constraints
 
 - Display name in every player-facing string: "Cast Ahead". Identifiers stay `CastAhead*`.

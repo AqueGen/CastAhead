@@ -1,6 +1,6 @@
 # Key recorder and wrong-call reports
 
-Status: design approved in chat on 2026-10-03, awaiting review of this written spec.
+Status: approved 2026-10-03; revised the same day for the mark panel, mob identity and time-window exports.
 
 ## Goal
 
@@ -21,10 +21,10 @@ The deciding requirement for the report format: the owner must be able to recons
 
 | Switch | Where | Turns on |
 |---|---|---|
-| Report wrong calls | General tab, Advanced group, off by default | key journal, mark key binding, on-screen mark button, post-key chat line, `/ca report` |
-| Development mode + Combat log in dungeons | existing | all of the above plus the combat log, so the owner's audit can join the journal to the log |
+| Key journal | Development tab, off by default; works only while Development mode is on | key journal, mark panel, mark key binding, post-key chat line, `/ca report` |
+| Combat log in dungeons | Development tab (existing) | the combat log, so the owner's audit can join the journal to the log |
 
-The public switch never touches the combat log, so other players do not end up with hundreds of MB of logs.
+Everything here lives behind Development mode, so ordinary players never see it. A player who wants to report turns on Development mode and the key journal; the combat log switch stays separate, so other players do not end up with hundreds of MB of logs.
 
 ## Components
 
@@ -54,16 +54,43 @@ One line per event, `t|type|slot|fields`, `t` in milliseconds since key start (f
 - `PRED` a prediction set or moved: spell, due time, approximate yes/no, source (repeat, projected, opening)
 - `TL` timeline event added / finished / cancelled with reason
 - `HEADS` heads-up voiced (when the lead warning is on)
-- `MARK` player mark: mark number, optional note, snapshot (see below), screenshot taken yes/no
+- `MARK` player mark: mark number, selected mob or `-`
+- `SNAP` one per recent mob at a mark
+- `NOTE` a note for a mark number, possibly long after it
 - `TRIM` cap reached
 
 Recording only appends plain numbers and strings the addon already holds as ordinary Lua values. It never reads, compares or boolean-tests a value that 12.x may return Secret.
 
-### Mark
+### Mob identity
 
-- Key binding "Cast Ahead: mark a wrong call" via `Bindings.xml` (loaded by the client automatically from the addon root, shown under the addon's own header in the game's key bindings).
-- A small movable on-screen button for players who do not bind keys, shown only while the switch is on and the player is in combat or in a dungeon.
-- On mark: writes a `MARK` line with a snapshot of every tracked plate within the last 10 seconds (casting state, last claim and call, candidates, live predictions with due times), prints one confirmation line in chat, and takes a screenshot with `Screenshot()` if that call works from an addon in combat. That is verified in game first with a throwaway probe; if it does not work, marks carry no screenshot and the option is not offered.
+The game recycles nameplate tokens: `nameplate3` can be one mob now and another a second later. Every appearance of a hostile plate therefore gets its own number, counted per key, and every line names the mob as `<slot>.<mob number>` (for example `3.17`). A recycled token starts a new number, so one mob's history never merges with another's.
+
+### Mark panel
+
+Shown only while Development mode and the key journal are on, and the player is in a dungeon or in combat. Movable; position saved.
+
+- A list of recent mobs: everything the addon tracked in the last 120 seconds, alive or dead, at most 8 rows, most recent activity first. Each row shows the icon of the mob's last cast (or of its next predicted one), the call made for it, and its state: "casting", "N s ago", or "dead". The list keeps updating while it is open, but a selected row stays selected even after the mob dies or scrolls out of the 120-second window, until the mark is made.
+- Clicking a row selects that mob; clicking it again clears the selection. With nothing selected, a mark applies to the whole moment (every recent mob).
+- Two buttons:
+  - "Mark": records the mark at once.
+  - "Mark + note": records the mark at once, then opens a one-line input with the cursor in it. Enter saves the note to that mark and closes the input; Escape closes it without a note; the mark stays either way. The input never blocks the next mark: pressing a mark button or the key again while it is open saves what was typed so far to the previous mark first.
+- Key bindings (`Bindings.xml`, under the addon's own header in the game's key bindings): "Mark" and "Mark + note", both acting on the current selection.
+- On mark: a `MARK` line (mark number, selected mob or `-`) and a `SNAP` line per recent mob (state, last claim and call, candidates, live predictions with due times), and one confirmation line in chat. A note arrives later as its own `NOTE` line pointing at the mark number, so a note typed half a minute after the mark still belongs to it.
+
+### How players actually mark
+
+People mark at any moment and in any order; the design must not assume the mark comes at the moment of the mistake. Cases it has to handle, each with a test:
+
+- During the wrong cast, while it is still on the cast bar.
+- Seconds after the cast, when the mob is casting something else.
+- After the mob died, or after its plate left the screen.
+- After the pull ended, between pulls.
+- In a chain pull that never leaves combat: there is no pull boundary, so nothing may rely on one.
+- Several marks in a row, on the same mob or on different ones; several marks before any note; a note typed while the next pull starts.
+- A mark with nothing selected, or with a mob selected that is no longer in the list.
+- A mark outside a dungeon or with no mobs tracked at all.
+- A `/reload` or disconnect between the mark and the note, or in the middle of a key.
+- Marking the wrong mob by mistake: the snapshot of every recent mob is kept regardless, so the audit can still find the right one.
 
 ### After the key
 
@@ -76,15 +103,15 @@ Line based, same `t|type|slot|fields` lines as the journal, wrapped in a header 
 
 ```
 CastAhead-Report 1 addon=0.14.0 data=<checksum> instance=2923 level=12 affixes=... role=HEALER start=... len=...
-# mark 1 at 05:12.4, pull 3: claimed Devour/SWITCH while casting 2.0s; note: tank buster was called swap
-<every event line of the pull that contains each mark, in order>
+# mark 1 at 05:12.4 on 3.17: claimed Devour/SWITCH while casting 2.0s; note: tank buster was called swap
+<every event line in the mark windows, in time order>
 CastAhead-Report end lines=<n>
 ```
 
 - The `#` lines are the human summary, one per mark; everything else is machine data.
-- It carries the whole pull around each mark, not just the marked mob, so the pull can be replayed.
+- For each mark it carries a time window, not a pull: the whole history of the selected mob from its first line to its last, plus every line from 60 seconds before the mark to the mark (or the last 60 seconds of every snapshotted mob when nothing was selected). Windows of several marks are merged where they overlap and kept in time order. Chain pulls with no combat break therefore export the same way as separate pulls.
 - The footer line count lets the parser detect a truncated paste.
-- Size: a busy pull is a few hundred lines; GitHub issue bodies hold 65536 characters. When a report would exceed about 60000 characters the window offers one pull at a time.
+- Size: a mark window is a few hundred lines; GitHub issue bodies hold 65536 characters. When the export would exceed 60000 characters, the oldest marks' windows are left out and the header says how many were dropped, so nothing is lost silently.
 
 ### GitHub issue form
 
@@ -112,13 +139,13 @@ Output: Markdown in `F:\claude-data\castahead-audit\<date>-<instance>.md` for th
 - `test_core.lua`: the journal receives the expected event lines over a scripted pull; a mark snapshots the right plates; export text round-trips through `tools/audit.py` (written to a temp file, parsed back, every line accounted for); line and key caps with the truncation flag; a reload mid-key continues the key; nothing errors when `CastAheadRecorder` is nil.
 - `tools/test_audit.py` (pytest): parsing, checksum handling, truncated paste detection, offline narrowing on a fixture.
 - End to end on a real log: the three Voidscar Arena keys of 2026-10-03 must surface the Brutalize/Devour start claim if it is replayed with v0.12.0 data.
-- CPU: replay a full key through the harness with the recorder on and off; the difference must be negligible before release.
 
 ## Out of scope
 
 - Uploading anything from the game (impossible for an addon) or reading the combat log in game.
 - Changing what the addon calls out. The recorder only observes.
 - Automatic sync of new logs; that stays the `castahead-sync` skill.
+- Left out under YAGNI after the owner handed the work over (2026-10-03), each easy to add later: a screenshot on mark (cannot be verified without the game, and the snapshot already records the moment), the CPU benchmark (recording is a table append per event), choosing a single pull for export (time windows replace pulls).
 
 ## Packaging
 
