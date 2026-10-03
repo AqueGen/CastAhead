@@ -68,6 +68,13 @@ def test_a_cooldown_drifting_one_delay_step_keeps_the_anchor():
     assert changed == ["cd"] and settled["cd"] == [24.0]
 
 
+def test_a_held_cooldown_is_judged_by_its_own_fit():
+    held = [26.7]
+    intervals = [26.7] * 4 + [31.6, 30.3, 31.5, 30.4, 29.9, 31.0]
+    settled, _ = settle(row(cd=[27.5], fit=0.9, iv=intervals), row(cd=held, approx=False))
+    assert settled["cd"] == held and settled["approx"] is True
+
+
 def test_thin_target_evidence_keeps_the_anchor_verdict():
     settled, _ = settle(row(targeted=None), row(targeted=True))
     assert settled["targeted"] is True
@@ -144,6 +151,21 @@ def _run_gen(tmp, casts, spell_times=None, channels=None, overrides=None):
         gen_main(casts_path, out_path, None, paths.get("overrides"), paths.get("channels"), None, None,
                   paths.get("spell_times"))
     return open(out_path, encoding="utf-8").read(), buf.getvalue()
+
+
+def test_an_opening_that_covers_few_first_casts_is_dropped():
+    spike = [0.5] * 12 + [20.0 + i for i in range(30)]
+    tight = [8.0 + 0.1 * (i % 5) for i in range(20)] + [30.0, 31.0]
+    with tempfile.TemporaryDirectory() as tmp:
+        casts = {"1|Zone": {"10": {
+            "1000": _base_cast_record(first=spike, starts=50),
+            "1001": _base_cast_record(cast=[4.0] * 5, first=tight, starts=50),
+        }}}
+        lua, _ = _run_gen(tmp, casts, overrides={"include": ["1000", "1001"]})
+        spike_row = next(line for line in lua.splitlines() if "spell = 1000," in line)
+        tight_row = next(line for line in lua.splitlines() if "spell = 1001," in line)
+        assert "first = nil" in spike_row and "firstN = 0," in spike_row
+        assert "first = 8.2" in tight_row
 
 
 def test_log_measured_cast_wins_when_the_log_saw_enough_starts_but_reports_the_disagreement():

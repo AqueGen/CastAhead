@@ -122,6 +122,13 @@ local tuning = {
     --    Replay of our logs: 583 right / 67 wrong without it, 631 / 57 with.
     targetNarrow = true,       -- whether the cast has a target, read at its start, narrows candidates
     observedBelowOnly = true,  -- an observed interval replaces the tabled cooldown only when shorter
+    --  - claimWindow 2 and lateClaimMax 4: a start more than 2 s from its
+    --    prediction, or more than 4 s overdue, was a wrong call about as
+    --    often as a right one. Replays with game-read targets, voiced start
+    --    calls right/wrong: public 2129/341 -> 1992/124, own keys 149/19 ->
+    --    142/6; completed-cast identification improved slightly.
+    claimWindow = 2.0,         -- how far from its prediction a start may be claimed by it
+    lateClaimMax = 4.0,        -- how long an overdue prediction may still claim a start
 }
 
 -- Population: how many of each creature MDT places in this dungeon (Packs.lua,
@@ -1482,7 +1489,8 @@ local function OnCastStart(unit, channel)
                 -- Inside the window, or overdue and still waiting: the "!"
                 -- icon is kept precisely so a late cast is recognised.
                 local late = track.due and now >= track.nextAt
-                if (delta <= PREDICTION_MATCH_WINDOW or late) and (not bestDelta or delta < bestDelta) then
+                    and (not tuning.lateClaimMax or now - track.nextAt <= tuning.lateClaimMax)
+                if (delta <= tuning.claimWindow or late) and (not bestDelta or delta < bestDelta) then
                     best, bestDelta = track, delta
                 end
             end
