@@ -43,7 +43,7 @@ local recentCasts
 local StartPreview
 local RefineByNPC
 local ResolvedNPCs, LockedNPCs
-local Probe, ProbeCast, ProbeAnchor, ProbeRestore -- /ca probe, defined next to Debug; the event handler calls them
+local Probe, ProbeCast, ProbeAnchor, ProbeRestore, ProbeCall -- /ca probe, defined next to Debug; the event handler calls them
 local Identify
 local LockNPC
 local diag = { plates = 0, casts = 0, identified = 0, shown = 0, published = 0 }
@@ -1933,13 +1933,15 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         end
     elseif event == "UNIT_SPELLCAST_START" then
         Probe(unit)
-        ProbeCast(unit, false)
+        local probed = ProbeCast(unit, false)
         OnCastStart(unit, false)
+        ProbeCall(probed, unit)
     elseif event == "UNIT_SPELLCAST_STOP" then
         OnCastStop(unit, false)
     elseif event == "UNIT_SPELLCAST_CHANNEL_START" then
-        ProbeCast(unit, true)
+        local probed = ProbeCast(unit, true)
         OnCastStart(unit, true)
+        ProbeCall(probed, unit)
     elseif event == "UNIT_SPELLCAST_CHANNEL_STOP" then
         -- A kicked channel is told apart from one that ran its course by the
         -- fourth payload value, `interruptedBy` - which is where Blizzard's own
@@ -2770,6 +2772,16 @@ local function Sweep(unit)
     end
 end
 
+function ProbeCall(row, unit)
+    if not row then return end
+    local state = plates[unit]
+    local casting = state and state.casting
+    row.claimed = casting and casting.row and casting.row.spell or "-"
+    local advice = casting and Announceable(casting.candidates)
+        and CastAheadMatch.ConsensusAdvice(casting.candidates, state.interruptible)
+    row.call = advice and advice.key or "-"
+end
+
 function ProbeCast(unit, channel)
     if not probing or not IsHostileNameplate(unit) then return end
     local s = Session()
@@ -2817,6 +2829,7 @@ function ProbeCast(unit, channel)
     if okDuration then DurationFacts(row, duration) end
     s.rows[#s.rows + 1] = row
     Sweep(unit)
+    return row
 end
 
 function CastAheadCore.Probing() return probing end

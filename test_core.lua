@@ -1680,6 +1680,16 @@ check(ok, "a cast with the probe on must not error: " .. tostring(err))
 local session = CastAheadDB.fingerprints and CastAheadDB.fingerprints[1]
 check(session and #session.rows == 1 and #session.anchors == 1 and session.anchors[1][2] == "12345",
     "the probe records the hostile cast and the player's own cast")
+check(session and session.rows[1].claimed == "-" and session.rows[1].call == "-",
+    "an unpredicted cast is recorded as claimed by nothing")
+CastAheadDB.importantOnly = false
+advance(17)
+castFor(3.0)
+local predicted = session and session.rows[2]
+check(predicted and predicted.claimed == 100 and predicted.call == "AOE",
+    "a predicted cast records the spell and the call it was announced as, got "
+    .. tostring(predicted and predicted.claimed) .. " / " .. tostring(predicted and predicted.call))
+CastAheadDB.importantOnly = nil
 reset()
 fire("PLAYER_ENTERING_WORLD")
 check(CastAheadCore.Probing(), "the probe stays on across a reload")
