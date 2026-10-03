@@ -51,6 +51,27 @@ UnitPowerType = function(unit) return powers[unit] or 0 end
 -- Whether the cast in flight has a target, taken from the log's cast result.
 local targets = {}
 UnitShouldDisplaySpellTargetName = function(unit) return targets[unit] end
+-- Classification, lieutenant flag and creature family per plate, from the
+-- creature's own Traits.lua row: the game shows them, and a constant here
+-- dropped the true spell at the traits step on creatures the game tells apart.
+local npcs = {}
+local function TraitRow(unit)
+    for _, row in ipairs(CastAheadTraits and CastAheadTraits[currentInstance] or {}) do
+        if row.npc == npcs[unit] then return row end
+    end
+end
+UnitClassification = function(unit)
+    local row = TraitRow(unit)
+    return row and row.elite == false and "normal" or "elite"
+end
+UnitIsLieutenant = function(unit)
+    local row = TraitRow(unit)
+    return row and row.lieutenant or false
+end
+UnitCreatureFamily = function(unit)
+    local row = TraitRow(unit)
+    return row and row.family and "Beast" or nil
+end
 
 dofile("Config.lua")
 dofile(dataPath)
@@ -100,6 +121,18 @@ end
 if os.getenv("CA_PACKS_COMPANY") == "0" then
     CastAheadCore.Tuning.packsCompany = false
     knobs[#knobs + 1] = "packsCompany=off"
+end
+if os.getenv("CA_CLAIM_WINDOW") then
+    CastAheadCore.Tuning.claimWindow = tonumber(os.getenv("CA_CLAIM_WINDOW"))
+    knobs[#knobs + 1] = "claimWindow=" .. os.getenv("CA_CLAIM_WINDOW")
+end
+if os.getenv("CA_LATE_MAX") then
+    CastAheadCore.Tuning.lateClaimMax = tonumber(os.getenv("CA_LATE_MAX"))
+    knobs[#knobs + 1] = "lateClaimMax=" .. os.getenv("CA_LATE_MAX")
+end
+if os.getenv("CA_CLAIM_MARGIN") then
+    CastAheadCore.Tuning.claimMargin = tonumber(os.getenv("CA_CLAIM_MARGIN"))
+    knobs[#knobs + 1] = "claimMargin=" .. os.getenv("CA_CLAIM_MARGIN")
 end
 if os.getenv("CA_TARGET") == "0" then
     CastAheadCore.Tuning.targetNarrow = false
@@ -157,6 +190,7 @@ local wrongPairs = {}      -- "truth -> guess" -> count
 local missed = {}          -- truth spell -> count of none/ambiguous
 local names = {}
 local startRight, startWrong, startWrongPairs = 0, 0, {}
+local voicedRight, voicedWrong, voicedWrongPairs = 0, 0, {}
 
 local function bump(t, key) t[key] = (t[key] or 0) + 1 end
 
@@ -184,6 +218,7 @@ for _, run in ipairs(CastAheadReplay) do
             hostile[unit], combat[unit], dead[unit] = true, true, nil
             levels[unit] = ev.level
             powers[unit] = ev.power or 0
+            npcs[unit] = ev.npc
             fire("NAME_PLATE_UNIT_ADDED", unit)
         elseif ev.e == "REMOVE" then
             open[unit] = nil
@@ -208,6 +243,16 @@ for _, run in ipairs(CastAheadReplay) do
                 else
                     startWrong = startWrong + 1
                     bump(startWrongPairs, ev.spell .. " -> " .. claim.row.spell)
+                end
+                local said = CastAheadMatch.AnyImportant(claim.candidates)
+                    and CastAheadMatch.ConsensusAdvice(claim.candidates)
+                if said then
+                    if truth and said == CastAheadMatch.Advice(truth) then
+                        voicedRight = voicedRight + 1
+                    else
+                        voicedWrong = voicedWrong + 1
+                        bump(voicedWrongPairs, ev.spell .. " -> " .. claim.row.spell)
+                    end
                 end
             end
             -- The game says whether the cast can be kicked a moment after it
@@ -354,3 +399,5 @@ top(untabledSpells, 12, "cast but absent from Data.lua, most frequent first:")
 print("")
 print(string.format("claimed at cast start: %d with the right call, %d with a wrong one", startRight, startWrong))
 top(startWrongPairs, 12, "wrong calls at cast start, most frequent first:")
+print(string.format("voiced at cast start: %d right, %d wrong", voicedRight, voicedWrong))
+top(voicedWrongPairs, 12, "wrong voiced calls at cast start, most frequent first:")
