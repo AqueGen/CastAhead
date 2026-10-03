@@ -14,6 +14,11 @@
 CastAheadTimeline = {}
 local T = CastAheadTimeline
 
+local function Record(...)
+    local recorder = CastAheadRecorder
+    if recorder and recorder.Enabled() then recorder.Note("TL", nil, ...) end
+end
+
 -- Re-adding is the only way to change an event's time, and each add replays the
 -- icon's entry animation. Below this drift it is better to leave it alone.
 local RETIME_THRESHOLD = 1.0
@@ -72,6 +77,7 @@ function T.Cancel(track)
         -- addon's events too.
         pcall(C_EncounterTimeline.CancelScriptEvent, track.timelineEventID)
     end
+    Record("cancelled", track.timelineSpell)
     track.timelineEventID = nil
     track.timelineTargetAt = nil
 end
@@ -83,6 +89,7 @@ function T.Finish(track)
     if C_EncounterTimeline and C_EncounterTimeline.FinishScriptEvent then
         pcall(C_EncounterTimeline.FinishScriptEvent, track.timelineEventID)
     end
+    Record("finished", track.timelineSpell)
     track.timelineEventID = nil
     track.timelineTargetAt = nil
 end
@@ -127,5 +134,7 @@ function T.Sync(track, targetAt, row, advice, confident)
         track.timelineEventID = eventID
         track.timelineTargetAt = targetAt
         track.timelineSpell = row.spell
+        local key = CastAheadRecorder and CastAheadRecorder.Current()
+        Record("added", row.spell, key and math.floor((targetAt - key.startedAt) * 1000 + 0.5) or "?")
     end
 end

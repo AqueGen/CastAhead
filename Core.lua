@@ -47,6 +47,17 @@ local Probe, ProbeCast, ProbeAnchor, ProbeRestore, ProbeCall -- /ca probe, defin
 local Identify
 local LockNPC
 local diag = { plates = 0, casts = 0, identified = 0, shown = 0, published = 0 }
+
+local function Record(kind, slot, ...)
+    local recorder = CastAheadRecorder
+    if recorder and recorder.Enabled() then recorder.Note(kind, slot, ...) end
+end
+
+local function Ids(rows)
+    local ids = {}
+    for i = 1, #(rows or {}) do ids[i] = rows[i].spell end
+    return ids
+end
 local plates = {}                -- unit -> state
 local dungeon = nil              -- rows for the current instance
 local traitRows = nil            -- creature identity traits for the current instance
@@ -641,6 +652,7 @@ function LockNPC(unit, state, npc, source)
     if not npc or state.npc == npc then return end
     state.npc = npc
     state.npcSource = source or "cast"
+    Record("LOCK", unit, npc, state.npcSource)
     state.npcSet = nil
     RefineByNPC(state, npc, nil)
     if state.inCombat then
@@ -1253,6 +1265,20 @@ local function PaintBar(bar, entry, interruptible)
 end
 
 function RefreshBar(unit, state)
+    local key = CastAheadRecorder and CastAheadRecorder.Enabled() and CastAheadRecorder.Current()
+    if key then
+        for _, track in pairs(state.tracks) do
+            if track.nextAt ~= track.recordedAt and track.candidates and #track.candidates == 1 then
+                track.recordedAt = track.nextAt
+                if track.nextAt then
+                    Record("PRED", unit, track.candidates[1].spell,
+                        math.floor((track.nextAt - key.startedAt) * 1000 + 0.5),
+                        (track.projected or track.candidates[1].approx) and 1 or 0,
+                        track.projected and "projected" or "repeat")
+                end
+            end
+        end
+    end
     -- Nameplate icons are one output among two; the timeline is fed elsewhere
     -- and keeps working when these are switched off.
     if not CastAheadConfig.Enabled("nameplates") then
@@ -1387,6 +1413,7 @@ local function LastCandidates(unit) return lastIdentified[unit] end
 local narrowTrace
 local function Trace(unit, step, candidates)
     if narrowTrace then narrowTrace(unit, step, candidates) end
+    Record("STEP", unit, step, Ids(candidates))
 end
 
 -- Between ENCOUNTER_START and ENCOUNTER_END nothing is tracked: the data is
@@ -1394,9 +1421,10 @@ end
 -- trash spell would otherwise wear that spell's schedule.
 local inEncounter = false
 
-local function DropUnit(unit)
+local function DropUnit(unit, reason)
     local state = plates[unit]
     if state then
+        Record("PLATE", unit, "removed", reason or "gone")
         state.shown = nil
         ClearTimeline(state)
         ReleaseBars(state)
@@ -1414,13 +1442,15 @@ local function RefreshCombat(unit)
     if not IsHostileNameplate(unit) or not C_NamePlate.GetNamePlateForUnit(unit) then
         -- Not attackable any more, dead, or the plate is simply gone: the unit
         -- token may already have been recycled onto something else.
-        if UnitIsDead(unit) then NoteDeath(state) end
-        DropUnit(unit)
+        local dead = UnitIsDead(unit)
+        if dead then NoteDeath(state) end
+        DropUnit(unit, dead and "died" or "gone")
         return
     end
     local inCombat = UnitAffectingCombat(unit)
     if inCombat and not state.inCombat then
         state.engagedAt = GetTime()
+        Record("ENGAGE", unit)
         state.level = state.level or SafeLevel(unit)
         StartOpening(unit, state)
     elseif not inCombat and state.inCombat then
@@ -1467,7 +1497,10 @@ local function OnCastStart(unit, channel)
     local state = GetState(unit)
     if not state.inCombat then
         state.inCombat = true
-        state.engagedAt = state.engagedAt or GetTime()
+        if not state.engagedAt then
+            state.engagedAt = GetTime()
+            Record("ENGAGE", unit)
+        end
     end
     local now = GetTime()
     state.castStartAt = now
@@ -1612,6 +1645,7 @@ local function OnCastStop(unit, channel)
     local duration = GetTime() - startAt
     local sole = channel and CastAheadMatch.SoleChannel(dungeon, duration)
     if sole then duration = sole.cast end
+    state.lastMeasured = duration
     local track, trackKey = GetTrack(state, duration, channel)
     local candidates = track.candidates
     -- A projected sibling's lastStartAt is the anchor it was laid out from, not
@@ -1808,6 +1842,7 @@ local function OnCastInterrupted(unit)
     end
     state.castStartAt = nil
     state.casting = nil
+    Record("CUT", unit, math.floor((GetTime() - startAt) * 1000 + 0.5))
     ResolveInterrupted(unit, state, startAt, matched)
 end
 
@@ -1874,9 +1909,35 @@ end
 -- The payload past `unit` differs per event: UNIT_AURA's arg2 is updateInfo
 -- (never read - it is Secret in instances), the spellcast events carry
 -- castGUID, spellID and, on CHANNEL_STOP, interruptedBy.
+local function RecordStart(unit, channel)
+    local state = plates[unit]
+    if not (state and state.castStartAt == GetTime()) then return end
+    local casting = state and state.casting
+    local advice = casting and Announceable(casting.candidates)
+        and CastAheadMatch.ConsensusAdvice(casting.candidates, state.interruptible)
+    local target = state and state.spellTarget
+    Record("START", unit, channel and 1 or 0, casting and casting.row and casting.row.spell or "-",
+        advice and advice.key or "-", Ids(casting and casting.candidates),
+        target == true and 1 or target == false and 0 or "?")
+end
+
+local function StopCast(unit, channel)
+    local state = plates[unit]
+    local open = state and state.castStartAt
+    OnCastStop(unit, channel)
+    state = plates[unit]
+    if open and state and not state.castStartAt and state.lastMeasured then
+        local final = lastIdentified[unit]
+        local advice = final and Announceable(final) and CastAheadMatch.ConsensusAdvice(final)
+        Record("STOP", unit, channel and 1 or 0, math.floor(state.lastMeasured * 1000 + 0.5),
+            Ids(final), advice and advice.key or "-")
+    end
+end
+
 frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     if unit == "player" and (event == "UNIT_SPELLCAST_SUCCEEDED" or event == "UNIT_SPELLCAST_START") then
         ProbeAnchor(arg3)
+        if event == "UNIT_SPELLCAST_SUCCEEDED" and not IsSecret(arg3) then Record("SELF", nil, arg3) end
         if event == "UNIT_SPELLCAST_SUCCEEDED" then return end
     end
     if event == "UNIT_AURA" then
@@ -1901,6 +1962,11 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     end
     if event == "PLAYER_ENTERING_WORLD" then
         ProbeRestore()
+        if CastAheadRecorder then
+            CastAheadRecorder.Restore()
+            if CastAheadRecorder.Enabled() and IsInInstance() then CastAheadRecorder.EnsureKey() end
+        end
+        if CastAheadReport then CastAheadReport.Refresh() end
         CastAheadCore.SyncCombatLog()
         wipe(seenAuras)
         wipe(recentCasts)
@@ -1915,6 +1981,43 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     end
     if event == "CHALLENGE_MODE_START" then
         ResetPopulation()
+        if CastAheadRecorder and CastAheadRecorder.Enabled() then
+            local name, _, _, _, _, _, _, instance = GetInstanceInfo()
+            local level, affixes = 0, ""
+            if C_ChallengeMode and C_ChallengeMode.GetActiveKeystoneInfo then
+                local ok, lvl, list = pcall(C_ChallengeMode.GetActiveKeystoneInfo)
+                if ok and type(lvl) == "number" then level = lvl end
+                if ok and type(list) == "table" then affixes = table.concat(list, ",") end
+            end
+            local role = "NONE"
+            if GetSpecialization and GetSpecializationRole then
+                local spec = GetSpecialization()
+                role = spec and GetSpecializationRole(spec) or "NONE"
+            end
+            CastAheadRecorder.StartKey({ instance = instance, name = name, level = level,
+                affixes = affixes, role = role })
+            for tracked, state in pairs(plates) do
+                local traits = ReadTraits(tracked)
+                Record("PLATE", tracked, "added", type(state.level) == "number" and state.level or "?",
+                    traits.power or "?", traits.classification or "?")
+                if state.engagedAt then Record("ENGAGE", tracked) end
+            end
+        end
+        return
+    end
+    if event == "CHALLENGE_MODE_COMPLETED" then
+        if CastAheadRecorder then CastAheadRecorder.EndKey("completed") end
+        return
+    end
+    if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
+        if event == "PLAYER_REGEN_DISABLED" and CastAheadRecorder and CastAheadRecorder.Enabled() then
+            CastAheadRecorder.EnsureKey()
+        end
+        Record("PULL", nil, event == "PLAYER_REGEN_DISABLED" and "in" or "out")
+        if event == "PLAYER_REGEN_ENABLED" and CastAheadRecorder and not IsInInstance() then
+            CastAheadRecorder.EndKey("left")
+        end
+        if CastAheadReport then CastAheadReport.Refresh() end
         return
     end
     if event == "ENCOUNTER_START" or event == "ENCOUNTER_END" then
@@ -1927,7 +2030,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         return
     end
     if event == "NAME_PLATE_UNIT_REMOVED" then
-        DropUnit(unit)
+        DropUnit(unit, "gone")
         return
     end
     if not dungeon or inEncounter
@@ -1947,6 +2050,9 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
             state.actedAt = nil
             HideBar(state)
             state.level = SafeLevel(unit)
+            local traits = ReadTraits(unit)
+            Record("PLATE", unit, "added", type(state.level) == "number" and state.level or "?",
+                traits.power or "?", traits.classification or "?")
             state.npc = nil                 -- the unit token may be recycled
             state.npcSource = nil
             state.npcSet = nil
@@ -1957,19 +2063,21 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     elseif event == "UNIT_HEALTH" then
         if plates[unit] and UnitIsDead(unit) then
             NoteDeath(plates[unit])
-            DropUnit(unit)
+            DropUnit(unit, "died")
         end
     elseif event == "UNIT_SPELLCAST_START" then
         Probe(unit)
         local probed = ProbeCast(unit, false)
         OnCastStart(unit, false)
         ProbeCall(probed, unit)
+        RecordStart(unit, false)
     elseif event == "UNIT_SPELLCAST_STOP" then
-        OnCastStop(unit, false)
+        StopCast(unit, false)
     elseif event == "UNIT_SPELLCAST_CHANNEL_START" then
         local probed = ProbeCast(unit, true)
         OnCastStart(unit, true)
         ProbeCall(probed, unit)
+        RecordStart(unit, true)
     elseif event == "UNIT_SPELLCAST_CHANNEL_STOP" then
         -- A kicked channel is told apart from one that ran its course by the
         -- fourth payload value, `interruptedBy` - which is where Blizzard's own
@@ -1983,7 +2091,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         if IsSecret(arg4) or arg4 ~= nil then
             OnCastInterrupted(unit)     -- a second call from INTERRUPTED is a no-op
         else
-            OnCastStop(unit, true)
+            StopCast(unit, true)
         end
     elseif event == "UNIT_SPELLCAST_INTERRUPTIBLE" or event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" then
         local state = plates[unit]
@@ -2264,6 +2372,8 @@ frame:SetScript("OnUpdate", function()
                         if lead > 0 and remaining <= lead and not entry.casting
                             and entry.track and not entry.track.warned then
                             entry.track.warned = true
+                            local heads = CastAheadMatch.ConsensusAdvice(entry.candidates)
+                            Record("HEADS", unit, heads and heads.key or "-", Ids(entry.candidates))
                             PlayAdviceSound(
                                 CastAheadMatch.ConsensusAdvice(entry.candidates), true, entry.candidates)
                         end
@@ -2303,7 +2413,8 @@ end)
 
 for _, event in ipairs({
     "ADDON_LOADED", "PLAYER_ENTERING_WORLD", "PLAYER_SPECIALIZATION_CHANGED", "SPELLS_CHANGED",
-    "ENCOUNTER_START", "ENCOUNTER_END", "CHALLENGE_MODE_START",
+    "ENCOUNTER_START", "ENCOUNTER_END", "CHALLENGE_MODE_START", "CHALLENGE_MODE_COMPLETED",
+    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
     "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH",
     "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP",
     "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",
@@ -2330,6 +2441,30 @@ CastAheadCore = {}
 CastAheadCore.LastCandidates = LastCandidates   -- replay harness only
 CastAheadCore.Tracks = function(unit) return plates[unit] and plates[unit].tracks end
 CastAheadCore.Casting = function(unit) return plates[unit] and plates[unit].casting end
+
+function CastAheadCore.Snapshot()
+    local out, now = {}, GetTime()
+    local key = CastAheadRecorder and CastAheadRecorder.Current()
+    for unit, state in pairs(plates) do
+        local entry = { slot = tonumber(unit:match("(%d+)$")), preds = {} }
+        local c = state.casting
+        if c then
+            local advice = Announceable(c.candidates)
+                and CastAheadMatch.ConsensusAdvice(c.candidates, state.interruptible)
+            entry.casting = { claimed = c.row and c.row.spell or "-", call = advice and advice.key or "-",
+                candidates = Ids(c.candidates), sinceMs = math.floor((now - c.startAt) * 1000 + 0.5) }
+        end
+        for _, track in pairs(state.tracks) do
+            if key and track.nextAt and track.candidates and #track.candidates == 1 then
+                entry.preds[#entry.preds + 1] = { track.candidates[1].spell,
+                    math.floor((track.nextAt - key.startedAt) * 1000 + 0.5),
+                    (track.projected or track.candidates[1].approx) and 1 or 0 }
+            end
+        end
+        if entry.slot then out[#out + 1] = entry end
+    end
+    return out
+end
 CastAheadCore.SetTrace = function(fn) narrowTrace = fn end
 CastAheadCore.Tuning = tuning
 CastAheadCore.SpreadBars = SpreadBars
@@ -2787,7 +2922,7 @@ end
 
 -- Loading the documentation mid-pull would stall the frame the pull starts on.
 function ProbeRestore()
-    probing = CastAheadDB ~= nil and CastAheadDB.probing == true
+    probing = CastAheadConfig.Dev("probing")
     if probing and not sweep then BuildSweep() end
 end
 
@@ -2865,8 +3000,7 @@ function CastAheadCore.Probing() return probing end
 function CastAheadCore.SyncCombatLog()
     if not (LoggingCombat and CastAheadDB) then return end
     local _, kind = IsInInstance()
-    local want = kind == "party" and CastAheadConfig.Get("devMode") == true
-        and CastAheadConfig.Get("autoCombatLog") == true
+    local want = kind == "party" and CastAheadConfig.Dev("autoCombatLog")
     if want then
         if C_CVar and C_CVar.SetCVar then C_CVar.SetCVar("advancedCombatLogging", "1") end
         if not LoggingCombat() then
@@ -2881,6 +3015,13 @@ function CastAheadCore.SyncCombatLog()
             print("|cff33ff99Cast Ahead|r combat log off")
         end
     end
+end
+
+function CastAheadCore.ApplyDevMode()
+    ProbeRestore()
+    CastAheadCore.SyncCombatLog()
+    if CastAheadReport then CastAheadReport.Refresh() end
+    if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
 end
 
 function CastAheadCore.Probe(command)

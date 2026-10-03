@@ -22,6 +22,8 @@ Cast Ahead watches enemy nameplates, works out which spell a mob is casting and 
 | `/ca move` | Drag the centre-screen call where you want it |
 | `/ca debug` | What the addon sees right now: dungeon, plates, identification, voice chain |
 | `/ca hide` | Clear every icon the addon drew (proves what belongs to it) |
+| `/ca report` | The text of your marked wrong calls, ready to paste into an issue |
+| `/ca mark <note>` | Mark a wrong call from chat, with an optional note |
 
 `/forecast` and `/fcast` still work: the addon was called Forecast before 2026-09-01.
 
@@ -32,6 +34,10 @@ Everything lives in the addon window, next to the cast table. **General** holds 
 The early warning ("tank buster soon") is a slider in seconds, off by default: on top of the real call it can read as two separate casts.
 
 Icon rows step sideways by the words under them, so labels never touch; **Fixed spacing** in the Icon size group steps by icon plus a gap instead, for rows that pack identically every time. **Layer** in the same group is the icons' frame strata, BACKGROUND by default: above every nameplate and under the rest of the UI, like a plate; go higher to put the icons over your bars, DIALOG or above if a nameplate addon lifts its plates into the UI.
+
+## Reporting a wrong call
+
+Turn on Development mode in the settings, then the key journal on the Development tab. While you are in a dungeon a small panel lists the mobs Cast Ahead tracked in the last two minutes. Pick the one it got wrong (or none, to mark the whole moment) and press Mark, or Mark + note to type what really happened; Enter saves the note. The same two actions can be bound under Key Bindings > Cast Ahead. After the key, `/ca report` gives the text to paste into a [wrong call issue](https://github.com/AqueGen/CastAhead/issues/new?template=wrong-call.yml) or a CurseForge comment. The journal holds spell and creature ids and timings only, no names of people.
 
 ## Where the data comes from
 

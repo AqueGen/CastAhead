@@ -1,0 +1,19 @@
+name: Wrong call
+description: Cast Ahead named the wrong spell or called it at the wrong time
+labels: ["wrong call"]
+body:
+  - type: markdown
+    attributes:
+      value: In the addon's settings turn on Development mode, then on the Development tab turn on the key journal. Mark the moment on the panel (pick the mob if you can), then run /ca report and paste the text below.
+  - type: textarea
+    id: report
+    attributes:
+      label: Report text from /ca report
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: truth
+    attributes:
+      label: What really happened (optional)
+      description: The spell or the moment you saw, in any language.
