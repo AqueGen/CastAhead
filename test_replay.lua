@@ -198,7 +198,7 @@ local CHANNELS = os.getenv("CA_CHANNELS") ~= "0"
 if not CHANNELS then print("knobs: follow-up channels off") end
 local channels = {}
 
-local function score(unit, spell, instance, d)
+local function score(unit, spell, instance, d, lost)
     local row = tabled[instance] and tabled[instance][spell]
     if row then names[spell] = row.name end
     local candidates = CastAheadCore.LastCandidates(unit)
@@ -207,7 +207,7 @@ local function score(unit, spell, instance, d)
     if not row then
         verdict = "untabled"
         bump(untabledSpells, spell)
-    elseif not candidates or #candidates == 0 then
+    elseif lost or not candidates or #candidates == 0 then
         verdict = "none"
         bump(missed, spell)
     elseif #candidates == 1 then
@@ -299,9 +299,15 @@ for _, run in ipairs(CastAheadReplay) do
         endChannels(base + ev.t)
         now = base + ev.t
         local unit = ev.u and ("nameplate" .. ev.u)
-        if unit and channels[unit] and (ev.e == "REMOVE" or ev.e == "START") then
-            channels[unit].at = now
-            endChannels(now, unit)
+        local settling
+        if unit and channels[unit] and ev.e == "START" then
+            settling, channels[unit] = channels[unit].spell, nil
+        elseif unit and channels[unit] and ev.e == "REMOVE" then
+            score(unit, channels[unit].spell, run.instance, d, true)
+            channels[unit] = nil
+        elseif ev.e == "ENC" then
+            for u, pending in pairs(channels) do score(u, pending.spell, run.instance, d, true) end
+            for u in pairs(channels) do channels[u] = nil end
         end
         if ev.e == "ENC" then
             fire(ev.on and "ENCOUNTER_START" or "ENCOUNTER_END", 1)
@@ -323,6 +329,7 @@ for _, run in ipairs(CastAheadReplay) do
             open[unit] = ev.spell
             targets[unit] = ev.target
             fire("UNIT_SPELLCAST_START", unit)
+            if settling then score(unit, settling, run.instance, d) end
             local claim = CastAheadCore.Casting(unit)
             if claim and claim.row then
                 local truth = tabled[run.instance] and tabled[run.instance][ev.spell]

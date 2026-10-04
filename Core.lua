@@ -1512,8 +1512,8 @@ local function OnCastStart(unit, channel)
     local now = GetTime()
     if channel and state.castStartAt and not state.channelling then
         state.held = { startAt = state.castStartAt, duration = now - state.castStartAt,
-            claimed = state.casting and state.casting.track }
-    elseif not channel and state.held then
+            claimed = state.casting and state.casting.track, target = state.spellTarget }
+    elseif state.held then
         FinishHeld(unit, state)
     end
     state.castStartAt = now
@@ -1545,7 +1545,7 @@ local function OnCastStart(unit, channel)
                     and (not tuning.lateClaimMax or now - track.nextAt <= tuning.lateClaimMax)
                 if delta <= tuning.claimWindow or late then
                     eligible[#eligible + 1] = { track = track, delta = delta }
-                    if not bestDelta or delta < bestDelta then
+                    if not bestDelta or delta < bestDelta or (delta == bestDelta and track.slot < best.slot) then
                         best, bestDelta = track, delta
                     end
                 end
@@ -1646,7 +1646,7 @@ end
 -- A cast that finished on its own: its measured length is the identifying
 -- fact, and so is the length of the channel it turned into (`follow`). Returns
 -- whether that channel was one of the candidates' own.
-local function FinishCast(unit, state, startAt, duration, channel, follow, claimed)
+local function FinishCast(unit, state, startAt, duration, channel, follow, claimed, target)
     diag.casts = diag.casts + 1
     local sole = channel and CastAheadMatch.SoleChannel(dungeon, duration)
     if sole then duration = sole.cast end
@@ -1663,7 +1663,7 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
         and CastAheadUI.IsDisabled(candidates[1].spell) then
         candidates = nil
     end
-    local rejected, resetPicked
+    local rejected, resetPicked, adapted
     if candidates and #candidates == 1 and previousCast
         and CastAheadMatch.HasSchedule(candidates[1])
         and not CastAheadMatch.SlotForInterval(candidates[1], startAt - previousCast, track.index) then
@@ -1676,7 +1676,7 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
             -- but only for a single-slot cooldown: one noisy gap must not
             -- flatten a {4.8, 4.8, 8.7} rotation into a scalar.
             if #candidates[1].cd == 1 then
-                track.observedCD = (not tuning.observedBelowOnly or measured < tabled) and measured or nil
+                adapted = { (not tuning.observedBelowOnly or measured < tabled) and measured or nil }
             end
         else
             -- Nowhere near this spell's schedule: it was never this spell, and
@@ -1715,7 +1715,7 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
         candidates = CastAheadMatch.NarrowByLevel(candidates, state.level)
         Trace(unit, "level", candidates)
         if tuning.targetNarrow then
-            candidates = CastAheadMatch.NarrowByTarget(candidates, state.spellTarget)
+            candidates = CastAheadMatch.NarrowByTarget(candidates, target)
             Trace(unit, "target", candidates)
         end
         candidates = CastAheadMatch.NarrowByMob(candidates, KnownNPCs(state, track))
@@ -1787,14 +1787,15 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
 
     if #candidates == 1 then
         local own = SpellTrack(state, candidates[1], track)
+        local foreign = (track.sure or track.projected) and track.candidates and #track.candidates == 1
+            and track.candidates[1] ~= candidates[1]
         if own then
-            if not (track.sure and track.candidates and #track.candidates == 1) then
+            if not foreign then
                 if CastAheadTimeline then CastAheadTimeline.Cancel(track) end
                 state.tracks[track.slot] = nil
             end
             track = own
-        elseif track.sure and track.candidates and #track.candidates == 1
-            and track.candidates[1] ~= candidates[1] then
+        elseif foreign then
             track = NewTrack(state, duration, channel)
         end
         if track ~= picked then
@@ -1805,6 +1806,7 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
         track.observedCD = nil
         track.index = nil
     end
+    if adapted and track == picked then track.observedCD = adapted[1] end
 
     -- Line the rotation up with reality: the interval we just saw says which
     -- slot the mob is on, and a measured cooldown beats the table's median.
@@ -1868,7 +1870,7 @@ function FinishHeld(unit, state)
     local held = state.held
     if not held then return end
     state.held = nil
-    FinishCast(unit, state, held.startAt, held.duration, false, nil, held.claimed)
+    FinishCast(unit, state, held.startAt, held.duration, false, nil, held.claimed, held.target)
 end
 
 local function OnCastStop(unit, channel)
@@ -1885,13 +1887,13 @@ local function OnCastStop(unit, channel)
     local held = state.held
     state.held = nil
     if held and channel
-        and FinishCast(unit, state, held.startAt, held.duration, false, duration, held.claimed) then
+        and FinishCast(unit, state, held.startAt, held.duration, false, duration, held.claimed, held.target) then
         RefreshBar(unit, state)
         return
     end
     local follow
     if not channel then follow = false end
-    FinishCast(unit, state, startAt, duration, channel, follow, claimed)
+    FinishCast(unit, state, startAt, duration, channel, follow, claimed, state.spellTarget)
 end
 
 -- INTERRUPTED and FAILED are terminal: Blizzard's own cast bar clears on them
@@ -2045,6 +2047,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
             local state = GetState(unit)
             ClearTimeline(state)
             wipe(state.tracks)
+            state.held = nil
             state.inCombat = nil
             state.engagedAt = nil
             state.actedAt = nil
