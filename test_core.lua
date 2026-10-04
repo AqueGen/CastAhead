@@ -1941,7 +1941,7 @@ Loud()
 check(printed[#printed] and printed[#printed]:find("Cast Ahead", 1, true), "every mark is confirmed in chat")
 
 -- Export: header, one summary per mark, the windows, a footer that counts lines.
-local text = R.Export(R.Current())
+local text = (R.Export(R.Current()):gsub("%^", "|"))
 local rows = {}
 for line in text:gmatch("[^\n]+") do rows[#rows + 1] = line end
 check(rows[1]:match("^CastAhead%-Report 1 addon=.- data=%x+ instance=1877 level=%d+ "), "the header names format, addon, data, instance; got " .. rows[1])
@@ -1952,7 +1952,7 @@ check(rows[#rows] == "CastAhead-Report end lines=" .. body, "the footer counts t
 check(text:find("|STOP|1.1|0|3000|", 1, true), "the selected mob's whole history is in the export")
 local limit = R.EXPORT_LIMIT
 R.EXPORT_LIMIT = #text - 1
-local cut = R.Export(R.Current())
+local cut = (R.Export(R.Current()):gsub("%^", "|"))
 check(cut:match("droppedMarks=%d+"), "an export over the limit drops the oldest marks and says so")
 R.EXPORT_LIMIT = limit
 if os.getenv("CA_WRITE_FIXTURE") == "1" then
@@ -2015,7 +2015,7 @@ fire("PLAYER_REGEN_ENABLED")
 reset()
 advance(70)
 R.Mark()
-local late = R.Export(R.Current())
+local late = (R.Export(R.Current()):gsub("%^", "|"))
 check(late:find("|STOP|", 1, true), "a mark 70 s after the pull, nothing selected, exports the mob's casts")
 Loud()
 
@@ -2058,6 +2058,21 @@ check(#R.Keys() == 1, "an unmarked pseudo-key is dropped when it ends, got " .. 
 local afterEnd = R.Mark()
 check(afterEnd and #R.Keys() == 1 and R.Keys()[1].lines[#R.Keys()[1].lines]:match("|MARK|"),
     "a mark right after a key ended lands in that key")
+R.EndKey("completed")
+local keysBefore, savedMarkInfo = #R.Keys(), GetInstanceInfo
+GetInstanceInfo = function() return "City", "none", 0, "", 0, 0, false, 2393 end
+R.Mark()
+check(#R.Keys() == keysBefore + 1 and R.Keys()[#R.Keys()].instance == 2393,
+    "a mark made somewhere else starts a key there instead of joining the dungeon's")
+R.EndKey("completed")
+GetInstanceInfo = savedMarkInfo
+local ended = R.Keys()[#R.Keys()]
+ended.endedAt = now + 5000
+keysBefore = #R.Keys()
+R.Mark()
+check(#R.Keys() == keysBefore + 1, "a key ended in an earlier session (a later clock) is never marked again")
+check(not R.Export(R.Keys()[#R.Keys()]):find("|", 1, true),
+    "the export carries no '|', which the game's text boxes read as escape codes")
 R.EndKey("completed")
 Loud()
 

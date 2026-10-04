@@ -47,7 +47,7 @@ def parse_line(text):
 
 def parse_export(text):
     report = Report()
-    text = RECORD.sub("\n", text)
+    text = RECORD.sub("\n", text.replace("^", "|"))
     rows = [r.strip() for r in text.splitlines() if r.strip()]
     if not rows or not HEADER.match(rows[0]):
         report.problems.append("no CastAhead-Report header")

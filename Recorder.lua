@@ -199,7 +199,7 @@ function R.Restore()
 end
 
 local function Clean(text)
-    return (tostring(text):gsub("[|\r\n]", " "))
+    return (tostring(text):gsub("[|^\r\n]", " "))
 end
 
 local function Field(value)
@@ -327,7 +327,12 @@ local function MarkTarget()
     if open then return open end
     local keys = Journal().keys
     local last = keys[#keys]
-    if last and last.endedAt and GetTime() - last.endedAt <= R.RECENT_WINDOW then return last end
+    local now = GetTime()
+    local _, _, _, _, _, _, _, instance = GetInstanceInfo()
+    if last and last.endedAt and now >= last.endedAt and now - last.endedAt <= R.RECENT_WINDOW
+        and last.instance == instance then
+        return last
+    end
 end
 
 function R.Mark()
@@ -500,5 +505,5 @@ function R.Export(key)
     out[#out + 1] = coverage
     for _, line in ipairs(body) do out[#out + 1] = line end
     out[#out + 1] = "CastAhead-Report end lines=" .. #body
-    return table.concat(out, "\n")
+    return (table.concat(out, "\n"):gsub("|", "^"))
 end
