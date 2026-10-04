@@ -1899,6 +1899,11 @@ advance(3.0)
 fire("UNIT_SPELLCAST_CHANNEL_STOP", unit, nil, nil, "kicker")
 check(Last() == 1202, "a kicked channel still lets the cast it came from be settled, got " .. tostring(Last()))
 reset()
+enter()
+advance(6.4)
+castFor(2.0)
+check(Last() == 1203, "a 2.0s cast that ended without a channel is not the golem's, got " .. tostring(Last()))
+reset()
 CastAheadData[1999] = nil
 GetInstanceInfo = savedGolemInfo
 fire("PLAYER_ENTERING_WORLD")

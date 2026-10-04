@@ -49,7 +49,9 @@ local golem = {
 check(#M.NarrowByFollow(golem, 8.0) == 1 and M.NarrowByFollow(golem, 8.0)[1].spell == 21,
     "the channel that followed a cast picks the spell that turns into it")
 check(#M.NarrowByFollow(golem, 20.0) == 3, "a follow-up channel matching nothing must not erase candidates")
-check(#M.NarrowByFollow(golem, nil) == 3, "no follow-up channel narrows nothing")
+check(#M.NarrowByFollow(golem, nil) == 3, "an unknown follow-up narrows nothing")
+check(#M.NarrowByFollow(golem, false) == 1 and M.NarrowByFollow(golem, false)[1].spell == 22,
+    "a cast that ended without a channel is not one that always turns into one")
 check(M.SlotForInterval(rows[3], 27.5) == 2, "27.5s belongs to the second rotation slot")
 check(M.SlotForInterval(rows[3], 40) == nil, "an interval in no slot returns nil")
 

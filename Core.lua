@@ -1686,7 +1686,7 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
             resetPicked = true
         end
     end
-    if follow and candidates and #candidates == 1 and not CastAheadMatch.FollowFits(candidates[1], follow) then
+    if follow ~= nil and candidates and #candidates == 1 and not CastAheadMatch.FollowFits(candidates[1], follow) then
         candidates = nil
     end
     if candidates and #candidates == 1 and not track.sure and not tuning.trustUnsureTrack then
@@ -1720,7 +1720,7 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
         end
         candidates = CastAheadMatch.NarrowByMob(candidates, KnownNPCs(state, track))
         Trace(unit, "mob", candidates)
-        if follow then
+        if follow ~= nil then
             candidates = CastAheadMatch.NarrowByFollow(candidates, follow)
             Trace(unit, "follow", candidates)
         end
@@ -1857,7 +1857,7 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
     track.nextAt = cd and (startAt + cd) or nil
     SyncTimeline(track)
     RefreshBar(unit, state)
-    if not follow then return false end
+    if type(follow) ~= "number" then return false end
     for i = 1, #candidates do
         if CastAheadMatch.FollowFits(candidates[i], follow) then return true end
     end
@@ -1889,7 +1889,9 @@ local function OnCastStop(unit, channel)
         RefreshBar(unit, state)
         return
     end
-    FinishCast(unit, state, startAt, duration, channel, nil, claimed)
+    local follow
+    if not channel then follow = false end
+    FinishCast(unit, state, startAt, duration, channel, follow, claimed)
 end
 
 -- INTERRUPTED and FAILED are terminal: Blizzard's own cast bar clears on them

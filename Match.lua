@@ -272,11 +272,12 @@ function M.NarrowByInterval(candidates, interval)
 end
 
 function M.FollowFits(row, follow)
+    if follow == false then return row.follow == nil end
     return row.follow ~= nil and math.abs(row.follow - follow) <= M.CAST_TOLERANCE
 end
 
 function M.NarrowByFollow(candidates, follow)
-    if not follow then return candidates end
+    if follow == nil then return candidates end
     local out = {}
     for i = 1, #candidates do
         if M.FollowFits(candidates[i], follow) then out[#out + 1] = candidates[i] end
