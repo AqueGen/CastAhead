@@ -1960,6 +1960,16 @@ check(not TrackOf(1202), "a plate added again mid-channel drops the cast it was 
 reset()
 enter()
 advance(6.4)
+slamAt = now
+castIntoChannel(2.0, 8.0)
+advance(slamAt + 30.4 - now)
+fire("UNIT_SPELLCAST_START", unit)
+local before = CastAheadCore.Casting(unit)
+fire("NAME_PLATE_UNIT_ADDED", unit)
+check(before and CastAheadCore.Casting(unit) == nil, "a plate added again forgets the cast it showed")
+reset()
+enter()
+advance(6.4)
 fire("UNIT_SPELLCAST_START", unit)
 advance(2.0)
 fire("UNIT_SPELLCAST_CHANNEL_START", unit)
@@ -2003,6 +2013,8 @@ CastAheadData[2000] = { name = "Row",
       first = 5.0, firstN = 40, n = 40, follow = 1.2, prio = "AOE" },
     { spell = 1302, npc = 42, mob = "Warlock", name = "Drain Life", cast = 2.0, cd = { 20.0 },
       first = 5.0, firstN = 40, n = 40, follow = 7.0, prio = "TARGET" },
+    { spell = 1303, npc = 43, mob = "Golem", name = "Defiled Slam", cast = 2.0, cd = { 30.0 },
+      first = 40.0, firstN = 40, n = 40, follow = 8.0, prio = "AOE" },
 }
 GetInstanceInfo = function() return "d", "party", 0, "", 0, 0, false, 2000 end
 fire("PLAYER_ENTERING_WORLD")
@@ -2013,6 +2025,9 @@ check(Last() == 1301, "a Drain Life cut to 1.2s reads as Blade Dance")
 advance(20.0 - 3.2)
 castIntoChannel(2.0, 7.0)
 check(Last() == 1302, "but its next full 7s channel undoes that and names Drain Life, got " .. tostring(Last()))
+advance(20.0 - 9.0)
+castIntoChannel(2.0, 7.3)
+check(Last() == 1302, "a Drain Life channel a little over 7s keeps the warlock, got " .. tostring(Last()))
 local blade
 for _, track in pairs(CastAheadCore.Tracks(unit) or {}) do
     if track.candidates and #track.candidates == 1 and track.candidates[1].spell == 1301 then blade = track end

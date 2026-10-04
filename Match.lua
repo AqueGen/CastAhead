@@ -277,6 +277,11 @@ function M.FollowFits(row, follow)
     return row.follow ~= nil and follow <= row.follow + M.CAST_TOLERANCE
 end
 
+function M.FollowExact(row, follow)
+    return type(follow) == "number" and not row.followUnknown and row.follow ~= nil
+        and math.abs(row.follow - follow) <= M.CAST_TOLERANCE
+end
+
 function M.NarrowByFollow(candidates, follow)
     if follow == nil then return candidates end
     local exact, fits, unknown = {}, {}, {}
@@ -284,7 +289,7 @@ function M.NarrowByFollow(candidates, follow)
         local row = candidates[i]
         if row.followUnknown then
             unknown[#unknown + 1] = row
-        elseif type(follow) == "number" and row.follow and math.abs(row.follow - follow) <= M.CAST_TOLERANCE then
+        elseif M.FollowExact(row, follow) then
             exact[#exact + 1] = row
         end
         if M.FollowFits(row, follow) then fits[#fits + 1] = row end

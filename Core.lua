@@ -1732,10 +1732,18 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
                 if CastAheadMatch.FollowFits(candidates[i], follow) then fits = true end
             end
             if not fits then
-                local pool = CastAheadMatch.NarrowByFollow(CastAheadMatch.NarrowByLevel(
-                    CastAheadMatch.NarrowByEnabled(CastAheadMatch.ByCastTime(dungeon, duration, channel),
-                        CastAheadUI and CastAheadUI.IsDisabled), state.level), follow)
-                if pool[1] and CastAheadMatch.FollowFits(pool[1], follow) then
+                local pool = CastAheadMatch.NarrowByLevel(CastAheadMatch.NarrowByEnabled(
+                    CastAheadMatch.ByCastTime(dungeon, duration, channel), CastAheadUI and CastAheadUI.IsDisabled),
+                    state.level)
+                if tuning.targetNarrow then pool = CastAheadMatch.NarrowByTarget(pool, target) end
+                local exact = {}
+                for i = 1, #pool do
+                    if pool[i] ~= rejected and CastAheadMatch.FollowExact(pool[i], follow) then
+                        exact[#exact + 1] = pool[i]
+                    end
+                end
+                pool = exact
+                if pool[1] then
                     local wrong = state.npc
                     state.npc, state.npcSource, state.npcSet = nil, nil, nil
                     for slot, other in pairs(state.tracks) do
