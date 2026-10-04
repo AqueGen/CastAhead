@@ -2015,6 +2015,8 @@ CastAheadData[2000] = { name = "Row",
       first = 5.0, firstN = 40, n = 40, follow = 7.0, prio = "TARGET" },
     { spell = 1303, npc = 43, mob = "Golem", name = "Defiled Slam", cast = 2.0, cd = { 30.0 },
       first = 40.0, firstN = 40, n = 40, follow = 8.0, prio = "AOE" },
+    { spell = 1304, npc = 41, mob = "Lucsei", name = "Eye Beam", cast = 2.5, cd = { 30.0 },
+      first = 60.0, firstN = 40, n = 40, follow = 2.5, prio = "FRONTAL" },
 }
 GetInstanceInfo = function() return "d", "party", 0, "", 0, 0, false, 2000 end
 fire("PLAYER_ENTERING_WORLD")
@@ -2022,6 +2024,12 @@ enter()
 advance(5.0)
 castIntoChannel(2.0, 1.2)
 check(Last() == 1301, "a Drain Life cut to 1.2s reads as Blade Dance")
+local function HasTrack(spell)
+    for _, track in pairs(CastAheadCore.Tracks(unit) or {}) do
+        if track.candidates and #track.candidates == 1 and track.candidates[1].spell == spell then return true end
+    end
+end
+check(HasTrack(1304), "and lays out Lucsei's Eye Beam beside it")
 advance(20.0 - 3.2)
 local drainAt = now
 castIntoChannel(2.0, 7.0)
@@ -2040,7 +2048,7 @@ local blade
 for _, track in pairs(CastAheadCore.Tracks(unit) or {}) do
     if track.candidates and #track.candidates == 1 and track.candidates[1].spell == 1301 then blade = track end
 end
-check(not blade, "and Blade Dance, Lucsei's, no longer has a track on the warlock's plate")
+check(not blade and not HasTrack(1304), "and neither Blade Dance nor Eye Beam, Lucsei's, keeps a track on the warlock's plate")
 reset()
 CastAheadData[2000] = nil
 GetInstanceInfo = savedGolemInfo
