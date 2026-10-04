@@ -2,6 +2,7 @@ CastAhead-Report 1 addon=? data=32c64c22 instance=1877 level=0 affixes=- role=NO
 # mark 1 at 00:23.0 on -: claimed 100/AOE; note: tank buster was called swap
 # mark 2 at 00:23.0 on 1.1: claimed 100/AOE; note: -
 # mark 3 at 05:23.0 on -: claimed -/-; note: -
+# never shown: 200,300,500,610,700
 0|PLATE|1.1|added|90|0|elite
 0|ENGAGE|1.1
 0|PULL|-|in

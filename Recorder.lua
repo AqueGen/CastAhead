@@ -91,6 +91,46 @@ function R.Summary(key)
         casts, calls, key.marks or 0)
 end
 
+local SHOWN = {
+    START = "^%d|(%d+)|",
+    STOP = "^%d|%d+|(%d+)|",
+    PRED = "^(%d+)|",
+    TL = "^added|(%d+)|",
+}
+
+function R.Coverage(key)
+    local shown = {}
+    for _, line in ipairs(key.lines) do
+        local kind, rest = line:match("^%d+|(%u+)|[^|]*|(.*)$")
+        local spell = SHOWN[kind] and rest:match(SHOWN[kind])
+        if spell then shown[tonumber(spell)] = true end
+    end
+    local never, seen, total = {}, {}, 0
+    for _, row in ipairs(CastAheadData and CastAheadData[key.instance] or {}) do
+        if not seen[row.spell] then
+            seen[row.spell] = true
+            total = total + 1
+            if not shown[row.spell] then never[#never + 1] = row end
+        end
+    end
+    table.sort(never, function(a, b)
+        if (a.prio ~= nil) ~= (b.prio ~= nil) then return a.prio ~= nil end
+        return a.spell < b.spell
+    end)
+    return never, total
+end
+
+local function CoverageLine(key)
+    local never, total = R.Coverage(key)
+    if #never == 0 then
+        return string.format("|cff33ff99Cast Ahead|r every one of this dungeon's %d spells was shown", total)
+    end
+    local names = {}
+    for i = 1, math.min(#never, 8) do names[i] = never[i].name or tostring(never[i].spell) end
+    return string.format("|cff33ff99Cast Ahead|r shown %d of %d spells; never shown: %s%s",
+        total - #never, total, table.concat(names, ", "), #never > 8 and (" and " .. (#never - 8) .. " more") or "")
+end
+
 local function Disposable(key)
     return key.pseudo and (key.marks or 0) == 0
 end
@@ -105,7 +145,10 @@ function R.EndKey(result)
         table.remove(keys, #keys)
         return
     end
-    if key.ended == "completed" then print(R.Summary(key)) end
+    if key.ended == "completed" then
+        print(R.Summary(key))
+        print(CoverageLine(key))
+    end
 end
 
 function R.StartKey(info)
@@ -406,6 +449,10 @@ function R.Export(key)
     local picked, size, droppedMarks, droppedLines = {}, 0, 0, 0
     local summaries = {}
     for m, mark in ipairs(marks) do summaries[m] = MarkSummary(key, mark) end
+    local ids = {}
+    for i, row in ipairs((R.Coverage(key))) do ids[i] = row.spell end
+    local coverage = "# never shown: " .. (#ids > 0 and table.concat(ids, ",") or "-")
+    summaries[#summaries + 1] = coverage
     local budget = R.EXPORT_LIMIT - 400
     for m = 1, #summaries do budget = budget - #summaries[m] - 1 end
     if #marks == 0 then
@@ -450,6 +497,7 @@ function R.Export(key)
         droppedMarks > 0 and (" droppedMarks=" .. droppedMarks) or "",
         droppedLines > 0 and (" droppedLines=" .. droppedLines) or "") }
     for m = droppedMarks + 1, #marks do out[#out + 1] = summaries[m] end
+    out[#out + 1] = coverage
     for _, line in ipairs(body) do out[#out + 1] = line end
     out[#out + 1] = "CastAhead-Report end lines=" .. #body
     return table.concat(out, "\n")

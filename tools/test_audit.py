@@ -1,6 +1,6 @@
 import pathlib
 
-from audit import issue_report, load_data_rows, owner_audit, parse_export, parse_line, read_journal
+from audit import coverage_report, issue_report, load_data_rows, owner_audit, parse_export, parse_line, read_journal
 
 HERE = pathlib.Path(__file__).parent
 SAMPLE = (HERE / "fixtures" / "export_sample.txt").read_text(encoding="utf-8")
@@ -87,3 +87,29 @@ def test_the_journal_is_read_back_from_saved_variables():
     sv = 'CastAheadDB = {\n["journal"] = {\n["keys"] = {\n{\n["lines"] = {\n"0|PULL|-|in",\n"1500|START|1.1|0|100|AOE|100|1",\n},\n},\n},\n},\n}\n'
     lines = read_journal(sv)
     assert [l.kind for l in lines] == ["PULL", "START"] and lines[1].mob == "1.1"
+
+
+def test_coverage_splits_the_dungeon_into_missed_not_cast_and_shown(tmp_path):
+    data = ('CastAheadData = {\n    [1877] = { name = "T",\n'
+            '        { spell = 100, npc = 1, mob = "A", name = "Big", cast = 3.0, cd = { 20.0 }, first = 5.0, n = 9, firstN = 9, level = 91, offset = 0.0, },\n'
+            '        { spell = 700, npc = 7, mob = "G", name = "Beam", cast = 2.0, cd = { 30.0 }, first = 6.0, n = 9, firstN = 9, level = 91, offset = 0.0, },\n'
+            '        { spell = 610, npc = 11, mob = "D", name = "Drain", cast = 6.0, cd = { 22.0 }, first = 8.0, n = 9, firstN = 9, level = 91, offset = 0.0, channel = true, },\n'
+            '    },\n}\n')
+    sv = ('CastAheadDB = {\n["journal"] = {\n["keys"] = {\n{\n["instance"] = 1877,\n["level"] = 12,\n'
+          '["lines"] = {\n"1500|START|1.1|0|100|AOE|100|1",\n"3000|STOP|1.1|0|3000|100|AOE",\n"9000|START|2.2|0|-|-||0",\n},\n},\n},\n},\n}\n')
+    mob, golem = "Creature-0-1-2-3-1-0000000001", "Creature-0-1-2-3-7-0000000002"
+    log = [
+        '10/3/2026 12:00:00.000  CHALLENGE_MODE_START,"T",1877,1,12,[10]',
+        '10/3/2026 12:00:01.500  SPELL_CAST_START,%s,"A",0xa48,0x0,0000000000000000,nil,0x0,0x0,100,"Big",0x1' % mob,
+        '10/3/2026 12:00:09.000  SPELL_CAST_START,%s,"G",0xa48,0x0,0000000000000000,nil,0x0,0x0,700,"Beam",0x1' % golem,
+        '10/3/2026 12:10:00.000  CHALLENGE_MODE_END,1877,1,12,600000',
+        '10/3/2026 12:20:00.000  SPELL_CAST_START,%s,"G",0xa48,0x0,0000000000000000,nil,0x0,0x0,610,"Drain",0x1' % golem,
+    ]
+    path = tmp_path / "log.txt"
+    path.write_text("\n".join(log) + "\n", encoding="utf-8")
+    text = coverage_report(sv, [str(path)], data, {700: "DODGE"})
+    missed = text.split("Missed")[1].split("Not cast")[0]
+    not_cast = text.split("Not cast")[1].split("Shown")[0]
+    assert "Beam (700) DODGE, cast 1" in missed and "Big" not in missed
+    assert "Drain (610)" in not_cast
+    assert "Big (100)" in text.split("Shown")[1]

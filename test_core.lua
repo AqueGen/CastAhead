@@ -1912,6 +1912,11 @@ for _, kind in ipairs({ "PLATE", "ENGAGE", "START", "STEP", "STOP", "PRED", "PUL
 end
 check(Find("^%d+|PLATE|1%.1|added|"), "the plate is mob 1.1")
 check(Find("^%d+|STOP|1%.1|0|3000|"), "a stop carries the measured length in ms on mob 1.1")
+local never, total = R.Coverage(R.Current())
+local neverIds = {}
+for _, row in ipairs(never) do neverIds[row.spell] = true end
+check(total >= 6 and not neverIds[100] and neverIds[700] and neverIds[610],
+    "coverage counts the identified Big as shown and the untouched spells as never shown")
 reset()
 check(Find("^%d+|PLATE|1%.1|removed|gone$"), "a dropped plate is journalled")
 hostile[unit], combat[unit] = true, true

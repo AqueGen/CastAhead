@@ -2,6 +2,7 @@
 
     python tools/audit.py issue <export.txt> [--data Data.lua]
     python tools/audit.py owner <SavedVariables CastAhead.lua> <combat log> [--key N] [--data Data.lua] [--out DIR]
+    python tools/audit.py coverage <SavedVariables CastAhead.lua> <combat log> [...] [--data Data.lua] [--out DIR]
 """
 import argparse
 import csv
@@ -238,6 +239,144 @@ def owner_audit(lines, log_path, rows):
     return "\n".join(out)
 
 
+SHOWN_FIELD = {"START": 1, "STOP": 2, "PRED": 0, "TL": 1}
+
+
+LUA_TOKEN = re.compile(r'\s*(?:--[^\n]*|(\{|\}|=|,)|\[\s*("(?:[^"\\]|\\.)*"|-?[\d.]+)\s*\]'
+                       r'|("(?:[^"\\]|\\.)*")|(-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)|(true|false|nil)|([A-Za-z_]\w*))')
+
+
+def lua_tokens(text):
+    for m in LUA_TOKEN.finditer(text):
+        punct, key, string, number, word, name_ = m.groups()
+        if punct:
+            yield ("p", punct)
+        elif key is not None:
+            yield ("k", lua_scalar(key))
+        elif string is not None:
+            yield ("v", lua_scalar(string))
+        elif number is not None:
+            yield ("v", float(number) if "." in number or "e" in number.lower() else int(number))
+        elif word is not None:
+            yield ("v", {"true": True, "false": False, "nil": None}[word])
+        elif name_ is not None:
+            yield ("n", name_)
+
+
+def lua_scalar(text):
+    if text.startswith('"'):
+        return re.sub(r'\\(.)', lambda m: {"n": "\n", "t": "\t"}.get(m.group(1), m.group(1)), text[1:-1])
+    return float(text) if "." in text else int(text)
+
+
+def lua_table(tokens):
+    table, index = {}, 1
+    for kind, value in tokens:
+        if (kind, value) == ("p", "}"):
+            return table
+        if kind == "k":
+            next(tokens)
+            vkind, item = next(tokens)
+            table[value] = lua_table(tokens) if (vkind, item) == ("p", "{") else item
+        elif (kind, value) == ("p", "{"):
+            table[index], index = lua_table(tokens), index + 1
+        elif kind == "v":
+            table[index], index = value, index + 1
+    return table
+
+
+def saved_variable(sv_text, name_):
+    tokens = lua_tokens(sv_text)
+    for kind, value in tokens:
+        if (kind, value) == ("n", name_):
+            next(tokens)
+            next(tokens)
+            return lua_table(tokens)
+    return {}
+
+
+def journal_keys(sv_text):
+    keys = saved_variable(sv_text, "CastAheadDB").get("journal", {}).get("keys", {})
+    out = []
+    for i in sorted(k for k in keys if isinstance(k, int)):
+        key = keys[i]
+        lines = key.get("lines", {})
+        out.append((key.get("instance"), int(key.get("level") or 0),
+                    [parse_line(lines[j]) for j in sorted(k for k in lines if isinstance(k, int))]))
+    return out
+
+
+def shown_spells(lines):
+    shown = {}
+    for l in lines:
+        index = SHOWN_FIELD.get(l.kind)
+        if index is None or (l.kind == "TL" and l.fields[0] != "added"):
+            continue
+        value = l.fields[index]
+        if value.isdigit():
+            shown[int(value)] = shown.get(int(value), 0) + 1
+    return shown
+
+
+def key_windows(log_paths):
+    windows = []
+    for path in log_paths:
+        open_key = None
+        for ms, p in log_events(path):
+            if p[0] == "CHALLENGE_MODE_START":
+                open_key = (int(p[2]), int(p[4]), ms)
+            elif p[0] == "CHALLENGE_MODE_END" and open_key:
+                windows.append((open_key[0], open_key[1], open_key[2], ms, path))
+                open_key = None
+    return windows
+
+
+def casts_in(window, spells):
+    _, _, start, end, path = window
+    counts = {}
+    for ms, p in log_events(path):
+        if start <= ms <= end and p[0] in ("SPELL_CAST_START", "SPELL_CAST_SUCCESS") and p[1].startswith("Creature-"):
+            spell = int(p[9])
+            if spell in spells and (p[0] == "SPELL_CAST_START" or spells[spell]["channel"]):
+                counts[spell] = counts.get(spell, 0) + 1
+    return counts
+
+
+def coverage_report(sv_text, log_paths, data_text, priority):
+    windows = key_windows(log_paths)
+    used, out = set(), ["# Cast Ahead coverage"]
+    for n, (instance, level, lines) in enumerate(journal_keys(sv_text), 1):
+        rows = load_data_rows(data_text, instance)
+        if not rows or not level:
+            continue
+        match = next((w for w in windows if w[0] == instance and w[1] == level and w not in used), None)
+        shown = shown_spells(lines)
+        out.append("\n## Key %d: instance %s +%d%s" % (n, instance, level, "" if match else " (no matching key in the logs)"))
+        if not match:
+            continue
+        used.add(match)
+        cast = casts_in(match, rows)
+
+        def entry(spell):
+            return "- %s%s, cast %d, shown %d" % (name(rows, spell), " " + priority[spell] if spell in priority else "",
+                                                cast.get(spell, 0), shown.get(spell, 0))
+        missed = sorted((s for s in rows if cast.get(s) and not shown.get(s)), key=lambda s: (s not in priority, -cast[s]))
+        idle = sorted(s for s in rows if not cast.get(s) and not shown.get(s))
+        fine = sorted((s for s in rows if shown.get(s)), key=lambda s: -shown[s])
+        out.append("### Missed - cast but never shown (%d)" % len(missed))
+        out += [entry(s) for s in missed]
+        out.append("### Not cast and not shown (%d)" % len(idle))
+        out += [entry(s) for s in idle]
+        out.append("### Shown (%d)" % len(fine))
+        out += [entry(s) for s in fine]
+    return "\n".join(out)
+
+
+def read_priority(text):
+    block = text.split("CastAheadPriority = {", 1)[-1].split("}", 1)[0]
+    return {int(k): v for k, v in re.findall(r'\[(\d+)\] = "(\w+)"', block)}
+
+
 def main(argv):
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="mode", required=True)
@@ -250,8 +389,26 @@ def main(argv):
     b.add_argument("--key", type=int)
     b.add_argument("--data", default=str(pathlib.Path(__file__).resolve().parent.parent / "Data.lua"))
     b.add_argument("--out")
+    c = sub.add_parser("coverage")
+    c.add_argument("saved")
+    c.add_argument("logs", nargs="+")
+    c.add_argument("--data", default=str(pathlib.Path(__file__).resolve().parent.parent / "Data.lua"))
+    c.add_argument("--priority", default=str(pathlib.Path(__file__).resolve().parent.parent / "Priority.lua"))
+    c.add_argument("--out")
     args = ap.parse_args(argv)
     data = pathlib.Path(args.data).read_text(encoding="utf-8")
+    if args.mode == "coverage":
+        text = coverage_report(pathlib.Path(args.saved).read_text(encoding="utf-8"), args.logs, data,
+                               read_priority(pathlib.Path(args.priority).read_text(encoding="utf-8")))
+        if args.out:
+            target = pathlib.Path(args.out)
+            target.mkdir(parents=True, exist_ok=True)
+            target = target / (datetime.date.today().isoformat() + "-coverage.md")
+            target.write_text(text, encoding="utf-8")
+            print("wrote", target)
+        else:
+            print(text)
+        return
     if args.mode == "issue":
         report = parse_export(pathlib.Path(args.export).read_text(encoding="utf-8"))
         print(issue_report(report, load_data_rows(data, report.header.get("instance"))))
