@@ -1843,6 +1843,10 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
             previousCast = (not track.projected) and track.lastStartAt or nil
         end
     end
+    if disproved and track == picked then
+        previousCast, adapted, resetPicked = nil, nil, nil
+        track.index, track.observedCD = nil, nil
+    end
     if resetPicked and track == picked then
         track.observedCD = nil
         track.index = nil
