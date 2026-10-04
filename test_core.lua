@@ -1974,8 +1974,17 @@ Quiet()
 ok, err = pcall(SlashCmdList.CASTAHEAD, "mark slash note")
 Loud()
 check(ok and Find("|NOTE|%-|%d+|slash note$"), "/ca mark <note> marks and notes: " .. tostring(err))
+local plainCreate, reportWindow = CreateFrame, nil
+CreateFrame = function(kind, name, ...)
+    local f = plainCreate(kind, name, ...)
+    f.shown = true
+    if name == "CastAheadReportWindow" then reportWindow = f end
+    return f
+end
 ok, err = pcall(SlashCmdList.CASTAHEAD, "report")
+CreateFrame = plainCreate
 check(ok, "/ca report opens: " .. tostring(err))
+check(reportWindow and reportWindow.shown, "the first /ca report shows the window, though the game creates frames shown")
 ok, err = pcall(CastAheadReport.Refresh)
 check(ok, "the panel refreshes: " .. tostring(err))
 Quiet()

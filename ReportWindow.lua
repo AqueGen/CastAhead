@@ -159,6 +159,9 @@ end
 
 local function BuildWindow()
     window = CreateFrame("Frame", "CastAheadReportWindow", UIParent, "BasicFrameTemplateWithInset")
+    window:Hide()
+    window:SetFrameStrata("FULLSCREEN_DIALOG")
+    window:SetToplevel(true)
     window:SetSize(640, 460)
     window:SetPoint("CENTER")
     window:SetMovable(true)
