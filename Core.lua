@@ -1846,7 +1846,7 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
     -- Sure means the identification needed no fallback: the cast length (with
     -- the level) is unique in this dungeon, or the interval fit the schedule.
     if #candidates == 1 then
-        local unique = CastAheadMatch.FollowCompatible(CastAheadMatch.NarrowByLevel(
+        local unique = CastAheadMatch.NarrowByFollow(CastAheadMatch.NarrowByLevel(
             CastAheadMatch.ByCastTime(dungeon, duration, channel), state.level), follow)
         track.sure = (#unique == 1 and unique[1] == candidates[1]) or slotMatched
         if track.sure then LockNPC(unit, state, candidates[1].npc) end
