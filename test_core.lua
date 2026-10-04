@@ -1841,5 +1841,68 @@ check(not logging, "nothing is logged outside Development mode")
 IsInInstance, LoggingCombat, C_CVar = savedIsInInstance, nil, nil
 CastAheadDB = nil
 
+-- Defiled Golem: two 2.0s casts with different calls, each turning into a
+-- channel of its own length, plus another creature's 2.0s cast.
+CastAheadData[1999] = { name = "Golem",
+    { spell = 1201, npc = 31, mob = "Golem", name = "Fel Beam", cast = 2.0, cd = { 30.4 },
+      first = 22.4, firstN = 40, offset = 16.0, n = 40, follow = 4.0, prio = "DODGE" },
+    { spell = 1202, npc = 31, mob = "Golem", name = "Defiled Slam", cast = 2.0, cd = { 30.4 },
+      first = 6.4, firstN = 40, offset = 0.0, n = 40, follow = 8.0, prio = "AOE" },
+    { spell = 1203, npc = 32, mob = "Other", name = "Bolt", cast = 2.0, cd = { 15.0 },
+      first = 3.0, firstN = 40, n = 40, prio = "KICK" },
+}
+local savedGolemInfo = GetInstanceInfo
+GetInstanceInfo = function() return "d", "party", 0, "", 0, 0, false, 1999 end
+CastAheadDB = { leadSeconds = 0 }
+local function castIntoChannel(cast, channel)
+    fire("UNIT_SPELLCAST_START", unit)
+    advance(cast)
+    fire("UNIT_SPELLCAST_CHANNEL_START", unit)
+    fire("UNIT_SPELLCAST_STOP", unit)
+    advance(channel)
+    fire("UNIT_SPELLCAST_CHANNEL_STOP", unit)
+end
+local function Last() local c = CastAheadCore.LastCandidates(unit) return c and #c == 1 and c[1].spell end
+enter()
+advance(6.4)
+local slamAt = now
+castIntoChannel(2.0, 8.0)
+check(Last() == 1202, "a 2.0s cast that turned into an 8s channel is Defiled Slam, got " .. tostring(Last()))
+local beam
+for _, track in pairs(CastAheadCore.Tracks(unit) or {}) do
+    if track.candidates and #track.candidates == 1 and track.candidates[1].spell == 1201 then beam = track end
+end
+check(beam and beam.nextAt and math.abs(beam.nextAt - (slamAt + 16.0)) < 0.01,
+    "Fel Beam, the same length as Slam, keeps a track of its own, due 16s after Slam")
+advance(slamAt + 16.0 - now)
+sounds, spoken, clips = 0, 0, 0
+fire("UNIT_SPELLCAST_START", unit)
+local claim = CastAheadCore.Casting(unit)
+check(claim and claim.row and claim.row.spell == 1201 and Alerts() > 0,
+    "the next 2.0s cast, where Fel Beam is due, is called as Fel Beam, got "
+    .. tostring(claim and claim.row and claim.row.spell))
+advance(2.0)
+fire("UNIT_SPELLCAST_CHANNEL_START", unit)
+fire("UNIT_SPELLCAST_STOP", unit)
+advance(4.0)
+fire("UNIT_SPELLCAST_CHANNEL_STOP", unit)
+check(Last() == 1201, "its 4s channel confirms Fel Beam, got " .. tostring(Last()))
+advance(slamAt + 30.4 - now)
+fire("UNIT_SPELLCAST_START", unit)
+claim = CastAheadCore.Casting(unit)
+check(claim and claim.row and claim.row.spell == 1202,
+    "and Slam's next cast is still called as Slam, got " .. tostring(claim and claim.row and claim.row.spell))
+advance(2.0)
+fire("UNIT_SPELLCAST_CHANNEL_START", unit)
+fire("UNIT_SPELLCAST_STOP", unit)
+advance(3.0)
+fire("UNIT_SPELLCAST_CHANNEL_STOP", unit, nil, nil, "kicker")
+check(Last() == 1202, "a kicked channel still lets the cast it came from be settled, got " .. tostring(Last()))
+reset()
+CastAheadData[1999] = nil
+GetInstanceInfo = savedGolemInfo
+fire("PLAYER_ENTERING_WORLD")
+CastAheadDB = nil
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

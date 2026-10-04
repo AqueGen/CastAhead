@@ -41,6 +41,15 @@ local both = M.ByCastTime(rows, 2.5)
 check(#M.NarrowByInterval(both, 8.4) == 1, "an observed 8.4s interval should pick one spell")
 check(M.NarrowByInterval(both, 8.4)[1].spell == 1, "and it should be the 8.5s one")
 check(#M.NarrowByInterval(both, 60) == 2, "an interval matching nothing must not erase candidates")
+local golem = {
+    { spell = 20, npc = 3, cast = 2.0, cd = { 30 }, follow = 4.0 },
+    { spell = 21, npc = 3, cast = 2.0, cd = { 30 }, follow = 8.0 },
+    { spell = 22, npc = 4, cast = 2.0, cd = { 15 } },
+}
+check(#M.NarrowByFollow(golem, 8.0) == 1 and M.NarrowByFollow(golem, 8.0)[1].spell == 21,
+    "the channel that followed a cast picks the spell that turns into it")
+check(#M.NarrowByFollow(golem, 20.0) == 3, "a follow-up channel matching nothing must not erase candidates")
+check(#M.NarrowByFollow(golem, nil) == 3, "no follow-up channel narrows nothing")
 check(M.SlotForInterval(rows[3], 27.5) == 2, "27.5s belongs to the second rotation slot")
 check(M.SlotForInterval(rows[3], 40) == nil, "an interval in no slot returns nil")
 
