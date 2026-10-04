@@ -49,6 +49,10 @@ local golem = {
 check(#M.NarrowByFollow(golem, 8.0) == 1 and M.NarrowByFollow(golem, 8.0)[1].spell == 21,
     "the channel that followed a cast picks the spell that turns into it")
 check(#M.NarrowByFollow(golem, 20.0) == 3, "a follow-up channel matching nothing must not erase candidates")
+check(#M.NarrowByFollow(golem, 4.0) == 1 and M.NarrowByFollow(golem, 4.0)[1].spell == 20,
+    "a channel of exactly one spell's length picks it over a longer one it could be cut from")
+check(#M.NarrowByFollow(golem, 6.0) == 1 and M.NarrowByFollow(golem, 6.0)[1].spell == 21,
+    "a channel cut short still belongs to a spell whose channel is at least that long")
 check(#M.NarrowByFollow(golem, nil) == 3, "an unknown follow-up narrows nothing")
 check(#M.NarrowByFollow(golem, false) == 1 and M.NarrowByFollow(golem, false)[1].spell == 22,
     "a cast that ended without a channel is not one that always turns into one")

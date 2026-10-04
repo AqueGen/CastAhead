@@ -347,6 +347,8 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
     spell_times = json.load(open(spell_times_path, encoding="utf-8")) if spell_times_path else {}
     follows = {int(k): float(v) for k, v in
                json.load(open(follows_path, encoding="utf-8")).items()} if follows_path else {}
+    if not follows_path:
+        print("warning: no follows file given, every follow-up channel length is dropped")
 
     anchor, anchor_zones = ({}, {}) if fresh else read_anchor(out_path)
     dungeons, seen, report = {}, set(), []

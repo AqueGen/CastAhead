@@ -196,9 +196,14 @@ local function bump(t, key) t[key] = (t[key] or 0) + 1 end
 
 local CHANNELS = os.getenv("CA_CHANNELS") ~= "0"
 if not CHANNELS then print("knobs: follow-up channels off") end
+local CUT = tonumber(os.getenv("CA_CUT") or "")
+if CUT then
+    math.randomseed(1)
+    print("knobs: " .. CUT .. " of follow-up channels cut short")
+end
 local channels = {}
 
-local function score(unit, spell, instance, d)
+local function score(unit, spell, instance, d, lost)
     local row = tabled[instance] and tabled[instance][spell]
     if row then names[spell] = row.name end
     local candidates = CastAheadCore.LastCandidates(unit)
@@ -207,7 +212,7 @@ local function score(unit, spell, instance, d)
     if not row then
         verdict = "untabled"
         bump(untabledSpells, spell)
-    elseif not candidates or #candidates == 0 then
+    elseif lost or not candidates or #candidates == 0 then
         verdict = "none"
         bump(missed, spell)
     elseif #candidates == 1 then
@@ -299,9 +304,21 @@ for _, run in ipairs(CastAheadReplay) do
         endChannels(base + ev.t)
         now = base + ev.t
         local unit = ev.u and ("nameplate" .. ev.u)
-        if unit and channels[unit] and (ev.e == "REMOVE" or ev.e == "START") then
-            channels[unit].at = now
-            endChannels(now, unit)
+        local settling
+        if unit and channels[unit] and ev.e == "START" then
+            settling, channels[unit] = channels[unit].spell, nil
+        elseif unit and channels[unit] and (ev.e == "KICK" or ev.e == "FAIL") then
+            local pending = channels[unit]
+            channels[unit] = nil
+            fire("UNIT_SPELLCAST_CHANNEL_STOP", unit, nil, nil, "kicker")
+            score(unit, pending.spell, run.instance, d)
+            settling = "kicked"
+        elseif unit and channels[unit] and ev.e == "REMOVE" then
+            score(unit, channels[unit].spell, run.instance, d, true)
+            channels[unit] = nil
+        elseif ev.e == "ENC" then
+            for u, pending in pairs(channels) do score(u, pending.spell, run.instance, d, true) end
+            for u in pairs(channels) do channels[u] = nil end
         end
         if ev.e == "ENC" then
             fire(ev.on and "ENCOUNTER_START" or "ENCOUNTER_END", 1)
@@ -323,6 +340,7 @@ for _, run in ipairs(CastAheadReplay) do
             open[unit] = ev.spell
             targets[unit] = ev.target
             fire("UNIT_SPELLCAST_START", unit)
+            if settling and settling ~= "kicked" then score(unit, settling, run.instance, d) end
             local claim = CastAheadCore.Casting(unit)
             if claim and claim.row then
                 local truth = tabled[run.instance] and tabled[run.instance][ev.spell]
@@ -353,6 +371,8 @@ for _, run in ipairs(CastAheadReplay) do
             elseif ev.kick == false then
                 fire("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", unit)
             end
+        elseif settling == "kicked" then
+            open[unit] = nil
         elseif ev.e == "KICK" then
             open[unit] = nil
             fire("UNIT_SPELLCAST_INTERRUPTED", unit)
@@ -373,7 +393,9 @@ for _, run in ipairs(CastAheadReplay) do
             if CHANNELS and row and row.follow and not row.channel then
                 fire("UNIT_SPELLCAST_CHANNEL_START", unit)
                 fire("UNIT_SPELLCAST_STOP", unit)
-                channels[unit] = { at = now + row.follow, spell = ev.spell }
+                local length = row.follow
+                if CUT and math.random() < CUT then length = length * (0.1 + 0.8 * math.random()) end
+                channels[unit] = { at = now + length, spell = ev.spell }
             else
                 fire("UNIT_SPELLCAST_STOP", unit)
                 score(unit, ev.spell, run.instance, d)

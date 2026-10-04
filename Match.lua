@@ -273,16 +273,23 @@ end
 
 function M.FollowFits(row, follow)
     if follow == false then return row.follow == nil end
-    return row.follow ~= nil and math.abs(row.follow - follow) <= M.CAST_TOLERANCE
+    return row.follow ~= nil and follow <= row.follow + M.CAST_TOLERANCE
+end
+
+local function FollowExact(row, follow)
+    return type(follow) == "number" and row.follow ~= nil
+        and math.abs(row.follow - follow) <= M.CAST_TOLERANCE
 end
 
 function M.NarrowByFollow(candidates, follow)
     if follow == nil then return candidates end
-    local out = {}
+    local exact, fits = {}, {}
     for i = 1, #candidates do
-        if M.FollowFits(candidates[i], follow) then out[#out + 1] = candidates[i] end
+        if FollowExact(candidates[i], follow) then exact[#exact + 1] = candidates[i] end
+        if M.FollowFits(candidates[i], follow) then fits[#fits + 1] = candidates[i] end
     end
-    return #out > 0 and out or candidates
+    if #exact > 0 then return exact end
+    return #fits > 0 and fits or candidates
 end
 
 -- Time from the mob entering combat to this cast. Separates candidates on the

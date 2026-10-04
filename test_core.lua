@@ -1904,6 +1904,24 @@ advance(6.4)
 castFor(2.0)
 check(Last() == 1203, "a 2.0s cast that ended without a channel is not the golem's, got " .. tostring(Last()))
 reset()
+local function TrackOf(spell)
+    for _, track in pairs(CastAheadCore.Tracks(unit) or {}) do
+        if track.candidates and #track.candidates == 1 and track.candidates[1].spell == spell then return track end
+    end
+end
+enter()
+advance(6.4)
+slamAt = now
+castIntoChannel(2.0, 8.0)
+TrackOf(1201).nextAt = nil
+advance(slamAt + 16.0 - now)
+castIntoChannel(2.0, 4.0)
+local slam, beamTrack = TrackOf(1202), TrackOf(1201)
+check(Last() == 1201 and beamTrack and beamTrack.lastStartAt == slamAt + 16.0,
+    "a cast picked by Slam's track but channelled like Fel Beam lands on Fel Beam's track")
+check(slam and slam.observedCD == nil and math.abs(slam.nextAt - (slamAt + 30.4)) < 0.01,
+    "and Slam's own schedule is left as it was, got observedCD " .. tostring(slam and slam.observedCD))
+reset()
 CastAheadData[1999] = nil
 GetInstanceInfo = savedGolemInfo
 fire("PLAYER_ENTERING_WORLD")
