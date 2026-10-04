@@ -2168,6 +2168,12 @@ CastAheadData[1999] = { name = "Golem",
       first = 3.0, firstN = 40, n = 40, prio = "KICK" },
     { spell = 1204, npc = 31, mob = "Golem", name = "Smash", cast = 3.0, cd = { 40.0 },
       first = 50.0, firstN = 40, offset = 45.0, n = 40, prio = "TANK" },
+    { spell = 1205, npc = 36, mob = "Drainer", name = "Siphon", cast = 6.0, cd = { 30.0 },
+      first = 9.0, firstN = 40, n = 40, channel = true, prio = "KICK" },
+    { spell = 1206, npc = 33, mob = "Serpent", name = "Spray", cast = 2.5, cd = { 30.0 },
+      first = 7.0, firstN = 40, n = 40, followUnknown = true, prio = "TANK" },
+    { spell = 1207, npc = 37, mob = "Serpent II", name = "Spit", cast = 2.5, cd = { 30.0 },
+      first = 7.0, firstN = 40, n = 40, followUnknown = true, prio = "TANK" },
 }
 local savedGolemInfo = GetInstanceInfo
 GetInstanceInfo = function() return "d", "party", 0, "", 0, 0, false, 1999 end
@@ -2253,7 +2259,78 @@ castFor(3.0)
 check(Last() == 1204 and TrackOf(1201) and TrackOf(1202),
     "once Smash names the golem, Fel Beam and Slam each get a track although an earlier 2.0s cast was ambiguous between them")
 reset()
+local function Lengths()
+    local c = CastAheadCore.LastCandidates(unit)
+    return c and #c > 0 and c[1].cast
+end
+enter()
+advance(6.4)
+fire("UNIT_SPELLCAST_START", unit)
+advance(2.0)
+fire("UNIT_SPELLCAST_CHANNEL_START", unit)
+fire("UNIT_SPELLCAST_STOP", unit)
+fire("NAME_PLATE_UNIT_ADDED", unit)
+advance(8.0)
+fire("UNIT_SPELLCAST_CHANNEL_STOP", unit)
+check(not TrackOf(1202), "a plate added again mid-channel drops the cast it was holding")
+reset()
+enter()
+advance(6.4)
+fire("UNIT_SPELLCAST_START", unit)
+advance(2.0)
+fire("UNIT_SPELLCAST_CHANNEL_START", unit)
+fire("UNIT_SPELLCAST_STOP", unit)
+advance(1.0)
+fire("UNIT_SPELLCAST_CHANNEL_START", unit)
+check(Lengths() == 2.0, "a second channel start settles the held 2.0s cast at once")
+advance(8.0)
+fire("UNIT_SPELLCAST_CHANNEL_STOP", unit)
+reset()
+enter()
+advance(6.4)
+castIntoChannel(2.0, 20.0)
+check(Lengths() == 2.0, "a channel that is no candidate's own still leaves the held cast's identification")
+reset()
+enter()
+advance(6.4)
+slamAt = now
+castIntoChannel(2.0, 8.0)
+local beamGone = TrackOf(1201)
+CastAheadCore.Tracks(unit)[beamGone.slot] = nil
+advance(slamAt + 16.0 - now)
+castIntoChannel(2.0, 4.0)
+slam = TrackOf(1202)
+check(TrackOf(1201) and TrackOf(1201).lastStartAt == slamAt + 16.0 and slam
+    and math.abs(slam.nextAt - (slamAt + 30.4)) < 0.01,
+    "a Fel Beam picked by Slam's track gets a track of its own and leaves Slam's schedule alone")
+reset()
+enter()
+advance(7.0)
+castIntoChannel(2.5, 6.0)
+check(Lengths() == 2.5, "the channel after casts whose channel length is unconfirmed stays theirs, not Siphon's")
+reset()
 CastAheadData[1999] = nil
+GetInstanceInfo = savedGolemInfo
+fire("PLAYER_ENTERING_WORLD")
+
+-- Felmaster Lucsei and Corrupted Warlock: 2.0s casts, channels of 1.2s and 7s.
+CastAheadData[2000] = { name = "Row",
+    { spell = 1301, npc = 41, mob = "Lucsei", name = "Blade Dance", cast = 2.0, cd = { 20.0 },
+      first = 5.0, firstN = 40, n = 40, follow = 1.2, prio = "AOE" },
+    { spell = 1302, npc = 42, mob = "Warlock", name = "Drain Life", cast = 2.0, cd = { 20.0 },
+      first = 5.0, firstN = 40, n = 40, follow = 7.0, prio = "TARGET" },
+}
+GetInstanceInfo = function() return "d", "party", 0, "", 0, 0, false, 2000 end
+fire("PLAYER_ENTERING_WORLD")
+enter()
+advance(5.0)
+castIntoChannel(2.0, 1.2)
+check(Last() == 1301, "a Drain Life cut to 1.2s reads as Blade Dance")
+advance(20.0 - 3.2)
+castIntoChannel(2.0, 7.0)
+check(Last() == 1302, "but its next full 7s channel undoes that and names Drain Life, got " .. tostring(Last()))
+reset()
+CastAheadData[2000] = nil
 GetInstanceInfo = savedGolemInfo
 fire("PLAYER_ENTERING_WORLD")
 CastAheadDB = nil

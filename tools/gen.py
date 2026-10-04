@@ -296,7 +296,8 @@ def settle(new, old):
     row["filler"] = not row["cd"] or min(row["cd"]) < MIN_CD
     row["kickable"] = row["mdt_kick"] if row["mdt_kick"] is not None else row["kick"] >= KICK_SHARE
     if old is not None:
-        changed += [f for f in ("approx", "filler", "follow", "kickable", "level", "mob", "name", "targeted")
+        changed += [f for f in ("approx", "filler", "follow", "followUnknown", "kickable", "level", "mob", "name",
+                                "targeted")
                     if row.get(f) != old.get(f)]
     return row, changed
 
@@ -345,8 +346,9 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
     # otherwise the log's own measurement still wins (the game doesn't always cast at DB2's
     # nominal length, and a triggered cast has no bar to measure).
     spell_times = json.load(open(spell_times_path, encoding="utf-8")) if spell_times_path else {}
-    follows = {int(k): float(v) for k, v in
-               json.load(open(follows_path, encoding="utf-8")).items()} if follows_path else {}
+    follows = {}
+    for k, v in (json.load(open(follows_path, encoding="utf-8")).items() if follows_path else ()):
+        follows[int(k)] = (float(v["follow"]), bool(v["verified"])) if isinstance(v, dict) else (float(v), True)
     if not follows_path:
         print("warning: no follows file given, every follow-up channel length is dropped")
 
@@ -444,7 +446,9 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                     "offset": offset,
                     "samples": len(r["cast"]) + r.get("kicked", 0),
                     "channel": is_channel,
-                    "follow": None if is_channel else follows.get(int(spellid)),
+                    "follow": None if is_channel else follows.get(int(spellid), (None,))[0],
+                    "followUnknown": (not is_channel and int(spellid) in follows
+                                      and not follows[int(spellid)][1]) or None,
                     "targeted": choose_targeted(targets.get(int(spellid)), game_targets.get(int(spellid)),
                                                 is_channel, curated_targets.get(int(spellid))),
                     **t,
@@ -510,6 +514,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                            + (" approx = true," if r["approx"] else "")
                            + (" channel = true," if r.get("channel") else "")
                            + (" follow = %s," % r["follow"] if r.get("follow") else "")
+                           + (" followUnknown = true," if r.get("followUnknown") else "")
                            + (" soleChannel = true," if r.get("soleChannel") else "")
                            + ("" if r.get("targeted") is None
                               else " targeted = %s," % ("true" if r["targeted"] else "false"))))
