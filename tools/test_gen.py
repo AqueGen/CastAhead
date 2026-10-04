@@ -182,6 +182,9 @@ def test_a_cast_that_turns_into_a_channel_carries_the_channel_length():
         other = next(line for line in lua.splitlines() if "spell = 1001," in line)
         assert "follow = 8.0," in slam and "followUnknown" not in slam
         assert "follow = 5.0," in other and "followUnknown = true," in other
+        lua, _ = _run_gen(tmp, casts, follows={"1000": 8.0}, overrides={"include": ["1000", "1001"]})
+        slam = next(line for line in lua.splitlines() if "spell = 1000," in line)
+        assert "follow = 8.0," in slam and "followUnknown = true," in slam
 
 
 def test_log_measured_cast_wins_when_the_log_saw_enough_starts_but_reports_the_disagreement():
