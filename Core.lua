@@ -38,7 +38,8 @@ local MAX_NAMEPLATES = 40
 -- Declared up front because the bar code above needs them: Lua resolves an
 -- undeclared local as a global, which is nil at call time.
 local RefreshBar
-local GetTrack
+local GetTrack, NewTrack, SpellTrack
+local FinishHeld
 local recentCasts
 local StartPreview
 local RefineByNPC
@@ -1089,7 +1090,10 @@ local function ProjectSiblings(state, row, startAt, now)
     for i = 1, #siblings do
         local sibling = siblings[i]
         if sibling ~= row and not (isDisabled and isDisabled(sibling.spell)) then
-            local track = GetTrack(state, sibling.cast, sibling.channel)
+            local track = SpellTrack(state, sibling) or GetTrack(state, sibling.cast, sibling.channel)
+            if track.candidates and #track.candidates == 1 and track.candidates[1] ~= sibling then
+                track = NewTrack(state, sibling.cast, sibling.channel)
+            end
             if not track.candidates then
                 track.candidates = { sibling }
                 track.ambiguous = false
@@ -1308,18 +1312,53 @@ end
 -- never share a schedule. One constant, nothing else knows about it.
 local CHANNEL_KEY = 1000
 
--- One track per cast length, within the same tolerance the matcher uses.
-function GetTrack(state, duration, channel)
+local function SameLength(track, duration, channel)
     local key = channel and (duration + CHANNEL_KEY) or duration
-    for length, track in pairs(state.tracks) do
-        if (track.channel == true) == (channel == true)
-            and math.abs(length - key) <= CastAheadMatch.CAST_TOLERANCE then
-            return track, length
+    return (track.channel == true) == (channel == true)
+        and math.abs(track.key - key) <= CastAheadMatch.CAST_TOLERANCE
+end
+
+function NewTrack(state, duration, channel)
+    local key = channel and (duration + CHANNEL_KEY) or duration
+    local slot = key
+    while state.tracks[slot] do slot = slot + 0.001 end
+    local track = { channel = channel or nil, key = key, slot = slot }
+    state.tracks[slot] = track
+    return track
+end
+
+function GetTrack(state, duration, channel)
+    local first
+    for _, track in pairs(state.tracks) do
+        if SameLength(track, duration, channel) and (not first or track.slot < first.slot) then
+            first = track
         end
     end
-    local track = { channel = channel or nil }
-    state.tracks[key] = track
-    return track, key
+    return first or NewTrack(state, duration, channel)
+end
+
+function SpellTrack(state, row, except)
+    for _, track in pairs(state.tracks) do
+        if track ~= except and track.candidates and #track.candidates == 1 and track.candidates[1] == row then
+            return track
+        end
+    end
+end
+
+local function PickTrack(state, duration, channel, claimed, startAt)
+    if claimed and state.tracks[claimed.slot] == claimed and SameLength(claimed, duration, channel) then
+        return claimed
+    end
+    local best, bestDelta
+    for _, track in pairs(state.tracks) do
+        if SameLength(track, duration, channel) and track.nextAt then
+            local delta = math.abs(startAt - track.nextAt)
+            if not best or delta < bestDelta or (delta == bestDelta and track.slot < best.slot) then
+                best, bestDelta = track, delta
+            end
+        end
+    end
+    return best or GetTrack(state, duration, channel)
 end
 
 -- Creatures the plate's other, already identified casts point at. A mob only
@@ -1432,6 +1471,7 @@ local function RefreshCombat(unit)
         state.actedAt = nil
         state.castStartAt = nil
         state.casting = nil
+        state.held = nil
         state.interrupted = nil
         state.interruptible = nil
         state.opening = nil
@@ -1470,6 +1510,12 @@ local function OnCastStart(unit, channel)
         state.engagedAt = state.engagedAt or GetTime()
     end
     local now = GetTime()
+    if channel and state.castStartAt and not state.channelling then
+        state.held = { startAt = state.castStartAt, duration = now - state.castStartAt,
+            claimed = state.casting and state.casting.track }
+    elseif not channel and state.held then
+        FinishHeld(unit, state)
+    end
     state.castStartAt = now
     state.channelling = channel or nil
     state.interrupted = false
@@ -1597,22 +1643,15 @@ local function ResolveInterrupted(unit, state, startAt, matched)
     RefreshBar(unit, state)
 end
 
--- A cast that finished on its own: its measured length is the identifying fact.
-local function OnCastStop(unit, channel)
-    local state = plates[unit]
-    if not state or not state.castStartAt then return end
-    -- A STOP of the other kind is not ours: a channel that follows a cast on
-    -- the same creature raises CHANNEL_START first, which resets the clock.
-    if (state.channelling == true) ~= (channel == true) then return end
-    local startAt = state.castStartAt
-    state.castStartAt = nil
-    state.casting = nil
-
+-- A cast that finished on its own: its measured length is the identifying
+-- fact, and so is the length of the channel it turned into (`follow`). Returns
+-- whether that channel was one of the candidates' own.
+local function FinishCast(unit, state, startAt, duration, channel, follow, claimed)
     diag.casts = diag.casts + 1
-    local duration = GetTime() - startAt
     local sole = channel and CastAheadMatch.SoleChannel(dungeon, duration)
     if sole then duration = sole.cast end
-    local track, trackKey = GetTrack(state, duration, channel)
+    local picked = PickTrack(state, duration, channel, claimed, startAt)
+    local track = picked
     local candidates = track.candidates
     -- A projected sibling's lastStartAt is the anchor it was laid out from, not
     -- a cast of its own, so nothing below may read it as an interval - doing so
@@ -1624,7 +1663,7 @@ local function OnCastStop(unit, channel)
         and CastAheadUI.IsDisabled(candidates[1].spell) then
         candidates = nil
     end
-    local rejected
+    local rejected, resetPicked
     if candidates and #candidates == 1 and previousCast
         and CastAheadMatch.HasSchedule(candidates[1])
         and not CastAheadMatch.SlotForInterval(candidates[1], startAt - previousCast, track.index) then
@@ -1644,9 +1683,11 @@ local function OnCastStop(unit, channel)
             -- the re-identification below must not hand it straight back.
             rejected = candidates[1]
             candidates = nil
-            track.observedCD = nil
-            track.index = nil
+            resetPicked = true
         end
+    end
+    if follow ~= nil and candidates and #candidates == 1 and not CastAheadMatch.FollowFits(candidates[1], follow) then
+        candidates = nil
     end
     if candidates and #candidates == 1 and not track.sure and not tuning.trustUnsureTrack then
         -- The track's one candidate was a guess, not a confirmed identity:
@@ -1679,6 +1720,10 @@ local function OnCastStop(unit, channel)
         end
         candidates = CastAheadMatch.NarrowByMob(candidates, KnownNPCs(state, track))
         Trace(unit, "mob", candidates)
+        if follow ~= nil then
+            candidates = CastAheadMatch.NarrowByFollow(candidates, follow)
+            Trace(unit, "follow", candidates)
+        end
         -- The trait match prefers its own creatures but cannot exclude: a
         -- creature the trait table does not list still has to be recognised
         -- from the cast table alone.
@@ -1723,6 +1768,7 @@ local function OnCastStop(unit, channel)
         candidates = CastAheadMatch.NarrowByEnabled(candidates, CastAheadUI and CastAheadUI.IsDisabled)
         candidates = CastAheadMatch.NarrowByLevel(candidates, state.level)
         candidates = CastAheadMatch.NarrowByMob(candidates, ResolvedNPCs(state, track))
+        candidates = CastAheadMatch.NarrowByFollow(candidates, follow)
         if previousCast then
             candidates = CastAheadMatch.NarrowByInterval(candidates, startAt - previousCast)
         elseif state.engagedAt then
@@ -1734,9 +1780,30 @@ local function OnCastStop(unit, channel)
         -- The track goes, so its timeline event must go with it, or the id is
         -- lost and the icon lingers on Blizzard's timeline.
         if CastAheadTimeline then CastAheadTimeline.Cancel(track) end
-        state.tracks[trackKey] = nil
+        state.tracks[track.slot] = nil
         RefreshBar(unit, state)
-        return
+        return false
+    end
+
+    if #candidates == 1 then
+        local own = SpellTrack(state, candidates[1], track)
+        if own then
+            if not (track.sure and track.candidates and #track.candidates == 1) then
+                if CastAheadTimeline then CastAheadTimeline.Cancel(track) end
+                state.tracks[track.slot] = nil
+            end
+            track = own
+        elseif track.sure and track.candidates and #track.candidates == 1
+            and track.candidates[1] ~= candidates[1] then
+            track = NewTrack(state, duration, channel)
+        end
+        if track ~= picked then
+            previousCast = (not track.projected) and track.lastStartAt or nil
+        end
+    end
+    if resetPicked and track == picked then
+        track.observedCD = nil
+        track.index = nil
     end
 
     -- Line the rotation up with reality: the interval we just saw says which
@@ -1772,8 +1839,8 @@ local function OnCastStop(unit, channel)
     -- Sure means the identification needed no fallback: the cast length (with
     -- the level) is unique in this dungeon, or the interval fit the schedule.
     if #candidates == 1 then
-        local unique = CastAheadMatch.NarrowByLevel(
-            CastAheadMatch.ByCastTime(dungeon, duration, channel), state.level)
+        local unique = CastAheadMatch.NarrowByFollow(CastAheadMatch.NarrowByLevel(
+            CastAheadMatch.ByCastTime(dungeon, duration, channel), state.level), follow)
         track.sure = (#unique == 1) or slotMatched
         if track.sure then LockNPC(unit, state, candidates[1].npc) end
     else
@@ -1790,6 +1857,41 @@ local function OnCastStop(unit, channel)
     track.nextAt = cd and (startAt + cd) or nil
     SyncTimeline(track)
     RefreshBar(unit, state)
+    if type(follow) ~= "number" then return false end
+    for i = 1, #candidates do
+        if CastAheadMatch.FollowFits(candidates[i], follow) then return true end
+    end
+    return false
+end
+
+function FinishHeld(unit, state)
+    local held = state.held
+    if not held then return end
+    state.held = nil
+    FinishCast(unit, state, held.startAt, held.duration, false, nil, held.claimed)
+end
+
+local function OnCastStop(unit, channel)
+    local state = plates[unit]
+    if not state or not state.castStartAt then return end
+    -- A STOP of the other kind is not ours: a channel that follows a cast on
+    -- the same creature raises CHANNEL_START first, which holds the cast.
+    if (state.channelling == true) ~= (channel == true) then return end
+    local startAt = state.castStartAt
+    local claimed = state.casting and state.casting.track
+    state.castStartAt = nil
+    state.casting = nil
+    local duration = GetTime() - startAt
+    local held = state.held
+    state.held = nil
+    if held and channel
+        and FinishCast(unit, state, held.startAt, held.duration, false, duration, held.claimed) then
+        RefreshBar(unit, state)
+        return
+    end
+    local follow
+    if not channel then follow = false end
+    FinishCast(unit, state, startAt, duration, channel, follow, claimed)
 end
 
 -- INTERRUPTED and FAILED are terminal: Blizzard's own cast bar clears on them
@@ -1798,6 +1900,7 @@ end
 local function OnCastInterrupted(unit)
     local state = plates[unit]
     if not state or not state.castStartAt then return end
+    FinishHeld(unit, state)
     local startAt = state.castStartAt
     local matched = state.casting and state.casting.track or nil
     state.interrupted = true

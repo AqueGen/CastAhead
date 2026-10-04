@@ -296,7 +296,7 @@ def settle(new, old):
     row["filler"] = not row["cd"] or min(row["cd"]) < MIN_CD
     row["kickable"] = row["mdt_kick"] if row["mdt_kick"] is not None else row["kick"] >= KICK_SHARE
     if old is not None:
-        changed += [f for f in ("approx", "filler", "kickable", "level", "mob", "name", "targeted")
+        changed += [f for f in ("approx", "filler", "follow", "kickable", "level", "mob", "name", "targeted")
                     if row.get(f) != old.get(f)]
     return row, changed
 
@@ -319,7 +319,8 @@ def print_report(report, total):
 
 
 def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path=None, targets_path=None,
-         game_targets_path=None, spell_times_path=None, curated_targets_path=None, fresh=False):
+         game_targets_path=None, spell_times_path=None, curated_targets_path=None, follows_path=None,
+         fresh=False):
     data = json.load(open(casts_path, encoding="utf-8"))
     # MDT knows what the logs cannot: which creature owns a spell, whether that
     # spell is interruptible, and which creatures are bosses.
@@ -344,6 +345,8 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
     # otherwise the log's own measurement still wins (the game doesn't always cast at DB2's
     # nominal length, and a triggered cast has no bar to measure).
     spell_times = json.load(open(spell_times_path, encoding="utf-8")) if spell_times_path else {}
+    follows = {int(k): float(v) for k, v in
+               json.load(open(follows_path, encoding="utf-8")).items()} if follows_path else {}
 
     anchor, anchor_zones = ({}, {}) if fresh else read_anchor(out_path)
     dungeons, seen, report = {}, set(), []
@@ -439,6 +442,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                     "offset": offset,
                     "samples": len(r["cast"]) + r.get("kicked", 0),
                     "channel": is_channel,
+                    "follow": None if is_channel else follows.get(int(spellid)),
                     "targeted": choose_targeted(targets.get(int(spellid)), game_targets.get(int(spellid)),
                                                 is_channel, curated_targets.get(int(spellid))),
                     **t,
@@ -503,6 +507,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                            (" filler = true," if r["filler"] else "")
                            + (" approx = true," if r["approx"] else "")
                            + (" channel = true," if r.get("channel") else "")
+                           + (" follow = %s," % r["follow"] if r.get("follow") else "")
                            + (" soleChannel = true," if r.get("soleChannel") else "")
                            + ("" if r.get("targeted") is None
                               else " targeted = %s," % ("true" if r["targeted"] else "false"))))
