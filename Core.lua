@@ -1696,7 +1696,7 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
         and CastAheadUI.IsDisabled(candidates[1].spell) then
         candidates = nil
     end
-    local rejected, resetPicked, adapted
+    local rejected, resetPicked, adapted, disproved
     if candidates and #candidates == 1 and previousCast
         and CastAheadMatch.HasSchedule(candidates[1])
         and not CastAheadMatch.SlotForInterval(candidates[1], startAt - previousCast, track.index) then
@@ -1765,11 +1765,30 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
                 if CastAheadMatch.FollowFits(candidates[i], follow) then fits = true end
             end
             if not fits then
-                local pool = CastAheadMatch.NarrowByFollow(CastAheadMatch.NarrowByLevel(
-                    CastAheadMatch.NarrowByEnabled(CastAheadMatch.ByCastTime(dungeon, duration, channel),
-                        CastAheadUI and CastAheadUI.IsDisabled), state.level), follow)
-                if pool[1] and CastAheadMatch.FollowFits(pool[1], follow) then
+                local pool = CastAheadMatch.NarrowByLevel(CastAheadMatch.NarrowByEnabled(
+                    CastAheadMatch.ByCastTime(dungeon, duration, channel), CastAheadUI and CastAheadUI.IsDisabled),
+                    state.level)
+                if tuning.targetNarrow then pool = CastAheadMatch.NarrowByTarget(pool, target) end
+                local exact = {}
+                for i = 1, #pool do
+                    if pool[i] ~= rejected and CastAheadMatch.FollowExact(pool[i], follow) then
+                        exact[#exact + 1] = pool[i]
+                    end
+                end
+                pool = exact
+                if pool[1] then
+                    local wrong = state.npc
                     state.npc, state.npcSource, state.npcSet = nil, nil, nil
+                    for slot, other in pairs(state.tracks) do
+                        if other.candidates and #other.candidates == 1 and other.candidates[1].npc == wrong then
+                            if other == track then
+                                disproved = true
+                            else
+                                if CastAheadTimeline then CastAheadTimeline.Cancel(other) end
+                                state.tracks[slot] = nil
+                            end
+                        end
+                    end
                     candidates = pool
                     Trace(unit, "unlock", candidates)
                 end
@@ -1842,7 +1861,8 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
 
     if #candidates == 1 then
         local own = SpellTrack(state, candidates[1], track)
-        local foreign = track.candidates and #track.candidates == 1 and track.candidates[1] ~= candidates[1]
+        local foreign = not disproved and track.candidates and #track.candidates == 1
+            and track.candidates[1] ~= candidates[1]
         if own then
             if not foreign then
                 if CastAheadTimeline then CastAheadTimeline.Cancel(track) end
