@@ -272,13 +272,15 @@ function M.NarrowByInterval(candidates, interval)
 end
 
 function M.FollowFits(row, follow)
+    if row.followUnknown then return true end
     if follow == false then return row.follow == nil end
     return row.follow ~= nil and follow <= row.follow + M.CAST_TOLERANCE
 end
 
 local function FollowExact(row, follow)
-    return type(follow) == "number" and row.follow ~= nil
-        and math.abs(row.follow - follow) <= M.CAST_TOLERANCE
+    if type(follow) ~= "number" then return false end
+    if row.followUnknown then return true end
+    return row.follow ~= nil and math.abs(row.follow - follow) <= M.CAST_TOLERANCE
 end
 
 function M.NarrowByFollow(candidates, follow)

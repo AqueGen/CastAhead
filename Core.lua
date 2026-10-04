@@ -1726,6 +1726,22 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
         end
         candidates = CastAheadMatch.NarrowByMob(candidates, KnownNPCs(state, track))
         Trace(unit, "mob", candidates)
+        if type(follow) == "number" and state.npc then
+            local fits = false
+            for i = 1, #candidates do
+                if CastAheadMatch.FollowFits(candidates[i], follow) then fits = true end
+            end
+            if not fits then
+                local pool = CastAheadMatch.NarrowByFollow(CastAheadMatch.NarrowByLevel(
+                    CastAheadMatch.NarrowByEnabled(CastAheadMatch.ByCastTime(dungeon, duration, channel),
+                        CastAheadUI and CastAheadUI.IsDisabled), state.level), follow)
+                if pool[1] and CastAheadMatch.FollowFits(pool[1], follow) then
+                    state.npc, state.npcSource, state.npcSet = nil, nil, nil
+                    candidates = pool
+                    Trace(unit, "unlock", candidates)
+                end
+            end
+        end
         if follow ~= nil then
             candidates = CastAheadMatch.NarrowByFollow(candidates, follow)
             Trace(unit, "follow", candidates)

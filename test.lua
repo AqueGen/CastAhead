@@ -53,6 +53,14 @@ check(#M.NarrowByFollow(golem, 4.0) == 1 and M.NarrowByFollow(golem, 4.0)[1].spe
     "a channel of exactly one spell's length picks it over a longer one it could be cut from")
 check(#M.NarrowByFollow(golem, 6.0) == 1 and M.NarrowByFollow(golem, 6.0)[1].spell == 21,
     "a channel cut short still belongs to a spell whose channel is at least that long")
+local unknown = { golem[1], golem[2], { spell = 23, npc = 5, cast = 2.0, cd = { 20 }, followUnknown = true } }
+unknown[#unknown + 1] = { spell = 24, npc = 6, cast = 2.0, cd = { 20 } }
+check(#M.NarrowByFollow(unknown, 4.0) == 2 and #M.NarrowByFollow(unknown, false) == 2,
+    "a spell said to channel for an unconfirmed length is never ruled out by a channel or by its absence")
+check(M.NarrowByFollow(unknown, false)[1].spell == 23 and M.NarrowByFollow(unknown, false)[2].spell == 24,
+    "and it does not crowd out a spell that never channels when the cast ended without one")
+check(#M.NarrowByFollow(unknown, 20.0) == 1 and M.NarrowByFollow(unknown, 20.0)[1].spell == 23,
+    "a channel longer than every known one is left to the spell whose length is unconfirmed")
 check(#M.NarrowByFollow(golem, nil) == 3, "an unknown follow-up narrows nothing")
 check(#M.NarrowByFollow(golem, false) == 1 and M.NarrowByFollow(golem, false)[1].spell == 22,
     "a cast that ended without a channel is not one that always turns into one")

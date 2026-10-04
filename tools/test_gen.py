@@ -175,10 +175,13 @@ def test_a_cast_that_turns_into_a_channel_carries_the_channel_length():
             "1000": _base_cast_record(cast=[2.0] * 5),
             "1001": _base_cast_record(cast=[2.0] * 5),
         }}}
-        lua, _ = _run_gen(tmp, casts, follows={"1000": 8.0}, overrides={"include": ["1000", "1001"]})
+        lua, _ = _run_gen(tmp, casts, follows={"1000": {"follow": 8.0, "verified": True},
+                                               "1001": {"follow": 5.0, "verified": False}},
+                          overrides={"include": ["1000", "1001"]})
         slam = next(line for line in lua.splitlines() if "spell = 1000," in line)
         other = next(line for line in lua.splitlines() if "spell = 1001," in line)
-        assert "follow = 8.0," in slam and "follow" not in other
+        assert "follow = 8.0," in slam and "followUnknown" not in slam
+        assert "follow = 5.0," in other and "followUnknown = true," in other
 
 
 def test_log_measured_cast_wins_when_the_log_saw_enough_starts_but_reports_the_disagreement():
