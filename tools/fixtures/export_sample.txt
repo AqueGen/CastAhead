@@ -11,6 +11,7 @@ CastAhead-Report 1 addon=? data=32c64c22 instance=1877 level=0 affixes=- role=NO
 3000|STEP|1.1|level|100
 3000|STEP|1.1|target|100
 3000|STEP|1.1|mob|100
+3000|STEP|1.1|follow|100
 3000|STEP|1.1|first|100
 3000|LOCK|1.1|1|cast
 3000|PRED|1.1|100|20000|0|repeat
@@ -33,4 +34,4 @@ CastAhead-Report 1 addon=? data=32c64c22 instance=1877 level=0 affixes=- role=NO
 23000|SNAP|1.1|gone|100|AOE||-|
 23000|NOTE|-|1|tank buster was called swap
 323000|MARK|-|3|-
-CastAhead-Report end lines=30
+CastAhead-Report end lines=31
