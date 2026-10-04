@@ -2013,6 +2013,11 @@ check(Last() == 1301, "a Drain Life cut to 1.2s reads as Blade Dance")
 advance(20.0 - 3.2)
 castIntoChannel(2.0, 7.0)
 check(Last() == 1302, "but its next full 7s channel undoes that and names Drain Life, got " .. tostring(Last()))
+local blade
+for _, track in pairs(CastAheadCore.Tracks(unit) or {}) do
+    if track.candidates and #track.candidates == 1 and track.candidates[1].spell == 1301 then blade = track end
+end
+check(not blade, "and Blade Dance, Lucsei's, no longer has a track on the warlock's plate")
 reset()
 CastAheadData[2000] = nil
 GetInstanceInfo = savedGolemInfo
