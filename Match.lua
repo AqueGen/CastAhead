@@ -281,6 +281,15 @@ local function FollowExact(row, follow)
         and math.abs(row.follow - follow) <= M.CAST_TOLERANCE
 end
 
+function M.FollowCompatible(candidates, follow)
+    if follow == nil then return candidates end
+    local out = {}
+    for i = 1, #candidates do
+        if M.FollowFits(candidates[i], follow) then out[#out + 1] = candidates[i] end
+    end
+    return #out > 0 and out or candidates
+end
+
 function M.NarrowByFollow(candidates, follow)
     if follow == nil then return candidates end
     local exact, fits = {}, {}

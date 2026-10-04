@@ -1850,6 +1850,8 @@ CastAheadData[1999] = { name = "Golem",
       first = 6.4, firstN = 40, offset = 0.0, n = 40, follow = 8.0, prio = "AOE" },
     { spell = 1203, npc = 32, mob = "Other", name = "Bolt", cast = 2.0, cd = { 15.0 },
       first = 3.0, firstN = 40, n = 40, prio = "KICK" },
+    { spell = 1204, npc = 31, mob = "Golem", name = "Smash", cast = 3.0, cd = { 40.0 },
+      first = 50.0, firstN = 40, offset = 45.0, n = 40, prio = "TANK" },
 }
 local savedGolemInfo = GetInstanceInfo
 GetInstanceInfo = function() return "d", "party", 0, "", 0, 0, false, 1999 end
@@ -1921,6 +1923,25 @@ check(Last() == 1201 and beamTrack and beamTrack.lastStartAt == slamAt + 16.0,
     "a cast picked by Slam's track but channelled like Fel Beam lands on Fel Beam's track")
 check(slam and slam.observedCD == nil and math.abs(slam.nextAt - (slamAt + 30.4)) < 0.01,
     "and Slam's own schedule is left as it was, got observedCD " .. tostring(slam and slam.observedCD))
+reset()
+enter()
+advance(6.4)
+castIntoChannel(2.0, 4.0)
+check(Last() == 1201 and TrackOf(1201) and not TrackOf(1201).sure,
+    "a 4s channel reads as Fel Beam, but not surely: Slam's 8s channel could have been cut to 4s")
+reset()
+enter()
+advance(14)
+fire("UNIT_SPELLCAST_START", unit)
+advance(2.0)
+fire("UNIT_SPELLCAST_CHANNEL_START", unit)
+fire("UNIT_SPELLCAST_STOP", unit)
+advance(1.0)
+fire("UNIT_SPELLCAST_CHANNEL_STOP", unit, nil, nil, "kicker")
+advance(30 - 17)
+castFor(3.0)
+check(Last() == 1204 and TrackOf(1201) and TrackOf(1202),
+    "once Smash names the golem, Fel Beam and Slam each get a track although an earlier 2.0s cast was ambiguous between them")
 reset()
 CastAheadData[1999] = nil
 GetInstanceInfo = savedGolemInfo

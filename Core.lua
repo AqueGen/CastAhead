@@ -1091,7 +1091,7 @@ local function ProjectSiblings(state, row, startAt, now)
         local sibling = siblings[i]
         if sibling ~= row and not (isDisabled and isDisabled(sibling.spell)) then
             local track = SpellTrack(state, sibling) or GetTrack(state, sibling.cast, sibling.channel)
-            if track.candidates and #track.candidates == 1 and track.candidates[1] ~= sibling then
+            if track.candidates and not (#track.candidates == 1 and track.candidates[1] == sibling) then
                 track = NewTrack(state, sibling.cast, sibling.channel)
             end
             if not track.candidates then
@@ -1846,7 +1846,7 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
     -- Sure means the identification needed no fallback: the cast length (with
     -- the level) is unique in this dungeon, or the interval fit the schedule.
     if #candidates == 1 then
-        local unique = CastAheadMatch.NarrowByFollow(CastAheadMatch.NarrowByLevel(
+        local unique = CastAheadMatch.FollowCompatible(CastAheadMatch.NarrowByLevel(
             CastAheadMatch.ByCastTime(dungeon, duration, channel), state.level), follow)
         track.sure = (#unique == 1 and unique[1] == candidates[1]) or slotMatched
         if track.sure then LockNPC(unit, state, candidates[1].npc) end
@@ -2058,6 +2058,8 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
             wipe(state.tracks)
             state.held = nil
             state.castStartAt = nil
+            state.casting = nil
+            state.channelling = nil
             state.inCombat = nil
             state.engagedAt = nil
             state.actedAt = nil
