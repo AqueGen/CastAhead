@@ -271,6 +271,36 @@ function M.NarrowByInterval(candidates, interval)
     return #out > 0 and out or candidates
 end
 
+function M.FollowFits(row, follow)
+    if row.followUnknown then return true end
+    if follow == false then return row.follow == nil end
+    return row.follow ~= nil and follow <= row.follow + M.CAST_TOLERANCE
+end
+
+function M.FollowExact(row, follow)
+    return type(follow) == "number" and not row.followUnknown and row.follow ~= nil
+        and math.abs(row.follow - follow) <= M.CAST_TOLERANCE
+end
+
+function M.NarrowByFollow(candidates, follow)
+    if follow == nil then return candidates end
+    local exact, fits, unknown = {}, {}, {}
+    for i = 1, #candidates do
+        local row = candidates[i]
+        if row.followUnknown then
+            unknown[#unknown + 1] = row
+        elseif M.FollowExact(row, follow) then
+            exact[#exact + 1] = row
+        end
+        if M.FollowFits(row, follow) then fits[#fits + 1] = row end
+    end
+    if #exact > 0 then
+        for i = 1, #unknown do exact[#exact + 1] = unknown[i] end
+        return exact
+    end
+    return #fits > 0 and fits or candidates
+end
+
 -- Time from the mob entering combat to this cast. Separates candidates on the
 -- very first cast, before any interval exists - Sand-Sworn Rider opens at 20.6s
 -- where Corrupted Guardian opens at 3.5s.

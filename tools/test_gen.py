@@ -137,19 +137,20 @@ def _base_cast_record(**overrides):
     return r
 
 
-def _run_gen(tmp, casts, spell_times=None, channels=None, overrides=None):
+def _run_gen(tmp, casts, spell_times=None, channels=None, overrides=None, follows=None):
     """Write the given fixtures to tmp and run gen.main; returns (Data.lua text, printed output)."""
     casts_path, out_path = os.path.join(tmp, "casts.json"), os.path.join(tmp, "Data.lua")
     json.dump(casts, open(casts_path, "w", encoding="utf-8"))
     paths = {}
-    for name, value in (("spell_times", spell_times), ("channels", channels), ("overrides", overrides)):
+    for name, value in (("spell_times", spell_times), ("channels", channels), ("overrides", overrides),
+                        ("follows", follows)):
         if value is not None:
             paths[name] = os.path.join(tmp, name + ".json")
             json.dump(value, open(paths[name], "w", encoding="utf-8"))
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         gen_main(casts_path, out_path, None, paths.get("overrides"), paths.get("channels"), None, None,
-                  paths.get("spell_times"))
+                  paths.get("spell_times"), follows_path=paths.get("follows"))
     return open(out_path, encoding="utf-8").read(), buf.getvalue()
 
 
@@ -166,6 +167,24 @@ def test_an_opening_that_covers_few_first_casts_is_dropped():
         tight_row = next(line for line in lua.splitlines() if "spell = 1001," in line)
         assert "first = nil" in spike_row and "firstN = 0," in spike_row
         assert "first = 8.2" in tight_row
+
+
+def test_a_cast_that_turns_into_a_channel_carries_the_channel_length():
+    with tempfile.TemporaryDirectory() as tmp:
+        casts = {"1|Zone": {"10": {
+            "1000": _base_cast_record(cast=[2.0] * 5),
+            "1001": _base_cast_record(cast=[2.0] * 5),
+        }}}
+        lua, _ = _run_gen(tmp, casts, follows={"1000": {"follow": 8.0, "verified": True},
+                                               "1001": {"follow": 5.0, "verified": False}},
+                          overrides={"include": ["1000", "1001"]})
+        slam = next(line for line in lua.splitlines() if "spell = 1000," in line)
+        other = next(line for line in lua.splitlines() if "spell = 1001," in line)
+        assert "follow = 8.0," in slam and "followUnknown" not in slam
+        assert "follow = 5.0," in other and "followUnknown = true," in other
+        lua, _ = _run_gen(tmp, casts, follows={"1000": 8.0}, overrides={"include": ["1000", "1001"]})
+        slam = next(line for line in lua.splitlines() if "spell = 1000," in line)
+        assert "follow = 8.0," in slam and "followUnknown = true," in slam
 
 
 def test_log_measured_cast_wins_when_the_log_saw_enough_starts_but_reports_the_disagreement():

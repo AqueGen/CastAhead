@@ -27,6 +27,8 @@ Packs.lua
 Match.lua
 Timeline.lua
 Core.lua
+Recorder.lua
 UI.lua
 Options.lua
 Minimap.lua
+ReportWindow.lua

@@ -1,0 +1,37 @@
+CastAhead-Report 1 addon=? data=32c64c22 instance=1877 level=0 affixes=- role=NONE len=323000 marks=3
+# mark 1 at 00:23.0 on -: claimed 100/AOE; note: tank buster was called swap
+# mark 2 at 00:23.0 on 1.1: claimed 100/AOE; note: -
+# mark 3 at 05:23.0 on -: claimed -/-; note: -
+# never shown: 200,300,500,610,700
+0|PLATE|1.1|added|90|0|elite
+0|ENGAGE|1.1
+0|PULL|-|in
+0|START|1.1|0|-|-||?
+3000|STEP|1.1|length|100
+3000|STEP|1.1|level|100
+3000|STEP|1.1|target|100
+3000|STEP|1.1|mob|100
+3000|STEP|1.1|follow|100
+3000|STEP|1.1|first|100
+3000|LOCK|1.1|1|cast
+3000|PRED|1.1|100|20000|0|repeat
+3000|PRED|1.1|101|9000|1|projected
+3000|STOP|1.1|0|3000|100|AOE
+20000|START|1.1|0|100|AOE|100|?
+23000|STEP|1.1|track|100
+23000|PRED|1.1|100|40000|0|repeat
+23000|STOP|1.1|0|3000|100|AOE
+23000|SELF|-|12345
+23000|PLATE|1.1|removed|gone
+23000|PLATE|1.2|added|90|0|elite
+23000|ENGAGE|1.2
+23000|PLATE|1.2|removed|gone
+23000|MARK|-|1|-
+23000|SNAP|1.2|gone|-|-||-|
+23000|SNAP|1.1|gone|100|AOE||-|
+23000|MARK|-|2|1.1
+23000|SNAP|1.2|gone|-|-||-|
+23000|SNAP|1.1|gone|100|AOE||-|
+23000|NOTE|-|1|tank buster was called swap
+323000|MARK|-|3|-
+CastAhead-Report end lines=31

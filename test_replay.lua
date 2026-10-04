@@ -194,6 +194,81 @@ local voicedRight, voicedWrong, voicedWrongPairs = 0, 0, {}
 
 local function bump(t, key) t[key] = (t[key] or 0) + 1 end
 
+local CHANNELS = os.getenv("CA_CHANNELS") ~= "0"
+if not CHANNELS then print("knobs: follow-up channels off") end
+local CUT = tonumber(os.getenv("CA_CUT") or "")
+if CUT then
+    math.randomseed(1)
+    print("knobs: " .. CUT .. " of follow-up channels cut short")
+end
+local channels = {}
+
+local function score(unit, spell, instance, d, lost)
+    local row = tabled[instance] and tabled[instance][spell]
+    if row then names[spell] = row.name end
+    local candidates = CastAheadCore.LastCandidates(unit)
+    d.casts = d.casts + 1
+    local verdict
+    if not row then
+        verdict = "untabled"
+        bump(untabledSpells, spell)
+    elseif lost or not candidates or #candidates == 0 then
+        verdict = "none"
+        bump(missed, spell)
+    elseif #candidates == 1 then
+        if candidates[1].spell == spell then
+            verdict = "correct"
+        else
+            -- The player hears a call, not a spell ID: a wrong row that
+            -- carries the same call (two AOEs, two kicks) does no harm.
+            local said = CastAheadMatch.Advice(candidates[1])
+            local meant = CastAheadMatch.Advice(row)
+            if said and meant and said == meant then
+                verdict = "harmless"
+            else
+                verdict = "wrong"
+                names[candidates[1].spell] = candidates[1].name
+                bump(wrongPairs, spell .. " -> " .. candidates[1].spell)
+                bump(blamed, blame(unit, spell))
+                -- CA_WATCH=<spellID> prints every narrowing step of the
+                -- casts that spell was called wrong on, so a handful of
+                -- wrong calls can be read one by one instead of as a
+                -- tally.
+                if WATCH == spell then
+                    print(string.format("\nWATCH %d (%s) called as %d (%s), plate %s",
+                        spell, tostring(row and row.name), candidates[1].spell,
+                        tostring(candidates[1].name), tostring(unit)))
+                    for _, entry in ipairs(steps[unit] or {}) do
+                        local ids = {}
+                        for id in pairs(entry.has) do ids[#ids + 1] = id end
+                        table.sort(ids)
+                        print(string.format("   %-10s %2d left  %s%s",
+                            entry.step, entry.n, table.concat(ids, " "),
+                            entry.has[spell] and "" or "   <- truth gone"))
+                    end
+                end
+            end
+        end
+    else
+        verdict = "ambiguous"
+        bump(missed, spell)
+        if CastAheadMatch.ConsensusAdvice(candidates) then
+            ambiguousAgree = ambiguousAgree + 1
+        elseif CastAheadMatch.SplitAdvice(candidates) then
+            ambiguousSplit = ambiguousSplit + 1
+        end
+        local sameNpc, hit = true, false
+        for i = 1, #candidates do
+            if candidates[i].npc ~= candidates[1].npc then sameNpc = false end
+            if candidates[i].spell == spell then hit = true end
+        end
+        if sameNpc then ambiguousSameNpc = ambiguousSameNpc + 1 end
+        if not hit then ambiguousMiss = ambiguousMiss + 1 end
+    end
+    totals[verdict] = totals[verdict] + 1
+    d[verdict] = d[verdict] + 1
+end
+
 for _, run in ipairs(CastAheadReplay) do
     currentInstance = run.instance
     local d = perDungeon[run.name]
@@ -209,9 +284,42 @@ for _, run in ipairs(CastAheadReplay) do
     fire("PLAYER_ENTERING_WORLD")
     fire("CHALLENGE_MODE_START")
     local base = now
+    local function endChannels(upTo, only)
+        while true do
+            local unit, due
+            for u, pending in pairs(channels) do
+                if (not only or u == only) and pending.at <= upTo
+                    and (not due or pending.at < due.at or (pending.at == due.at and u < unit)) then
+                    unit, due = u, pending
+                end
+            end
+            if not due then return end
+            channels[unit] = nil
+            now = math.max(now, math.min(due.at, upTo))
+            fire("UNIT_SPELLCAST_CHANNEL_STOP", unit)
+            score(unit, due.spell, run.instance, d)
+        end
+    end
     for _, ev in ipairs(run.events) do
+        endChannels(base + ev.t)
         now = base + ev.t
         local unit = ev.u and ("nameplate" .. ev.u)
+        local settling
+        if unit and channels[unit] and ev.e == "START" then
+            settling, channels[unit] = channels[unit].spell, nil
+        elseif unit and channels[unit] and (ev.e == "KICK" or ev.e == "FAIL") then
+            local pending = channels[unit]
+            channels[unit] = nil
+            fire("UNIT_SPELLCAST_CHANNEL_STOP", unit, nil, nil, "kicker")
+            score(unit, pending.spell, run.instance, d)
+            settling = "kicked"
+        elseif unit and channels[unit] and ev.e == "REMOVE" then
+            score(unit, channels[unit].spell, run.instance, d, true)
+            channels[unit] = nil
+        elseif ev.e == "ENC" then
+            for u, pending in pairs(channels) do score(u, pending.spell, run.instance, d, true) end
+            for u in pairs(channels) do channels[u] = nil end
+        end
         if ev.e == "ENC" then
             fire(ev.on and "ENCOUNTER_START" or "ENCOUNTER_END", 1)
         elseif ev.e == "ADD" then
@@ -232,6 +340,7 @@ for _, run in ipairs(CastAheadReplay) do
             open[unit] = ev.spell
             targets[unit] = ev.target
             fire("UNIT_SPELLCAST_START", unit)
+            if settling and settling ~= "kicked" then score(unit, settling, run.instance, d) end
             local claim = CastAheadCore.Casting(unit)
             if claim and claim.row then
                 local truth = tabled[run.instance] and tabled[run.instance][ev.spell]
@@ -262,6 +371,8 @@ for _, run in ipairs(CastAheadReplay) do
             elseif ev.kick == false then
                 fire("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", unit)
             end
+        elseif settling == "kicked" then
+            open[unit] = nil
         elseif ev.e == "KICK" then
             open[unit] = nil
             fire("UNIT_SPELLCAST_INTERRUPTED", unit)
@@ -278,73 +389,21 @@ for _, run in ipairs(CastAheadReplay) do
         elseif ev.e == "STOP" then
             open[unit] = nil
             steps[unit] = nil
-            fire("UNIT_SPELLCAST_STOP", unit)
             local row = tabled[run.instance] and tabled[run.instance][ev.spell]
-            if row then names[ev.spell] = row.name end
-            local candidates = CastAheadCore.LastCandidates(unit)
-            d.casts = d.casts + 1
-            local verdict
-            if not row then
-                verdict = "untabled"
-                bump(untabledSpells, ev.spell)
-            elseif not candidates or #candidates == 0 then
-                verdict = "none"
-                bump(missed, ev.spell)
-            elseif #candidates == 1 then
-                if candidates[1].spell == ev.spell then
-                    verdict = "correct"
-                else
-                    -- The player hears a call, not a spell ID: a wrong row that
-                    -- carries the same call (two AOEs, two kicks) does no harm.
-                    local said = CastAheadMatch.Advice(candidates[1])
-                    local meant = CastAheadMatch.Advice(row)
-                    if said and meant and said == meant then
-                        verdict = "harmless"
-                    else
-                        verdict = "wrong"
-                        names[candidates[1].spell] = candidates[1].name
-                        bump(wrongPairs, ev.spell .. " -> " .. candidates[1].spell)
-                        bump(blamed, blame(unit, ev.spell))
-                        -- CA_WATCH=<spellID> prints every narrowing step of the
-                        -- casts that spell was called wrong on, so a handful of
-                        -- wrong calls can be read one by one instead of as a
-                        -- tally.
-                        if WATCH == ev.spell then
-                            print(string.format("\nWATCH %d (%s) called as %d (%s), plate %s",
-                                ev.spell, tostring(row and row.name), candidates[1].spell,
-                                tostring(candidates[1].name), tostring(unit)))
-                            for _, entry in ipairs(steps[unit] or {}) do
-                                local ids = {}
-                                for id in pairs(entry.has) do ids[#ids + 1] = id end
-                                table.sort(ids)
-                                print(string.format("   %-10s %2d left  %s%s",
-                                    entry.step, entry.n, table.concat(ids, " "),
-                                    entry.has[ev.spell] and "" or "   <- truth gone"))
-                            end
-                        end
-                    end
-                end
+            if CHANNELS and row and row.follow and not row.channel then
+                fire("UNIT_SPELLCAST_CHANNEL_START", unit)
+                fire("UNIT_SPELLCAST_STOP", unit)
+                local length = row.follow
+                if CUT and math.random() < CUT then length = length * (0.1 + 0.8 * math.random()) end
+                channels[unit] = { at = now + length, spell = ev.spell }
             else
-                verdict = "ambiguous"
-                bump(missed, ev.spell)
-                if CastAheadMatch.ConsensusAdvice(candidates) then
-                    ambiguousAgree = ambiguousAgree + 1
-                elseif CastAheadMatch.SplitAdvice(candidates) then
-                    ambiguousSplit = ambiguousSplit + 1
-                end
-                local sameNpc, hit = true, false
-                for i = 1, #candidates do
-                    if candidates[i].npc ~= candidates[1].npc then sameNpc = false end
-                    if candidates[i].spell == ev.spell then hit = true end
-                end
-                if sameNpc then ambiguousSameNpc = ambiguousSameNpc + 1 end
-                if not hit then ambiguousMiss = ambiguousMiss + 1 end
+                fire("UNIT_SPELLCAST_STOP", unit)
+                score(unit, ev.spell, run.instance, d)
             end
-            totals[verdict] = totals[verdict] + 1
-            d[verdict] = d[verdict] + 1
         end
         if updateHandler then updateHandler() end
     end
+    endChannels(math.huge)
 end
 
 local judged = totals.correct + totals.harmless + totals.wrong + totals.ambiguous + totals.none

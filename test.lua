@@ -41,6 +41,32 @@ local both = M.ByCastTime(rows, 2.5)
 check(#M.NarrowByInterval(both, 8.4) == 1, "an observed 8.4s interval should pick one spell")
 check(M.NarrowByInterval(both, 8.4)[1].spell == 1, "and it should be the 8.5s one")
 check(#M.NarrowByInterval(both, 60) == 2, "an interval matching nothing must not erase candidates")
+local golem = {
+    { spell = 20, npc = 3, cast = 2.0, cd = { 30 }, follow = 4.0 },
+    { spell = 21, npc = 3, cast = 2.0, cd = { 30 }, follow = 8.0 },
+    { spell = 22, npc = 4, cast = 2.0, cd = { 15 } },
+}
+check(#M.NarrowByFollow(golem, 8.0) == 1 and M.NarrowByFollow(golem, 8.0)[1].spell == 21,
+    "the channel that followed a cast picks the spell that turns into it")
+check(#M.NarrowByFollow(golem, 20.0) == 3, "a follow-up channel matching nothing must not erase candidates")
+check(#M.NarrowByFollow(golem, 4.0) == 1 and M.NarrowByFollow(golem, 4.0)[1].spell == 20,
+    "a channel of exactly one spell's length picks it over a longer one it could be cut from")
+check(#M.NarrowByFollow(golem, 6.0) == 1 and M.NarrowByFollow(golem, 6.0)[1].spell == 21,
+    "a channel cut short still belongs to a spell whose channel is at least that long")
+local unknown = { golem[1], golem[2], { spell = 23, npc = 5, cast = 2.0, cd = { 20 }, followUnknown = true } }
+unknown[#unknown + 1] = { spell = 24, npc = 6, cast = 2.0, cd = { 20 } }
+check(#M.NarrowByFollow(unknown, 4.0) == 2 and #M.NarrowByFollow(unknown, false) == 2,
+    "a spell said to channel for an unconfirmed length is never ruled out by a channel or by its absence")
+check(M.NarrowByFollow(unknown, false)[1].spell == 23 and M.NarrowByFollow(unknown, false)[2].spell == 24,
+    "and it does not crowd out a spell that never channels when the cast ended without one")
+check(#M.NarrowByFollow(unknown, 20.0) == 1 and M.NarrowByFollow(unknown, 20.0)[1].spell == 23,
+    "a channel longer than every known one is left to the spell whose length is unconfirmed")
+local six = M.NarrowByFollow(unknown, 6.0)
+check(#six == 2 and six[1].spell == 21 and six[2].spell == 23,
+    "a cut-short channel keeps the known spell it fits beside the unconfirmed one")
+check(#M.NarrowByFollow(golem, nil) == 3, "an unknown follow-up narrows nothing")
+check(#M.NarrowByFollow(golem, false) == 1 and M.NarrowByFollow(golem, false)[1].spell == 22,
+    "a cast that ended without a channel is not one that always turns into one")
 check(M.SlotForInterval(rows[3], 27.5) == 2, "27.5s belongs to the second rotation slot")
 check(M.SlotForInterval(rows[3], 40) == nil, "an interval in no slot returns nil")
 
