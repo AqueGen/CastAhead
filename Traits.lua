@@ -93,7 +93,7 @@ CastAheadTraits = {
         { npc = 235322, level = 91, power = 1, elite = true, lieutenant = true, family = nil, stage = { 4 }, casts = { 2 }, channels = { 4, 8 } },
         { npc = 235465, level = 91, power = 1, elite = true, lieutenant = false, family = nil, stage = { 3, 4 }, casts = { 1, 4 } },
         { npc = 236071, level = 91, power = 1, elite = true, lieutenant = true, family = nil, stage = { 1 }, casts = { 2, 3 } },
-        { npc = 236902, level = 91, power = 0, elite = true, lieutenant = true, family = nil, stage = { 1 }, casts = { 2 }, channels = { 1 } },
+        { npc = 236902, level = 91, power = 0, elite = true, lieutenant = true, family = nil, stage = { 1 }, casts = { 2, 5 }, channels = { 1 } },
         { npc = 236905, level = 91, power = 1, elite = true, lieutenant = true, family = nil, stage = { 3 }, casts = { 2, 2.5 }, channels = { 1.2, 2.5 } },
     },
     [2825] = {
