@@ -14,6 +14,11 @@ def test_the_export_written_by_the_addon_parses_completely():
     assert [l.fields[0] for l in report.lines if l.kind == "MARK"] == ["1", "2", "3"]
 
 
+def test_the_export_as_the_game_shows_it_with_carets_parses_the_same():
+    shown = parse_export(SAMPLE.replace("|", "^"))
+    assert shown.complete and [l.kind for l in shown.lines] == [l.kind for l in parse_export(SAMPLE).lines]
+
+
 def test_a_lost_tail_is_reported_not_taken_as_complete():
     report = parse_export("\n".join(SAMPLE.splitlines()[:-3]))
     assert not report.complete
