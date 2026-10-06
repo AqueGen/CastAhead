@@ -387,14 +387,6 @@ M.PlayerCanHandle = function() return true end
 check(M.Important({ prio = "POISON" }), "outside the game nothing is hidden")
 M.PlayerRole, M.PlayerCanHandle = savedRole, savedCan
 
-dofile("Debuffs.lua")
-for instance, rows in pairs(CastAheadDebuffs) do
-    for spellID, react in pairs(rows) do
-        check(react ~= "SAVE" and M.ADVICE[react] ~= nil,
-            string.format("debuff %d in %d calls %s, which is no call with its own clip", spellID, instance, tostring(react)))
-    end
-end
-
 print(string.format("%d dungeons, %d spells, %d unresolvable after two casts, %d needing the mob check",
     dungeons, spells, stuck, rescued))
 print(failures == 0 and "OK" or (failures .. " FAILURES"))

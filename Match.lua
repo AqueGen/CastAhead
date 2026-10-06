@@ -67,7 +67,6 @@ M.ADVICE = {
     DISEASE = { label = "DISEASE", say = "dispel disease", r = 0.75, g = 0.65, b = 0.30 },
     -- Nothing removes a bleed; the call is the defensive, not the dispel.
     BLEED   = { label = "BLEED", say = "bleed, defensive", r = 0.90, g = 0.25, b = 0.25 },
-    DEFENSIVE = { label = "DEFENSIVE", say = "defensive", r = 1.00, g = 0.55, b = 0.20 },
     -- "SWAP" everywhere, not only when short labels are on: four characters
     -- fit the icon's own width at the default size where six did not, and
     -- nobody has to learn what it means. The voice still says the whole
