@@ -5,7 +5,7 @@ BINDING_NAME_CASTAHEAD_MARK = "Mark a wrong call"
 BINDING_NAME_CASTAHEAD_MARK_NOTE = "Mark a wrong call and add a note"
 
 R.FORMAT = 1
-R.MAX_KEYS = 5
+R.MAX_KEYS = 12
 R.MAX_LINES = 20000
 R.RESUME_WINDOW = 7200
 R.RECENT_WINDOW = 120
@@ -27,7 +27,7 @@ local function Journal()
 end
 
 function R.Enabled()
-    return CastAheadConfig.Dev("keyJournal")
+    return CastAheadConfig.Dev()
 end
 
 local function Hash(h, text)

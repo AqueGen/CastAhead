@@ -1700,11 +1700,11 @@ CastAheadCore.Tuning.packsNarrow = false
 CastAheadCore.Tuning.packsCompany = false
 
 -- The probe keeps one fingerprint per hostile cast and one clock anchor per
--- cast of the player's own, and its switch survives a reload.
+-- cast of the player's own, and runs whenever Development mode is on.
 date = date or os.date
 UnitGUID = UnitGUID or function() return "Player-1" end
 CastAheadDB = { devMode = true }
-CastAheadCore.Probe("on")
+CastAheadCore.ApplyDevMode()
 enter()
 fire("UNIT_SPELLCAST_SUCCEEDED", "player", nil, 12345)
 ok, err = pcall(castFor, 3.0)
@@ -1725,9 +1725,10 @@ CastAheadDB.importantOnly = nil
 reset()
 fire("PLAYER_ENTERING_WORLD")
 check(CastAheadCore.Probing(), "the probe stays on across a reload")
-CastAheadCore.Probe("off")
+CastAheadDB.devMode = nil
+CastAheadCore.ApplyDevMode()
 CastAheadCore.Probe("clear")
-check(not CastAheadCore.Probing() and CastAheadDB.fingerprints == nil, "off and clear undo it")
+check(not CastAheadCore.Probing() and CastAheadDB.fingerprints == nil, "Development mode off and clear undo it")
 
 -- Sideways spacing (#20): by default neighbours step far enough apart that
 -- their labels never touch; with fixed spacing they step by icon plus gap
@@ -1826,7 +1827,7 @@ C_CVar = { SetCVar = function(name, value) cvars[name] = value end }
 local where = "party"
 local savedIsInInstance = IsInInstance
 IsInInstance = function() return where ~= "none", where end
-CastAheadDB = { devMode = true, autoCombatLog = true }
+CastAheadDB = { devMode = true }
 fire("PLAYER_ENTERING_WORLD")
 check(logging, "entering a dungeon starts the combat log")
 check(cvars.advancedCombatLogging == "1", "with advanced logging")
@@ -1862,8 +1863,8 @@ local function Loud() print = realPrint end
 
 CastAheadDB = { keyJournal = true }
 check(not R.Enabled(), "the journal stays off without Development mode")
-CastAheadDB = { keyJournal = true, devMode = true, importantOnly = false }
-check(R.Enabled(), "Development mode plus the journal switch turns it on")
+CastAheadDB = { devMode = true, importantOnly = false }
+check(R.Enabled(), "Development mode alone turns it on")
 
 R.StartKey({ instance = 1877, name = "Test", level = 12, affixes = "9,10", role = "HEALER" })
 advance(1.5)
@@ -1886,12 +1887,12 @@ R.Note("PULL", nil, "out")
 check(#Lines() == 4, "and new lines land in it")
 
 Quiet()
-for i = 1, 6 do
+for i = 1, R.MAX_KEYS + 1 do
     R.EndKey("completed")
     R.StartKey({ instance = 1877, name = "Test", level = i })
 end
 Loud()
-check(#R.Keys() == 5, "only five keys are kept, got " .. #R.Keys())
+check(#R.Keys() == R.MAX_KEYS, "only the newest keys are kept, got " .. #R.Keys())
 local savedMax = R.MAX_LINES
 R.MAX_LINES = 3
 R.Note("PULL", nil, "in") R.Note("PULL", nil, "out") R.Note("PULL", nil, "in") R.Note("PULL", nil, "out")
@@ -2082,10 +2083,21 @@ R.EndKey("completed")
 Loud()
 CastAheadDB = nil
 
+CastAheadDB = { devMode = true }
+Quiet()
+for i = 1, 8 do
+    R.StartKey({ instance = 1877, name = "Key " .. i, level = 12 })
+    R.Note("PULL", nil, "in")
+    R.EndKey("completed")
+end
+Loud()
+check(#CastAheadDB.journal.keys == 8, "a day of eight keys is kept whole, got " .. #CastAheadDB.journal.keys)
+CastAheadDB = nil
+
 -- Core runs with no recorder loaded at all.
 local recorder, report = CastAheadRecorder, CastAheadReport
 CastAheadRecorder, CastAheadReport = nil, nil
-CastAheadDB = { keyJournal = true, devMode = true }
+CastAheadDB = { devMode = true }
 ok, err = pcall(function()
     enter()
     fire("CHALLENGE_MODE_START")
@@ -2118,7 +2130,7 @@ LoggingCombat = function(on)
 end
 C_CVar = { SetCVar = function() end }
 IsInInstance = function() return true, "party" end
-CastAheadDB = { keyJournal = true, autoCombatLog = true, probing = true, importantOnly = false,
+CastAheadDB = { importantOnly = false,
     journal = { keys = { { startedAt = now, lines = {}, marks = 0, mobs = 0 } } } }
 local devBefore = Copy(CastAheadDB)
 Quiet()
@@ -2131,7 +2143,7 @@ castFor(3.0)
 fire("UNIT_SPELLCAST_SUCCEEDED", "player", nil, 12345)
 fire("PLAYER_REGEN_ENABLED")
 fire("CHALLENGE_MODE_COMPLETED")
-for _, command in ipairs({ "probe on", "probe show", "probe clear", "report", "mark wrong call", "note 1 text" }) do
+for _, command in ipairs({ "probe", "probe show", "probe clear", "report", "mark wrong call", "note 1 text" }) do
     SlashCmdList.CASTAHEAD(command)
 end
 CastAheadReport.Mark(true)
@@ -2149,7 +2161,7 @@ check(not leaked, "and prints nothing but the refusals, got " .. tostring(leaked
 CastAheadDB.devMode = true
 CastAheadCore.ApplyDevMode()
 check(devLogging and CastAheadCore.Probing() and CastAheadRecorder.Enabled(),
-    "Development mode on brings back every tool whose own switch is on")
+    "Development mode on, with no other switch, runs every tool")
 CastAheadDB.devMode = nil
 CastAheadCore.ApplyDevMode()
 check(not devLogging and not CastAheadCore.Probing() and not CastAheadRecorder.Enabled(),
