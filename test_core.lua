@@ -2162,6 +2162,13 @@ CastAheadDB.devMode = true
 CastAheadCore.ApplyDevMode()
 check(devLogging and CastAheadCore.Probing() and CastAheadRecorder.Enabled(),
     "Development mode on, with no other switch, runs every tool")
+CastAheadDB.recordAll = false
+CastAheadCore.ApplyDevMode()
+check(not devLogging and not CastAheadCore.Probing() and not CastAheadRecorder.Enabled(),
+    "Record everything off stops all recording while Development mode stays on")
+CastAheadDB.recordAll = nil
+CastAheadCore.ApplyDevMode()
+check(devLogging and CastAheadCore.Probing() and CastAheadRecorder.Enabled(), "and on again resumes it")
 CastAheadDB.devMode = nil
 CastAheadCore.ApplyDevMode()
 check(not devLogging and not CastAheadCore.Probing() and not CastAheadRecorder.Enabled(),

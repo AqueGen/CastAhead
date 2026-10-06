@@ -130,6 +130,10 @@ function C.Dev()
     return C.Get("devMode") == true
 end
 
+function C.Recording()
+    return C.Dev() and C.Enabled("recordAll")
+end
+
 function C.SetEnabled(key, enabled)
     if enabled then
         C.Set(key, nil)

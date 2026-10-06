@@ -103,7 +103,9 @@ local SWITCHES = {
     fullLabels = { label = "Full labels", defaultOff = true,
         tip = "Spell the longest verdicts out under a nameplate icon - BUSTER becomes TANKBUSTER. The icons step sideways by the width of the words under them, so the full words spread the row out; off, every plate's widest word is six characters and the rows pack evenly. The cast table and the spoken call always use the whole word either way." },
     devMode = { label = "Development mode", defaultOff = true,
-        tip = "Records everything the addon can reach, for improving its data: the game's combat log with advanced logging in every dungeon (off again when you leave, unless you had started it yourself), a journal of each key with a panel on screen to mark a wrong call, and what the game lets an addon read off each enemy cast. Keeps the last 12 keys. No names of people are recorded. Nothing here changes what the addon calls out. /reload after a key saves it to disk." },
+        tip = "Adds the Development tab and starts recording everything for improving the addon's data (the Record everything switch there, on by default). Nothing here changes what the addon calls out." },
+    recordAll = { label = "Record everything",
+        tip = "The game's combat log with advanced logging in every dungeon (off again when you leave, unless you had started it yourself), a journal of each key with a panel on screen to mark a wrong call, and what the game lets an addon read off each enemy cast. Keeps the last 12 keys. No names of people are recorded. /reload after a key saves it to disk." },
 }
 
 local function SwitchOn(key)
@@ -481,17 +483,22 @@ local function DevButton(panel, label, width, point, command, tip)
     return button
 end
 
--- Recording itself is the one Development mode switch on the General tab;
--- this page only looks at what was recorded.
+-- One switch records everything; the rest of the page only looks at it.
 function BuildDevelopment(panel)
     local intro = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     intro:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -6)
     intro:SetWidth(600)
     intro:SetJustifyH("LEFT")
-    intro:SetText("|cffaaaaaaWhile Development mode is on, everything is recorded: combat log in dungeons, key journal, enemy casts. Nothing on this page changes what the addon calls out.|r")
+    intro:SetText("|cffaaaaaaRecord everything: combat log in dungeons, key journal, enemy casts. Nothing on this page changes what the addon calls out.|r")
 
-    local group = BuildGroup(panel, "Recorded enemy data", 1, 62,
+    local recording = BuildGroup(panel, "Recording", 1, 62,
         { "TOPLEFT", intro, "BOTTOMLEFT", 0, -14 })
+    BuildSwitch(panel, "recordAll", { "TOPLEFT", recording, "TOPLEFT", 10, -26 }, function()
+        if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
+    end)
+
+    local group = BuildGroup(panel, "Recorded enemy data", 2, 62,
+        { "TOPLEFT", recording, "TOPRIGHT", COL_GAP, 0 })
     local show = DevButton(panel, "Show", 70, { "TOPLEFT", group, "TOPLEFT", 16, -28 },
         "probe show", "Print which facts each unit API returned readable, secret or empty. /ca probe show")
     local sweep = DevButton(panel, "Sweep", 70, { "LEFT", show, "RIGHT", 4, 0 },

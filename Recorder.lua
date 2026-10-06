@@ -27,7 +27,7 @@ local function Journal()
 end
 
 function R.Enabled()
-    return CastAheadConfig.Dev()
+    return CastAheadConfig.Recording()
 end
 
 local function Hash(h, text)
