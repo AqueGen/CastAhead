@@ -10,7 +10,7 @@ Why: an audit of the owner's warlock keys (+17/18) against 120 top Warcraft Logs
 
 ## Scope
 
-- Alpha/beta: 9 specs with a shipped button table - Warlock (Affliction, Demonology, Destruction), Paladin (Holy, Protection, Retribution), Demon Hunter (Havoc, Vengeance, Devourer). Every other spec gets the generic call (shield icon, no button) and a "more specs coming" note.
+- Alpha/beta: 9 specs with a shipped button table - Warlock (Affliction, Demonology, Destruction), Paladin (Holy, Protection, Retribution), Demon Hunter (Havoc, Vengeance, Devourer). Every other spec gets the generic call (no button icon) and a "more specs coming" note.
 - Content: the 8 Mythic+ Season 2 dungeons, trash and bosses. Raid is out of scope for this version.
 - Voice: English, rendered like the existing clips (Azure en-US GuyNeural, `tools/voice.py`).
 
@@ -26,7 +26,8 @@ This feature reverses two earlier decisions for itself only: the 2026-10-01 feat
 4. Verdict per (ability, role): `BIG` when top players of that role answer it with their big button or the 90th percentile hit is at least 60% HP; `SMALL` when they answer with the small button or the hit is 30-60%; nothing below. Tanks keep `TANK` and gain a verdict from tank specs.
 5. Lead per ability: median seconds between the top players' press and the hit.
 6. Boss ids: BigWigs and DBM sometimes broadcast a different spell id than the log records (Sever 1299680 vs 1299684). Join by name through the boss module source, as the MRT `build_alias.py` did.
-7. Output: a generated `Defensives.lua` data file (verdicts, leads, aliases) plus the shipped button table, written by `gen.py` like `Data.lua`.
+7. Output: a generated `Defensives.lua` data file (verdicts, leads, aura flags, aliases) written by the private `CastAheadTools/def_build.py` (its input is Warcraft Logs player data, which never ships), plus the curated `SaveButtons.lua`.
+8. Boss coverage: DBM timeline-only bars carry no callback and a Secret spell id; only module timers fire `DBM_TimerBegin` with a spell id. Before the adapter is built, a coverage report checks which boss verdict spells have a module timer; if coverage is poor, the owner decides between the adapter and from-pull schedules.
 
 ## Runtime
 
@@ -34,7 +35,7 @@ This feature reverses two earlier decisions for itself only: the 2026-10-01 feat
 
 - New advice keys `SMALL` (label `SMALL SAVE`, say "small defensive") and `BIG` (label `BIG SAVE`, say "big defensive") in `Match.ADVICE`, with `_soon` clips.
 - One alert per call, as settled in PR #21. Priority: `KICK` / `CC` > `BIG` > `SMALL` > `TANK` / `AOE` / the rest. A cast that has a verdict for the player's role replaces the generic `AOE` call for that player.
-- Centre block shows the icon of the first spell in the spec's list for that size, the label and the countdown. Specs without a table show a shield icon.
+- Centre block shows the icon of the first spell in the spec's list for that size, the label and the countdown. Specs without a table show the threatening spell's own icon, as the centre block does today.
 
 ### Triggers
 
