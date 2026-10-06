@@ -5,7 +5,7 @@ BINDING_NAME_CASTAHEAD_MARK = "Mark a wrong call"
 BINDING_NAME_CASTAHEAD_MARK_NOTE = "Mark a wrong call and add a note"
 
 R.FORMAT = 1
-R.MAX_KEYS = 5
+R.MAX_KEYS = 12
 R.MAX_LINES = 20000
 R.RESUME_WINDOW = 7200
 R.RECENT_WINDOW = 120
@@ -14,6 +14,19 @@ R.MARK_WINDOW = 60
 R.EXPORT_LIMIT = 60000
 
 local UNCAPPED = { MARK = true, SNAP = true, NOTE = true }
+
+-- Saved variables reach the disk only on a reload or logout; a crash loses
+-- every key recorded since.
+StaticPopupDialogs.CASTAHEAD_RELOAD = {
+    text = "Cast Ahead: key recorded. Reload now to save it to disk?",
+    button1 = RELOADUI or "Reload",
+    button2 = LATER or "Later",
+    OnAccept = function() ReloadUI() end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
 
 local checksum
 local mobOf = {}
@@ -27,7 +40,7 @@ local function Journal()
 end
 
 function R.Enabled()
-    return CastAheadConfig.Dev("keyJournal")
+    return CastAheadConfig.Recording()
 end
 
 local function Hash(h, text)
@@ -148,6 +161,7 @@ function R.EndKey(result)
     if key.ended == "completed" then
         print(R.Summary(key))
         print(CoverageLine(key))
+        if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RELOAD") end
     end
 end
 

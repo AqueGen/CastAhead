@@ -2992,7 +2992,7 @@ end
 -- width. The sweep calls every documented Unit* function on the casting unit
 -- and keeps only counts, to find readable facts nobody thought to try.
 local FINGERPRINT_CAP = 4000
-local SESSIONS_KEPT = 5
+local SESSIONS_KEPT = 12
 local session, sweep, identityCurve, secondsFormatter, widthProbe, barProbe
 
 local function Now()
@@ -3080,7 +3080,7 @@ end
 
 -- Loading the documentation mid-pull would stall the frame the pull starts on.
 function ProbeRestore()
-    probing = CastAheadConfig.Dev("probing")
+    probing = CastAheadConfig.Recording()
     if probing and not sweep then BuildSweep() end
 end
 
@@ -3158,7 +3158,7 @@ function CastAheadCore.Probing() return probing end
 function CastAheadCore.SyncCombatLog()
     if not (LoggingCombat and CastAheadDB) then return end
     local _, kind = IsInInstance()
-    local want = kind == "party" and CastAheadConfig.Dev("autoCombatLog")
+    local want = kind == "party" and CastAheadConfig.Recording()
     if want then
         if C_CVar and C_CVar.SetCVar then C_CVar.SetCVar("advancedCombatLogging", "1") end
         if not LoggingCombat() then
@@ -3183,13 +3183,6 @@ function CastAheadCore.ApplyDevMode()
 end
 
 function CastAheadCore.Probe(command)
-    if command == "off" then
-        probing = false
-        CastAheadDB = CastAheadDB or {}
-        CastAheadDB.probing = false
-        print("|cff33ff99Cast Ahead|r probe off")
-        return
-    end
     if command == "clear" then
         if CastAheadDB then
             CastAheadDB.probe, CastAheadDB.sweep, CastAheadDB.fingerprints = nil, nil, nil
@@ -3213,29 +3206,22 @@ function CastAheadCore.Probe(command)
         end
         return
     end
-    if command == "show" then
-        local fp = CastAheadDB and CastAheadDB.fingerprints
-        if fp and #fp > 0 then
-            local last = fp[#fp]
-            print(string.format("|cff33ff99Cast Ahead|r fingerprints: %d session(s), last %s with %d casts and %d anchors",
-                #fp, tostring(last.started), #last.rows, #last.anchors))
-        end
-        local db = CastAheadDB and CastAheadDB.probe
-        if not db then print("|cff33ff99Cast Ahead|r no probe results yet") return end
-        local names = {}
-        for name in pairs(db) do names[#names + 1] = name end
-        table.sort(names)
-        for _, name in ipairs(names) do
-            local r = db[name]
-            print(string.format("|cff33ff99Cast Ahead|r %-26s readable %3d  secret %3d  nil %3d  err %3d  distinct %s  e.g. %s",
-                name, r.readable, r.secret, r.empty, r.errors or 0, tostring(r.distinct or 0), tostring(r.sample)))
-        end
-        return
+    local fp = CastAheadDB and CastAheadDB.fingerprints
+    if fp and #fp > 0 then
+        local last = fp[#fp]
+        print(string.format("|cff33ff99Cast Ahead|r fingerprints: %d session(s), last %s with %d casts and %d anchors",
+            #fp, tostring(last.started), #last.rows, #last.anchors))
     end
-    CastAheadDB = CastAheadDB or {}
-    CastAheadDB.probing = true
-    ProbeRestore()
-    print("|cff33ff99Cast Ahead|r probe on - it stays on across reloads. Turn on /combatlog, pull some trash, then /ca probe show and /ca probe sweep")
+    local db = CastAheadDB and CastAheadDB.probe
+    if not db then print("|cff33ff99Cast Ahead|r no probe results yet") return end
+    local names = {}
+    for name in pairs(db) do names[#names + 1] = name end
+    table.sort(names)
+    for _, name in ipairs(names) do
+        local r = db[name]
+        print(string.format("|cff33ff99Cast Ahead|r %-26s readable %3d  secret %3d  nil %3d  err %3d  distinct %s  e.g. %s",
+            name, r.readable, r.secret, r.empty, r.errors or 0, tostring(r.distinct or 0), tostring(r.sample)))
+    end
 end
 
 function CastAheadCore.Debug()

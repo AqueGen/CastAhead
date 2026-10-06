@@ -142,12 +142,17 @@ local function Build()
     noteBox:Hide()
 end
 
+function W.PanelWanted()
+    return CastAheadRecorder and CastAheadRecorder.Enabled() and CastAheadConfig.Get("showMarkPanel") == true or false
+end
+
 function W.Refresh()
-    local want = CastAheadRecorder and CastAheadRecorder.Enabled()
-    if window and not want then window:Hide() end
+    local recording = CastAheadRecorder and CastAheadRecorder.Enabled()
+    if window and not recording then window:Hide() end
+    local want = W.PanelWanted()
     if want and not panel then Build() end
     if not panel then return end
-    panel:SetShown(want and true or false)
+    panel:SetShown(want)
     if want and not ticker and C_Timer and C_Timer.NewTicker then
         ticker = C_Timer.NewTicker(0.5, Paint)
     elseif not want and ticker then
