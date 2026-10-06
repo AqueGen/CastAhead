@@ -26,6 +26,7 @@ Traits.lua
 Packs.lua
 Debuffs.lua
 Match.lua
+DebuffCalls.lua
 Timeline.lua
 Core.lua
 Recorder.lua

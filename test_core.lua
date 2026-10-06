@@ -32,12 +32,26 @@ UnitCreatureFamily = function() return nil end
 -- The player's harmful auras, as C_UnitAuras hands them out by index. In 12.1
 -- UNIT_AURA's updateInfo is Secret in instances, so Core enumerates instead.
 local playerAuras = {}
+local auraSounds, removedSounds, auraSoundSeq, auraBySpell = {}, {}, 0, {}
+local lockdown = false
 C_UnitAuras = {
     GetAuraDataByIndex = function(unit, index, filter)
         if unit ~= "player" or filter ~= "HARMFUL" then return nil end
         return playerAuras[index]
     end,
+    AddAuraSound = function(trigger, info)
+        auraSoundSeq = auraSoundSeq + 1
+        auraSounds[auraSoundSeq] = { trigger = trigger, info = info }
+        return auraSoundSeq
+    end,
+    RemoveAuraSound = function(id)
+        removedSounds[#removedSounds + 1] = id
+        auraSounds[id] = nil
+    end,
+    GetPlayerAuraBySpellID = function(spellID) return auraBySpell[spellID] end,
 }
+C_Secrets = { ShouldSpellAuraBeSecret = function(spellID) return spellID == 901 end }
+InCombatLockdown = function() return lockdown end
 IsInInstance = function() return true end
 GetInstanceInfo = function() return "d", "party", 0, "", 0, 0, false, 1877 end
 local plateShown = true
@@ -136,6 +150,7 @@ C_EncounterTimeline = {
 bit = { bor = function(a, b) return (a or 0) + (b or 0) end }
 Enum.EncounterEventIconmask = { TankRole = 128, HealerRole = 256, DpsRole = 512, DeadlyEffect = 1, MagicEffect = 8 }
 Enum.EncounterEventSeverity = { Low = 0, Medium = 1, High = 2 }
+Enum.UnitAuraSoundTrigger = { Added = 0, ApplicationsIncreased = 1, Removed = 2 }
 
 SOUNDKIT = { RAID_WARNING = 1, ALARM_CLOCK_WARNING_3 = 2, ALARM_CLOCK_WARNING_2 = 3,
              ALARM_CLOCK_WARNING_1 = 4 }
@@ -282,7 +297,9 @@ CastAheadExtra = {
 }
 
 dofile("Config.lua")
+dofile("Debuffs.lua")
 dofile("Match.lua")
+dofile("DebuffCalls.lua")
 dofile("Timeline.lua")
 -- UI.lua only needs the stubs above for its option helpers.
 UISpecialFrames = {}
@@ -2370,6 +2387,51 @@ CastAheadData[2000] = nil
 GetInstanceInfo = savedGolemInfo
 fire("PLAYER_ENTERING_WORLD")
 CastAheadDB = nil
+
+local savedDebuffs = CastAheadDebuffs
+local function Registered()
+    local out = {}
+    for _, s in pairs(auraSounds) do out[#out + 1] = s.info.spellID .. "=" .. s.info.soundFileName end
+    table.sort(out)
+    return table.concat(out, " ")
+end
+local DEF = "900=Interface\\AddOns\\CastAhead\\Sounds\\en\\DEFENSIVE.ogg"
+local DODGE = "901=Interface\\AddOns\\CastAhead\\Sounds\\en\\DODGE.ogg"
+CastAheadDebuffs = { [1877] = { [900] = "DEFENSIVE", [901] = "DODGE" } }
+CastAheadDB = {}
+fire("PLAYER_ENTERING_WORLD")
+check(Registered() == DEF .. " " .. DODGE, "entering a dungeon with listed debuffs registers one sound each, got " .. Registered())
+local first
+for _, s in pairs(auraSounds) do first = s end
+check(first.trigger == Enum.UnitAuraSoundTrigger.Added and first.info.unitToken == "player" and first.info.outputChannel == "Master",
+    "the sound plays when the debuff is added to the player, on the master channel")
+GetInstanceInfo = function() return "d", "party", 0, "", 0, 0, false, 2000 end
+fire("PLAYER_ENTERING_WORLD")
+check(Registered() == "" and #removedSounds == 2, "a dungeon without listed debuffs removes ours, got " .. Registered())
+GetInstanceInfo = savedGolemInfo
+CastAheadDB = { debuffCalls = false }
+fire("PLAYER_ENTERING_WORLD")
+check(Registered() == "", "debuffCalls off registers nothing")
+CastAheadDB = { sound = false }
+fire("PLAYER_ENTERING_WORLD")
+check(Registered() == "", "the master sound switch off registers nothing")
+CastAheadDB = { disabled = { [901] = true } }
+fire("PLAYER_ENTERING_WORLD")
+check(Registered() == DEF, "a debuff switched off in the window is skipped, got " .. Registered())
+CastAheadDB = {}
+lockdown = true
+CastAheadCore.Reapply()
+check(Registered() == DEF, "a settings change in combat leaves the registered sounds alone, got " .. Registered())
+lockdown = false
+fire("PLAYER_REGEN_ENABLED")
+check(Registered() == DEF .. " " .. DODGE, "and the refresh happens once combat ends, got " .. Registered())
+IsInInstance = function() return false end
+fire("PLAYER_ENTERING_WORLD")
+check(Registered() == "", "leaving the dungeon removes every debuff sound, got " .. Registered())
+IsInInstance = function() return true end
+CastAheadDebuffs = savedDebuffs
+CastAheadDB = nil
+fire("PLAYER_ENTERING_WORLD")
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

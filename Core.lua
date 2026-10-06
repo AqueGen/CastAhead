@@ -2128,6 +2128,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
             ClearTimeline(state)
         end
         LoadDungeon()
+        if CastAheadDebuffCalls then CastAheadDebuffCalls.Refresh() end
         if not dungeon then
             for tracked in pairs(plates) do DropUnit(tracked) end
         end
@@ -2168,6 +2169,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
             CastAheadRecorder.EnsureKey()
         end
         Record("PULL", nil, event == "PLAYER_REGEN_DISABLED" and "in" or "out")
+        if event == "PLAYER_REGEN_ENABLED" and CastAheadDebuffCalls then CastAheadDebuffCalls.AfterCombat() end
         if event == "PLAYER_REGEN_ENABLED" and CastAheadRecorder and not IsInInstance() then
             CastAheadRecorder.EndKey("left")
         end
@@ -3336,6 +3338,7 @@ function CastAheadCore.ResizeCenter()
 end
 
 function CastAheadCore.Reapply()
+    if CastAheadDebuffCalls then CastAheadDebuffCalls.Refresh() end
     local isDisabled = CastAheadUI and CastAheadUI.IsDisabled
     for unit, state in pairs(plates) do
         for key, track in pairs(state.tracks) do

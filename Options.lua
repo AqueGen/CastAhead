@@ -98,6 +98,8 @@ local SWITCHES = {
         tip = "Master switch for everything the addon plays." },
     voice = { label = "Voice",
         tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"interrupt\"." },
+    debuffCalls = { label = "Call debuffs on you",
+        tip = "Says the answer - defensive, dodge, dispel - the moment a dangerous trash debuff lands on you. Works in combat; the centre call shows it too when the game lets the addon read that debuff." },
     fixedSpacing = { label = "Fixed spacing", defaultOff = true,
         tip = "Step sideways by the icon plus the gap below, whatever the words under the icons measure. Every row packs the same; two wide verdicts side by side may overlap." },
     fullLabels = { label = "Full labels", defaultOff = true,
@@ -253,9 +255,10 @@ function BuildGeneral(panel)
     })
 
     -- Sound ---------------------------------------------------------------
-    local audio = BuildGroup(panel, "Sound", 2, 86)
+    local audio = BuildGroup(panel, "Sound", 2, 114)
     local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 })
-    BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 })
+    local voice = BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 })
+    BuildSwitch(panel, "debuffCalls", { "TOPLEFT", voice, "BOTTOMLEFT", 0, -4 })
 
     -- Development mode ----------------------------------------------------
     local extra = BuildGroup(panel, "Advanced", 2, 62,
