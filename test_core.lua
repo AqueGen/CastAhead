@@ -2108,6 +2108,9 @@ Loud()
 CastAheadDB = nil
 
 CastAheadDB = { devMode = true }
+local popups = {}
+local savedPopup = StaticPopup_Show
+StaticPopup_Show = function(name) popups[#popups + 1] = name end
 Quiet()
 for i = 1, 8 do
     R.StartKey({ instance = 1877, name = "Key " .. i, level = 12 })
@@ -2115,7 +2118,10 @@ for i = 1, 8 do
     R.EndKey("completed")
 end
 Loud()
+StaticPopup_Show = savedPopup
 check(#CastAheadDB.journal.keys == 8, "a day of eight keys is kept whole, got " .. #CastAheadDB.journal.keys)
+check(#popups == 8 and popups[1] == "CASTAHEAD_RELOAD" and StaticPopupDialogs.CASTAHEAD_RELOAD,
+    "each completed key offers a reload to save it to disk, got " .. #popups)
 CastAheadDB = nil
 
 -- Core runs with no recorder loaded at all.

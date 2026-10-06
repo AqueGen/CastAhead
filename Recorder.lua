@@ -15,6 +15,20 @@ R.EXPORT_LIMIT = 60000
 
 local UNCAPPED = { MARK = true, SNAP = true, NOTE = true }
 
+-- Saved variables reach the disk only on a reload or logout; a crash loses
+-- every key recorded since.
+StaticPopupDialogs = StaticPopupDialogs or {}
+StaticPopupDialogs.CASTAHEAD_RELOAD = {
+    text = "Cast Ahead: key recorded. Reload now to save it to disk?",
+    button1 = RELOADUI or "Reload",
+    button2 = LATER or "Later",
+    OnAccept = function() ReloadUI() end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
 local checksum
 local mobOf = {}
 local recent = {}
@@ -148,6 +162,7 @@ function R.EndKey(result)
     if key.ended == "completed" then
         print(R.Summary(key))
         print(CoverageLine(key))
+        if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RELOAD") end
     end
 end
 
