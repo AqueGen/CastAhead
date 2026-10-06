@@ -17,7 +17,6 @@ local UNCAPPED = { MARK = true, SNAP = true, NOTE = true }
 
 -- Saved variables reach the disk only on a reload or logout; a crash loses
 -- every key recorded since.
-StaticPopupDialogs = StaticPopupDialogs or {}
 StaticPopupDialogs.CASTAHEAD_RELOAD = {
     text = "Cast Ahead: key recorded. Reload now to save it to disk?",
     button1 = RELOADUI or "Reload",

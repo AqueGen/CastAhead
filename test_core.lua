@@ -286,6 +286,7 @@ dofile("Match.lua")
 dofile("Timeline.lua")
 -- UI.lua only needs the stubs above for its option helpers.
 UISpecialFrames = {}
+StaticPopupDialogs = {}
 SlashCmdList = {}
 SearchBoxTemplate_OnTextChanged = function() end
 GameTooltip = setmetatable({}, { __index = function() return function() end end })
@@ -2425,6 +2426,22 @@ CastAheadData[2000] = nil
 GetInstanceInfo = savedGolemInfo
 fire("PLAYER_ENTERING_WORLD")
 CastAheadDB = nil
+
+do
+    local overwritten = {}
+    local env = setmetatable({}, {
+        __index = _G,
+        __newindex = function(t, k, v)
+            local own = tostring(k):match("^CastAhead") or tostring(k):match("^BINDING_NAME_CASTAHEAD")
+            if rawget(_G, k) ~= nil and not own then overwritten[#overwritten + 1] = k end
+            rawset(t, k, v)
+        end,
+    })
+    local chunk = assert(loadfile("Recorder.lua"))
+    setfenv(chunk, env)
+    chunk()
+    check(#overwritten == 0, "Recorder.lua assigns no existing game global (a taint source for Blizzard code), got " .. table.concat(overwritten, ", "))
+end
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)
