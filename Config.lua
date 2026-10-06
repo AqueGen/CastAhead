@@ -126,8 +126,8 @@ function C.Enabled(key)
     return C.Get(key) ~= false
 end
 
-function C.Dev(key)
-    return C.Get("devMode") == true and (key == nil or C.Get(key) == true)
+function C.Dev()
+    return C.Get("devMode") == true
 end
 
 function C.SetEnabled(key, enabled)

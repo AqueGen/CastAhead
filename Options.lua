@@ -103,11 +103,7 @@ local SWITCHES = {
     fullLabels = { label = "Full labels", defaultOff = true,
         tip = "Spell the longest verdicts out under a nameplate icon - BUSTER becomes TANKBUSTER. The icons step sideways by the width of the words under them, so the full words spread the row out; off, every plate's widest word is six characters and the rows pack evenly. The cast table and the spoken call always use the whole word either way." },
     devMode = { label = "Development mode", defaultOff = true,
-        tip = "Adds a Development tab with the data-collection tools. Switching it off stops every one of them, whatever their own switches say. Nothing here changes what the addon calls out - it is for finding out what the game still lets an addon read." },
-    keyJournal = { label = "Key journal and mark panel", defaultOff = true,
-        tip = "Keeps a journal of each key and shows a panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. /ca report gives the text to paste into a GitHub issue or a CurseForge comment. No names of people are recorded. Only while Development mode is on." },
-    autoCombatLog = { label = "Combat log in dungeons", defaultOff = true,
-        tip = "Turns the game's combat log on, with advanced logging, whenever you enter a dungeon, and off again when you leave - unless you had switched it on yourself. The log is what the cast timings, first casts and damage are measured from. Only while Development mode is on." },
+        tip = "Records everything the addon can reach, for improving its data: the game's combat log with advanced logging in every dungeon (off again when you leave, unless you had started it yourself), a journal of each key with a panel on screen to mark a wrong call, and what the game lets an addon read off each enemy cast. Keeps the last 12 keys. No names of people are recorded. Nothing here changes what the addon calls out. /reload after a key saves it to disk." },
 }
 
 local function SwitchOn(key)
@@ -485,65 +481,23 @@ local function DevButton(panel, label, width, point, command, tip)
     return button
 end
 
--- The tools that collect data rather than change what is called out. Behind
--- the Development mode switch: useful after a patch, noise the rest of the
--- time.
+-- Recording itself is the one Development mode switch on the General tab;
+-- this page only looks at what was recorded.
 function BuildDevelopment(panel)
     local intro = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     intro:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -6)
     intro:SetWidth(600)
     intro:SetJustifyH("LEFT")
-    intro:SetText("|cffaaaaaaNothing on this page changes what the addon calls out. It measures what the game still lets an addon read about an enemy, which is worth re-checking after every patch.|r")
+    intro:SetText("|cffaaaaaaWhile Development mode is on, everything is recorded: combat log in dungeons, key journal, enemy casts. Nothing on this page changes what the addon calls out.|r")
 
-    -- The probe samples what the game still lets us read off a hostile plate
-    -- (level, power, health...) while trash is being fought, and prints the
-    -- results to chat. Same as /ca probe and /ca probe show.
-    local group = BuildGroup(panel, "Nameplate probe", 1, 120,
+    local group = BuildGroup(panel, "Recorded enemy data", 1, 62,
         { "TOPLEFT", intro, "BOTTOMLEFT", 0, -14 })
-
-    local probe = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
-    probe:SetSize(22, 22)
-    probe:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -26)
-    probe.text = probe:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    probe.text:SetPoint("LEFT", probe, "RIGHT", 2, 0)
-    -- Short: the group is one column wide like every other, and the whole
-    -- explanation is a hover away.
-    probe.text:SetText("Collect enemy data")
-    probe:SetHitRectInsets(0, -(probe.text:GetStringWidth() + 6), 0, 0)
-    probe:SetScript("OnClick", function(self)
-        if CastAheadCore and CastAheadCore.Probe then
-            CastAheadCore.Probe(self:GetChecked() and "on" or "off")
-        end
-    end)
-    probe:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Probe", 1, 1, 1)
-        GameTooltip:AddLine("While on, every hostile nameplate and cast is checked against the unit API to see which facts are readable and which come back secret, and the call made at each cast start is kept, so a wrong call can be found in the combat log afterwards. Pull some trash, then press Show. Costs nothing noticeable.", nil, nil, nil, true)
-        GameTooltip:Show()
-    end)
-    probe:SetScript("OnLeave", GameTooltip_Hide)
-    table.insert(refreshers, function()
-        probe:SetChecked(CastAheadCore and CastAheadCore.Probing and CastAheadCore.Probing() or false)
-    end)
-
-    local show = DevButton(panel, "Show", 70, { "TOPLEFT", probe, "BOTTOMLEFT", 6, -8 },
+    local show = DevButton(panel, "Show", 70, { "TOPLEFT", group, "TOPLEFT", 16, -28 },
         "probe show", "Print which facts each unit API returned readable, secret or empty. /ca probe show")
     local sweep = DevButton(panel, "Sweep", 70, { "LEFT", show, "RIGHT", 4, 0 },
         "probe sweep", "Print every Unit* function that returned something readable. /ca probe sweep")
     DevButton(panel, "Clear", 60, { "LEFT", sweep, "RIGHT", 4, 0 },
         "probe clear", "Forget the collected probe results. /ca probe clear")
-
-    local logGroup = BuildGroup(panel, "Combat log", 1, 62,
-        { "TOPLEFT", group, "BOTTOMLEFT", 0, -12 })
-    BuildSwitch(panel, "autoCombatLog", { "TOPLEFT", logGroup, "TOPLEFT", 10, -26 }, function()
-        if CastAheadCore and CastAheadCore.SyncCombatLog then CastAheadCore.SyncCombatLog() end
-    end)
-
-    local journalGroup = BuildGroup(panel, "Key journal", 2, 62,
-        { "TOPLEFT", group, "TOPRIGHT", COL_GAP, 0 })
-    BuildSwitch(panel, "keyJournal", { "TOPLEFT", journalGroup, "TOPLEFT", 10, -26 }, function()
-        if CastAheadReport then CastAheadReport.Refresh() end
-    end)
 end
 
 local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
