@@ -2095,7 +2095,10 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         if event == "UNIT_SPELLCAST_SUCCEEDED" then return end
     end
     if event == "UNIT_AURA" then
-        if unit == "player" then LearnDispel() end
+        if unit == "player" then
+            LearnDispel()
+            if CastAheadDebuffCalls then CastAheadDebuffCalls.OnPlayerAura() end
+        end
         return
     end
     if event == "PLAYER_SPECIALIZATION_CHANGED" or event == "SPELLS_CHANGED" then
@@ -2105,6 +2108,10 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
             InvalidateCapabilities()
             if CastAheadCore then CastAheadCore.Reapply() end
         end
+        return
+    end
+    if event == "ADDON_RESTRICTION_STATE_CHANGED" then
+        if CastAheadDebuffCalls then CastAheadDebuffCalls.Retry() end
         return
     end
     if event == "ADDON_LOADED" then
@@ -2128,6 +2135,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
             ClearTimeline(state)
         end
         LoadDungeon()
+        if CastAheadDebuffCalls then CastAheadDebuffCalls.Refresh() end
         if not dungeon then
             for tracked in pairs(plates) do DropUnit(tracked) end
         end
@@ -2168,6 +2176,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
             CastAheadRecorder.EnsureKey()
         end
         Record("PULL", nil, event == "PLAYER_REGEN_DISABLED" and "in" or "out")
+        if event == "PLAYER_REGEN_ENABLED" and CastAheadDebuffCalls then CastAheadDebuffCalls.Retry() end
         if event == "PLAYER_REGEN_ENABLED" and CastAheadRecorder and not IsInInstance() then
             CastAheadRecorder.EndKey("left")
         end
@@ -2440,7 +2449,11 @@ local function CenterPick(now)
             end
         end
     end
-    table.sort(centerPicks, function(a, b) return a.endAt < b.endAt end)
+    if CastAheadDebuffCalls then CastAheadDebuffCalls.Picks(now, centerPicks) end
+    table.sort(centerPicks, function(a, b)
+        if (a.debuff or false) ~= (b.debuff or false) then return a.debuff == true end
+        return a.endAt < b.endAt
+    end)
     return centerPicks
 end
 
@@ -2467,7 +2480,12 @@ local function UpdateCenter(now)
             line.icon:SetTexture(SpellIcon(pick.row.spell))
             -- "Tank buster 4.0": the response in words, not the category code.
             local say = pick.advice.say
-            line.text:SetFormattedText("%s  %.1f", say:sub(1, 1):upper() .. say:sub(2), pick.endAt - now)
+            say = say:sub(1, 1):upper() .. say:sub(2)
+            if pick.endAt == math.huge then
+                line.text:SetFormattedText("%s", say)
+            else
+                line.text:SetFormattedText("%s  %.1f", say, pick.endAt - now)
+            end
             line.text:SetTextColor(pick.advice.r, pick.advice.g, pick.advice.b)
             line:Show()
         else
@@ -2572,7 +2590,7 @@ end)
 for _, event in ipairs({
     "ADDON_LOADED", "PLAYER_ENTERING_WORLD", "PLAYER_SPECIALIZATION_CHANGED", "SPELLS_CHANGED",
     "ENCOUNTER_START", "ENCOUNTER_END", "CHALLENGE_MODE_START", "CHALLENGE_MODE_COMPLETED",
-    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
+    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ADDON_RESTRICTION_STATE_CHANGED",
     "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH",
     "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP",
     "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",
@@ -3322,6 +3340,7 @@ function CastAheadCore.ResizeCenter()
 end
 
 function CastAheadCore.Reapply()
+    if CastAheadDebuffCalls then CastAheadDebuffCalls.Refresh() end
     local isDisabled = CastAheadUI and CastAheadUI.IsDisabled
     for unit, state in pairs(plates) do
         for key, track in pairs(state.tracks) do
