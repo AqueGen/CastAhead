@@ -42,6 +42,7 @@ LINES = {
     "PURGE": "purge buff",
     "DISEASE": "dispel disease",
     "BLEED": "bleed, defensive",
+    "DEFENSIVE": "defensive",
     "SWITCH": "switch target",
     "ALERT": "danger",
 }
