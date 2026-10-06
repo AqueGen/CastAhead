@@ -14,7 +14,7 @@ jobs:
         with:
           luaVersion: "5.1"
       - name: Syntax-check every shipped file
-        run: luac -p Config.lua Data.lua Priority.lua Traits.lua Match.lua Timeline.lua Core.lua Recorder.lua UI.lua Options.lua Minimap.lua ReportWindow.lua
+        run: luac -p Config.lua Data.lua Priority.lua Traits.lua Debuffs.lua Match.lua Timeline.lua Core.lua Recorder.lua UI.lua Options.lua Minimap.lua ReportWindow.lua
       - name: Data and matcher suite
         run: lua test.lua
       - name: Runtime suite against the stubbed API
