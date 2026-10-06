@@ -2095,7 +2095,10 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         if event == "UNIT_SPELLCAST_SUCCEEDED" then return end
     end
     if event == "UNIT_AURA" then
-        if unit == "player" then LearnDispel() end
+        if unit == "player" then
+            LearnDispel()
+            if CastAheadDebuffCalls then CastAheadDebuffCalls.OnPlayerAura() end
+        end
         return
     end
     if event == "PLAYER_SPECIALIZATION_CHANGED" or event == "SPELLS_CHANGED" then
@@ -2442,7 +2445,11 @@ local function CenterPick(now)
             end
         end
     end
-    table.sort(centerPicks, function(a, b) return a.endAt < b.endAt end)
+    if CastAheadDebuffCalls then CastAheadDebuffCalls.Picks(now, centerPicks) end
+    table.sort(centerPicks, function(a, b)
+        if (a.debuff or false) ~= (b.debuff or false) then return a.debuff == true end
+        return a.endAt < b.endAt
+    end)
     return centerPicks
 end
 
@@ -2469,7 +2476,12 @@ local function UpdateCenter(now)
             line.icon:SetTexture(SpellIcon(pick.row.spell))
             -- "Tank buster 4.0": the response in words, not the category code.
             local say = pick.advice.say
-            line.text:SetFormattedText("%s  %.1f", say:sub(1, 1):upper() .. say:sub(2), pick.endAt - now)
+            say = say:sub(1, 1):upper() .. say:sub(2)
+            if pick.endAt == math.huge then
+                line.text:SetFormattedText("%s", say)
+            else
+                line.text:SetFormattedText("%s  %.1f", say, pick.endAt - now)
+            end
             line.text:SetTextColor(pick.advice.r, pick.advice.g, pick.advice.b)
             line:Show()
         else

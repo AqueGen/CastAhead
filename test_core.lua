@@ -2429,6 +2429,44 @@ IsInInstance = function() return false end
 fire("PLAYER_ENTERING_WORLD")
 check(Registered() == "", "leaving the dungeon removes every debuff sound, got " .. Registered())
 IsInInstance = function() return true end
+
+local function CenterLines()
+    local out = {}
+    for i = 1, #allFrames do
+        local f = allFrames[i]
+        if f.shown and type(f.timeValue) == "string" and f.timeValue:match("^%u[%l ,]+") then out[#out + 1] = f.timeValue end
+    end
+    return out
+end
+CastAheadDB = { leadSeconds = 5, centerText = true }
+enter()
+castFor(3.0)
+advance(17.0)
+fire("UNIT_SPELLCAST_START", unit)
+auraBySpell[900] = { spellId = 900, expirationTime = now + 5 }
+auraBySpell[901] = { spellId = 901, expirationTime = now + 5 }
+fire("UNIT_AURA", "player")
+advance(0.5)
+local centre = CenterLines()
+check(centre[1] == "Defensive  4.5" and #centre == 2 and centre[2]:match("^Aoe"),
+    "a readable debuff on you leads the centre call above the cast, a secret one is not shown, got " .. table.concat(centre, " | "))
+auraBySpell[900] = { spellId = 900, expirationTime = 0 }
+auraBySpell[901] = nil
+fire("UNIT_AURA", "player")
+advance(0.1)
+check(CenterLines()[1] == "Defensive", "a debuff with no expiry shows the call without a number, got " .. tostring(CenterLines()[1]))
+auraBySpell[900] = { spellId = 900, expirationTime = now + 1 }
+fire("UNIT_AURA", "player")
+advance(1.5)
+check(not table.concat(CenterLines(), " "):find("Defensive"), "a debuff past its expiry leaves the centre even before the next UNIT_AURA")
+CastAheadDB.debuffCalls = false
+CastAheadCore.Reapply()
+auraBySpell[900] = { spellId = 900, expirationTime = now + 5 }
+fire("UNIT_AURA", "player")
+advance(0.1)
+check(not table.concat(CenterLines(), " "):find("Defensive"), "debuffCalls off keeps debuffs out of the centre call")
+auraBySpell[900] = nil
+reset()
 CastAheadDebuffs = savedDebuffs
 CastAheadDB = nil
 fire("PLAYER_ENTERING_WORLD")
