@@ -105,7 +105,9 @@ local SWITCHES = {
     devMode = { label = "Development mode", defaultOff = true,
         tip = "Adds the Development tab and starts recording everything for improving the addon's data (the Record everything switch there, on by default). Nothing here changes what the addon calls out." },
     recordAll = { label = "Record everything",
-        tip = "The game's combat log with advanced logging in every dungeon (off again when you leave, unless you had started it yourself), a journal of each key with a panel on screen to mark a wrong call, and what the game lets an addon read off each enemy cast. Keeps the last 12 keys. No names of people are recorded. /reload after a key saves it to disk." },
+        tip = "The game's combat log with advanced logging in every dungeon (off again when you leave, unless you had started it yourself), a journal of each key, and what the game lets an addon read off each enemy cast. Keeps the last 12 keys. No names of people are recorded. /reload after a key saves it to disk." },
+    showMarkPanel = { label = "Mark panel", defaultOff = true,
+        tip = "A panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. Only while recording. The key bindings and /ca mark work without it." },
 }
 
 local function SwitchOn(key)
@@ -491,10 +493,13 @@ function BuildDevelopment(panel)
     intro:SetJustifyH("LEFT")
     intro:SetText("|cffaaaaaaRecord everything: combat log in dungeons, key journal, enemy casts. Nothing on this page changes what the addon calls out.|r")
 
-    local recording = BuildGroup(panel, "Recording", 1, 62,
+    local recording = BuildGroup(panel, "Recording", 1, 86,
         { "TOPLEFT", intro, "BOTTOMLEFT", 0, -14 })
-    BuildSwitch(panel, "recordAll", { "TOPLEFT", recording, "TOPLEFT", 10, -26 }, function()
+    local recordAll = BuildSwitch(panel, "recordAll", { "TOPLEFT", recording, "TOPLEFT", 10, -26 }, function()
         if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
+    end)
+    BuildSwitch(panel, "showMarkPanel", { "TOPLEFT", recordAll, "BOTTOMLEFT", 0, -4 }, function()
+        if CastAheadReport then CastAheadReport.Refresh() end
     end)
 
     local group = BuildGroup(panel, "Recorded enemy data", 2, 62,

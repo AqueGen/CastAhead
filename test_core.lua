@@ -1988,6 +1988,12 @@ check(ok, "/ca report opens: " .. tostring(err))
 check(reportWindow and reportWindow.shown, "the first /ca report shows the window, though the game creates frames shown")
 ok, err = pcall(CastAheadReport.Refresh)
 check(ok, "the panel refreshes: " .. tostring(err))
+check(not CastAheadReport.PanelWanted(), "recording alone keeps the mark panel off screen")
+CastAheadDB.showMarkPanel = true
+check(CastAheadReport.PanelWanted(), "its own switch shows it")
+CastAheadDB.devMode = nil
+check(not CastAheadReport.PanelWanted(), "and never without Development mode")
+CastAheadDB.devMode, CastAheadDB.showMarkPanel = true, nil
 Quiet()
 R.EndKey("completed")
 Loud()
