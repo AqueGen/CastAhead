@@ -99,7 +99,7 @@ local SWITCHES = {
     voice = { label = "Voice",
         tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"interrupt\"." },
     debuffCalls = { label = "Call debuffs on you",
-        tip = "Says the answer - defensive, dodge, dispel - the moment a dangerous trash debuff lands on you. Works in combat; the centre call shows it too when the game lets the addon read that debuff." },
+        tip = "Says the answer - defensive, dodge, dispel - the moment a dangerous trash debuff lands on you. Works in combat, needs Sound and Voice on; the centre call shows it too when the game lets the addon read that debuff." },
     fixedSpacing = { label = "Fixed spacing", defaultOff = true,
         tip = "Step sideways by the icon plus the gap below, whatever the words under the icons measure. Every row packs the same; two wide verdicts side by side may overlap." },
     fullLabels = { label = "Full labels", defaultOff = true,

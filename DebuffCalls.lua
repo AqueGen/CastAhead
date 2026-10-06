@@ -11,8 +11,10 @@ local function IsSecret(v)
     return issecretvalue ~= nil and issecretvalue(v)
 end
 
-local function InCombat()
-    return InCombatLockdown and InCombatLockdown()
+local function AddingBlocked()
+    if InCombatLockdown and InCombatLockdown() then return true end
+    local chat = C_ChatInfo and C_ChatInfo.InChatMessagingLockdown
+    return chat ~= nil and chat() == true
 end
 
 local function Off(spellID)
@@ -34,33 +36,35 @@ local function RemoveOurs()
 end
 
 function D.Refresh()
-    if InCombat() then
-        pending = true
-        return
-    end
-    pending = false
-    RemoveOurs()
-    wipe(active)
     local C = CastAheadConfig
     rows = C.Enabled("debuffCalls") and InstanceRows() or nil
     local add = C_UnitAuras and C_UnitAuras.AddAuraSound
     local trigger = Enum and Enum.UnitAuraSoundTrigger and Enum.UnitAuraSoundTrigger.Added
-    if not (rows and add and trigger and C.Enabled("sound")) then return end
-    for spellID, kind in pairs(rows) do
-        local advice = CastAheadMatch.ADVICE[kind]
-        if advice and not Off(spellID) then
-            local ok, id = pcall(add, trigger, { unitToken = "player", spellID = spellID,
-                soundFileName = CLIP_ROOT .. advice.file .. ".ogg", outputChannel = "Master" })
-            if not ok then
-                pending = true
-            elseif id then
-                registered[#registered + 1] = id
+    local speak = rows and add and trigger and C.Enabled("sound") and C.Enabled("voice")
+    pending = false
+    if speak and AddingBlocked() then
+        pending = true
+    else
+        RemoveOurs()
+        if speak then
+            for spellID, kind in pairs(rows) do
+                local advice = CastAheadMatch.ADVICE[kind]
+                if advice and not Off(spellID) then
+                    local ok, id = pcall(add, trigger, { unitToken = "player", spellID = spellID,
+                        soundFileName = CLIP_ROOT .. advice.file .. ".ogg", outputChannel = "Master" })
+                    if ok and id then
+                        registered[#registered + 1] = id
+                    else
+                        pending = true
+                    end
+                end
             end
         end
     end
+    D.OnPlayerAura()
 end
 
-function D.AfterCombat()
+function D.Retry()
     if pending then D.Refresh() end
 end
 

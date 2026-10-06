@@ -24,6 +24,12 @@ def number(f, i):
         return 0.0
 
 
+def close_all(windows):
+    for window in windows.values():
+        window["row"]["shares"].append(window["share"])
+    windows.clear()
+
+
 def scan(paths):
     stats = {}
     for path in paths:
@@ -31,6 +37,7 @@ def scan(paths):
         key = 0
         in_boss = False
         windows = {}
+        maxhp_of = {}
         with open(path, encoding="utf-8", errors="replace") as fh:
             for line in fh:
                 f = fields(line)
@@ -38,21 +45,25 @@ def scan(paths):
                     continue
                 event = f[0]
                 if event == "CHALLENGE_MODE_START":
+                    close_all(windows)
                     zone, instance = f[1], int(f[2])
                     key += 1
-                    windows.clear()
                     in_boss = False
-                elif event == "CHALLENGE_MODE_END":
+                elif event == "CHALLENGE_MODE_END" or (event == "ZONE_CHANGE" and instance is not None
+                                                        and number(f, 1) != instance):
+                    close_all(windows)
                     instance = None
-                    windows.clear()
                 elif instance is None:
                     continue
                 elif event == "ENCOUNTER_START":
+                    close_all(windows)
                     in_boss = True
                 elif event == "ENCOUNTER_END":
                     in_boss = False
+                elif in_boss:
+                    continue
                 elif event == "SPELL_AURA_APPLIED":
-                    if in_boss or len(f) < 13 or f[12] != "DEBUFF":
+                    if len(f) < 13 or f[12] != "DEBUFF":
                         continue
                     if not f[1].startswith("Creature-") or not f[5].startswith("Player-"):
                         continue
@@ -62,18 +73,23 @@ def scan(paths):
                         "deaths": 0, "shares": []})
                     row["applications"] += 1
                     row["keys"].add((path, key))
-                    windows[(f[5], spell)] = {"row": row, "share": 0.0}
+                    windows.setdefault((f[5], spell), {"row": row, "share": 0.0})
                 elif event == "SPELL_AURA_REMOVED":
                     window = windows.pop((f[5], int(f[9])), None) if len(f) > 9 else None
                     if window:
                         window["row"]["shares"].append(window["share"])
-                elif event in DAMAGE:
-                    if not f[1].startswith("Creature-"):
+                elif event in DAMAGE or event == "SWING_DAMAGE":
+                    if not f[1].startswith("Creature-") or not f[5].startswith("Player-"):
                         continue
-                    maxhp = number(f, MAXHP)
+                    if event == "SWING_DAMAGE":
+                        maxhp, shift = maxhp_of.get(f[5], 0.0), -3
+                    else:
+                        maxhp, shift = number(f, MAXHP), 0
+                        maxhp_of[f[5]] = maxhp
                     if maxhp <= 0:
                         continue
-                    share = (number(f, AMOUNT) - max(0.0, number(f, OVERKILL)) + number(f, ABSORBED)) / maxhp
+                    share = (number(f, AMOUNT + shift) - max(0.0, number(f, OVERKILL + shift))
+                             + number(f, ABSORBED + shift)) / maxhp
                     for (dst, _), window in windows.items():
                         if dst == f[5]:
                             window["share"] += share
@@ -81,7 +97,8 @@ def scan(paths):
                     for k in [k for k in windows if k[0] == f[5]]:
                         window = windows.pop(k)
                         window["row"]["deaths"] += 1
-                        window["row"]["shares"].append(0.0)
+                        window["row"]["shares"].append(window["share"])
+        close_all(windows)
     for row in stats.values():
         row["keys"] = len(row["keys"])
     return stats
@@ -92,24 +109,29 @@ def percentile(values, q):
     return s[min(len(s) - 1, int(q * len(s)))] if s else 0.0
 
 
-def read_reacts(path):
+def read_reviewed(path):
     if not os.path.exists(path):
         return {}
     with open(path, encoding="utf-8") as fh:
         rows = list(csv.DictReader(fh, delimiter="\t"))
-    return {(int(r["instance"]), int(r["spell"])): r["react"] for r in rows if r.get("react")}
+    return {(int(r["instance"]), int(r["spell"])): r for r in rows if r.get("react")}
 
 
 def write_review(stats, path):
-    reacts = read_reacts(path)
+    reviewed = read_reviewed(path)
     rows = [(k, v) for k, v in stats.items() if v["applications"] >= MIN_APPLICATIONS]
     rows.sort(key=lambda kv: (kv[0][0], -kv[1]["deaths"], -percentile(kv[1]["shares"], 0.5)))
+    lines = []
+    for (instance, spell), v in rows:
+        old = reviewed.pop((instance, spell), None)
+        lines.append([str(instance), v["zone"], str(spell), v["name"], str(v["applications"]),
+                      str(v["keys"]), str(v["deaths"]), "%.2f" % percentile(v["shares"], 0.5),
+                      "%.2f" % percentile(v["shares"], 0.9), old["react"] if old else ""])
+    lines += [[old[c] for c in COLUMNS] for _, old in sorted(reviewed.items())]
     with open(path, "w", encoding="utf-8", newline="") as fh:
         fh.write("\t".join(COLUMNS) + "\n")
-        for (instance, spell), v in rows:
-            fh.write("\t".join([str(instance), v["zone"], str(spell), v["name"], str(v["applications"]),
-                                str(v["keys"]), str(v["deaths"]), "%.2f" % percentile(v["shares"], 0.5),
-                                "%.2f" % percentile(v["shares"], 0.9), reacts.get((instance, spell), "")]) + "\n")
+        for line in lines:
+            fh.write("\t".join(line) + "\n")
 
 
 def gen(review_path, out_path):

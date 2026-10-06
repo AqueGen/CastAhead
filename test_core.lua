@@ -33,13 +33,15 @@ UnitCreatureFamily = function() return nil end
 -- UNIT_AURA's updateInfo is Secret in instances, so Core enumerates instead.
 local playerAuras = {}
 local auraSounds, removedSounds, auraSoundSeq, auraBySpell = {}, {}, 0, {}
-local lockdown = false
+local lockdown, chatLock, refuseSound = false, false, false
+C_ChatInfo = { InChatMessagingLockdown = function() return chatLock end }
 C_UnitAuras = {
     GetAuraDataByIndex = function(unit, index, filter)
         if unit ~= "player" or filter ~= "HARMFUL" then return nil end
         return playerAuras[index]
     end,
     AddAuraSound = function(trigger, info)
+        if refuseSound then return nil end
         auraSoundSeq = auraSoundSeq + 1
         auraSounds[auraSoundSeq] = { trigger = trigger, info = info }
         return auraSoundSeq
@@ -2425,6 +2427,31 @@ check(Registered() == DEF, "a settings change in combat leaves the registered so
 lockdown = false
 fire("PLAYER_REGEN_ENABLED")
 check(Registered() == DEF .. " " .. DODGE, "and the refresh happens once combat ends, got " .. Registered())
+CastAheadDB = { disabled = { [901] = true } }
+chatLock = true
+fire("PLAYER_ENTERING_WORLD")
+check(Registered() == DEF .. " " .. DODGE, "while adding sounds is locked down the registered ones stay, got " .. Registered())
+chatLock = false
+fire("ADDON_RESTRICTION_STATE_CHANGED", 5, 0)
+check(Registered() == DEF, "and the refresh happens when the restriction lifts, got " .. Registered())
+CastAheadDB = {}
+refuseSound = true
+fire("PLAYER_ENTERING_WORLD")
+check(Registered() == "", "a sound the game refuses is not counted, got " .. Registered())
+refuseSound = false
+fire("PLAYER_REGEN_ENABLED")
+check(Registered() == DEF .. " " .. DODGE, "and it is tried again after the next pull, got " .. Registered())
+CastAheadDB = { voice = false }
+fire("PLAYER_ENTERING_WORLD")
+check(Registered() == "", "the voice switch off registers nothing, got " .. Registered())
+CastAheadDB = {}
+chatLock = true
+IsInInstance = function() return false end
+fire("PLAYER_ENTERING_WORLD")
+check(Registered() == "", "leaving the dungeon removes the sounds even while adding is locked down, got " .. Registered())
+chatLock = false
+IsInInstance = function() return true end
+fire("PLAYER_ENTERING_WORLD")
 IsInInstance = function() return false end
 fire("PLAYER_ENTERING_WORLD")
 check(Registered() == "", "leaving the dungeon removes every debuff sound, got " .. Registered())
@@ -2455,6 +2482,9 @@ auraBySpell[901] = nil
 fire("UNIT_AURA", "player")
 advance(0.1)
 check(CenterLines()[1] == "Defensive", "a debuff with no expiry shows the call without a number, got " .. tostring(CenterLines()[1]))
+CastAheadCore.Reapply()
+advance(0.1)
+check(CenterLines()[1] == "Defensive", "a settings change keeps a debuff that is still on you in the centre, got " .. tostring(CenterLines()[1]))
 auraBySpell[900] = { spellId = 900, expirationTime = now + 1 }
 fire("UNIT_AURA", "player")
 advance(1.5)

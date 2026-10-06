@@ -2110,6 +2110,10 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         end
         return
     end
+    if event == "ADDON_RESTRICTION_STATE_CHANGED" then
+        if CastAheadDebuffCalls then CastAheadDebuffCalls.Retry() end
+        return
+    end
     if event == "ADDON_LOADED" then
         if unit == "CastAhead" then
             CastAheadConfig.AdoptOldName()
@@ -2172,7 +2176,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
             CastAheadRecorder.EnsureKey()
         end
         Record("PULL", nil, event == "PLAYER_REGEN_DISABLED" and "in" or "out")
-        if event == "PLAYER_REGEN_ENABLED" and CastAheadDebuffCalls then CastAheadDebuffCalls.AfterCombat() end
+        if event == "PLAYER_REGEN_ENABLED" and CastAheadDebuffCalls then CastAheadDebuffCalls.Retry() end
         if event == "PLAYER_REGEN_ENABLED" and CastAheadRecorder and not IsInInstance() then
             CastAheadRecorder.EndKey("left")
         end
@@ -2586,7 +2590,7 @@ end)
 for _, event in ipairs({
     "ADDON_LOADED", "PLAYER_ENTERING_WORLD", "PLAYER_SPECIALIZATION_CHANGED", "SPELLS_CHANGED",
     "ENCOUNTER_START", "ENCOUNTER_END", "CHALLENGE_MODE_START", "CHALLENGE_MODE_COMPLETED",
-    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
+    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ADDON_RESTRICTION_STATE_CHANGED",
     "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH",
     "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP",
     "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",

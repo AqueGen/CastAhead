@@ -74,6 +74,54 @@ def test_scan_counts_applications_keys_deaths_and_health_share_outside_bosses(tm
     assert (2521, 111) not in stats
 
 
+def swing(dst, amount, absorbed=0):
+    f = ["SWING_DAMAGE", MOB, '"Mob"', "0xa48", "0x80000000", dst, '"A-Realm-EU"', "0x512", "0x80000000",
+         MOB, "0000000000000000", "27863038", "27866047"] + ["0"] * 25
+    f[28], f[30], f[34] = str(amount), "-1", str(absorbed)
+    return stamp(*f)
+
+
+def test_a_death_keeps_the_damage_taken_and_melee_counts_against_the_last_known_health(tmp_path):
+    log = [start(),
+           aura("SPELL_AURA_APPLIED", P1),
+           damage(P1, 600, 1000),
+           swing(P1, 300, absorbed=100),
+           died(P1),
+           aura("SPELL_AURA_APPLIED", P2),
+           aura("SPELL_AURA_APPLIED", P2),
+           damage(P2, 200, 1000),
+           end()]
+    row = scan([write_log(tmp_path, log)])[(2521, 373693)]
+    assert row["deaths"] == 1 and row["applications"] == 3
+    assert sorted(row["shares"]) == [0.2, 1.0]
+
+
+def test_leaving_an_abandoned_key_and_boss_pulls_close_the_open_windows(tmp_path):
+    log = [start(),
+           aura("SPELL_AURA_APPLIED", P1),
+           damage(P1, 100, 1000),
+           stamp("ENCOUNTER_START", "2609", '"Melidrussa"', "8", "5", "2521"),
+           damage(P1, 900, 1000),
+           died(P1),
+           stamp("ENCOUNTER_END", "2609", '"Melidrussa"', "8", "5", "1", "60000"),
+           stamp("ZONE_CHANGE", "2444", '"The Waking Shores"', "0"),
+           aura("SPELL_AURA_APPLIED", P2),
+           stamp("ZONE_CHANGE", "2521", '"Ruby Life Pools"', "8")]
+    stats = scan([write_log(tmp_path, log)])
+    assert stats[(2521, 373693)]["applications"] == 1
+    assert stats[(2521, 373693)]["shares"] == [0.1] and stats[(2521, 373693)]["deaths"] == 0
+
+
+def test_a_rescan_without_a_reviewed_spell_keeps_its_row_and_react(tmp_path):
+    out = tmp_path / "review.tsv"
+    head = "\t".join(["instance", "zone", "spell", "name", "applications", "keys", "deaths",
+                      "median_share", "p90_share", "react"])
+    out.write_text(head + "\n2521\tRuby Life Pools\t373693\tLiving Bomb\t19\t3\t2\t0.40\t0.90\tDEFENSIVE\n", encoding="utf-8")
+    write_review(scan([write_log(tmp_path, [start(), end()])]), str(out))
+    lines = out.read_text(encoding="utf-8").splitlines()
+    assert lines[1].split("\t") == ["2521", "Ruby Life Pools", "373693", "Living Bomb", "19", "3", "2", "0.40", "0.90", "DEFENSIVE"]
+
+
 def test_review_keeps_rows_with_three_applications_and_the_reacts_set_by_hand(tmp_path):
     out = tmp_path / "review.tsv"
     write_review(scan([write_log(tmp_path, LOG)]), str(out))
