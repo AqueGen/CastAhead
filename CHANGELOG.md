@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.14.0](https://github.com/AqueGen/CastAhead/compare/v0.13.0...v0.14.0) (2026-10-06)
+
+
+### Features
+
+* data sync from the 3-5 October logs ([#51](https://github.com/AqueGen/CastAhead/issues/51)) ([aa8d859](https://github.com/AqueGen/CastAhead/commit/aa8d8598cf8169558f1b7a7048e2c4e1578ed0a7))
+* Development mode records everything, and keeps a day of keys ([#52](https://github.com/AqueGen/CastAhead/issues/52)) ([319c4a4](https://github.com/AqueGen/CastAhead/commit/319c4a4b9173b9a96d56211e7df601f5ab5aec0e))
+* key journal, mark panel, wrong-call reports and a coverage check ([#46](https://github.com/AqueGen/CastAhead/issues/46)) ([1329f5a](https://github.com/AqueGen/CastAhead/commit/1329f5a5d18549a242b45facf42222a048d95af7))
+
+
+### Bug Fixes
+
+* Development mode off stops every development tool ([1329f5a](https://github.com/AqueGen/CastAhead/commit/1329f5a5d18549a242b45facf42222a048d95af7))
+* report window opens on first click; marks go to the key of the place they are made ([#50](https://github.com/AqueGen/CastAhead/issues/50)) ([97da61a](https://github.com/AqueGen/CastAhead/commit/97da61af3e0fc15a75a23ff73323df689e9f1fd0))
+* tell same-length spells of one creature apart, and measure a cast that turns into a channel ([#48](https://github.com/AqueGen/CastAhead/issues/48)) ([1329f5a](https://github.com/AqueGen/CastAhead/commit/1329f5a5d18549a242b45facf42222a048d95af7))
+
 ## [0.13.0](https://github.com/AqueGen/CastAhead/compare/v0.12.0...v0.13.0) (2026-10-03)
 
 
