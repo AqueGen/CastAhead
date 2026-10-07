@@ -547,11 +547,19 @@ local function EntryLabel(e)
     return IconLabel(icon, name)
 end
 
-local LIST_ROWS, LIST_ROW_H = 8, 20
+local LIST_MIN_ROWS, LIST_ROW_H = 4, 20
 local LIST_TOP = -48
-local LIST_H = 314
-local LIST_TITLES = { small = "Small defensive", big = "Big defensive", heal = "Heal after the hit" }
+local LIST_FOOT = 92
 local LIST_ORDER = { "small", "big", "heal" }
+
+local function ListRows()
+    local n = LIST_MIN_ROWS
+    for _, size in ipairs(LIST_ORDER) do n = math.max(n, #CastAheadSaves.List(size)) end
+    return n
+end
+
+local function ListHeight(rows) return -LIST_TOP + rows * LIST_ROW_H + LIST_FOOT end
+local LIST_TITLES = { small = "Small defensive", big = "Big defensive", heal = "Heal after the hit" }
 
 local function RefreshAll()
     for _, refresh in ipairs(refreshers) do refresh() end
@@ -577,7 +585,7 @@ end
 local function BuildSaveList(panel, size, column, hint)
     local S = CastAheadSaves
     local title = LIST_TITLES[size]
-    local group = BuildGroup(panel, title, column, LIST_H)
+    local group = BuildGroup(panel, title, column, ListHeight(LIST_MIN_ROWS))
     if hint then
         local line = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         line:SetPoint("TOPLEFT", group.title, "BOTTOMLEFT", 0, -3)
@@ -611,7 +619,8 @@ local function BuildSaveList(panel, size, column, hint)
     end
 
     local rows = {}
-    for i = 1, LIST_ROWS do
+    local function Row(i)
+        if rows[i] then return rows[i] end
         local y = LIST_TOP - (i - 1) * LIST_ROW_H
         local hit = CreateFrame("Button", nil, group)
         hit:SetSize(COL_W - 44, LIST_ROW_H)
@@ -629,14 +638,11 @@ local function BuildSaveList(panel, size, column, hint)
         remove:SetPoint("TOPRIGHT", group, "TOPRIGHT", -8, y)
         remove:SetScript("OnClick", function() Remove(i) end)
         rows[i] = { text = text, remove = remove, hit = hit }
+        return rows[i]
     end
-
-    local more = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    more:SetPoint("TOPLEFT", group, "TOPLEFT", 12, LIST_TOP - LIST_ROWS * LIST_ROW_H - 2)
 
     local box = CreateFrame("EditBox", nil, group, "InputBoxTemplate")
     box:SetSize(COL_W - 96, 20)
-    box:SetPoint("TOPLEFT", group, "TOPLEFT", 18, LIST_TOP - LIST_ROWS * LIST_ROW_H - 18)
     box:SetAutoFocus(false)
     addBoxes[#addBoxes + 1] = box
     local add = CreateFrame("Button", nil, group, "UIPanelButtonTemplate")
@@ -694,7 +700,9 @@ local function BuildSaveList(panel, size, column, hint)
 
     local function Paint()
         local list = S.List(size)
-        for i, row in ipairs(rows) do
+        local n = ListRows()
+        for i = 1, math.max(#list, #rows, 1) do
+            local row = Row(i)
             row.text:SetText(list[i] and EntryLabel(list[i]) or "")
             row.remove:SetShown(list[i] ~= nil)
             row.hit:SetShown(list[i] ~= nil)
@@ -703,7 +711,9 @@ local function BuildSaveList(panel, size, column, hint)
             rows[1].text:SetText(size == "heal" and "|cffaaaaaaEmpty - no heal up call|r"
                 or "|cffaaaaaaEmpty - this call shows no button|r")
         end
-        more:SetText(#list > LIST_ROWS and string.format("|cffaaaaaa+%d more|r", #list - LIST_ROWS) or "")
+        box:ClearAllPoints()
+        box:SetPoint("TOPLEFT", group, "TOPLEFT", 18, LIST_TOP - n * LIST_ROW_H - 6)
+        group:SetHeight(ListHeight(n))
         reason:SetText("")
     end
     table.insert(refreshers, Paint)
@@ -712,7 +722,10 @@ local function BuildSaveList(panel, size, column, hint)
 end
 
 function BuildDefensives(panel)
-    local group = BuildGroup(panel, "Defensive calls", 1, LIST_H)
+    local group = BuildGroup(panel, "Defensive calls", 1, ListHeight(LIST_MIN_ROWS))
+    local function Fit() group:SetHeight(ListHeight(ListRows())) end
+    table.insert(refreshers, Fit)
+    table.insert(listRefreshers, Fit)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, SaveRefresh)
     local boss = BuildSwitch(panel, "bossAdapter", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, function(on)
         Redraw()
