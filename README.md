@@ -35,6 +35,22 @@ The early warning ("tank buster soon") is a slider in seconds, off by default: o
 
 Icon rows step sideways by the words under them, so labels never touch; **Fixed spacing** in the Icon size group steps by icon plus a gap instead, for rows that pack identically every time. **Layer** in the same group is the icons' frame strata, BACKGROUND by default: above every nameplate and under the rest of the UI, like a plate; go higher to put the icons over your bars, DIALOG or above if a nameplate addon lifts its plates into the UI.
 
+## Defensive calls (alpha)
+
+Cast Ahead can also tell you when to press a defensive. It says "small defensive" or "big defensive" (SMALL SAVE and BIG SAVE on screen), with the icon of your own spec's button. The calls come from three places: trash casts, dangerous debuffs on you (sound only), and boss abilities read from DBM or BigWigs bars. Which call a spell gets comes from a table built from measured top-player runs: 228 spells and 90 aliases.
+
+Buttons ship for these specs so far:
+
+- Warlock, all three specs: Dark Pact and Unending Resolve.
+- Demon Hunter, Havoc and Devourer: Blur and Darkness. Vengeance: Demon Spikes and Fiery Brand, with Metamorphosis as the fallback.
+- Paladin, Retribution and Holy: Divine Protection and Divine Shield. Protection: Ardent Defender and Guardian of Ancient Kings.
+
+Other specs get the generic call without a button icon. More specs will follow.
+
+To change a button, open the Defensives tab in the settings. It has a "Defensive calls" switch, a "Boss calls from DBM / BigWigs" switch, a small and a big button picker for your current spec, and Reset to default. The status line shows which boss mod is connected. Boss calls need DBM or BigWigs installed; without one, trash and debuff calls still work.
+
+Boss coverage is partial today. About 47% of boss threats have a DBM module timer the addon can hear, because bars that exist only in Blizzard's own timeline give addons no callback. Schedules counted from the pull are the planned next step.
+
 ## Reporting a wrong call
 
 Turn on Development mode in the settings, then the key journal on the Development tab. While you are in a dungeon a small panel lists the mobs Cast Ahead tracked in the last two minutes. Pick the one it got wrong (or none, to mark the whole moment) and press Mark, or Mark + note to type what really happened; Enter saves the note. The same two actions can be bound under Key Bindings > Cast Ahead. After the key, `/ca report` gives the text to paste into a [wrong call issue](https://github.com/AqueGen/CastAhead/issues/new?template=wrong-call.yml) or a CurseForge comment. The journal holds spell and creature ids and timings only, no names of people.
