@@ -398,12 +398,20 @@ check(M.Advice(saveRow) == M.ADVICE.SMALL, "a tank gets the tank verdict")
 local kickRow = { spell = 901, cast = 2.0, kickable = true, save = { TANK = "BIG" } }
 check(M.Advice(kickRow) == M.ADVICE.KICK, "a kickable cast still says interrupt")
 check(M.Advice({ spell = 902, prio = "KICK", save = { TANK = "BIG" } }) == M.ADVICE.KICK, "a curated kick still wins")
-check(M.Advice({ spell = 903, prio = "DODGE", save = { TANK = "BIG" } }) == M.ADVICE.BIG, "BIG outranks a curated dodge")
+check(M.Advice({ spell = 903, prio = "DODGE", save = { TANK = "BIG" } }) == M.ADVICE.DODGE, "a curated dodge outranks BIG")
+check(M.Advice({ spell = 903, prio = "TARGET", save = { TANK = "BIG" } }) == M.ADVICE.BIG, "BIG outranks a curated target")
+check(M.Advice({ spell = 903, prio = "TARGET", dispel = "Poison", save = { TANK = "BIG" } }) == M.ADVICE.POISON, "a dispel outranks BIG")
+check(M.Advice({ spell = 903, prio = "BLEED", save = { TANK = "BIG" } }) == M.ADVICE.BIG, "BIG outranks a curated bleed")
 check(M.IsSave(M.ADVICE.BIG) and M.IsSave(M.ADVICE.SMALL) and not M.IsSave(M.ADVICE.AOE), "IsSave names the two save calls")
 local savedPlayerRole = M.PlayerRole
 M.PlayerRole = function() return nil end
 check(M.Important({ spell = 904, save = { TANK = "SMALL" } }), "a save row is important even with the role filter off")
 check(not M.Important({ spell = 905, kickable = true, save = { TANK = "BIG" } }), "a kickable save row is not important by its verdict")
+local savedCanHandle = M.PlayerCanHandle
+M.PlayerCanHandle = function() return false end
+check(not M.Important({ spell = 906, prio = "MAGIC", save = { TANK = "BIG" } }), "a dispel row the player cannot handle is not made important by a save it does not call")
+check(M.Important({ spell = 907, prio = "TARGET", save = { TANK = "BIG" } }), "a save that replaces a target call is important")
+M.PlayerCanHandle = savedCanHandle
 M.PlayerRole = savedPlayerRole
 M.SpecRole = function() return nil end
 check(M.Advice(saveRow) == M.ADVICE.AOE, "outside the game no role means no save call")

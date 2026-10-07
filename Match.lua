@@ -156,10 +156,15 @@ function M.IsSave(advice)
     return advice == M.ADVICE.SMALL or advice == M.ADVICE.BIG
 end
 
+local SAVE_REPLACES = {
+    [M.ADVICE.AOE] = true, [M.ADVICE.TANK] = true, [M.ADVICE.TARGET] = true,
+    [M.ADVICE.BLEED] = true, [M.ADVICE.ALERT] = true,
+}
+
 function M.Advice(row, interruptible)
     if not row then return nil end
     local base = BaseAdvice(row, interruptible)
-    if base == M.ADVICE.KICK or base == M.ADVICE.CC then return base end
+    if base and not SAVE_REPLACES[base] then return base end
     return M.SaveAdvice(row) or base
 end
 
@@ -374,8 +379,7 @@ M.PlayerCanHandle = function() return true end
 -- player can act on it. Kept as functions here so the display filter and the
 -- sound gate agree on the meaning.
 function M.Important(row)
-    local base = BaseAdvice(row)
-    if M.SaveAdvice(row) and base ~= M.ADVICE.KICK and base ~= M.ADVICE.CC then return true end
+    if M.IsSave(M.Advice(row)) then return true end
     if not row.prio then return false end
     local hides = M.ROLE_HIDES[M.PlayerRole()]
     if hides and hides[row.prio] then return false end

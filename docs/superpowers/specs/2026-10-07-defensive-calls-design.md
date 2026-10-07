@@ -34,7 +34,7 @@ This feature reverses two earlier decisions for itself only: the 2026-10-01 feat
 ### Calls
 
 - New advice keys `SMALL` (label `SMALL SAVE`, say "small defensive") and `BIG` (label `BIG SAVE`, say "big defensive") in `Match.ADVICE`, with `_soon` clips.
-- One alert per call, as settled in PR #21. Priority: `KICK` / `CC` > `BIG` > `SMALL` > `TANK` / `AOE` / the rest. A cast that has a verdict for the player's role replaces the generic `AOE` call for that player.
+- One alert per call, as settled in PR #21. Priority: `KICK` / `CC` / `DODGE` / `FRONTAL` / `SWITCH` / dispels > `BIG` > `SMALL` > `AOE` / `TANK` / `TARGET` / `BLEED` / `ALERT`. A cast that has a verdict for the player's role replaces only an `AOE`, `TANK`, `TARGET`, `BLEED` or `ALERT` call (or no call) for that player.
 - Centre block shows the icon of the first spell in the spec's list for that size, the label and the countdown. Specs without a table show the threatening spell's own icon, as the centre block does today.
 
 ### Triggers
@@ -58,7 +58,7 @@ New Defensives tab in `Options.lua`, reads and writes through `Config.lua`:
 ## Testing
 
 `test_core.lua` harness additions:
-- verdict priority (`KICK` beats `BIG`, `BIG` replaces `AOE` for a matching role);
+- verdict priority (`KICK` / `DODGE` / dispels beat `BIG`, `BIG` replaces `AOE` / `TARGET` for a matching role);
 - button lookup per spec, override from settings, generic fallback for an unsupported spec;
 - a stubbed BigWigs bar and DBM timer produce a call at bar end minus lead, and stop/pause cancel or hold it;
 - `AddAuraSound` registration never happens in combat;
