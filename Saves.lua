@@ -49,7 +49,7 @@ local auraPending = false
 
 local function ClearAuraSounds()
     for i = #auraIDs, 1, -1 do
-        C_UnitAuras.RemoveAuraSound(auraIDs[i])
+        pcall(C_UnitAuras.RemoveAuraSound, auraIDs[i])
         auraIDs[i] = nil
     end
 end
@@ -68,10 +68,10 @@ local function RegisterAuraSounds()
     for spellID, row in pairs(CastAheadDefensives and CastAheadDefensives.spells or {}) do
         local advice = row.aura and M.SaveAdvice({ save = row })
         if advice then
-            local id = C_UnitAuras.AddAuraSound(Enum.UnitAuraSoundTrigger.Added, {
+            local ok, id = pcall(C_UnitAuras.AddAuraSound, Enum.UnitAuraSoundTrigger.Added, {
                 unitToken = "player", spellID = spellID,
                 soundFileName = SOUND_ROOT .. advice.file .. ".ogg", outputChannel = "Master" })
-            if id then auraIDs[#auraIDs + 1] = id end
+            if ok and id then auraIDs[#auraIDs + 1] = id end
         end
     end
 end

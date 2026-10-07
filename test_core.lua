@@ -2543,6 +2543,8 @@ do
     CastAheadSaves.Refresh()
     check(CastAheadSaves.AuraSoundCount() == 0, "switching save calls off removes them")
     CastAheadConfig.SetEnabled("saveCalls", true)
+    C_UnitAuras.AddAuraSound = function() error("restricted") end
+    check(pcall(CastAheadSaves.Refresh) and CastAheadSaves.AuraSoundCount() == 0, "a failing AddAuraSound is skipped")
     C_UnitAuras.AddAuraSound, C_UnitAuras.RemoveAuraSound = nil, nil
     C_ChatInfo, InCombatLockdown, Enum.UnitAuraSoundTrigger = nil, nil, nil
     CastAheadDefensives = { spells = {}, alias = {} }
@@ -2551,6 +2553,11 @@ end
 
 GetSpecialization, GetSpecializationRole, GetSpecializationInfo, IsPlayerSpell = nil, nil, nil, nil
 CastAheadDefensives = { spells = {}, alias = {} }
+CastAheadDB = {}
+check(CastAheadConfig.Enabled("saveCalls") and CastAheadConfig.Enabled("bossAdapter"), "save and boss calls are on by default")
+CastAheadConfig.SetEnabled("bossAdapter", false)
+check(CastAheadDB.bossAdapter == false and CastAheadConfig.Enabled("saveCalls"), "the boss switch is separate")
+CastAheadDB = nil
 CastAheadCore.ReapplyData()
 CastAheadDB = nil
 
