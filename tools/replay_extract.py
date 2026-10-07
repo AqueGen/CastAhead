@@ -25,12 +25,14 @@ Writes a Lua table, one entry per keystone run:
     }
 
 `u` is a nameplate slot, 1..40, recycled the way the game recycles unit
-tokens. Channels are left out: the log records no channel length, so there is
-nothing honest to replay for them.
+tokens. A pure channel (no cast bar, listed as a channel in the client's spell
+data passed with --channels) replays as CHAN at its SPELL_CAST_SUCCESS and
+CHANEND when its aura leaves, `full` when it ran at least 90% of its length.
 """
 import csv
 import glob
 import io
+import json
 import sys
 from collections import defaultdict
 
@@ -39,6 +41,7 @@ LINGER = 45.0          # a creature quiet this long has left the nameplate range
 LEVEL_INDEX = 30       # advanced block on SPELL_CAST_SUCCESS: caster level
 POWER_INDEX = 22       # ... and its power type (0 mana, 1 rage, 3 energy, ...)
 HOSTILE = 0x40
+CHANNEL_FULL = 0.9     # gen.py CHANNEL_FULL
 
 
 def stamp(s):
@@ -63,6 +66,7 @@ class Run:
         self.level = {}         # guid -> (level, power), from the first SUCCESS
         self.kickable = {}      # (npc, spell) -> bool, from MDT
         self.open = {}          # guid -> (spell, t) of the cast in progress
+        self.channel = {}       # guid -> (spell, t) of the pure channel in progress
         self.pending_add = {}   # guid -> npc, waiting for a level
 
     def touch(self, guid, t):
@@ -90,6 +94,7 @@ class Run:
         slot = self.slot.pop(guid, None)
         self.pending_add.pop(guid, None)
         self.open.pop(guid, None)
+        self.channel.pop(guid, None)
         if slot is not None:
             event = {"t": t, "e": "REMOVE", "u": slot}
             if dead:
@@ -150,7 +155,8 @@ def kickable_from(mdt_path):
     return flags
 
 
-def scan(path, runs, kickable):
+def scan(path, runs, kickable, channels=None):
+    channels = channels or {}
     run = None
     in_boss = False
     known = levels_in(path)
@@ -220,6 +226,20 @@ def scan(path, runs, kickable):
                     if opened[2] is not None:
                         opened[2]["target"] = dst not in ("0000000000000000", "")
                     run.cast("STOP", src, spell, t)
+                elif not opened and spell in channels:
+                    run.channel[src] = (spell, t)
+                    run.cast("CHAN", src, spell, t)
+            elif ev == "SPELL_AURA_REMOVED":
+                try:
+                    spell = int(p[9])
+                except (ValueError, IndexError):
+                    continue
+                running = run.channel.get(src)
+                if running and running[0] == spell:
+                    run.channel.pop(src)
+                    event = run.cast("CHANEND", src, spell, t)
+                    if event is not None:
+                        event["full"] = t - running[1] >= channels[spell] * CHANNEL_FULL
             elif ev == "SPELL_CAST_START":
                 run.touch(src, t)
                 try:
@@ -252,7 +272,7 @@ def write(runs, out_path):
             for key in ("u", "level", "power", "npc", "spell"):
                 if key in e:
                     fields.append("%s = %d" % (key, e[key]))
-            for key in ("on", "kick", "dead", "target"):
+            for key in ("on", "kick", "dead", "target", "full"):
                 if key in e:
                     fields.append("%s = %s" % (key, "true" if e[key] else "false"))
             out.write("        { %s },\n" % ", ".join(fields))
@@ -266,6 +286,12 @@ def main():
         print(__doc__)
         return 1
     args = sys.argv[1:]
+    channels = {}
+    for arg in [a for a in args if a.startswith("--channels=")]:
+        args.remove(arg)
+        for spell, times in json.load(io.open(arg.split("=", 1)[1], encoding="utf-8")).items():
+            if times.get("channel") and not times.get("cast"):
+                channels[int(spell)] = float(times["channel"])
     mdt_path = None
     if args[-1].endswith(".json"):
         mdt_path = args.pop()
@@ -277,7 +303,7 @@ def main():
     runs = []
     for path in files:
         print("reading %s" % path)
-        scan(path, runs, kickable)
+        scan(path, runs, kickable, channels)
     write(runs, out_path)
     casts = sum(1 for r in runs for e in r.events if e["e"] == "STOP")
     print("%d runs, %d completed casts -> %s" % (len(runs), casts, out_path))

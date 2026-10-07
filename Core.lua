@@ -147,6 +147,7 @@ local tuning = {
     claimWindow = 2.0,         -- how far from its prediction a start may be claimed by it
     lateClaimMax = 4.0,        -- how long an overdue prediction may still claim a start
     claimMargin = 1.0,         -- a rival with another call almost as close to the start leaves it unclaimed
+    firstChannel = true,       -- a plate's first channel is the only channel its creatures have
 }
 
 -- Population: how many of each creature MDT places in this dungeon (Packs.lua,
@@ -1529,6 +1530,22 @@ local function SpellTargeted(unit)
     end
 end
 
+local function OnlyChannel(state)
+    local npcs = state.npc and { [state.npc] = true } or state.npcSet
+    if not npcs then return nil end
+    local isDisabled = CastAheadUI and CastAheadUI.IsDisabled
+    local only
+    for npc in pairs(npcs) do
+        for _, row in ipairs(byNPC[npc] or {}) do
+            if row.channel and not (isDisabled and isDisabled(row.spell)) then
+                if only then return nil end
+                only = row
+            end
+        end
+    end
+    return only
+end
+
 local function OnCastStart(unit, channel)
     -- Out-of-combat casts (patrol flavour channels) tell us nothing about a
     -- pull's rotation, so they are ignored - the poll may be up to a tick
@@ -1591,9 +1608,19 @@ local function OnCastStart(unit, channel)
     -- Only a track with no countdown may claim it: one with a schedule that
     -- put the cast elsewhere just said this is not its spell, and taking it
     -- anyway finished its timeline event early and voiced the wrong call.
-    if not best and identifiedCount == 1 and not identified.nextAt then
+    if not best and identifiedCount == 1 and not identified.nextAt and not identified.firstChannel then
         best = identified
     end
+    if not best and channel and tuning.firstChannel and not state.channelSeen and identifiedCount == 0 then
+        local row = OnlyChannel(state)
+        if row then
+            best = NewTrack(state, row.cast, true)
+            best.candidates = { row }
+            best.ambiguous = false
+            best.firstChannel = true
+        end
+    end
+    if channel then state.channelSeen = true end
     if best and tuning.claimMargin then
         local call = CastAheadMatch.ConsensusAdvice(best.candidates)
         for _, rival in ipairs(eligible) do

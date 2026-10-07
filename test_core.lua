@@ -1321,6 +1321,26 @@ fire("UNIT_SPELLCAST_CHANNEL_STOP", unit)
 check(not IconShown(610), "an interrupted channel is not identified by its shortened length")
 reset()
 
+do
+    local savedLevel = levels[unit]
+    levels[unit] = 94
+    enter()
+    fire("UNIT_SPELLCAST_CHANNEL_START", unit)
+    local firstChannel = CastAheadCore.Casting(unit)
+    check(firstChannel and firstChannel.row and firstChannel.row.spell == 610,
+        "the plate's first channel is named at its start when it is the only channel its creatures have")
+    advance(1.4)
+    fire("UNIT_SPELLCAST_CHANNEL_STOP", unit)
+    advance(5.0)
+    fire("UNIT_SPELLCAST_CHANNEL_START", unit)
+    local laterChannel = CastAheadCore.Casting(unit)
+    check(not (laterChannel and laterChannel.row),
+        "a later channel on the same plate is not named by that rule, it may be a death channel")
+    fire("UNIT_SPELLCAST_CHANNEL_STOP", unit)
+    reset()
+    levels[unit] = savedLevel
+end
+
 -- A channel starting exactly where a cast was predicted is not that cast.
 -- Attributing it across kinds handed the channel the cast's track: the cast's
 -- timeline event was finished early and its call was voiced for a spell that
