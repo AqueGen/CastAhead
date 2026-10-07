@@ -2,27 +2,32 @@ CastAheadBossAdapter = {}
 local A = CastAheadBossAdapter
 local M = CastAheadMatch
 local connected
-local barsSeen, encounterAt = false, nil
+local barsSeen, encounterAt, healthWarned = false, nil, false
 local barSpells = {}
 local HEALTH_WAIT = 30
 
 local function Key(source, barKey) return source .. ":" .. tostring(barKey) end
 
+local function Secret(...)
+    if not issecretvalue then return false end
+    for i = 1, select("#", ...) do
+        if issecretvalue((select(i, ...))) then return true end
+    end
+    return false
+end
+
 local function Verdict(spellID)
-    local data = CastAheadDefensives
-    if not data then return nil end
-    local id = data.alias and data.alias[spellID] or spellID
-    local row = data.spells and data.spells[id]
+    local row = M.SaveRow(spellID)
     local advice = row and M.SaveAdvice({ save = row })
-    if not advice or not CastAheadConfig.Enabled("saveCalls") or not CastAheadConfig.Enabled("bossAdapter") then return nil end
-    return id, row.lead or 3, advice
+    if not advice or not CastAheadConfig.Enabled("bossAdapter") then return nil end
+    return spellID, row.lead or 3, advice
 end
 
 function A.OnBar(source, barKey, spellID, duration, now)
     barsSeen = true
     if not CastAheadSaves then return end
     spellID, duration = tonumber(spellID), tonumber(duration)
-    if not (spellID and duration) then return end
+    if not (spellID and duration) or duration <= 0 then return end
     local id, lead, advice = Verdict(spellID)
     if not id then return end
     local key = Key(source, barKey)
@@ -74,23 +79,49 @@ function A.Connect()
     local dbm, bw
     if DBM and DBM.RegisterCallback then
         DBM:RegisterCallback("DBM_TimerBegin", function(_, id, _, timer, _, _, spellId)
+            if Secret(id, timer, spellId) then barsSeen = true return end
             A.OnBar("dbm", id, spellId, timer, GetTime())
         end)
-        DBM:RegisterCallback("DBM_TimerStop", function(_, id) A.OnStop("dbm", id) end)
-        DBM:RegisterCallback("DBM_TimerPause", function(_, id) A.OnPause("dbm", id, GetTime()) end)
-        DBM:RegisterCallback("DBM_TimerResume", function(_, id) A.OnResume("dbm", id, GetTime()) end)
+        DBM:RegisterCallback("DBM_TimerStop", function(_, id)
+            if Secret(id) then return end
+            A.OnStop("dbm", id)
+        end)
+        DBM:RegisterCallback("DBM_TimerPause", function(_, id)
+            if Secret(id) then return end
+            A.OnPause("dbm", id, GetTime())
+        end)
+        DBM:RegisterCallback("DBM_TimerResume", function(_, id)
+            if Secret(id) then return end
+            A.OnResume("dbm", id, GetTime())
+        end)
         DBM:RegisterCallback("DBM_TimerUpdate", function(_, id, elapsed, total)
+            if Secret(id, elapsed, total) then return end
             A.OnUpdate("dbm", id, elapsed, total, GetTime())
         end)
         dbm = true
     end
     if type(BigWigsLoader) == "table" and BigWigsLoader.RegisterMessage then
         BigWigsLoader.RegisterMessage(A, "BigWigs_StartBar", function(_, _, key, text, duration)
+            if Secret(key, text, duration) then barsSeen = true return end
             A.OnBar("bw", text, key, duration, GetTime())
         end)
-        BigWigsLoader.RegisterMessage(A, "BigWigs_StopBar", function(_, _, text) A.OnStop("bw", text) end)
-        BigWigsLoader.RegisterMessage(A, "BigWigs_PauseBar", function(_, _, text) A.OnPause("bw", text, GetTime()) end)
-        BigWigsLoader.RegisterMessage(A, "BigWigs_ResumeBar", function(_, _, text) A.OnResume("bw", text, GetTime()) end)
+        BigWigsLoader.RegisterMessage(A, "BigWigs_Timer", function(_, _, key, duration, _, text, _, _, _, isBarEnabled)
+            if Secret(key, duration, text, isBarEnabled) then barsSeen = true return end
+            if isBarEnabled then return end
+            A.OnBar("bw", text, key, duration, GetTime())
+        end)
+        BigWigsLoader.RegisterMessage(A, "BigWigs_StopBar", function(_, _, text)
+            if Secret(text) then return end
+            A.OnStop("bw", text)
+        end)
+        BigWigsLoader.RegisterMessage(A, "BigWigs_PauseBar", function(_, _, text)
+            if Secret(text) then return end
+            A.OnPause("bw", text, GetTime())
+        end)
+        BigWigsLoader.RegisterMessage(A, "BigWigs_ResumeBar", function(_, _, text)
+            if Secret(text) then return end
+            A.OnResume("bw", text, GetTime())
+        end)
         BigWigsLoader.RegisterMessage(A, "BigWigs_StopBars", function() A.OnStopAll("bw") end)
         BigWigsLoader.RegisterMessage(A, "BigWigs_OnBossDisable", function() A.OnStopAll("bw") end)
         bw = true
@@ -116,8 +147,9 @@ function A.OnEncounter(event)
 end
 
 function A.Tick(now)
-    if encounterAt and connected and not barsSeen and now - encounterAt > HEALTH_WAIT then
-        encounterAt = nil
+    if encounterAt and connected and not barsSeen and not healthWarned and now - encounterAt > HEALTH_WAIT
+        and CastAheadConfig.Enabled("saveCalls") and CastAheadConfig.Enabled("bossAdapter") then
+        encounterAt, healthWarned = nil, true
         local name = connected == "both" and "DBM and BigWigs" or connected
         print("|cff33ff99Cast Ahead|r " .. name .. " sent no boss timers this fight - boss save calls are off until it does.")
     end

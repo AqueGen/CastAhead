@@ -2485,6 +2485,39 @@ reset()
 CastAheadDefensives = { spells = { [100] = { DAMAGER = "BIG", lead = 4.0 } }, alias = {} }
 CastAheadCore.ReapplyData()
 
+-- Save calls off: the cast keeps its old call and its own icon, and no save heads-up comes early.
+do
+    local function CenterLine()
+        for i = 1, #allFrames do
+            local f = allFrames[i]
+            if f.shown and type(f.icon) == "table" and not IsBar(f) and f.timeValue then return f end
+        end
+    end
+    local row100 = CastAheadData[1877][1]
+    CastAheadDB = { centerText = true, leadSeconds = 0 }
+    check(CastAheadMatch.Advice(row100) == CastAheadMatch.ADVICE.BIG, "save calls on: the dps verdict")
+    CastAheadConfig.SetEnabled("saveCalls", false)
+    check(CastAheadMatch.SpecRole() == nil and CastAheadMatch.Advice(row100) == CastAheadMatch.ADVICE.AOE,
+        "save calls off: the old AOE call")
+    reset()
+    enter()
+    castFor(3.0)
+    sounds, spoken, clips = 0, 0, 0
+    advance(15.0)
+    advance(1.5)
+    check(Alerts() == 0, string.format("no save heads-up with save calls off, got %d", Alerts()))
+    advance(3.0)
+    fire("UNIT_SPELLCAST_START", unit)
+    advance(1.0)
+    local line = CenterLine()
+    check(line and line.timeValue:match("^Aoe damage") and line.icon.textureValue == textures[100],
+        "the centre shows the old call with the spell's own icon: " .. tostring(line and line.timeValue))
+    advance(2.0)
+    fire("UNIT_SPELLCAST_STOP", unit)
+    reset()
+    CastAheadConfig.SetEnabled("saveCalls", true)
+end
+
 -- A save call with the voice off still beeps once.
 CastAheadDB = { voice = false }
 sounds, spoken, clips = 0, 0, 0
@@ -2512,6 +2545,20 @@ CastAheadSaves.Cancel("test:2")
 sounds, spoken, clips = 0, 0, 0
 advance(3.0)
 check(Alerts() == 0, "a cancelled call never fires")
+reset()
+
+-- Save calls off: a scheduled call stays quiet, and one whose hit passed meanwhile never fires later.
+CastAheadDB = { centerText = true }
+enter()
+CastAheadSaves.Schedule("test:3", 100, now + 2, now + 5, CastAheadMatch.ADVICE.BIG)
+CastAheadConfig.SetEnabled("saveCalls", false)
+sounds, spoken, clips = 0, 0, 0
+advance(3.0)
+check(Alerts() == 0, "no scheduled call fires with save calls off")
+advance(3.0)
+CastAheadConfig.SetEnabled("saveCalls", true)
+advance(0.1)
+check(Alerts() == 0, "a call whose hit passed while off never fires after switching back on")
 reset()
 
 -- After an update and /reload a new TOC file is missing until a client restart.
@@ -2555,6 +2602,24 @@ do
     role = "TANK"
     fire("PLAYER_SPECIALIZATION_CHANGED", "player")
     check(#removed == 1 and added[#added] == 5, "a spec change swaps the registrations")
+    CastAheadConfig.SetEnabled("sound", false)
+    CastAheadSaves.Refresh()
+    check(CastAheadSaves.AuraSoundCount() == 0, "sound off registers no aura sound")
+    CastAheadConfig.SetEnabled("sound", true)
+    CastAheadConfig.SetEnabled("voice", false)
+    CastAheadSaves.Refresh()
+    check(CastAheadSaves.AuraSoundCount() == 0, "voice off registers no aura sound")
+    CastAheadConfig.SetEnabled("voice", true)
+    local files = {}
+    C_UnitAuras.AddAuraSound = function(trigger, info) files[#files + 1] = info.soundFileName return #files end
+    LibStub = function() return { Fetch = function(_, _, name) return name == "Path" and "custom/path.ogg" or 12345 end } end
+    CastAheadDB.sounds = { BIG = "Path" }
+    CastAheadSaves.Refresh()
+    check(files[#files] == "custom/path.ogg", "a picked sound with a file path replaces the clip")
+    CastAheadDB.sounds = { BIG = "Kit" }
+    CastAheadSaves.Refresh()
+    check(files[#files]:match("Sounds\\en\\BIG%.ogg$"), "a picked sound kit id keeps the clip")
+    LibStub, CastAheadDB.sounds = nil, nil
     CastAheadConfig.SetEnabled("saveCalls", false)
     CastAheadSaves.Refresh()
     check(CastAheadSaves.AuraSoundCount() == 0, "switching save calls off removes them")
@@ -2680,6 +2745,59 @@ do
     fire("ENCOUNTER_END", 1234)
     CastAheadBossAdapter.Connect()
     reset()
+end
+
+-- BigWigs: StartBar keys the call by bar text and takes the spell from the option key.
+do
+    local bw = {}
+    BigWigsLoader = { RegisterMessage = function(_, event, fn) bw[event] = fn end }
+    check(CastAheadBossAdapter.Connect() == "BigWigs", "BigWigs is detected")
+    GetSpecialization = function() return 1 end
+    GetSpecializationRole = function() return "DAMAGER" end
+    CastAheadDefensives = { spells = { [1299684] = { DAMAGER = "BIG", lead = 3.0 } }, alias = {} }
+    local mod = {}
+    reset()
+    enter()
+    sounds, spoken, clips = 0, 0, 0
+    bw.BigWigs_StartBar("BigWigs_StartBar", mod, 1299684, "Sever", 10)
+    advance(7.5)
+    check(Alerts() == 1, string.format("a BigWigs bar calls 3 s before its end, got %d", Alerts()))
+    advance(5)
+    bw.BigWigs_StartBar("BigWigs_StartBar", mod, 1299684, "Sever", 10)
+    bw.BigWigs_StopBar("BigWigs_StopBar", mod, "Sever")
+    sounds, spoken, clips = 0, 0, 0
+    advance(12)
+    check(Alerts() == 0, "StopBar by bar text cancels the call")
+    bw.BigWigs_Timer("BigWigs_Timer", mod, 1299684, 10, 10, "Sever", 1, 0, nil, false)
+    advance(7.5)
+    check(Alerts() == 1, string.format("a timer without a bar still calls, got %d", Alerts()))
+    advance(5)
+    sounds, spoken, clips = 0, 0, 0
+    bw.BigWigs_Timer("BigWigs_Timer", mod, 1299684, 10, 10, "Sever", 1, 0, nil, true)
+    advance(12)
+    check(Alerts() == 0, "a timer with a bar leaves the call to StartBar")
+    issecretvalue = function() return true end
+    local ok, err = pcall(function()
+        bw.BigWigs_StartBar("BigWigs_StartBar", mod, 1299684, "Sever", 10)
+        bw.BigWigs_Timer("BigWigs_Timer", mod, 1299684, 10, 10, "Sever", 1, 0, nil, false)
+        bw.BigWigs_PauseBar("BigWigs_PauseBar", mod, "Sever")
+        bw.BigWigs_ResumeBar("BigWigs_ResumeBar", mod, "Sever")
+        bw.BigWigs_StopBar("BigWigs_StopBar", mod, "Sever")
+        registered.DBM_TimerBegin("DBM_TimerBegin", "t1", "Sever", 10, nil, "cd", 1299684)
+        registered.DBM_TimerUpdate("DBM_TimerUpdate", "t1", 0, 20)
+        registered.DBM_TimerPause("DBM_TimerPause", "t1")
+        registered.DBM_TimerResume("DBM_TimerResume", "t1")
+        registered.DBM_TimerStop("DBM_TimerStop", "t1")
+    end)
+    issecretvalue = nil
+    advance(12)
+    check(ok, "secret bar arguments raise no error: " .. tostring(err))
+    check(Alerts() == 0, string.format("and schedule nothing, got %d", Alerts()))
+    BigWigsLoader = nil
+    CastAheadBossAdapter.Connect()
+    reset()
+    GetSpecialization, GetSpecializationRole = nil, nil
+    CastAheadDefensives = { spells = {}, alias = {} }
 end
 
 do
