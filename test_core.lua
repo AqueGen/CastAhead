@@ -2971,7 +2971,7 @@ do
     local function CenterLine()
         for i = 1, #allFrames do
             local f = allFrames[i]
-            if f.shown and type(f.icon) == "table" and f.extra and f.timeValue then return f end
+            if f.shown and type(f.icon) == "table" and type(f.extra) == "table" and type(f.extra[1]) == "table" and f.timeValue then return f end
         end
     end
     CastAheadSaves.Schedule("test:icons", 100, now + 1, now + 6, CastAheadMatch.ADVICE.SMALL)
@@ -2985,7 +2985,36 @@ do
     line = CenterLine()
     check(line and not line.extra[1].shown and not line.extra[2].shown, "a non-save call shows no extras")
     CastAheadSaves.Cancel("test:icons2")
+    CastAheadSaveButtons[265].small = { 108416, 104773, { use = 452930 } }
+    CastAheadSaves.Refresh()
+    CastAheadSaves.Schedule("test:icons3", 100, now + 0.1, now + 5, CastAheadMatch.ADVICE.SMALL)
+    advance(1)
+    line = CenterLine()
+    check(line and line.icon.textureValue == 2002 and line.extra[1].textureValue == 2001
+        and line.extra[2].shown and line.extra[2].textureValue == 9512, "three ready buttons fill all three icons")
+    CastAheadSaves.Cancel("test:icons3")
+    CastAheadSaveButtons[265].small = { 108416, { use = 452930 } }
+    CastAheadSaves.Refresh()
     reset()
+
+    CastAheadDB = { centerText = true, leadSeconds = 0 }
+    CastAheadDefensives = { spells = { [100] = { DAMAGER = "SMALL", lead = 4.0 } }, alias = {} }
+    CastAheadCore.ReapplyData()
+    enter()
+    castFor(3.0)
+    advance(15.0)
+    advance(1.5)
+    advance(3.0)
+    fire("UNIT_SPELLCAST_START", unit)
+    advance(1.0)
+    line = CenterLine()
+    check(line and line.icon.textureValue == 2002 and line.extra[1].shown and line.extra[1].textureValue == 9512
+        and not line.extra[2].shown, "a live small-save cast shows the spell and the item in the centre")
+    advance(2.0)
+    fire("UNIT_SPELLCAST_STOP", unit)
+    reset()
+    CastAheadDefensives = { spells = {}, alias = {} }
+    CastAheadCore.ReapplyData()
     C_Container, C_Item.GetItemCount = saved.C_Container, saved.GetItemCount
     C_Item.GetItemSpell, C_Item.GetItemCooldown, C_Item.GetItemIconByID = nil, nil, nil
     GetSpecialization, GetSpecializationRole, GetSpecializationInfo, IsPlayerSpell, InCombatLockdown = nil, nil, nil, nil, nil

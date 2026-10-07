@@ -2506,8 +2506,7 @@ local function UpdateCenter(now)
         if pick then
             local icons = pick.icons
             line.icon:SetTexture(icons and icons[1] or SpellIcon(pick.row.spell))
-            local shownExtras = icons and math.min(#icons - 1, 2) or 0
-            if shownExtras < 0 then shownExtras = 0 end
+            local shownExtras = icons and math.min(math.max(#icons - 1, 0), 2) or 0
             line.icon:SetPoint("RIGHT", line.text, "LEFT", -(10 + 24 * shownExtras), 0)
             for k = 1, 2 do
                 local x = line.extra[k]
