@@ -3336,7 +3336,9 @@ do
     local small = CastAheadSaves.Available("small")
     check(small[1].kind == "item" and small[1].id == 5512, "Dark Pact on cooldown: the analog Healthstone leads")
     check(ignoreGCD == true, "the cooldown query ignores the global cooldown")
-    check(#small == 3 and small[2].id == 5509 and small[3].id == 262000, "stones and potion follow")
+    check(#small == 2 and small[2].id == 5509, "the other stone follows; health potions are not small saves")
+    local heal = CastAheadSaves.Available("heal")
+    check(#heal == 3 and heal[3].id == 262000, "the health potion stays in the heal list")
 
     advance(1)
     secret = true
