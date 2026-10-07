@@ -97,6 +97,7 @@ local function MergeCuration()
         for i = 1, #rows do
             rows[i].prio = CastAheadPriority and CastAheadPriority[rows[i].spell] or nil
             rows[i].dispel = learned and learned[rows[i].spell] or nil
+            rows[i].save = CastAheadDefensives and CastAheadDefensives.spells[rows[i].spell] or nil
         end
     end
 end
@@ -237,6 +238,8 @@ local ADVICE_SOUND = {           -- keyed by CastAheadMatch.ADVICE key
     BLEED = "ALARM_CLOCK_WARNING_3",
     SWITCH = "RAID_WARNING",
     ALERT = "RAID_WARNING",
+    SMALL = "ALARM_CLOCK_WARNING_2",
+    BIG = "RAID_WARNING",
 }
 
 -- Default on: only casts in the curated priority set matter enough for icons,
@@ -277,6 +280,12 @@ end
 -- spec can act on. Off, or outside the game, every curated cast counts.
 CastAheadMatch.PlayerRole = function()
     if not CastAheadConfig.Enabled("roleFilter") then return nil end
+    if not (GetSpecialization and GetSpecializationRole) then return nil end
+    local spec = GetSpecialization()
+    return spec and GetSpecializationRole(spec) or nil
+end
+
+CastAheadMatch.SpecRole = function()
     if not (GetSpecialization and GetSpecializationRole) then return nil end
     local spec = GetSpecialization()
     return spec and GetSpecializationRole(spec) or nil
@@ -481,7 +490,7 @@ local function PlayAdviceSound(advice, lead, candidates)
     if not CastAheadConfig.Enabled("sound") then return end
     -- The heads-up is a number of seconds now; 0 means the player does not
     -- want it at all.
-    if lead and CastAheadConfig.Lead() <= 0 then return end
+    if lead and CastAheadConfig.Lead() <= 0 and not CastAheadMatch.IsSave(advice) then return end
     Alert(advice, lead, candidates, CastAheadConfig.Enabled("voice"))
 end
 
@@ -2103,6 +2112,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         -- dispels the character knows.
         if event == "SPELLS_CHANGED" or unit == "player" then
             InvalidateCapabilities()
+            CastAheadSaves.Refresh()
             if CastAheadCore then CastAheadCore.Reapply() end
         end
         return
@@ -2416,7 +2426,8 @@ local function CenterPick(now)
         if c and c.endAt and c.endAt > now and Announceable(c.candidates) then
             local advice = CastAheadMatch.ConsensusAdvice(c.candidates, state.interruptible)
             if advice then
-                centerPicks[#centerPicks + 1] = { endAt = c.endAt, advice = advice, row = c.row }
+                centerPicks[#centerPicks + 1] = { endAt = c.endAt, advice = advice, row = c.row,
+                                                  icon = CastAheadSaves.Icon(advice) }
             else
                 -- Disagreement is still a cast going out: show both answers
                 -- and let the player pick. Nothing is spoken for these.
@@ -2439,6 +2450,9 @@ local function CenterPick(now)
                 end
             end
         end
+    end
+    if CastAheadConfig.Enabled("saveCalls") then
+        for _, pick in ipairs(CastAheadSaves.Pending(now)) do centerPicks[#centerPicks + 1] = pick end
     end
     table.sort(centerPicks, function(a, b) return a.endAt < b.endAt end)
     return centerPicks
@@ -2464,7 +2478,7 @@ local function UpdateCenter(now)
     for i = 1, CENTER_LINES do
         local line, pick = f.lines[i], picks[i]
         if pick then
-            line.icon:SetTexture(SpellIcon(pick.row.spell))
+            line.icon:SetTexture(pick.icon or SpellIcon(pick.row.spell))
             -- "Tank buster 4.0": the response in words, not the category code.
             local say = pick.advice.say
             line.text:SetFormattedText("%s  %.1f", say:sub(1, 1):upper() .. say:sub(2), pick.endAt - now)
@@ -2480,6 +2494,7 @@ end
 frame:SetScript("OnUpdate", function()
     if not dungeon then return end
     local now = GetTime()
+    CastAheadSaves.Tick(now)
     UpdateCenter(now)
     if now >= pollAt then
         pollAt = now + COMBAT_POLL_INTERVAL
@@ -2526,14 +2541,17 @@ frame:SetScript("OnUpdate", function()
                         -- Heads-up shortly before a predicted cast, once each.
                         -- Not for a cast already going out: its own alert
                         -- fired at START, and "soon" is wrong for it anyway.
-                        local lead = CastAheadConfig.Lead()
-                        if lead > 0 and remaining <= lead and not entry.casting
-                            and entry.track and not entry.track.warned then
-                            entry.track.warned = true
+                        if not entry.casting and entry.track and not entry.track.warned then
                             local heads = CastAheadMatch.ConsensusAdvice(entry.candidates)
-                            Record("HEADS", unit, heads and heads.key or "-", Ids(entry.candidates))
-                            PlayAdviceSound(
-                                CastAheadMatch.ConsensusAdvice(entry.candidates), true, entry.candidates)
+                            local lead = CastAheadConfig.Lead()
+                            if CastAheadMatch.IsSave(heads) and CastAheadConfig.Enabled("saveCalls") then
+                                lead = math.max(lead, CastAheadSaves.Lead(entry.candidates[1].spell) or 3)
+                            end
+                            if lead > 0 and remaining <= lead then
+                                entry.track.warned = true
+                                Record("HEADS", unit, heads and heads.key or "-", Ids(entry.candidates))
+                                PlayAdviceSound(heads, true, entry.candidates)
+                            end
                         end
                         -- Tenths only in the last few seconds, where they
                         -- matter; whole numbers stay readable at a glance.
@@ -2596,6 +2614,8 @@ end
 -- the dungeon table load, are plates being tracked, what level did we read, and
 -- how far identification got on each one.
 CastAheadCore = {}
+CastAheadCore.Announce = PlayAdviceSound
+CastAheadCore.ReapplyData = function() extrasMerged = false; MergeCuration() end
 CastAheadCore.LastCandidates = LastCandidates   -- replay harness only
 CastAheadCore.Tracks = function(unit) return plates[unit] and plates[unit].tracks end
 CastAheadCore.Casting = function(unit) return plates[unit] and plates[unit].casting end

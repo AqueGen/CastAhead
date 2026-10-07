@@ -281,8 +281,12 @@ CastAheadExtra = {
     },
 }
 
+CastAheadSaveButtons = {}
+CastAheadDefensives = { spells = {}, alias = {} }
+
 dofile("Config.lua")
 dofile("Match.lua")
+dofile("Saves.lua")
 dofile("Timeline.lua")
 -- UI.lua only needs the stubs above for its option helpers.
 UISpecialFrames = {}
@@ -2425,6 +2429,76 @@ reset()
 CastAheadData[2000] = nil
 GetInstanceInfo = savedGolemInfo
 fire("PLAYER_ENTERING_WORLD")
+CastAheadDB = nil
+
+-- Save calls on trash: the dps verdict replaces AOE, the centre shows the player's button.
+local specRole2 = "DAMAGER"
+GetSpecialization = function() return 1 end
+GetSpecializationRole = function() return specRole2 end
+GetSpecializationInfo = function() return 265 end
+IsPlayerSpell = function(id) return id == 104773 or id == 108416 end
+textures[104773] = 2001
+textures[108416] = 2002
+CastAheadSaveButtons = { [265] = { small = { 108416 }, big = { 104773 } } }
+CastAheadDefensives = { spells = { [100] = { DAMAGER = "BIG", lead = 4.0 } }, alias = {} }
+CastAheadSaves.Refresh()
+CastAheadDB = { centerText = true }
+check(CastAheadSaves.Button("big") == 104773, "the shipped big button for the spec")
+check(CastAheadSaves.Icon(CastAheadMatch.ADVICE.BIG) == 2001, "its icon")
+CastAheadDB.saveButtons = { [265] = { big = 108416 } }
+check(CastAheadSaves.Button("big") == 108416, "an override wins")
+CastAheadDB.saveButtons = { [265] = { big = 999 } }
+check(CastAheadSaves.Button("big") == 104773, "an override the character does not know falls back")
+CastAheadDB.saveButtons = nil
+GetSpecializationInfo = function() return 70 end
+CastAheadSaves.Refresh()
+check(CastAheadSaves.Button("big") == nil, "a spec without a table has no button")
+GetSpecializationInfo = function() return 265 end
+CastAheadSaves.Refresh()
+
+-- Heads-up for a save call fires at the row's own lead even with the global lead off.
+reset()
+CastAheadDB = { centerText = true, leadSeconds = 0 }
+CastAheadCore.ReapplyData()
+enter()
+castFor(3.0)                  -- spell 100 identified, next one in 20 s
+sounds, spoken, clips = 0, 0, 0
+advance(15.0)                 -- 5 s before the next cast: nothing yet
+check(Alerts() == 0, "no heads-up before the save lead")
+advance(1.5)                  -- 3.5 s before: inside lead 4.0
+check(Alerts() == 1, string.format("one save heads-up inside the lead, got %d", Alerts()))
+reset()
+
+-- A save call with the voice off still beeps once.
+CastAheadDB = { voice = false }
+sounds, spoken, clips = 0, 0, 0
+CastAheadCore.Announce(CastAheadMatch.ADVICE.BIG, true)
+CastAheadCore.Announce(CastAheadMatch.ADVICE.SMALL, nil)
+check(sounds == 2 and Alerts() == 2, string.format("each save call beeps once with the voice off, got %d", Alerts()))
+
+-- A scheduled save call fires once at its time and shows in the centre until it ends.
+reset()
+CastAheadDB = { centerText = true }
+enter()
+CastAheadSaves.Schedule("test:1", 100, now + 2, now + 5, CastAheadMatch.ADVICE.BIG)
+sounds, spoken, clips = 0, 0, 0
+advance(1.0)
+check(Alerts() == 0, "a scheduled call is quiet before its time")
+advance(1.5)
+check(Alerts() == 1, "and speaks once at its time")
+advance(1.0)
+check(Alerts() == 1, "only once")
+check(#CastAheadSaves.Pending(now) == 1, "it stays in the centre until the hit")
+advance(2.0)
+check(#CastAheadSaves.Pending(now) == 0, "and leaves after it")
+CastAheadSaves.Schedule("test:2", 100, now + 2, now + 5, CastAheadMatch.ADVICE.BIG)
+CastAheadSaves.Cancel("test:2")
+sounds, spoken, clips = 0, 0, 0
+advance(3.0)
+check(Alerts() == 0, "a cancelled call never fires")
+reset()
+GetSpecialization, GetSpecializationRole, GetSpecializationInfo, IsPlayerSpell = nil, nil, nil, nil
+CastAheadDefensives = { spells = {}, alias = {} }
 CastAheadDB = nil
 
 do
