@@ -540,7 +540,7 @@ local function SaveChoices(spec, size)
 end
 
 function BuildDefensives(panel)
-    local group = BuildGroup(panel, "Defensive calls", 1, 232)
+    local group = BuildGroup(panel, "Defensive calls", 1, 260)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, SaveRefresh)
     local boss = BuildSwitch(panel, "bossAdapter", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 })
 
@@ -577,6 +577,7 @@ function BuildDefensives(panel)
                     end)
             end
         end)
+        dropdown.caption = label
         dropdowns[#dropdowns + 1] = dropdown
         anchor = dropdown
     end
@@ -604,6 +605,7 @@ function BuildDefensives(panel)
         note:SetShown(not shipped)
         for _, dropdown in ipairs(dropdowns) do
             dropdown:SetShown(shipped and true or false)
+            dropdown.caption:SetShown(shipped and true or false)
             dropdown:GenerateMenu()
         end
         reset:SetShown(shipped and true or false)
