@@ -1,6 +1,6 @@
 # Save lists, heal-after calls and the Saves view - design
 
-Date: 2026-10-08. Status: approved in conversation, awaiting written-spec review. Builds on `2026-10-07-defensive-calls-design.md` (same branch, PR #54).
+Date: 2026-10-08. Status: implemented on feat/defensive-calls (PR #54), awaiting in-game checks. Builds on `2026-10-07-defensive-calls-design.md` (same branch, PR #54).
 
 ## Goal
 

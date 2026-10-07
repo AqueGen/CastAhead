@@ -656,7 +656,7 @@ local function BuildSaveList(panel, size, column, hint)
         for _, e in ipairs(entries) do
             root:CreateButton(EntryLabel(e), function()
                 local copy = { unpack(S.List(size)) }
-                copy[#copy + 1] = e
+                copy[#copy + 1] = type(e) == "table" and { use = e.use } or e
                 S.SetList(size, copy)
                 RefreshAll()
             end)

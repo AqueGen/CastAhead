@@ -37,17 +37,23 @@ Icon rows step sideways by the words under them, so labels never touch; **Fixed 
 
 ## Defensive calls (alpha)
 
-Cast Ahead can also tell you when to press a defensive. It says "small defensive" or "big defensive" (SMALL SAVE and BIG SAVE on screen), with the icon of your own spec's button. The calls come from three places: trash casts, dangerous debuffs on you (sound only), and boss abilities read from DBM or BigWigs bars. Which call a spell gets comes from a table built from measured top-player runs.
+Cast Ahead can also tell you when to press a defensive. It says "small defensive" or "big defensive" (SMALL SAVE and BIG SAVE on screen) and shows up to three icons of the buttons you can press right now. The calls come from three places: trash casts, dangerous debuffs on you (sound only), and boss abilities read from DBM or BigWigs bars. Which call a spell gets comes from a table built from measured top-player runs.
 
-Buttons ship for these specs so far:
+Each size has its own list of buttons, in order. If the first one is on cooldown, the next one in the same list takes its place; a small call never offers a big button and the other way round. Healthstones and potions are found in your bags by what they do, so any rank or version of the item works, and they drop off the icons while they are on cooldown or used up.
 
-- Warlock, all three specs: Dark Pact and Unending Resolve.
-- Demon Hunter, Havoc and Devourer: Blur and Darkness. Vengeance: Demon Spikes and Fiery Brand, with Metamorphosis as the fallback.
-- Paladin, Retribution and Holy: Divine Protection and Divine Shield. Protection: Ardent Defender and Guardian of Ancient Kings.
+After a big hit lands, Cast Ahead says "heal up" (HEAL UP on screen) if something from your heal list is ready: a Healthstone, a potion, or a self-heal. This only follows a hit that got a big call, on trash when the cast finishes and on bosses when the bar runs out. Debuff calls never get a heal call.
 
-Other specs get the generic call without a button icon. More specs will follow.
+Lists ship for these specs so far, with Healthstones and the Silvermoon health potions in the small and heal lists of all of them:
 
-To change a button, open the Defensives tab in the settings. It has a "Defensive calls" switch, a "Boss calls from DBM / BigWigs" switch, a small and a big button picker for your current spec, and Reset to default. The status line shows which boss mod is connected. Boss calls need DBM or BigWigs installed; without one, trash and debuff calls still work.
+- Warlock, all three specs: Dark Pact (small), Unending Resolve (big), Mortal Coil (heal).
+- Paladin, Protection: Ardent Defender and Sentinel (small), Guardian of Ancient Kings and Divine Shield (big), Word of Glory and Lay on Hands (heal). Holy and Retribution: Divine Protection (small), Divine Shield and Blessing of Protection (big), Lay on Hands and Word of Glory (heal).
+- Demon Hunter, Havoc and Devourer: Blur (small), Darkness (big). Vengeance: Demon Spikes (small), Fiery Brand and Metamorphosis (big).
+
+Other specs get the generic call without button icons. More specs will follow.
+
+The Defensives tab in the settings has a "Defensive calls" switch, a "Boss calls from DBM / BigWigs" switch, a "Heal up after a big hit" switch and the three lists for your current spec. Click a row to move it to another list or remove it. "Add from list" offers your class's defensives and the stones and potions; the Add box takes a spell or item id, a name, or a shift-clicked link. Reset to default asks first, then restores the shipped lists. The status line shows which boss mod is connected. Boss calls need DBM or BigWigs installed; without one, trash and debuff calls still work.
+
+The Saves tab in the `/ca` window lists, for the current dungeon or the one you pick, every hit that gets a call: its size, your buttons, the mob or boss, what triggers it (cast, boss bar, debuff) and how early it comes. A hit where a kick, dodge or other mechanic wins over the save says so.
 
 Boss coverage is partial today. A boss threat gets a call only when DBM or BigWigs runs a timer for it, because bars that exist only in Blizzard's own timeline give addons no callback. Schedules counted from the pull are the planned next step.
 

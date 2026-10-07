@@ -3388,6 +3388,9 @@ do
     check(not (spells[108416] or spells[104773] or spells[6789] or spells[198589] or spells[203720]),
         "paladin catalogue has no warlock or demon hunter spells")
     check(#S.Catalogue(62) == 0 and #S.Catalogue(nil) == 0, "an unsupported spec has an empty catalogue")
+    for spec in pairs(CastAheadSaveButtons) do
+        check(#S.Catalogue(spec) > 0, "shipped spec " .. spec .. " has a class catalogue")
+    end
 
     GetSpecialization = function() return 1 end
     GetSpecializationInfo = function() return 265 end
