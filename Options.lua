@@ -119,6 +119,8 @@ local SWITCHES = {
         tip = "Call a small or big defensive ahead of damage that needs one, and show your button for it in the centre." },
     bossAdapter = { label = "Boss calls from DBM / BigWigs",
         tip = "Also call defensives for boss abilities announced by DBM or BigWigs." },
+    healCalls = { label = "Heal up after a big hit",
+        tip = "Right after a hit that called a big defensive, say \"heal up\" when your Healthstone or potion is ready." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
         tip = "A panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. Only while recording. The key bindings and /ca mark work without it." },
 }
@@ -558,7 +560,7 @@ local function SaveChoices(spec, size)
 end
 
 function BuildDefensives(panel)
-    local group = BuildGroup(panel, "Defensive calls", 1, 260)
+    local group = BuildGroup(panel, "Defensive calls", 1, 286)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, SaveRefresh)
     local boss = BuildSwitch(panel, "bossAdapter", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, function(on)
         Redraw()
@@ -567,9 +569,10 @@ function BuildDefensives(panel)
             CastAheadSaves.CancelPrefix("bw:")
         end
     end)
+    local heal = BuildSwitch(panel, "healCalls", { "TOPLEFT", boss, "BOTTOMLEFT", 0, -4 })
 
     local status = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    status:SetPoint("TOPLEFT", boss, "BOTTOMLEFT", 4, -6)
+    status:SetPoint("TOPLEFT", heal, "BOTTOMLEFT", 4, -6)
     status:SetWidth(COL_W - 24)
     status:SetJustifyH("LEFT")
     table.insert(refreshers, function()
@@ -638,7 +641,7 @@ end
 
 local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
     "POISON", "CURSE", "MAGIC", "DISEASE", "BLEED", "SOOTHE", "PURGE", "SWITCH", "ALERT",
-    "SMALL", "BIG" }
+    "SMALL", "BIG", "HEAL" }
 local SOUND_ROW_H = 26
 
 -- Default plus every sound LibSharedMedia knows. Shared with the casts

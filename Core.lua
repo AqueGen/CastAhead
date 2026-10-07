@@ -241,6 +241,7 @@ local ADVICE_SOUND = {           -- keyed by CastAheadMatch.ADVICE key
     ALERT = "RAID_WARNING",
     SMALL = "ALARM_CLOCK_WARNING_2",
     BIG = "RAID_WARNING",
+    HEAL = "ALARM_CLOCK_WARNING_1",
 }
 
 -- Default on: only casts in the curated priority set matter enough for icons,
@@ -2096,6 +2097,10 @@ local function StopCast(unit, channel)
         local advice = final and Announceable(final) and CastAheadMatch.ConsensusAdvice(final)
         Record("STOP", unit, channel and 1 or 0, math.floor(state.lastMeasured * 1000 + 0.5),
             Ids(final), advice and advice.key or "-")
+        if advice == CastAheadMatch.ADVICE.BIG and CastAheadSaves and CastAheadSaves.HealReady() then
+            PlayAdviceSound(CastAheadMatch.ADVICE.HEAL)
+            CastAheadSaves.Flash(CastAheadMatch.ADVICE.HEAL, GetTime(), 3)
+        end
     end
 end
 

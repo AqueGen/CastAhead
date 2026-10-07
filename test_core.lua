@@ -2642,6 +2642,7 @@ do
     CastAheadDB.sounds = { BIG = "Kit" }
     CastAheadSaves.Refresh()
     check(files[#files]:match("Sounds\\en\\BIG%.ogg$"), "a picked sound kit id keeps the clip")
+    for _, f in ipairs(files) do check(not f:match("HEAL"), "aura sounds never register heal up: " .. f) end
     LibStub, CastAheadDB.sounds = nil, nil
     CastAheadConfig.SetEnabled("saveCalls", false)
     CastAheadSaves.Refresh()
@@ -3013,6 +3014,83 @@ do
     advance(2.0)
     fire("UNIT_SPELLCAST_STOP", unit)
     reset()
+
+    local heard = {}
+    local realPlay = PlaySoundFile
+    PlaySoundFile = function(path) heard[#heard + 1] = path return realPlay(path) end
+    local function Heals()
+        local n = 0
+        for _, p in ipairs(heard) do if p:match("\\HEAL%.ogg$") then n = n + 1 end end
+        return n
+    end
+    local function LastBig()
+        local at = 0
+        for i, p in ipairs(heard) do if p:match("\\BIG") then at = i end end
+        return at
+    end
+    CastAheadDefensives = { spells = { [100] = { DAMAGER = "BIG", lead = 4.0 } }, alias = {} }
+    CastAheadDB = { centerText = true, leadSeconds = 0 }
+    CastAheadCore.ReapplyData()
+    local function BigCast(kick)
+        reset()
+        enter()
+        castFor(3.0)
+        wipe(heard)
+        advance(15.0)
+        advance(1.5)
+        advance(3.0)
+        fire("UNIT_SPELLCAST_START", unit)
+        advance(1.0)
+        if kick then fire("UNIT_SPELLCAST_INTERRUPTED", unit) end
+        advance(2.0)
+        fire("UNIT_SPELLCAST_STOP", unit)
+        advance(0.1)
+    end
+    BigCast(false)
+    check(Heals() == 1 and LastBig() > 0 and LastBig() < #heard and (heard[#heard] or ""):match("\\HEAL%.ogg$"),
+        "a completed big-save cast calls heal up once, after the big call: " .. table.concat(heard, ","))
+    line = CenterLine()
+    check(line and line.timeValue:match("^Heal up") and line.icon.textureValue == 9512, "the heal call shows the healthstone in the centre")
+    advance(3.0)
+    check(not (CenterLine() and CenterLine().timeValue:match("^Heal up")), "the heal line leaves after its seconds")
+    BigCast(true)
+    check(Heals() == 0, "a kicked big-save cast calls no heal")
+    counts[5512] = 0
+    BigCast(false)
+    check(Heals() == 0, "no heal call without a ready heal item")
+    counts[5512] = 3
+    CastAheadConfig.SetEnabled("healCalls", false)
+    BigCast(false)
+    check(Heals() == 0, "healCalls off silences the heal call")
+    CastAheadConfig.SetEnabled("healCalls", true)
+    CastAheadConfig.SetEnabled("saveCalls", false)
+    BigCast(false)
+    check(Heals() == 0 and LastBig() == 0, "saveCalls off silences big and heal")
+    CastAheadConfig.SetEnabled("saveCalls", true)
+    reset()
+
+    enter()
+    wipe(heard)
+    CastAheadSaves.Schedule("test:heal1", 100, now + 1, now + 3, CastAheadMatch.ADVICE.BIG)
+    advance(1.5)
+    check(LastBig() == 1 and Heals() == 0, "a boss big call fires at its time, no heal yet")
+    advance(2.0)
+    check(Heals() == 1 and (heard[#heard] or ""):match("\\HEAL%.ogg$"), "the boss hit lands: heal up once")
+    advance(2.0)
+    check(Heals() == 1, "only once")
+    wipe(heard)
+    CastAheadSaves.Schedule("test:heal2", 100, now + 1, now + 3, CastAheadMatch.ADVICE.SMALL)
+    advance(1.5)
+    advance(2.0)
+    check(Heals() == 0, "a small boss call gives no heal")
+    CastAheadSaves.Schedule("test:heal3", 100, now + 1, now + 3, CastAheadMatch.ADVICE.BIG)
+    advance(1.5)
+    CastAheadSaves.Cancel("test:heal3")
+    advance(2.0)
+    check(Heals() == 0, "a cancelled boss bar gives no heal")
+    reset()
+    PlaySoundFile = realPlay
+
     CastAheadDefensives = { spells = {}, alias = {} }
     CastAheadCore.ReapplyData()
     C_Container, C_Item.GetItemCount = saved.C_Container, saved.GetItemCount

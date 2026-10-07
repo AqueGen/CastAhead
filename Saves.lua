@@ -99,6 +99,10 @@ end
 
 function S.Icon(advice) return S.Icons(advice)[1] end
 
+function S.HealReady()
+    return CastAheadConfig.Enabled("saveCalls") and CastAheadConfig.Enabled("healCalls") and #S.Available("heal") > 0
+end
+
 local SOUND_ROOT = "Interface\\AddOns\\CastAhead\\Sounds\\en\\"
 local auraIDs = {}
 local auraPending = false
@@ -152,6 +156,12 @@ function S.Schedule(key, spellID, fireAt, endAt, advice)
     scheduled[key] = { spell = spellID, fireAt = fireAt, endAt = endAt, advice = advice }
 end
 
+local flashes = 0
+function S.Flash(advice, now, seconds)
+    flashes = flashes + 1
+    scheduled["flash:" .. flashes] = { fireAt = now, endAt = now + seconds, advice = advice, fired = true, firedAt = now }
+end
+
 function S.Cancel(key)
     scheduled[key] = nil
 end
@@ -203,7 +213,13 @@ function S.Tick(now)
                 c.fired, c.firedAt = true, now
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice, true) end
             end
-            if now >= c.endAt then scheduled[key] = nil end
+            if now >= c.endAt then
+                if c.fired and c.advice == M.ADVICE.BIG and S.HealReady()
+                    and CastAheadCore and CastAheadCore.Announce then
+                    CastAheadCore.Announce(M.ADVICE.HEAL)
+                end
+                scheduled[key] = nil
+            end
         end
     end
 end
