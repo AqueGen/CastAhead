@@ -14,6 +14,16 @@ local function Known(id)
     return type(id) == "number" and IsPlayerSpell and IsPlayerSpell(id)
 end
 
+local function SpellReady(id)
+    local get = C_Spell and C_Spell.GetSpellCooldownDuration
+    if not get then return true end
+    local ok, d = pcall(get, id)
+    if not ok or not d or not d.HasSecretValues or d:HasSecretValues() then return true end
+    local ok2, zero = pcall(d.IsZero, d)
+    if not ok2 then return true end
+    return zero == true
+end
+
 local useToItem = {}
 local bagsPending = false
 local memo = {}
@@ -63,7 +73,7 @@ local function Collect(list, out)
         if type(e) == "number" then
             if Known(e) then
                 resolved = true
-                out[#out + 1] = { kind = "spell", id = e, icon = C_Spell and C_Spell.GetSpellTexture(e) }
+                if SpellReady(e) then out[#out + 1] = { kind = "spell", id = e, icon = C_Spell and C_Spell.GetSpellTexture(e) } end
             end
         elseif type(e) == "table" and e.use then
             local item = useToItem[e.use]

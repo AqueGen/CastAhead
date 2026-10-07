@@ -200,7 +200,7 @@ local COLUMNS = {
 }
 
 local MAX_SAVE_ICONS = 5   -- ponytail: longer lists are cut at 5 icons; widen the column if lists grow
-local TRIGGER_WORDS ={ { "cast", "cast" }, { "bar", "DBM bar" }, { "debuff", "debuff" } }
+local TRIGGER_WORDS = { { "cast", "cast" }, { "bar", "DBM bar" }, { "debuff", "debuff" } }
 
 local SAVE_COLUMNS = {
     { key = "size", header = "Save", width = 50,

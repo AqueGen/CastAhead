@@ -3284,5 +3284,72 @@ do
     CastAheadDB = {}
 end
 
+do
+    local bags = { [0] = { 5512, 5509, 262000 } }
+    local useOf = { [5512] = 452930, [5509] = 6262, [262000] = 1295247 }
+    local saved = { C_Container = C_Container, spec = nil, build = C_Spell.GetSpellCooldownDuration }
+    C_Container = { GetContainerNumSlots = function(b) return bags[b] and #bags[b] or 0 end,
+                    GetContainerItemID = function(b, s) return bags[b] and bags[b][s] end }
+    C_Item = C_Item or {}
+    C_Item.GetItemSpell = function(id) if useOf[id] then return "Use", useOf[id] end end
+    C_Item.GetItemCount = function() return 1 end
+    C_Item.GetItemCooldown = function() return 0, 0, true end
+    C_Item.GetItemIconByID = function(id) return 9000 + (id % 1000) end
+    GetSpecialization = function() return 1 end
+    GetSpecializationRole = function() return "DAMAGER" end
+    local specID = 265
+    GetSpecializationInfo = function() return specID end
+    IsPlayerSpell = function(id) return id == 108416 or id == 104773 end
+    InCombatLockdown = function() return false end
+    local savedButtons, savedDB = CastAheadSaveButtons, CastAheadDB
+    CastAheadSaveButtons = {}
+    assert(loadfile("SaveButtons.lua"))()
+    CastAheadDB = {}
+    CastAheadSaves.ScanBags()
+
+    local cd, secret = true, false
+    local obj = { HasSecretValues = function() return secret end, IsZero = function() return not cd end }
+    C_Spell.GetSpellCooldownDuration = function() return obj end
+    local textureSaved = C_Spell.GetSpellTexture
+    C_Spell.GetSpellTexture = function(id) return id == 108416 and 7001 or textures[id] end
+
+    local small = CastAheadSaves.Available("small")
+    check(small[1].kind == "item" and small[1].id == 5512, "Dark Pact on cooldown: the analog Healthstone leads")
+    check(#small == 3 and small[2].id == 5509 and small[3].id == 262000, "stones and potion follow")
+
+    advance(1)
+    secret = true
+    check(CastAheadSaves.Available("small")[1].id == 108416, "a secret cooldown object leaves Dark Pact first")
+
+    advance(1)
+    secret = false
+    cd = false
+    small = CastAheadSaves.Available("small")
+    check(small[1].id == 108416, "Dark Pact ready leads")
+    local icons = CastAheadSaves.Icons(CastAheadMatch.ADVICE.SMALL)
+    check(#icons == 3 and icons[1] == 7001 and icons[2] == 9000 + 512 and icons[3] == 9000 + 509,
+        "small icons: Dark Pact, Demonic Healthstone, Healthstone (max 3)")
+
+    advance(1)
+    C_Spell.GetSpellCooldownDuration = nil
+    cd = true
+    check(CastAheadSaves.Available("small")[1].id == 108416, "missing cooldown API leaves the list unchanged")
+
+    advance(1)
+    specID = 65
+    IsPlayerSpell = function() return false end
+    bags[0] = { 5509 }
+    CastAheadSaves.ScanBags()
+    advance(1)
+    local heal = CastAheadSaves.Available("heal")
+    check(#heal == 1 and heal[1].id == 5509, "paladin heal list resolves the regular Healthstone")
+
+    C_Container, C_Spell.GetSpellCooldownDuration, C_Spell.GetSpellTexture = saved.C_Container, saved.build, textureSaved
+    C_Item.GetItemSpell, C_Item.GetItemCount, C_Item.GetItemCooldown, C_Item.GetItemIconByID = nil, nil, nil, nil
+    GetSpecialization, GetSpecializationRole, GetSpecializationInfo, IsPlayerSpell, InCombatLockdown = nil, nil, nil, nil, nil
+    CastAheadSaveButtons, CastAheadDB = savedButtons, savedDB
+    CastAheadSaves.ScanBags()
+end
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)
