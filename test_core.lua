@@ -2655,6 +2655,63 @@ do
     CastAheadDB = nil
 end
 
+-- Saves view: every hit that calls a save for the player's role in one dungeon.
+do
+    local role, savedButtons = "DAMAGER", CastAheadSaveButtons
+    GetSpecialization = function() return 1 end
+    GetSpecializationRole = function() return role end
+    GetSpecializationInfo = function() return 265 end
+    IsPlayerSpell = function(id) return id == 104773 end
+    CastAheadSaveButtons = { [265] = { small = {}, big = { 104773 } } }
+    CastAheadDB = {}
+    CastAheadSaves.Refresh()
+    CastAheadDefensives = { spells = {
+        [801] = { DAMAGER = "SMALL", lead = 2.0, aura = false, name = "Slam", mob = "Boss A", boss = "Boss A", dungeon = 9000, bar = true },
+        [806] = { DAMAGER = "BIG", lead = 1.5, aura = false, name = "Zap", mob = "Abe", boss = "Abe", dungeon = 9000, bar = true },
+        [802] = { DAMAGER = "SMALL", lead = 3.0, aura = false, name = "Bolt", mob = "Caster", boss = "", dungeon = 9000, bar = false },
+        [803] = { DAMAGER = "BIG", lead = 2.5, aura = true, name = "Burn", mob = "Environment", boss = "", dungeon = 9000, bar = false },
+        [804] = { DAMAGER = "SMALL", lead = 4.0, aura = false, name = "Ache", mob = "Grunt", boss = "", dungeon = 9000, bar = false },
+        [805] = { TANK = "BIG", lead = 4.0, aura = false, name = "Crush", mob = "Brute", boss = "", dungeon = 9000, bar = false },
+        [807] = { DAMAGER = "BIG", lead = 2.0, aura = false, name = "Magma", mob = "Pool", boss = "", dungeon = 9001, bar = false },
+        [808] = { DAMAGER = "BIG", lead = 2.0, aura = false, name = "Elsewhere", mob = "Other", boss = "", dungeon = 9001, bar = false },
+    }, alias = { [902] = 802 } }
+    CastAheadData[9000] = { name = "Fixture", { spell = 902 }, { spell = 807 }, { spell = 950 } }
+    CastAheadPriority[902], CastAheadPriority[807], CastAheadPriority[806] = "DODGE", "AOE", "KICK"
+
+    local list = CastAheadSaves.ViewRows and CastAheadSaves.ViewRows(9000) or {}
+    local order = {}
+    for i, r in ipairs(list) do order[i] = r.id end
+    check(table.concat(order, ",") == "806,801,803,807,804,802",
+        "bosses by name first, then trash BIG before SMALL by name, got " .. table.concat(order, ","))
+    local by = {}
+    for _, r in ipairs(list) do by[r.id] = r end
+    local zap, slam, bolt, burn, ache, magma = by[806], by[801], by[802], by[803], by[804], by[807]
+    check(slam and slam.size == "SMALL" and slam.trigger.bar and not slam.trigger.cast and not slam.trigger.debuff
+        and slam.wins == nil and slam.lead == 2.0 and slam.boss == "Boss A", "a boss row with a bar")
+    check(zap and zap.size == "BIG" and zap.wins == "KICK" and #zap.buttons == 1 and zap.buttons[1].id == 104773,
+        "a boss bar takes its wins from the row's own priority and shows the big buttons")
+    check(bolt and bolt.trigger.cast and not bolt.trigger.bar and bolt.wins == "DODGE" and bolt.name == "Bolt",
+        "a trash row reached by an aliased Data cast, beaten by its DODGE")
+    check(burn and burn.trigger.debuff and not burn.trigger.cast and burn.mob == "ground effect",
+        "an aura-only row, its Environment caster shown as a ground effect")
+    check(ache and not (ache.trigger.cast or ache.trigger.bar or ache.trigger.debuff) and #ache.buttons == 0,
+        "a row with no trigger, and no small button to show")
+    check(magma and magma.trigger.cast and magma.wins == nil, "a hit from another dungeon's table reached by this one's cast, AOE does not beat it")
+    check(not by[805] and not by[808], "other roles' rows and other dungeons' rows stay out")
+    role = "TANK"
+    list = CastAheadSaves.ViewRows and CastAheadSaves.ViewRows(9000) or {}
+    check(#list == 1 and list[1].id == 805 and list[1].size == "BIG", "a tank sees the tank list")
+    role = nil
+    check(CastAheadSaves.ViewRows and #CastAheadSaves.ViewRows(9000) == 0, "no role, no list")
+    local saved = CastAheadDefensives
+    CastAheadDefensives = nil
+    check(CastAheadSaves.ViewRows and #CastAheadSaves.ViewRows(9000) == 0, "no defensive table, no list")
+    CastAheadDefensives = saved
+    CastAheadData[9000] = nil
+    CastAheadPriority[902], CastAheadPriority[807], CastAheadPriority[806] = nil, nil, nil
+    CastAheadSaveButtons, CastAheadDB = savedButtons, nil
+end
+
 GetSpecialization, GetSpecializationRole, GetSpecializationInfo, IsPlayerSpell = nil, nil, nil, nil
 CastAheadDefensives = { spells = {}, alias = {} }
 CastAheadDB = {}

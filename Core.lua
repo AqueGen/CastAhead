@@ -2124,6 +2124,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
             InvalidateCapabilities()
             if CastAheadSaves then CastAheadSaves.Refresh() end
             if CastAheadOptions and CastAheadOptions.RefreshDefensives then CastAheadOptions.RefreshDefensives() end
+            if CastAheadUI and CastAheadUI.RefreshSaves then CastAheadUI.RefreshSaves() end
             if CastAheadCore then CastAheadCore.Reapply() end
         end
         return

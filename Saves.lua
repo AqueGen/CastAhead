@@ -170,6 +170,51 @@ end
 
 function S.Icon(advice) return S.Icons(advice)[1] end
 
+local WINS = { KICK = true, CC = true, DODGE = true, FRONTAL = true, SWITCH = true, DISPEL = true,
+    POISON = true, CURSE = true, MAGIC = true, DISEASE = true, SOOTHE = true, PURGE = true }
+
+local function Wins(id)
+    local prio = CastAheadPriority and CastAheadPriority[id]
+    return WINS[prio] and prio or nil
+end
+
+local function ViewOrder(a, b)
+    if (a.boss == "") ~= (b.boss == "") then return a.boss ~= "" end
+    if a.boss ~= b.boss then return a.boss < b.boss end
+    if a.size ~= b.size then return a.size == "BIG" end
+    if a.name ~= b.name then return a.name < b.name end
+    return a.id < b.id
+end
+
+function S.ViewRows(instanceID)
+    local out = {}
+    local spells = CastAheadDefensives and CastAheadDefensives.spells
+    local role = M.SpecRole()
+    if not (spells and role) then return out end
+    local cast, wins = {}, {}
+    for _, c in ipairs(CastAheadData and CastAheadData[instanceID] or {}) do
+        local _, id = M.SaveRow(c.spell)
+        if id then
+            cast[id] = true
+            wins[id] = wins[id] or Wins(c.spell)
+        end
+    end
+    for id, row in pairs(spells) do
+        local size = row[role]
+        if size and (row.dungeon == instanceID or cast[id]) then
+            out[#out + 1] = {
+                id = id, name = row.name or "", boss = row.boss or "", size = size, lead = row.lead,
+                mob = row.mob == "Environment" and "ground effect" or row.mob,
+                trigger = { cast = cast[id] == true, bar = row.bar == true, debuff = row.aura == true },
+                wins = wins[id] or Wins(id),
+                buttons = S.Available(SIZE[size]),
+            }
+        end
+    end
+    table.sort(out, ViewOrder)
+    return out
+end
+
 function S.HealReady()
     return CastAheadConfig.Enabled("saveCalls") and CastAheadConfig.Enabled("healCalls") and #S.Available("heal") > 0
 end

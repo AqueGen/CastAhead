@@ -426,7 +426,8 @@ for id, row in pairs(CastAheadDefensives.spells) do
         check(row[role] == nil or row[role] == "SMALL" or row[role] == "BIG", "spell " .. id .. " has a valid " .. role .. " verdict")
     end
     check(type(row.name) == "string" and type(row.mob) == "string" and type(row.boss) == "string", "spell " .. id .. " carries name, mob and boss strings")
-    check(CastAheadData[row.dungeon] ~= nil, "spell " .. id .. " names a known dungeon")
+    check(row.name ~= "" and row.mob ~= "", "spell " .. id .. " has a non-empty name and mob")
+    check(type(row.dungeon) == "number" and CastAheadData[row.dungeon] ~= nil, "spell " .. id .. " names a known dungeon")
     check(type(row.bar) == "boolean", "spell " .. id .. " has a boolean bar flag")
 end
 
