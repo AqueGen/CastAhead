@@ -2342,6 +2342,15 @@ local function CenterFrame()
         -- left edge, so the pair stays centred whatever the words' length.
         line.text:SetPoint("CENTER", line, "CENTER", 25, 0)
         line.icon:SetPoint("RIGHT", line.text, "LEFT", -10, 0)
+        line.extra = {}
+        for k = 1, 2 do
+            local x = line:CreateTexture(nil, "ARTWORK")
+            x:SetSize(20, 20)
+            x:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            x:SetPoint("LEFT", k == 1 and line.icon or line.extra[k - 1], "RIGHT", 4, 0)
+            x:Hide()
+            line.extra[k] = x
+        end
         line.text:SetShadowColor(0, 0, 0, 1)
         line.text:SetShadowOffset(2, -2)
         line:Hide()
@@ -2417,6 +2426,8 @@ local function ToggleMoveCenter()
         PlaceCenter(f)
         local line = f.lines[1]
         line.icon:SetTexture(136243)
+        line.icon:SetPoint("RIGHT", line.text, "LEFT", -10, 0)
+        for k = 1, 2 do line.extra[k]:Hide() end
         line.text:SetText("Tank buster  4.0")
         line.text:SetTextColor(1, 0.45, 0.10)
         line:Show()
@@ -2442,7 +2453,7 @@ local function CenterPick(now)
             local advice = CastAheadMatch.ConsensusAdvice(c.candidates, state.interruptible)
             if advice then
                 centerPicks[#centerPicks + 1] = { endAt = c.endAt, advice = advice, row = c.row,
-                                                  icon = CastAheadSaves and CastAheadSaves.Icon(advice) or nil }
+                                                  icons = CastAheadSaves and CastAheadSaves.Icons(advice) or nil }
             else
                 -- Disagreement is still a cast going out: show both answers
                 -- and let the player pick. Nothing is spoken for these.
@@ -2493,7 +2504,20 @@ local function UpdateCenter(now)
     for i = 1, CENTER_LINES do
         local line, pick = f.lines[i], picks[i]
         if pick then
-            line.icon:SetTexture(pick.icon or SpellIcon(pick.row.spell))
+            local icons = pick.icons
+            line.icon:SetTexture(icons and icons[1] or SpellIcon(pick.row.spell))
+            local shownExtras = icons and math.min(#icons - 1, 2) or 0
+            if shownExtras < 0 then shownExtras = 0 end
+            line.icon:SetPoint("RIGHT", line.text, "LEFT", -(10 + 24 * shownExtras), 0)
+            for k = 1, 2 do
+                local x = line.extra[k]
+                if k <= shownExtras then
+                    x:SetTexture(icons[k + 1])
+                    x:Show()
+                else
+                    x:Hide()
+                end
+            end
             -- "Tank buster 4.0": the response in words, not the category code.
             local say = pick.advice.say
             line.text:SetFormattedText("%s  %.1f", say:sub(1, 1):upper() .. say:sub(2), pick.endAt - now)

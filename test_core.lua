@@ -146,8 +146,10 @@ local function StubRegion()
     -- `textureValue` is a real field: the catch-all __index below hands back a
     -- fresh closure for anything unknown, so a test reading an unset field would
     -- always see two "different" values and could never fail.
-    local r = { textureValue = false }
+    local r = { textureValue = false, shown = false }
     r.SetTexture = function(_, tex) r.textureValue = tex end
+    r.Show = function() r.shown = true end
+    r.Hide = function() r.shown = false end
     setmetatable(r, { __index = function() return function() return r end end })
     return r
 end
@@ -2447,8 +2449,10 @@ CastAheadDB = { centerText = true }
 check(CastAheadSaves.Button("big") == 104773, "the shipped big button for the spec")
 check(CastAheadSaves.Icon(CastAheadMatch.ADVICE.BIG) == 2001, "its icon")
 CastAheadDB.saveButtons = { [265] = { big = { 108416 } } }
+CastAheadSaves.Refresh()
 check(CastAheadSaves.Button("big") == 108416, "an override wins")
 CastAheadDB.saveButtons = { [265] = { big = { 999, 104773 } } }
+CastAheadSaves.Refresh()
 check(CastAheadSaves.Button("big") == 104773, "an override the character does not know falls back")
 CastAheadDB.saveButtons = nil
 GetSpecializationInfo = function() return 70 end
@@ -2927,15 +2931,19 @@ do
     CastAheadSaves.ScanBags()
     local small = CastAheadSaves.Available("small")
     check(#small == 2 and small[1].kind == "spell" and small[2].kind == "item" and small[2].id == 5512, "spell then healthstone item")
+    advance(1)
     counts[5512] = 0
     check(#CastAheadSaves.Available("small") == 1, "an item with count 0 is not available, read live")
+    advance(1)
     counts[5512] = 3
     cds[5512] = { now - 10, 60 }
     check(#CastAheadSaves.Available("heal") == 0, "an item on cooldown is not available")
+    advance(1)
     cds[5512] = { 0, 0 }
     CastAheadDB.saveButtons = { [265] = { big = { 999, 104773 } } }
     check(CastAheadSaves.Available("big")[1].id == 104773, "an override skips an unknown spell to the next entry")
     check(#CastAheadSaves.Available("small") == 2, "a size missing from the override keeps the shipped list")
+    advance(1)
     CastAheadDB = { saveButtons = { [265] = { small = 108416 } } }
     CastAheadConfig.Migrate()
     check(type(CastAheadDB.saveButtons[265].small) == "table" and CastAheadDB.saveButtons[265].small[1] == 108416, "old single-number override migrates to a list")
@@ -2948,6 +2956,36 @@ do
     check(not CastAheadSaves.BagsPending(), "the pending scan runs after combat")
     CastAheadDB = {}
     check(#CastAheadSaves.Icons(CastAheadMatch.ADVICE.SMALL) == 2, "icons follow the available list")
+
+    local same = CastAheadSaves.Available("small")
+    check(CastAheadSaves.Available("small") == same, "Available is memoized within a frame")
+    counts[5512] = 0
+    advance(1)
+    check(#CastAheadSaves.Available("small") == 1, "the next frame reflects a changed item count")
+    counts[5512] = 3
+
+    CastAheadDB = { centerText = true }
+    CastAheadSaves.Refresh()
+    reset()
+    enter()
+    local function CenterLine()
+        for i = 1, #allFrames do
+            local f = allFrames[i]
+            if f.shown and type(f.icon) == "table" and f.extra and f.timeValue then return f end
+        end
+    end
+    CastAheadSaves.Schedule("test:icons", 100, now + 1, now + 6, CastAheadMatch.ADVICE.SMALL)
+    advance(1.5)
+    local line = CenterLine()
+    check(line and line.icon.textureValue == 2002 and line.extra[1].textureValue == 9512 and line.extra[1].shown and not line.extra[2].shown,
+        "a small save shows the spell, then the item, no third icon")
+    CastAheadSaves.Cancel("test:icons")
+    CastAheadSaves.Schedule("test:icons2", 100, now + 0.1, now + 5, CastAheadMatch.ADVICE.AOE)
+    advance(1)
+    line = CenterLine()
+    check(line and not line.extra[1].shown and not line.extra[2].shown, "a non-save call shows no extras")
+    CastAheadSaves.Cancel("test:icons2")
+    reset()
     C_Container, C_Item.GetItemCount = saved.C_Container, saved.GetItemCount
     C_Item.GetItemSpell, C_Item.GetItemCooldown, C_Item.GetItemIconByID = nil, nil, nil
     GetSpecialization, GetSpecializationRole, GetSpecializationInfo, IsPlayerSpell, InCombatLockdown = nil, nil, nil, nil, nil

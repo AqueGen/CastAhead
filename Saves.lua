@@ -16,6 +16,7 @@ end
 
 local useToItem = {}
 local bagsPending = false
+local memo = {}
 
 local function Shipped(spec, size)
     local s = CastAheadSaveButtons and CastAheadSaveButtons[spec]
@@ -33,6 +34,7 @@ end
 function S.ScanBags()
     if InCombatLockdown and InCombatLockdown() then bagsPending = true return end
     bagsPending = false
+    wipe(memo)
     wipe(useToItem)
     if not (C_Container and C_Item and C_Item.GetItemSpell) then return end
     for bag = 0, 5 do
@@ -56,7 +58,11 @@ local function ItemReady(item)
 end
 
 function S.Available(size)
+    local stamp = GetTime()
+    local hit = memo[size]
+    if hit and hit.stamp == stamp then return hit.list end
     local out = {}
+    memo[size] = { stamp = stamp, list = out }
     for _, e in ipairs(S.List(size)) do
         if type(e) == "number" then
             if Known(e) then
@@ -138,6 +144,7 @@ function S.AuraSoundCount() return #auraIDs end
 function S.AuraPending() return auraPending end
 
 function S.Refresh()
+    wipe(memo)
     RegisterAuraSounds()
 end
 
@@ -183,7 +190,7 @@ function S.Pending(now)
     for _, c in pairs(scheduled) do
         if not c.pausedAt and c.fired and c.endAt > now then
             pending[#pending + 1] = { endAt = c.endAt, advice = c.advice, row = { spell = c.spell },
-                                      icon = S.Icon(c.advice) }
+                                      icons = S.Icons(c.advice) }
         end
     end
     return pending
