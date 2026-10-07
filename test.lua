@@ -408,6 +408,17 @@ M.PlayerRole = savedPlayerRole
 M.SpecRole = function() return nil end
 check(M.Advice(saveRow) == M.ADVICE.AOE, "outside the game no role means no save call")
 
+dofile("SaveButtons.lua")
+dofile("Defensives.lua")
+for spec, lists in pairs(CastAheadSaveButtons) do
+    check(#lists.small > 0 and #lists.big > 0, "spec " .. spec .. " has a small and a big save button")
+end
+for id, row in pairs(CastAheadDefensives.spells) do
+    for _, role in ipairs({ "DAMAGER", "HEALER", "TANK" }) do
+        check(row[role] == nil or row[role] == "SMALL" or row[role] == "BIG", "spell " .. id .. " has a valid " .. role .. " verdict")
+    end
+end
+
 print(string.format("%d dungeons, %d spells, %d unresolvable after two casts, %d needing the mob check",
     dungeons, spells, stuck, rescued))
 print(failures == 0 and "OK" or (failures .. " FAILURES"))

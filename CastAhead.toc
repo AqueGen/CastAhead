@@ -23,6 +23,7 @@ Config.lua
 Data.lua
 Priority.lua
 SaveButtons.lua
+Defensives.lua
 Traits.lua
 Packs.lua
 Match.lua
