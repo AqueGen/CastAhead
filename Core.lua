@@ -2112,7 +2112,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         -- dispels the character knows.
         if event == "SPELLS_CHANGED" or unit == "player" then
             InvalidateCapabilities()
-            CastAheadSaves.Refresh()
+            if CastAheadSaves then CastAheadSaves.Refresh() end
             if CastAheadCore then CastAheadCore.Reapply() end
         end
         return
@@ -2427,7 +2427,7 @@ local function CenterPick(now)
             local advice = CastAheadMatch.ConsensusAdvice(c.candidates, state.interruptible)
             if advice then
                 centerPicks[#centerPicks + 1] = { endAt = c.endAt, advice = advice, row = c.row,
-                                                  icon = CastAheadSaves.Icon(advice) }
+                                                  icon = CastAheadSaves and CastAheadSaves.Icon(advice) or nil }
             else
                 -- Disagreement is still a cast going out: show both answers
                 -- and let the player pick. Nothing is spoken for these.
@@ -2451,7 +2451,7 @@ local function CenterPick(now)
             end
         end
     end
-    if CastAheadConfig.Enabled("saveCalls") then
+    if CastAheadSaves and CastAheadConfig.Enabled("saveCalls") then
         for _, pick in ipairs(CastAheadSaves.Pending(now)) do centerPicks[#centerPicks + 1] = pick end
     end
     table.sort(centerPicks, function(a, b) return a.endAt < b.endAt end)
@@ -2494,7 +2494,7 @@ end
 frame:SetScript("OnUpdate", function()
     if not dungeon then return end
     local now = GetTime()
-    CastAheadSaves.Tick(now)
+    if CastAheadSaves and CastAheadConfig.Enabled("saveCalls") then CastAheadSaves.Tick(now) end
     UpdateCenter(now)
     if now >= pollAt then
         pollAt = now + COMBAT_POLL_INTERVAL
@@ -2542,15 +2542,18 @@ frame:SetScript("OnUpdate", function()
                         -- Not for a cast already going out: its own alert
                         -- fired at START, and "soon" is wrong for it anyway.
                         if not entry.casting and entry.track and not entry.track.warned then
-                            local heads = CastAheadMatch.ConsensusAdvice(entry.candidates)
                             local lead = CastAheadConfig.Lead()
-                            if CastAheadMatch.IsSave(heads) and CastAheadConfig.Enabled("saveCalls") then
-                                lead = math.max(lead, CastAheadSaves.Lead(entry.candidates[1].spell) or 3)
-                            end
-                            if lead > 0 and remaining <= lead then
-                                entry.track.warned = true
-                                Record("HEADS", unit, heads and heads.key or "-", Ids(entry.candidates))
-                                PlayAdviceSound(heads, true, entry.candidates)
+                            local first = entry.candidates and entry.candidates[1]
+                            local saveLead = CastAheadSaves and CastAheadConfig.Enabled("saveCalls")
+                                and first and first.save and (first.save.lead or 3)
+                            local window = math.max(lead, saveLead or 0)
+                            if window > 0 and remaining <= window then
+                                local heads = CastAheadMatch.ConsensusAdvice(entry.candidates)
+                                if remaining <= lead or CastAheadMatch.IsSave(heads) then
+                                    entry.track.warned = true
+                                    Record("HEADS", unit, heads and heads.key or "-", Ids(entry.candidates))
+                                    PlayAdviceSound(heads, true, entry.candidates)
+                                end
                             end
                         end
                         -- Tenths only in the last few seconds, where they

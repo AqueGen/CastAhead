@@ -2497,8 +2497,27 @@ sounds, spoken, clips = 0, 0, 0
 advance(3.0)
 check(Alerts() == 0, "a cancelled call never fires")
 reset()
+
+-- After an update and /reload a new TOC file is missing until a client restart.
+local savedSaves = CastAheadSaves
+CastAheadSaves = nil
+CastAheadDB = { centerText = true, leadSeconds = 5 }
+local ok, err = pcall(function()
+    fire("SPELLS_CHANGED")
+    sounds, spoken, clips = 0, 0, 0
+    enter()
+    castFor(3.0)
+    advance(13.9)
+    advance(0.1)
+end)
+check(ok, "no error without the Saves module: " .. tostring(err))
+check(Alerts() == 1, string.format("the ordinary heads-up still fires once, got %d", Alerts()))
+reset()
+CastAheadSaves = savedSaves
+
 GetSpecialization, GetSpecializationRole, GetSpecializationInfo, IsPlayerSpell = nil, nil, nil, nil
 CastAheadDefensives = { spells = {}, alias = {} }
+CastAheadCore.ReapplyData()
 CastAheadDB = nil
 
 do
