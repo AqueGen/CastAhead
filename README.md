@@ -37,7 +37,7 @@ Icon rows step sideways by the words under them, so labels never touch; **Fixed 
 
 ## Defensive calls (alpha)
 
-Cast Ahead can also tell you when to press a defensive. It says "small defensive" or "big defensive" (SMALL SAVE and BIG SAVE on screen), with the icon of your own spec's button. The calls come from three places: trash casts, dangerous debuffs on you (sound only), and boss abilities read from DBM or BigWigs bars. Which call a spell gets comes from a table built from measured top-player runs: 228 spells and 90 aliases.
+Cast Ahead can also tell you when to press a defensive. It says "small defensive" or "big defensive" (SMALL SAVE and BIG SAVE on screen), with the icon of your own spec's button. The calls come from three places: trash casts, dangerous debuffs on you (sound only), and boss abilities read from DBM or BigWigs bars. Which call a spell gets comes from a table built from measured top-player runs.
 
 Buttons ship for these specs so far:
 
@@ -49,7 +49,7 @@ Other specs get the generic call without a button icon. More specs will follow.
 
 To change a button, open the Defensives tab in the settings. It has a "Defensive calls" switch, a "Boss calls from DBM / BigWigs" switch, a small and a big button picker for your current spec, and Reset to default. The status line shows which boss mod is connected. Boss calls need DBM or BigWigs installed; without one, trash and debuff calls still work.
 
-Boss coverage is partial today. About 47% of boss threats have a DBM module timer the addon can hear, because bars that exist only in Blizzard's own timeline give addons no callback. Schedules counted from the pull are the planned next step.
+Boss coverage is partial today. A boss threat gets a call only when DBM or BigWigs runs a timer for it, because bars that exist only in Blizzard's own timeline give addons no callback. Schedules counted from the pull are the planned next step.
 
 ## Reporting a wrong call
 
