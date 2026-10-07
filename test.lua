@@ -387,6 +387,27 @@ M.PlayerCanHandle = function() return true end
 check(M.Important({ prio = "POISON" }), "outside the game nothing is hidden")
 M.PlayerRole, M.PlayerCanHandle = savedRole, savedCan
 
+-- Save verdicts: the player's real role picks the verdict, a kick still wins.
+M.SpecRole = function() return "DAMAGER" end
+local saveRow = { spell = 900, cast = 2.0, save = { DAMAGER = "BIG", TANK = "SMALL", lead = 2.5 }, hits = 5, dmg = 0.6 }
+check(M.Advice(saveRow) == M.ADVICE.BIG, "a dps gets BIG where the table says BIG for dps")
+check(M.Advice(saveRow) ~= M.ADVICE.AOE, "and BIG replaces the AOE the statistics would give")
+M.SpecRole = function() return "HEALER" end
+check(M.Advice(saveRow) == M.ADVICE.AOE, "a healer with no verdict keeps the old call")
+M.SpecRole = function() return "TANK" end
+check(M.Advice(saveRow) == M.ADVICE.SMALL, "a tank gets the tank verdict")
+local kickRow = { spell = 901, cast = 2.0, kickable = true, save = { TANK = "BIG" } }
+check(M.Advice(kickRow) == M.ADVICE.KICK, "a kickable cast still says interrupt")
+check(M.Advice({ spell = 902, prio = "KICK", save = { TANK = "BIG" } }) == M.ADVICE.KICK, "a curated kick still wins")
+check(M.Advice({ spell = 903, prio = "DODGE", save = { TANK = "BIG" } }) == M.ADVICE.BIG, "BIG outranks a curated dodge")
+check(M.IsSave(M.ADVICE.BIG) and M.IsSave(M.ADVICE.SMALL) and not M.IsSave(M.ADVICE.AOE), "IsSave names the two save calls")
+local savedPlayerRole = M.PlayerRole
+M.PlayerRole = function() return nil end
+check(M.Important({ spell = 904, save = { TANK = "SMALL" } }), "a save row is important even with the role filter off")
+M.PlayerRole = savedPlayerRole
+M.SpecRole = function() return nil end
+check(M.Advice(saveRow) == M.ADVICE.AOE, "outside the game no role means no save call")
+
 print(string.format("%d dungeons, %d spells, %d unresolvable after two casts, %d needing the mob check",
     dungeons, spells, stuck, rescued))
 print(failures == 0 and "OK" or (failures .. " FAILURES"))

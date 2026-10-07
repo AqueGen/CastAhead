@@ -51,6 +51,8 @@ M.ADVICE = {
     -- height.
     TANK = { label = "TANKBUSTER", short = "BUSTER", say = "tank buster", r = 1.00, g = 0.45, b = 0.10 },
     AOE  = { label = "AOE", say = "aoe damage", r = 1.00, g = 0.75, b = 0.15 },
+    SMALL = { label = "SMALL SAVE", short = "SMALL", say = "small defensive", r = 0.55, g = 0.85, b = 1.00 },
+    BIG   = { label = "BIG SAVE", short = "BIG", say = "big defensive", r = 1.00, g = 0.35, b = 0.85 },
     -- Categories assigned by the curated priority set (row.prio).
     DODGE   = { label = "DODGE", say = "dodge", r = 0.30, g = 0.90, b = 0.40 },
     FRONTAL = { label = "FRONT", say = "frontal", r = 0.95, g = 0.90, b = 0.30 },
@@ -101,7 +103,7 @@ M.ADVICE.SAVE = M.ADVICE.TANK   -- old name, kept so saved settings still resolv
 M.DISPEL_CATEGORY = { Magic = "MAGIC", Poison = "POISON", Curse = "CURSE", Disease = "DISEASE", Bleed = "BLEED" }
 local REFINABLE = { TARGET = true, ALERT = true, DISPEL = true }
 
-function M.Advice(row, interruptible)
+local function BaseAdvice(row, interruptible)
     if not row then return nil end
     if row.prio and REFINABLE[row.prio] and row.dispel and M.DISPEL_CATEGORY[row.dispel] then
         return M.ADVICE[M.DISPEL_CATEGORY[row.dispel]]
@@ -132,6 +134,26 @@ function M.Advice(row, interruptible)
         return M.ADVICE.TANK
     end
     return nil
+end
+
+M.SpecRole = function() return nil end
+
+function M.SaveAdvice(row)
+    local save = row and row.save
+    local role = save and M.SpecRole()
+    local key = role and save[role]
+    return key and M.ADVICE[key] or nil
+end
+
+function M.IsSave(advice)
+    return advice == M.ADVICE.SMALL or advice == M.ADVICE.BIG
+end
+
+function M.Advice(row, interruptible)
+    if not row then return nil end
+    local base = BaseAdvice(row, interruptible)
+    if base == M.ADVICE.KICK or base == M.ADVICE.CC then return base end
+    return M.SaveAdvice(row) or base
 end
 
 M.MIN_OPENING_SAMPLES = 8
@@ -345,6 +367,7 @@ M.PlayerCanHandle = function() return true end
 -- player can act on it. Kept as functions here so the display filter and the
 -- sound gate agree on the meaning.
 function M.Important(row)
+    if M.SaveAdvice(row) then return true end
     if not row.prio then return false end
     local hides = M.ROLE_HIDES[M.PlayerRole()]
     if hides and hides[row.prio] then return false end
