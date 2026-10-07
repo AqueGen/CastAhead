@@ -199,7 +199,8 @@ local COLUMNS = {
       sort = function(e) return SpellSound(e) or "" end },
 }
 
-local TRIGGER_WORDS = { { "cast", "cast" }, { "bar", "DBM bar" }, { "debuff", "debuff" } }
+local MAX_SAVE_ICONS = 5   -- ponytail: longer lists are cut at 5 icons; widen the column if lists grow
+local TRIGGER_WORDS ={ { "cast", "cast" }, { "bar", "DBM bar" }, { "debuff", "debuff" } }
 
 local SAVE_COLUMNS = {
     { key = "size", header = "Save", width = 50,
@@ -207,7 +208,7 @@ local SAVE_COLUMNS = {
           local advice = CastAheadMatch.ADVICE[s.size]
           return string.format("|cff%02x%02x%02x%s|r", advice.r * 255, advice.g * 255, advice.b * 255, advice.short)
       end },
-    { key = "buttons", header = "Buttons", width = 54 },
+    { key = "buttons", header = "Buttons", width = MAX_SAVE_ICONS * 18 },
     { key = "name", header = "Hit", width = 160, text = function(s) return s.name end },
     { key = "mob", header = "Mob", width = 150,
       text = function(s) return "|cff9999ff" .. (s.mob or "?") .. "|r" end },
@@ -578,7 +579,7 @@ local function CreateSaveRow(parent, index)
     for i, column in ipairs(SAVE_COLUMNS) do
         local x = ColumnOffset(i, SAVE_COLUMNS)
         if column.key == "buttons" then
-            for j = 1, 3 do
+            for j = 1, MAX_SAVE_ICONS do
                 local icon = row:CreateTexture(nil, "ARTWORK")
                 icon:SetSize(16, 16)
                 icon:SetPoint("LEFT", row, "LEFT", x + (j - 1) * 18, 0)
@@ -609,7 +610,7 @@ end
 local ROLE_NAMES = { DAMAGER = "Damage", HEALER = "Healer", TANK = "Tank" }
 
 local function RefreshSaves()
-    if not (savesPage and savesPage:IsShown()) then return end
+    if not (savesPage and savesPage:IsVisible()) then return end
     PaintDungeons()
     local saves = CastAheadSaves and CastAheadSaves.ViewRows and CastAheadSaves.ViewRows(selectedInstanceID) or {}
     local items, group = {}, nil
@@ -637,6 +638,8 @@ local function RefreshSaves()
                 local button = save and save.buttons[j]
                 row.icons[j]:SetTexture(button and button.icon or nil)
                 row.icons[j]:SetShown(button and button.icon ~= nil or false)
+                row.icons[j]:SetDesaturated(not (button and button.available))
+                row.icons[j]:SetAlpha(button and button.available and 1 or 0.4)
             end
             row:Show()
         else

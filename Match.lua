@@ -165,11 +165,15 @@ local SAVE_REPLACES = {
     [M.ADVICE.BLEED] = true, [M.ADVICE.ALERT] = true,
 }
 
-function M.Advice(row, interruptible)
-    if not row then return nil end
+function M.Beats(row, interruptible)
     local base = BaseAdvice(row, interruptible)
     if base and not SAVE_REPLACES[base] then return base end
-    return M.SaveAdvice(row) or base
+    return nil
+end
+
+function M.Advice(row, interruptible)
+    if not row then return nil end
+    return M.Beats(row, interruptible) or M.SaveAdvice(row) or BaseAdvice(row, interruptible)
 end
 
 M.MIN_OPENING_SAMPLES = 8

@@ -170,12 +170,27 @@ end
 
 function S.Icon(advice) return S.Icons(advice)[1] end
 
-local WINS = { KICK = true, CC = true, DODGE = true, FRONTAL = true, SWITCH = true, DISPEL = true,
-    POISON = true, CURSE = true, MAGIC = true, DISEASE = true, SOOTHE = true, PURGE = true }
+local function Wins(row)
+    local advice = M.Beats(row)
+    return advice and advice.key or nil
+end
 
-local function Wins(id)
-    local prio = CastAheadPriority and CastAheadPriority[id]
-    return WINS[prio] and prio or nil
+local function ViewButtons(size)
+    local ready = {}
+    for _, e in ipairs(S.Available(size)) do ready[e.kind .. e.id] = true end
+    local out = {}
+    for _, e in ipairs(S.List(size)) do
+        if type(e) == "number" then
+            out[#out + 1] = { kind = "spell", id = e, available = ready["spell" .. e] == true,
+                icon = C_Spell and C_Spell.GetSpellTexture(e) }
+        elseif type(e) == "table" and e.use then
+            local item = useToItem[e.use]
+            local icon = item and C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(item)
+            out[#out + 1] = { kind = "item", id = item, available = item ~= nil and ready["item" .. item] == true,
+                icon = icon or C_Spell and C_Spell.GetSpellTexture(e.use) }
+        end
+    end
+    return out
 end
 
 local function ViewOrder(a, b)
@@ -191,23 +206,24 @@ function S.ViewRows(instanceID)
     local spells = CastAheadDefensives and CastAheadDefensives.spells
     local role = M.SpecRole()
     if not (spells and role) then return out end
-    local cast, wins = {}, {}
+    local cast, wins, buttons = {}, {}, {}
     for _, c in ipairs(CastAheadData and CastAheadData[instanceID] or {}) do
         local _, id = M.SaveRow(c.spell)
         if id then
             cast[id] = true
-            wins[id] = wins[id] or Wins(c.spell)
+            wins[id] = wins[id] or Wins(c)
         end
     end
     for id, row in pairs(spells) do
         local size = row[role]
         if size and (row.dungeon == instanceID or cast[id]) then
+            buttons[size] = buttons[size] or ViewButtons(SIZE[size])
             out[#out + 1] = {
                 id = id, name = row.name or "", boss = row.boss or "", size = size, lead = row.lead,
                 mob = row.mob == "Environment" and "ground effect" or row.mob,
                 trigger = { cast = cast[id] == true, bar = row.bar == true, debuff = row.aura == true },
-                wins = wins[id] or Wins(id),
-                buttons = S.Available(SIZE[size]),
+                wins = wins[id] or Wins({ prio = CastAheadPriority and CastAheadPriority[id] }),
+                buttons = buttons[size],
             }
         end
     end

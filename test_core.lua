@@ -2662,8 +2662,17 @@ do
     GetSpecializationRole = function() return role end
     GetSpecializationInfo = function() return 265 end
     IsPlayerSpell = function(id) return id == 104773 end
-    CastAheadSaveButtons = { [265] = { small = {}, big = { 104773 } } }
+    local savedContainer, savedItem = C_Container, C_Item
+    C_Container = { GetContainerNumSlots = function(b) return b == 0 and 1 or 0 end,
+                    GetContainerItemID = function(b, s) return b == 0 and s == 1 and 5512 or nil end }
+    C_Item = { GetItemSpell = function(id) if id == 5512 then return "Use", 452930 end end,
+               GetItemCount = function(id) return id == 5512 and 3 or 0 end,
+               GetItemCooldown = function() return now - 1, 60, true end,
+               GetItemIconByID = function(id) return 9000 + (id % 1000) end }
+    textures[777] = 3777
+    CastAheadSaveButtons = { [265] = { small = {}, big = { 104773, { use = 452930 }, { use = 777 } } } }
     CastAheadDB = {}
+    CastAheadSaves.ScanBags()
     CastAheadSaves.Refresh()
     CastAheadDefensives = { spells = {
         [801] = { DAMAGER = "SMALL", lead = 2.0, aura = false, name = "Slam", mob = "Boss A", boss = "Boss A", dungeon = 9000, bar = true },
@@ -2674,29 +2683,40 @@ do
         [805] = { TANK = "BIG", lead = 4.0, aura = false, name = "Crush", mob = "Brute", boss = "", dungeon = 9000, bar = false },
         [807] = { DAMAGER = "BIG", lead = 2.0, aura = false, name = "Magma", mob = "Pool", boss = "", dungeon = 9001, bar = false },
         [808] = { DAMAGER = "BIG", lead = 2.0, aura = false, name = "Elsewhere", mob = "Other", boss = "", dungeon = 9001, bar = false },
+        [809] = { DAMAGER = "SMALL", lead = 2.0, aura = false, name = "Hex", mob = "Witch", boss = "", dungeon = 9000, bar = false },
     }, alias = { [902] = 802 } }
-    CastAheadData[9000] = { name = "Fixture", { spell = 902 }, { spell = 807 }, { spell = 950 } }
-    CastAheadPriority[902], CastAheadPriority[807], CastAheadPriority[806] = "DODGE", "AOE", "KICK"
+    CastAheadData[9000] = { name = "Fixture", { spell = 902, prio = "DODGE" }, { spell = 807, prio = "AOE", kickable = true },
+                            { spell = 809, kickable = true }, { spell = 950 } }
+    CastAheadPriority[806] = "KICK"
 
     local list = CastAheadSaves.ViewRows and CastAheadSaves.ViewRows(9000) or {}
     local order = {}
     for i, r in ipairs(list) do order[i] = r.id end
-    check(table.concat(order, ",") == "806,801,803,807,804,802",
+    check(table.concat(order, ",") == "806,801,803,807,804,802,809",
         "bosses by name first, then trash BIG before SMALL by name, got " .. table.concat(order, ","))
     local by = {}
     for _, r in ipairs(list) do by[r.id] = r end
     local zap, slam, bolt, burn, ache, magma = by[806], by[801], by[802], by[803], by[804], by[807]
     check(slam and slam.size == "SMALL" and slam.trigger.bar and not slam.trigger.cast and not slam.trigger.debuff
         and slam.wins == nil and slam.lead == 2.0 and slam.boss == "Boss A", "a boss row with a bar")
-    check(zap and zap.size == "BIG" and zap.wins == "KICK" and #zap.buttons == 1 and zap.buttons[1].id == 104773,
-        "a boss bar takes its wins from the row's own priority and shows the big buttons")
+    check(zap and zap.size == "BIG" and zap.wins == "KICK", "a boss bar takes its wins from the row's own priority")
+    local b = zap and zap.buttons or {}
+    check(#b == 3 and b[1].kind == "spell" and b[1].id == 104773 and b[1].available and b[1].icon == 2001,
+        "the big list in order: the known spell first, available")
+    check(b[2] and b[2].kind == "item" and b[2].id == 5512 and b[2].available == false and b[2].icon == 9512,
+        "an item on cooldown stays in the list, not available")
+    check(b[3] and b[3].kind == "item" and b[3].available == false and b[3].icon == 3777,
+        "an item not in the bags shows its use spell's icon, not available")
+    local hex = by[809]
+    check(hex and hex.wins == "KICK", "a kickable cast with no curated category beats the save, as in the game")
     check(bolt and bolt.trigger.cast and not bolt.trigger.bar and bolt.wins == "DODGE" and bolt.name == "Bolt",
         "a trash row reached by an aliased Data cast, beaten by its DODGE")
     check(burn and burn.trigger.debuff and not burn.trigger.cast and burn.mob == "ground effect",
         "an aura-only row, its Environment caster shown as a ground effect")
     check(ache and not (ache.trigger.cast or ache.trigger.bar or ache.trigger.debuff) and #ache.buttons == 0,
         "a row with no trigger, and no small button to show")
-    check(magma and magma.trigger.cast and magma.wins == nil, "a hit from another dungeon's table reached by this one's cast, AOE does not beat it")
+    check(magma and magma.trigger.cast and magma.wins == nil,
+        "a hit from another dungeon's table reached by this one's cast, its curated AOE over kickable does not beat it")
     check(not by[805] and not by[808], "other roles' rows and other dungeons' rows stay out")
     role = "TANK"
     list = CastAheadSaves.ViewRows and CastAheadSaves.ViewRows(9000) or {}
@@ -2708,7 +2728,10 @@ do
     check(CastAheadSaves.ViewRows and #CastAheadSaves.ViewRows(9000) == 0, "no defensive table, no list")
     CastAheadDefensives = saved
     CastAheadData[9000] = nil
-    CastAheadPriority[902], CastAheadPriority[807], CastAheadPriority[806] = nil, nil, nil
+    CastAheadPriority[806] = nil
+    textures[777] = nil
+    C_Container, C_Item = savedContainer, savedItem
+    CastAheadSaves.ScanBags()
     CastAheadSaveButtons, CastAheadDB = savedButtons, nil
 end
 
