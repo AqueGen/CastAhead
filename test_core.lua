@@ -3333,12 +3333,11 @@ do
     local textureSaved = C_Spell.GetSpellTexture
     C_Spell.GetSpellTexture = function(id) return id == 108416 and 7001 or textures[id] end
 
-    local small = CastAheadSaves.Available("small")
-    check(small[1].kind == "item" and small[1].id == 5512, "Dark Pact on cooldown: the analog Healthstone leads")
+    check(#CastAheadSaves.Available("small") == 0, "Dark Pact on cooldown: stones and potions do not stand in for a small save")
     check(ignoreGCD == true, "the cooldown query ignores the global cooldown")
-    check(#small == 2 and small[2].id == 5509, "the other stone follows; health potions are not small saves")
     local heal = CastAheadSaves.Available("heal")
-    check(#heal == 3 and heal[3].id == 262000, "the health potion stays in the heal list")
+    check(#heal == 3 and heal[1].id == 5512 and heal[2].id == 5509 and heal[3].id == 262000,
+        "stones and the health potion sit in the heal list")
 
     advance(1)
     secret = true
@@ -3347,17 +3346,14 @@ do
     advance(1)
     secret = false
     cd = false
-    small = CastAheadSaves.Available("small")
-    check(small[1].id == 108416, "Dark Pact ready leads")
     local icons = CastAheadSaves.Icons(CastAheadMatch.ADVICE.SMALL)
-    check(#icons == 3 and icons[1] == 7001 and icons[2] == 9000 + 512 and icons[3] == 9000 + 509,
-        "small icons: Dark Pact, Demonic Healthstone, Healthstone (max 3)")
+    check(#icons == 1 and icons[1] == 7001, "small icons: Dark Pact only")
 
     advance(1)
-    CastAheadDB.saveButtons = { [265] = { small = { 108416 } } }
+    CastAheadDB.saveButtons = { [265] = { heal = { 108416 } } }
     CastAheadSaves.Refresh()
     cd = true
-    check(#CastAheadSaves.Available("small") == 0, "every known spell on cooldown: empty, not the shipped list")
+    check(#CastAheadSaves.Available("heal") == 0, "every known spell on cooldown: empty, not the shipped list")
     CastAheadDB.saveButtons = nil
     CastAheadSaves.Refresh()
     advance(1)

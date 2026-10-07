@@ -43,7 +43,7 @@ Each size has its own list of buttons, in order. If the first one is on cooldown
 
 After a big hit lands, Cast Ahead says "heal up" (HEAL UP on screen) if something from your heal list is ready: a Healthstone, a potion, or a self-heal. This only follows a hit that got a big call, on trash when the cast finishes and on bosses when the bar runs out. Debuff calls never get a heal call.
 
-Lists ship for these specs so far. Every spec has Healthstones in its small and heal lists; the Silvermoon health potions sit in the heal list only, so a small hit never asks you to drink one:
+Lists ship for these specs so far. Healthstones and the Silvermoon health potions sit in the heal list of every spec, not in the small one: they heal rather than reduce damage, so they are called after the hit, not before it. You can still add them to a list yourself.
 
 - Warlock, all three specs: Dark Pact (small), Unending Resolve (big), Mortal Coil (heal).
 - Paladin, Protection: Ardent Defender and Sentinel (small), Guardian of Ancient Kings and Divine Shield (big), Word of Glory and Lay on Hands (heal). Holy and Retribution: Divine Protection (small), Divine Shield and Blessing of Protection (big), Lay on Hands and Word of Glory (heal).
