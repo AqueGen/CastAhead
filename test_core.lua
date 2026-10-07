@@ -2515,6 +2515,40 @@ check(Alerts() == 1, string.format("the ordinary heads-up still fires once, got 
 reset()
 CastAheadSaves = savedSaves
 
+-- Aura sounds: registered for the player's role out of combat only, replaced on spec change.
+do
+    local added, removed, inCombat = {}, {}, false
+    C_UnitAuras.AddAuraSound = function(trigger, info) added[#added + 1] = info.spellID return #added end
+    C_UnitAuras.RemoveAuraSound = function(id) removed[#removed + 1] = id end
+    C_ChatInfo = { InChatMessagingLockdown = function() return false end }
+    InCombatLockdown = function() return inCombat end
+    Enum.UnitAuraSoundTrigger = { Added = 0 }
+    GetSpecialization = function() return 1 end
+    local role = "DAMAGER"
+    GetSpecializationRole = function() return role end
+    GetSpecializationInfo = function() return 265 end
+    CastAheadDefensives = { spells = { [373693] = { DAMAGER = "BIG", aura = true }, [5] = { TANK = "BIG", aura = true },
+                                       [6] = { DAMAGER = "SMALL" } }, alias = {} }
+    CastAheadDB = {}
+    inCombat = true
+    CastAheadSaves.Refresh()
+    check(#added == 0, "nothing is registered in combat")
+    inCombat = false
+    fire("PLAYER_REGEN_ENABLED")
+    check(#added == 1 and added[1] == 373693, "leaving combat registers the dps aura only")
+    role = "TANK"
+    fire("PLAYER_SPECIALIZATION_CHANGED", "player")
+    check(#removed == 1 and added[#added] == 5, "a spec change swaps the registrations")
+    CastAheadConfig.SetEnabled("saveCalls", false)
+    CastAheadSaves.Refresh()
+    check(CastAheadSaves.AuraSoundCount() == 0, "switching save calls off removes them")
+    CastAheadConfig.SetEnabled("saveCalls", true)
+    C_UnitAuras.AddAuraSound, C_UnitAuras.RemoveAuraSound = nil, nil
+    C_ChatInfo, InCombatLockdown, Enum.UnitAuraSoundTrigger = nil, nil, nil
+    CastAheadDefensives = { spells = {}, alias = {} }
+    CastAheadDB = nil
+end
+
 GetSpecialization, GetSpecializationRole, GetSpecializationInfo, IsPlayerSpell = nil, nil, nil, nil
 CastAheadDefensives = { spells = {}, alias = {} }
 CastAheadCore.ReapplyData()

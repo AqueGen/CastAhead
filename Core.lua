@@ -2117,6 +2117,9 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         end
         return
     end
+    if event == "PLAYER_REGEN_ENABLED" then
+        if CastAheadSaves and CastAheadSaves.AuraPending() then CastAheadSaves.Refresh() end
+    end
     if event == "ADDON_LOADED" then
         if unit == "CastAhead" then
             CastAheadConfig.AdoptOldName()
@@ -2131,6 +2134,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
             if CastAheadRecorder.Enabled() and IsInInstance() then CastAheadRecorder.EnsureKey() end
         end
         if CastAheadReport then CastAheadReport.Refresh() end
+        if CastAheadSaves then CastAheadSaves.Refresh() end
         CastAheadCore.SyncCombatLog()
         wipe(seenAuras)
         wipe(recentCasts)

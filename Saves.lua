@@ -43,8 +43,45 @@ function S.Lead(spellID)
     return row and row.lead or nil
 end
 
+local SOUND_ROOT = "Interface\\AddOns\\CastAhead\\Sounds\\en\\"
+local auraIDs = {}
+local auraPending = false
+
+local function ClearAuraSounds()
+    for i = #auraIDs, 1, -1 do
+        C_UnitAuras.RemoveAuraSound(auraIDs[i])
+        auraIDs[i] = nil
+    end
+end
+
+local function Blocked()
+    return (InCombatLockdown and InCombatLockdown())
+        or (C_ChatInfo and C_ChatInfo.InChatMessagingLockdown and C_ChatInfo.InChatMessagingLockdown())
+end
+
+local function RegisterAuraSounds()
+    if not (C_UnitAuras and C_UnitAuras.AddAuraSound and Enum and Enum.UnitAuraSoundTrigger) then return end
+    if Blocked() then auraPending = true return end
+    auraPending = false
+    ClearAuraSounds()
+    if not CastAheadConfig.Enabled("saveCalls") then return end
+    for spellID, row in pairs(CastAheadDefensives and CastAheadDefensives.spells or {}) do
+        local advice = row.aura and M.SaveAdvice({ save = row })
+        if advice then
+            local id = C_UnitAuras.AddAuraSound(Enum.UnitAuraSoundTrigger.Added, {
+                unitToken = "player", spellID = spellID,
+                soundFileName = SOUND_ROOT .. advice.file .. ".ogg", outputChannel = "Master" })
+            if id then auraIDs[#auraIDs + 1] = id end
+        end
+    end
+end
+
+function S.AuraSoundCount() return #auraIDs end
+function S.AuraPending() return auraPending end
+
 function S.Refresh()
     wipe(iconCache)
+    RegisterAuraSounds()
 end
 
 function S.Schedule(key, spellID, fireAt, endAt, advice)
