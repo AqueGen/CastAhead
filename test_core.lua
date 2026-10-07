@@ -2608,11 +2608,30 @@ do
     CastAheadConfig.SetEnabled("sound", true)
     CastAheadConfig.SetEnabled("voice", false)
     CastAheadSaves.Refresh()
-    check(CastAheadSaves.AuraSoundCount() == 0, "voice off registers no aura sound")
-    CastAheadConfig.SetEnabled("voice", true)
+    check(CastAheadSaves.AuraSoundCount() == 0, "voice off with no picked sound registers no aura sound")
     local files = {}
     C_UnitAuras.AddAuraSound = function(trigger, info) files[#files + 1] = info.soundFileName return #files end
     LibStub = function() return { Fetch = function(_, _, name) return name == "Path" and "custom/path.ogg" or 12345 end } end
+    CastAheadDB.sounds = { BIG = "Path" }
+    CastAheadSaves.Refresh()
+    check(CastAheadSaves.AuraSoundCount() == 1 and files[#files] == "custom/path.ogg",
+        "voice off with a picked file registers that file")
+    CastAheadDB.sounds = { BIG = "Kit" }
+    CastAheadSaves.Refresh()
+    check(CastAheadSaves.AuraSoundCount() == 0, "voice off with a picked sound kit registers no clip")
+    CastAheadConfig.SetEnabled("voice", true)
+    local lockdown = true
+    C_ChatInfo.InChatMessagingLockdown = function() return lockdown end
+    CastAheadSaves.Refresh()
+    check(CastAheadSaves.AuraPending(), "chat lockdown leaves the registration pending")
+    lockdown = false
+    fire("ENCOUNTER_END", 1234)
+    check(not CastAheadSaves.AuraPending() and CastAheadSaves.AuraSoundCount() == 1, "ENCOUNTER_END retries a pending registration")
+    lockdown = true
+    CastAheadSaves.Refresh()
+    lockdown = false
+    fire("CHALLENGE_MODE_COMPLETED")
+    check(not CastAheadSaves.AuraPending() and CastAheadSaves.AuraSoundCount() == 1, "CHALLENGE_MODE_COMPLETED retries a pending registration")
     CastAheadDB.sounds = { BIG = "Path" }
     CastAheadSaves.Refresh()
     check(files[#files] == "custom/path.ogg", "a picked sound with a file path replaces the clip")

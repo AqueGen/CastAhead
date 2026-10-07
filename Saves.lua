@@ -66,15 +66,14 @@ local function RegisterAuraSounds()
     if Blocked() then auraPending = true return end
     auraPending = false
     ClearAuraSounds()
-    if not (CastAheadConfig.Enabled("saveCalls") and CastAheadConfig.Enabled("sound") and CastAheadConfig.Enabled("voice")) then
-        return
-    end
+    if not (CastAheadConfig.Enabled("saveCalls") and CastAheadConfig.Enabled("sound")) then return end
+    local voice = CastAheadConfig.Enabled("voice")
     for spellID, row in pairs(CastAheadDefensives and CastAheadDefensives.spells or {}) do
         local advice = row.aura and M.SaveAdvice({ save = row })
-        if advice then
+        local file = advice and (PickedFile(advice) or voice and SOUND_ROOT .. advice.file .. ".ogg")
+        if file then
             local ok, id = pcall(C_UnitAuras.AddAuraSound, Enum.UnitAuraSoundTrigger.Added, {
-                unitToken = "player", spellID = spellID,
-                soundFileName = PickedFile(advice) or SOUND_ROOT .. advice.file .. ".ogg", outputChannel = "Master" })
+                unitToken = "player", spellID = spellID, soundFileName = file, outputChannel = "Master" })
             if ok and id then auraIDs[#auraIDs + 1] = id end
         end
     end

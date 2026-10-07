@@ -2119,7 +2119,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         end
         return
     end
-    if event == "PLAYER_REGEN_ENABLED" then
+    if event == "PLAYER_REGEN_ENABLED" or event == "CHALLENGE_MODE_COMPLETED" or event == "ENCOUNTER_END" then
         if CastAheadSaves and CastAheadSaves.AuraPending() then CastAheadSaves.Refresh() end
     end
     if event == "ADDON_LOADED" then
