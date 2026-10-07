@@ -547,9 +547,9 @@ local function EntryLabel(e)
     return IconLabel(icon, name)
 end
 
-local LIST_ROWS, LIST_ROW_H = 4, 20
+local LIST_ROWS, LIST_ROW_H = 8, 20
 local LIST_TOP = -48
-local LIST_H = 222
+local LIST_H = 314
 local LIST_TITLES = { small = "Small defensive", big = "Big defensive", heal = "Heal after the hit" }
 local LIST_ORDER = { "small", "big", "heal" }
 
