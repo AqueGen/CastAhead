@@ -548,8 +548,10 @@ local function EntryLabel(e)
 end
 
 local LIST_ROWS, LIST_ROW_H = 4, 20
-local LIST_TOP = -26
-local LIST_H = 184
+local LIST_TOP = -48
+local LIST_H = 222
+local LIST_TITLES = { small = "Small defensive", big = "Big defensive", heal = "Heal after the hit" }
+local LIST_ORDER = { "small", "big", "heal" }
 
 local function RefreshAll()
     for _, refresh in ipairs(refreshers) do refresh() end
@@ -572,12 +574,51 @@ elseif ChatEdit_InsertLink then
     hooksecurefunc("ChatEdit_InsertLink", InsertLink)
 end
 
-local function BuildSaveList(panel, size, title, column)
+local function BuildSaveList(panel, size, column, hint)
     local S = CastAheadSaves
+    local title = LIST_TITLES[size]
     local group = BuildGroup(panel, title, column, LIST_H)
+    if hint then
+        local line = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        line:SetPoint("TOPLEFT", group.title, "BOTTOMLEFT", 0, -3)
+        line:SetWidth(COL_W - 20)
+        line:SetJustifyH("LEFT")
+        line:SetText("|cffaaaaaa" .. hint .. "|r")
+    end
+
+    local function Remove(i)
+        local list = {}
+        for j, e in ipairs(S.List(size)) do
+            if j ~= i then list[#list + 1] = e end
+        end
+        S.SetList(size, list)
+        RefreshAll()
+    end
+
+    local function RowMenu(owner, i)
+        if not (MenuUtil and MenuUtil.CreateContextMenu) or not S.List(size)[i] then return end
+        MenuUtil.CreateContextMenu(owner, function(_, root)
+            for _, target in ipairs(LIST_ORDER) do
+                if target ~= size then
+                    root:CreateButton("Move to " .. LIST_TITLES[target], function()
+                        S.MoveEntry(size, i, target)
+                        RefreshAll()
+                    end)
+                end
+            end
+            root:CreateButton("Remove", function() Remove(i) end)
+        end)
+    end
+
     local rows = {}
     for i = 1, LIST_ROWS do
         local y = LIST_TOP - (i - 1) * LIST_ROW_H
+        local hit = CreateFrame("Button", nil, group)
+        hit:SetSize(COL_W - 44, LIST_ROW_H)
+        hit:SetPoint("TOPLEFT", group, "TOPLEFT", 8, y)
+        hit:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        hit:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+        hit:SetScript("OnClick", function(self) RowMenu(self, i) end)
         local text = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         text:SetPoint("TOPLEFT", group, "TOPLEFT", 12, y - 4)
         text:SetWidth(COL_W - 50)
@@ -586,15 +627,8 @@ local function BuildSaveList(panel, size, title, column)
         local remove = CreateFrame("Button", nil, group, "UIPanelCloseButton")
         remove:SetSize(20, 20)
         remove:SetPoint("TOPRIGHT", group, "TOPRIGHT", -8, y)
-        remove:SetScript("OnClick", function()
-            local list = {}
-            for j, e in ipairs(S.List(size)) do
-                if j ~= i then list[#list + 1] = e end
-            end
-            S.SetList(size, list)
-            RefreshAll()
-        end)
-        rows[i] = { text = text, remove = remove }
+        remove:SetScript("OnClick", function() Remove(i) end)
+        rows[i] = { text = text, remove = remove, hit = hit }
     end
 
     local more = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -609,8 +643,27 @@ local function BuildSaveList(panel, size, title, column)
     add:SetSize(56, 22)
     add:SetPoint("LEFT", box, "RIGHT", 6, 0)
     add:SetText("Add")
+    local pick = CreateFrame("DropdownButton", nil, group, "WowStyle1DropdownTemplate")
+    pick:SetSize(COL_W - 28, 24)
+    pick:SetPoint("TOPLEFT", box, "BOTTOMLEFT", -6, -6)
+    if pick.SetDefaultText then pick:SetDefaultText("Add from list") end
+    pick:SetupMenu(function(_, root)
+        local entries = S.Addable(size)
+        if #entries == 0 then
+            root:CreateTitle("Nothing left to add")
+            return
+        end
+        for _, e in ipairs(entries) do
+            root:CreateButton(EntryLabel(e), function()
+                local copy = { unpack(S.List(size)) }
+                copy[#copy + 1] = e
+                S.SetList(size, copy)
+                RefreshAll()
+            end)
+        end
+    end)
     local reason = group:CreateFontString(nil, "OVERLAY", "GameFontRedSmall")
-    reason:SetPoint("TOPLEFT", box, "BOTTOMLEFT", -6, -6)
+    reason:SetPoint("TOPLEFT", pick, "BOTTOMLEFT", 0, -6)
     reason:SetWidth(COL_W - 24)
     reason:SetJustifyH("LEFT")
 
@@ -644,6 +697,7 @@ local function BuildSaveList(panel, size, title, column)
         for i, row in ipairs(rows) do
             row.text:SetText(list[i] and EntryLabel(list[i]) or "")
             row.remove:SetShown(list[i] ~= nil)
+            row.hit:SetShown(list[i] ~= nil)
         end
         if #list == 0 then
             rows[1].text:SetText(size == "heal" and "|cffaaaaaaEmpty - no heal up call|r"
@@ -678,9 +732,9 @@ function BuildDefensives(panel)
     end)
 
     local lists = {
-        BuildSaveList(panel, "small", "Small defensive", 2),
-        BuildSaveList(panel, "big", "Big defensive", 3),
-        BuildSaveList(panel, "heal", "Heal up", 4),
+        BuildSaveList(panel, "small", 2),
+        BuildSaveList(panel, "big", 3),
+        BuildSaveList(panel, "heal", 4, "Pressed right after a big hit lands: stone, potion, self-heal."),
     }
 
     local reset = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
@@ -688,8 +742,7 @@ function BuildDefensives(panel)
     reset:SetPoint("TOPLEFT", status, "BOTTOMLEFT", -4, -14)
     reset:SetText("Reset to default")
     reset:SetScript("OnClick", function()
-        CastAheadSaves.ResetSpec()
-        RefreshAll()
+        if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_SAVES") end
     end)
 
     local note = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")

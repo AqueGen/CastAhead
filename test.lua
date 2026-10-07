@@ -418,8 +418,19 @@ check(M.Advice(saveRow) == M.ADVICE.AOE, "outside the game no role means no save
 
 dofile("SaveButtons.lua")
 dofile("Defensives.lua")
+local shippedTables = {}
 for spec, lists in pairs(CastAheadSaveButtons) do
-    check(#lists.small > 0 and #lists.big > 0, "spec " .. spec .. " has a small and a big save button")
+    for _, size in ipairs({ "small", "big", "heal" }) do
+        check(type(lists[size]) == "table" and #lists[size] > 0, "spec " .. spec .. " ships a " .. size .. " list")
+        for _, e in ipairs(lists[size] or {}) do
+            check(type(e) == "number" or type(e) == "table" and type(e.use) == "number",
+                "spec " .. spec .. " " .. size .. " entry is a spell id or an item use")
+            if type(e) == "table" then
+                check(not shippedTables[e], "spec " .. spec .. " " .. size .. " item entry is its own table")
+                shippedTables[e] = true
+            end
+        end
+    end
 end
 for id, row in pairs(CastAheadDefensives.spells) do
     for _, role in ipairs({ "DAMAGER", "HEALER", "TANK" }) do

@@ -143,20 +143,96 @@ function S.ParseEntry(text, list)
     return entry
 end
 
-function S.SetList(size, list)
-    local spec = S.SpecID()
-    if not spec then return end
+local function Write(spec, size, list)
     CastAheadDB = CastAheadDB or {}
     CastAheadDB.saveButtons = CastAheadDB.saveButtons or {}
     CastAheadDB.saveButtons[spec] = CastAheadDB.saveButtons[spec] or {}
     CastAheadDB.saveButtons[spec][size] = list
+end
+
+function S.SetList(size, list)
+    local spec = S.SpecID()
+    if not spec then return end
+    Write(spec, size, list)
     S.Refresh()
+end
+
+local function Has(list, entry)
+    for _, e in ipairs(list) do
+        if SameEntry(e, entry) then return true end
+    end
+    return false
+end
+
+function S.MoveEntry(from, index, to)
+    local spec = S.SpecID()
+    local source = S.List(from)
+    local entry = source[index]
+    if not (spec and entry) or from == to then return end
+    local kept = {}
+    for i, e in ipairs(source) do
+        if i ~= index then kept[#kept + 1] = e end
+    end
+    local target = { unpack(S.List(to)) }
+    if not Has(target, entry) then target[#target + 1] = entry end
+    Write(spec, from, kept)
+    Write(spec, to, target)
+    S.Refresh()
+end
+
+local CLASS_SPECS = {
+    { 265, 266, 267 },
+    { 65, 66, 70 },
+    { 577, 581, 1480 },
+}
+
+function S.Catalogue(spec)
+    local out = {}
+    for _, specs in ipairs(CLASS_SPECS) do
+        for _, s in ipairs(specs) do
+            if s == spec then
+                for _, member in ipairs(specs) do
+                    for _, size in ipairs({ "small", "big", "heal" }) do
+                        for _, e in ipairs(Shipped(member, size)) do
+                            if not Has(out, e) then out[#out + 1] = e end
+                        end
+                    end
+                end
+                return out
+            end
+        end
+    end
+    return out
+end
+
+function S.Addable(size)
+    local list, out = S.List(size), {}
+    for _, e in ipairs(S.Catalogue(S.SpecID())) do
+        if (type(e) ~= "number" or Known(e)) and not Has(list, e) then out[#out + 1] = e end
+    end
+    return out
 end
 
 function S.ResetSpec()
     local spec = S.SpecID()
     if spec and CastAheadDB and CastAheadDB.saveButtons then CastAheadDB.saveButtons[spec] = nil end
     S.Refresh()
+end
+
+if StaticPopupDialogs then
+    StaticPopupDialogs.CASTAHEAD_RESET_SAVES = {
+        text = "Reset Small, Big and Heal lists for this specialization to the defaults?",
+        button1 = YES or "Yes",
+        button2 = NO or "No",
+        OnAccept = function()
+            S.ResetSpec()
+            if CastAheadOptions and CastAheadOptions.RefreshDefensives then CastAheadOptions.RefreshDefensives() end
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+        preferredIndex = 3,
+    }
 end
 
 function S.Button(size)

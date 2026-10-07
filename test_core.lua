@@ -285,6 +285,7 @@ CastAheadExtra = {
 
 CastAheadSaveButtons = {}
 CastAheadDefensives = { spells = {}, alias = {} }
+StaticPopupDialogs = {}
 
 dofile("Config.lua")
 dofile("Match.lua")
@@ -293,7 +294,6 @@ dofile("BossAdapter.lua")
 dofile("Timeline.lua")
 -- UI.lua only needs the stubs above for its option helpers.
 UISpecialFrames = {}
-StaticPopupDialogs = {}
 SlashCmdList = {}
 SearchBoxTemplate_OnTextChanged = function() end
 GameTooltip = setmetatable({}, { __index = function() return function() end end })
@@ -3365,6 +3365,75 @@ do
     GetSpecialization, GetSpecializationRole, GetSpecializationInfo, IsPlayerSpell, InCombatLockdown = nil, nil, nil, nil, nil
     CastAheadSaveButtons, CastAheadDB = savedButtons, savedDB
     CastAheadSaves.ScanBags()
+end
+
+do
+    local savedButtons, savedDB = CastAheadSaveButtons, CastAheadDB
+    CastAheadSaveButtons = {}
+    assert(loadfile("SaveButtons.lua"))()
+    local S = CastAheadSaves
+
+    local cat = S.Catalogue(66)
+    local seen, spells, items = {}, {}, 0
+    for _, e in ipairs(cat) do
+        local key = type(e) == "table" and "use" .. e.use or e
+        check(not seen[key], "catalogue lists " .. key .. " once")
+        seen[key] = true
+        if type(e) == "number" then spells[e] = true else items = items + 1 end
+    end
+    for _, id in ipairs({ 498, 31850, 389539, 403876, 642, 1022, 86659, 633, 85673 }) do
+        check(spells[id], "paladin catalogue has " .. id)
+    end
+    check(#cat == 13 and items == 4 and cat[1] == 498, "paladin catalogue: 9 paladin spells and 4 items, in first-seen order")
+    check(not (spells[108416] or spells[104773] or spells[6789] or spells[198589] or spells[203720]),
+        "paladin catalogue has no warlock or demon hunter spells")
+    check(#S.Catalogue(62) == 0 and #S.Catalogue(nil) == 0, "an unsupported spec has an empty catalogue")
+
+    GetSpecialization = function() return 1 end
+    GetSpecializationInfo = function() return 265 end
+    IsPlayerSpell = function(id) return id == 108416 or id == 104773 end
+    local refreshes = 0
+    local realRefresh = S.Refresh
+    S.Refresh = function() refreshes = refreshes + 1 return realRefresh() end
+
+    CastAheadDB = { saveButtons = { [265] = { small = { 108416, { use = 452930 }, 6789 }, big = { 104773 } } } }
+    S.MoveEntry("small", 2, "big")
+    local o = CastAheadDB.saveButtons[265]
+    check(#o.small == 2 and o.small[1] == 108416 and o.small[2] == 6789, "a moved entry leaves its list")
+    check(#o.big == 2 and o.big[2].use == 452930 and refreshes == 1, "a moved entry is appended to the target, one refresh")
+    o.small = { 104773, 108416 }
+    S.MoveEntry("small", 1, "big")
+    check(#o.small == 1 and o.small[1] == 108416 and #o.big == 2, "moving an entry the target already has only removes it")
+
+    CastAheadDB = {}
+    local shippedSmall = #CastAheadSaveButtons[265].small
+    S.MoveEntry("small", 1, "heal")
+    check(#CastAheadSaveButtons[265].small == shippedSmall and CastAheadDB.saveButtons[265].heal[#CastAheadDB.saveButtons[265].heal] == 108416,
+        "moving out of a shipped list copies it, the shipped table stays")
+
+    CastAheadDB = { saveButtons = { [265] = { big = {} } } }
+    local add = S.Addable("big")
+    local addSeen = {}
+    for _, e in ipairs(add) do addSeen[type(e) == "table" and "use" .. e.use or e] = true end
+    check(addSeen[104773] and addSeen[108416] and addSeen.use452930 and not addSeen[6789],
+        "Addable lists known class spells and items, not unknown spells")
+    CastAheadDB.saveButtons[265].big = { 104773, { use = 452930 } }
+    add = S.Addable("big")
+    addSeen = {}
+    for _, e in ipairs(add) do addSeen[type(e) == "table" and "use" .. e.use or e] = true end
+    check(not addSeen[104773] and not addSeen.use452930 and addSeen.use6262, "Addable skips what the list already holds")
+
+    local dialog = StaticPopupDialogs.CASTAHEAD_RESET_SAVES
+    check(dialog and dialog.hideOnEscape and dialog.timeout == 0 and type(dialog.OnAccept) == "function",
+        "the reset confirmation is registered")
+    CastAheadDB = { saveButtons = { [265] = { big = {} } } }
+    if dialog then dialog.OnAccept() end
+    check(CastAheadDB.saveButtons[265] == nil, "accepting the reset clears the spec's lists")
+
+    S.Refresh = realRefresh
+    GetSpecialization, GetSpecializationInfo, IsPlayerSpell = nil, nil, nil
+    CastAheadSaveButtons, CastAheadDB = savedButtons, savedDB
+    S.Refresh()
 end
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
