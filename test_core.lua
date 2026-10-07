@@ -2618,6 +2618,39 @@ advance(7.5)
 check(Alerts() == 0, "an extended bar moves its call")
 advance(10)
 check(Alerts() == 1, "to the new end minus lead")
+advance(5)
+A.OnBar("dbm", "t7", 1299684, 10, now)
+sounds, spoken, clips = 0, 0, 0
+advance(7.5)
+A.OnUpdate("dbm", "t7", 0, 5, now)
+advance(6)
+check(Alerts() == 1, string.format("an update after the call fired does not call again, got %d", Alerts()))
+advance(5)
+A.OnBar("dbm", "t8", 1299684, 10, now)
+A.OnPause("dbm", "t8", now)
+sounds, spoken, clips = 0, 0, 0
+advance(20)
+A.OnUpdate("dbm", "t8", 0, 10, now)
+advance(20)
+check(Alerts() == 0, "an update while paused keeps the bar paused")
+A.OnResume("dbm", "t8", now)
+advance(6.5)
+check(Alerts() == 0, "the updated bar counts from where it paused")
+advance(1.0)
+check(Alerts() == 1, "and calls once after resuming")
+do
+    local savedSaves = CastAheadSaves
+    CastAheadSaves = nil
+    local ok, err = pcall(function()
+        A.OnBar("dbm", "t9", 1299684, 10, now)
+        A.OnUpdate("dbm", "t9", 0, 20, now)
+        A.OnStop("dbm", "t9")
+        fire("ENCOUNTER_START", 1234)
+        fire("ENCOUNTER_END", 1234)
+    end)
+    CastAheadSaves = savedSaves
+    check(ok, "the boss adapter needs no Saves module: " .. tostring(err))
+end
 reset()
 GetSpecialization, GetSpecializationRole = nil, nil
 CastAheadDefensives = { spells = {}, alias = {} }
@@ -2645,6 +2678,7 @@ do
     check(connectedAtLogin, "Core connects the adapter at login")
     check(printed == 1, string.format("one chat line when no boss timers arrive, got %d", printed))
     fire("ENCOUNTER_END", 1234)
+    CastAheadBossAdapter.Connect()
     reset()
 end
 

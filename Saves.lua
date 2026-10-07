@@ -111,6 +111,14 @@ function S.Resume(key, now)
     end
 end
 
+function S.Move(key, remaining, lead, now)
+    local c = scheduled[key]
+    if not c then return false end
+    c.endAt = (c.pausedAt or now) + remaining
+    c.fireAt = c.endAt - lead
+    return true
+end
+
 local pending = {}
 function S.Pending(now)
     wipe(pending)

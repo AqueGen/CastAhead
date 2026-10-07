@@ -8,35 +8,51 @@ local HEALTH_WAIT = 30
 
 local function Key(source, barKey) return source .. ":" .. tostring(barKey) end
 
-function A.OnBar(source, barKey, spellID, duration, now)
-    spellID, duration = tonumber(spellID), tonumber(duration)
-    if not (spellID and duration) then return end
-    barsSeen = true
+local function Verdict(spellID)
     local data = CastAheadDefensives
-    if not data then return end
+    if not data then return nil end
     local id = data.alias and data.alias[spellID] or spellID
     local row = data.spells and data.spells[id]
     local advice = row and M.SaveAdvice({ save = row })
-    if not advice or not CastAheadConfig.Enabled("saveCalls") or not CastAheadConfig.Enabled("bossAdapter") then return end
+    if not advice or not CastAheadConfig.Enabled("saveCalls") or not CastAheadConfig.Enabled("bossAdapter") then return nil end
+    return id, row.lead or 3, advice
+end
+
+function A.OnBar(source, barKey, spellID, duration, now)
+    barsSeen = true
+    if not CastAheadSaves then return end
+    spellID, duration = tonumber(spellID), tonumber(duration)
+    if not (spellID and duration) then return end
+    local id, lead, advice = Verdict(spellID)
+    if not id then return end
     local key = Key(source, barKey)
     local endAt = now + duration
     barSpells[key] = spellID
-    CastAheadSaves.Schedule(key, id, endAt - (row.lead or 3), endAt, advice)
+    CastAheadSaves.Schedule(key, id, endAt - lead, endAt, advice)
 end
 
 function A.OnUpdate(source, barKey, elapsed, total, now)
-    local spellID = barSpells[Key(source, barKey)]
+    if not CastAheadSaves then return end
+    local key = Key(source, barKey)
+    local spellID = barSpells[key]
     elapsed, total = tonumber(elapsed), tonumber(total)
-    if spellID and elapsed and total then A.OnBar(source, barKey, spellID, total - elapsed, now) end
+    if not (spellID and elapsed and total) then return end
+    local id, lead = Verdict(spellID)
+    if not id then return end
+    if not CastAheadSaves.Move(key, total - elapsed, lead, now) then
+        A.OnBar(source, barKey, spellID, total - elapsed, now)
+    end
 end
 
 function A.OnStop(source, barKey)
+    if not CastAheadSaves then return end
     local key = Key(source, barKey)
     barSpells[key] = nil
     CastAheadSaves.Cancel(key)
 end
 
 function A.OnStopAll(source)
+    if not CastAheadSaves then return end
     local prefix = source .. ":"
     for key in pairs(barSpells) do
         if key:sub(1, #prefix) == prefix then barSpells[key] = nil end
@@ -44,8 +60,15 @@ function A.OnStopAll(source)
     CastAheadSaves.CancelPrefix(prefix)
 end
 
-function A.OnPause(source, barKey, now) CastAheadSaves.Pause(Key(source, barKey), now) end
-function A.OnResume(source, barKey, now) CastAheadSaves.Resume(Key(source, barKey), now) end
+function A.OnPause(source, barKey, now)
+    if not CastAheadSaves then return end
+    CastAheadSaves.Pause(Key(source, barKey), now)
+end
+
+function A.OnResume(source, barKey, now)
+    if not CastAheadSaves then return end
+    CastAheadSaves.Resume(Key(source, barKey), now)
+end
 
 function A.Connect()
     local dbm, bw
