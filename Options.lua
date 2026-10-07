@@ -528,39 +528,114 @@ function BuildDevelopment(panel)
         "probe clear", "Forget the collected probe results. /ca probe clear")
 end
 
-local function SpellLabel(id)
-    local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(id) or tostring(id)
-    local icon = C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(id)
+local function IconLabel(icon, name)
     return icon and string.format("|T%s:16|t %s", icon, name) or name
 end
 
-local CLASS_SPECS = {
-    { 265, 266, 267 },
-    { 65, 66, 70 },
-    { 577, 581, 1480 },
-}
+local function EntryLabel(e)
+    if type(e) == "number" then
+        return IconLabel(C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(e),
+            C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(e) or tostring(e))
+    end
+    local use = type(e) == "table" and e.use
+    if not use then return tostring(e) end
+    local item = CastAheadSaves.ItemFor(use)
+    local name = item and C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(item)
+        or "Item with " .. (C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(use) or tostring(use))
+    local icon = item and C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(item)
+        or C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(use)
+    return IconLabel(icon, name)
+end
 
-local function SaveChoices(spec, size)
-    local ids, seen = {}, {}
-    local function add(id)
-        if id and not seen[id] and IsPlayerSpell and IsPlayerSpell(id) then seen[id] = true ids[#ids + 1] = id end
-    end
-    for _, specs in ipairs(CLASS_SPECS) do
-        if tContains(specs, spec) then
-            for _, classSpec in ipairs(specs) do
-                local shipped = CastAheadSaveButtons and CastAheadSaveButtons[classSpec] or {}
-                for _, id in ipairs(shipped.small or {}) do add(id) end
-                for _, id in ipairs(shipped.big or {}) do add(id) end
+local LIST_ROWS, LIST_ROW_H = 4, 20
+local LIST_TOP = -26
+local LIST_H = 184
+
+local function RefreshAll()
+    for _, refresh in ipairs(refreshers) do refresh() end
+end
+
+local function BuildSaveList(panel, size, title, column)
+    local S = CastAheadSaves
+    local group = BuildGroup(panel, title, column, LIST_H)
+    local rows = {}
+    for i = 1, LIST_ROWS do
+        local y = LIST_TOP - (i - 1) * LIST_ROW_H
+        local text = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        text:SetPoint("TOPLEFT", group, "TOPLEFT", 12, y - 4)
+        text:SetWidth(COL_W - 50)
+        text:SetJustifyH("LEFT")
+        text:SetWordWrap(false)
+        local remove = CreateFrame("Button", nil, group, "UIPanelCloseButton")
+        remove:SetSize(20, 20)
+        remove:SetPoint("TOPRIGHT", group, "TOPRIGHT", -8, y)
+        remove:SetScript("OnClick", function()
+            local list = {}
+            for j, e in ipairs(S.List(size)) do
+                if j ~= i then list[#list + 1] = e end
             end
-        end
+            S.SetList(size, list)
+            RefreshAll()
+        end)
+        rows[i] = { text = text, remove = remove }
     end
-    local picks = CastAheadDB and CastAheadDB.saveButtons and CastAheadDB.saveButtons[spec]
-    add(picks and picks[size])
-    return ids
+
+    local more = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    more:SetPoint("TOPLEFT", group, "TOPLEFT", 12, LIST_TOP - LIST_ROWS * LIST_ROW_H - 2)
+
+    local box = CreateFrame("EditBox", nil, group, "InputBoxTemplate")
+    box:SetSize(COL_W - 96, 20)
+    box:SetPoint("TOPLEFT", group, "TOPLEFT", 18, LIST_TOP - LIST_ROWS * LIST_ROW_H - 18)
+    box:SetAutoFocus(false)
+    local add = CreateFrame("Button", nil, group, "UIPanelButtonTemplate")
+    add:SetSize(56, 22)
+    add:SetPoint("LEFT", box, "RIGHT", 6, 0)
+    add:SetText("Add")
+    local reason = group:CreateFontString(nil, "OVERLAY", "GameFontRedSmall")
+    reason:SetPoint("TOPLEFT", box, "BOTTOMLEFT", -6, -6)
+    reason:SetWidth(COL_W - 24)
+    reason:SetJustifyH("LEFT")
+
+    local function Submit()
+        local list = S.List(size)
+        local entry, why = S.ParseEntry(box:GetText(), list)
+        if not entry then
+            reason:SetText(why)
+            return
+        end
+        local copy = { unpack(list) }
+        copy[#copy + 1] = entry
+        S.SetList(size, copy)
+        box:SetText("")
+        box:ClearFocus()
+        RefreshAll()
+    end
+    add:SetScript("OnClick", Submit)
+    box:SetScript("OnEnterPressed", Submit)
+    box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    box:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(title, 1, 1, 1)
+        GameTooltip:AddLine("A spell id or a spell name you know, an item id, or an item link. An item is stored by its use effect, so any item in your bags with that effect counts.", nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    box:SetScript("OnLeave", GameTooltip_Hide)
+
+    table.insert(refreshers, function()
+        local list = S.List(size)
+        for i, row in ipairs(rows) do
+            row.text:SetText(list[i] and EntryLabel(list[i]) or "")
+            row.remove:SetShown(list[i] ~= nil)
+        end
+        if #list == 0 then rows[1].text:SetText("|cffaaaaaaEmpty - this call shows no button|r") end
+        more:SetText(#list > LIST_ROWS and string.format("|cffaaaaaa+%d more|r", #list - LIST_ROWS) or "")
+        reason:SetText("")
+    end)
+    return group
 end
 
 function BuildDefensives(panel)
-    local group = BuildGroup(panel, "Defensive calls", 1, 286)
+    local group = BuildGroup(panel, "Defensive calls", 1, LIST_H)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, SaveRefresh)
     local boss = BuildSwitch(panel, "bossAdapter", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, function(on)
         Redraw()
@@ -579,45 +654,19 @@ function BuildDefensives(panel)
         status:SetText("|cffaaaaaa" .. (CastAheadBossAdapter and CastAheadBossAdapter.Status() or "No boss mod") .. "|r")
     end)
 
-    local dropdowns = {}
-    local anchor = status
-    for _, entry in ipairs({ { "small", "Small defensive" }, { "big", "Big defensive" } }) do
-        local size = entry[1]
-        local label = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -12)
-        label:SetText(entry[2])
-        local dropdown = CreateFrame("DropdownButton", nil, panel, "WowStyle1DropdownTemplate")
-        dropdown:SetSize(COL_W - 40, 24)
-        dropdown:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -4)
-        dropdown:SetupMenu(function(_, root)
-            local spec = CastAheadSaves and CastAheadSaves.SpecID()
-            if not spec then return end
-            for _, id in ipairs(SaveChoices(spec, size)) do
-                root:CreateRadio(SpellLabel(id),
-                    function() return CastAheadSaves.Button(size) == id end,
-                    function()
-                        CastAheadDB = CastAheadDB or {}
-                        CastAheadDB.saveButtons = CastAheadDB.saveButtons or {}
-                        CastAheadDB.saveButtons[spec] = CastAheadDB.saveButtons[spec] or {}
-                        CastAheadDB.saveButtons[spec][size] = id
-                        SaveRefresh()
-                    end)
-            end
-        end)
-        dropdown.caption = label
-        dropdowns[#dropdowns + 1] = dropdown
-        anchor = dropdown
-    end
+    local lists = {
+        BuildSaveList(panel, "small", "Small defensive", 2),
+        BuildSaveList(panel, "big", "Big defensive", 3),
+        BuildSaveList(panel, "heal", "Heal up", 4),
+    }
 
     local reset = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     reset:SetSize(110, 22)
-    reset:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -14)
+    reset:SetPoint("TOPLEFT", status, "BOTTOMLEFT", -4, -14)
     reset:SetText("Reset to default")
     reset:SetScript("OnClick", function()
-        local spec = CastAheadSaves and CastAheadSaves.SpecID()
-        if spec and CastAheadDB and CastAheadDB.saveButtons then CastAheadDB.saveButtons[spec] = nil end
-        SaveRefresh()
-        for _, refresh in ipairs(refreshers) do refresh() end
+        CastAheadSaves.ResetSpec()
+        RefreshAll()
     end)
 
     local note = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -628,14 +677,10 @@ function BuildDefensives(panel)
 
     table.insert(refreshers, function()
         local spec = CastAheadSaves and CastAheadSaves.SpecID()
-        local shipped = spec and CastAheadSaveButtons and CastAheadSaveButtons[spec]
+        local shipped = spec and CastAheadSaveButtons and CastAheadSaveButtons[spec] and true or false
         note:SetShown(not shipped)
-        for _, dropdown in ipairs(dropdowns) do
-            dropdown:SetShown(shipped and true or false)
-            dropdown.caption:SetShown(shipped and true or false)
-            dropdown:GenerateMenu()
-        end
-        reset:SetShown(shipped and true or false)
+        for _, list in ipairs(lists) do list:SetShown(shipped) end
+        reset:SetShown(shipped)
     end)
 end
 

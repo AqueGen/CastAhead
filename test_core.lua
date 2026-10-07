@@ -2964,6 +2964,57 @@ do
     check(#CastAheadSaves.Available("small") == 1, "the next frame reflects a changed item count")
     counts[5512] = 3
 
+    CastAheadDB = { saveButtons = { [265] = { big = { 999 } } } }
+    CastAheadSaves.Refresh()
+    local big = CastAheadSaves.Available("big")
+    check(#big == 1 and big[1].id == 104773, "an override with nothing available falls back to the shipped list")
+    CastAheadDB.saveButtons[265].big = {}
+    CastAheadSaves.Refresh()
+    check(#CastAheadSaves.Available("big") == 0, "an empty override still disables the size")
+
+    local realInfo = C_Spell.GetSpellInfo
+    C_Spell.GetSpellInfo = function(q)
+        if q == "Unending Resolve" then return { spellID = 104773, name = q } end
+        if q == "Fireball" then return { spellID = 133, name = q } end
+        return realInfo(q)
+    end
+    local Parse = CastAheadSaves.ParseEntry
+    local NOT_FOUND = "Not a spell you know or an item with a use effect"
+    check(Parse("104773") == 104773, "a known spell id parses to the spell")
+    local entry = Parse("5512")
+    check(type(entry) == "table" and entry.use == 452930, "an item id parses to its use spell")
+    entry = Parse("|cffffffff|Hitem:5512::::::::80:::::|h[Healthstone]|h|r")
+    check(type(entry) == "table" and entry.use == 452930, "an item link parses to its use spell")
+    check(Parse(" Unending Resolve ") == 104773, "a known spell name parses to its id")
+    local none, why = Parse("Fireball")
+    check(none == nil and why == NOT_FOUND, "a spell name the character does not know is rejected")
+    none, why = Parse("424242")
+    check(none == nil and why == NOT_FOUND, "an unknown number is rejected")
+    none, why = Parse("!!garbage")
+    check(none == nil and why == NOT_FOUND, "garbage is rejected")
+    none, why = Parse("", {})
+    check(none == nil and why == NOT_FOUND, "an empty box is rejected")
+    none, why = Parse("5512", { 108416, { use = 452930 } })
+    check(none == nil and why == "Already in the list", "an item already in the list is rejected")
+    none, why = Parse("108416", { 108416 })
+    check(none == nil and why == "Already in the list", "a spell already in the list is rejected")
+    C_Spell.GetSpellInfo = realInfo
+
+    local refreshes = 0
+    local realRefresh = CastAheadSaves.Refresh
+    CastAheadSaves.Refresh = function() refreshes = refreshes + 1 return realRefresh() end
+    CastAheadDB = {}
+    CastAheadSaves.SetList("heal", { 104773, { use = 452930 } })
+    local heal = CastAheadDB.saveButtons[265].heal
+    check(heal[1] == 104773 and heal[2].use == 452930 and refreshes == 1, "SetList writes the spec's list and refreshes")
+    check(CastAheadSaves.List("heal") == heal, "List reads what SetList wrote")
+    CastAheadSaves.ResetSpec()
+    check(CastAheadDB.saveButtons[265] == nil and refreshes == 2, "ResetSpec clears the spec's lists and refreshes")
+    check(CastAheadSaves.List("heal") == CastAheadSaveButtons[265].heal, "after a reset the shipped list is back")
+    CastAheadSaves.Refresh = realRefresh
+    CastAheadDB = {}
+    CastAheadSaves.Refresh()
+
     CastAheadDB = { centerText = true }
     CastAheadSaves.Refresh()
     reset()

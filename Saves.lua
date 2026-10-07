@@ -57,13 +57,8 @@ local function ItemReady(item)
     return (start or 0) == 0 or (start + (duration or 0)) <= GetTime()
 end
 
-function S.Available(size)
-    local stamp = GetTime()
-    local hit = memo[size]
-    if hit and hit.stamp == stamp then return hit.list end
-    local out = {}
-    memo[size] = { stamp = stamp, list = out }
-    for _, e in ipairs(S.List(size)) do
+local function Collect(list, out)
+    for _, e in ipairs(list) do
         if type(e) == "number" then
             if Known(e) then
                 out[#out + 1] = { kind = "spell", id = e, icon = C_Spell and C_Spell.GetSpellTexture(e) }
@@ -75,7 +70,72 @@ function S.Available(size)
             end
         end
     end
+end
+
+function S.Available(size)
+    local stamp = GetTime()
+    local hit = memo[size]
+    if hit and hit.stamp == stamp then return hit.list end
+    local out = {}
+    memo[size] = { stamp = stamp, list = out }
+    local list = S.List(size)
+    Collect(list, out)
+    if #out == 0 and #list > 0 then
+        local shipped = Shipped(S.SpecID(), size)
+        if shipped ~= list then Collect(shipped, out) end
+    end
     return out
+end
+
+function S.ItemFor(use) return useToItem[use] end
+
+local NOT_FOUND = "Not a spell you know or an item with a use effect"
+
+local function ItemEntry(item)
+    if not (C_Item and C_Item.GetItemSpell) then return nil end
+    local _, use = C_Item.GetItemSpell(item)
+    return use and { use = use } or nil
+end
+
+local function SameEntry(a, b)
+    if type(a) == "table" and type(b) == "table" then return a.use == b.use end
+    return a == b
+end
+
+function S.ParseEntry(text, list)
+    text = tostring(text or ""):match("^%s*(.-)%s*$")
+    local link = text:match("|Hitem:(%d+)")
+    local number = tonumber(text)
+    local entry
+    if link then
+        entry = ItemEntry(tonumber(link))
+    elseif number then
+        entry = Known(number) and number or ItemEntry(number)
+    elseif text ~= "" and C_Spell and C_Spell.GetSpellInfo then
+        local info = C_Spell.GetSpellInfo(text)
+        if info and Known(info.spellID) then entry = info.spellID end
+    end
+    if not entry then return nil, NOT_FOUND end
+    for _, e in ipairs(list or {}) do
+        if SameEntry(e, entry) then return nil, "Already in the list" end
+    end
+    return entry
+end
+
+function S.SetList(size, list)
+    local spec = S.SpecID()
+    if not spec then return end
+    CastAheadDB = CastAheadDB or {}
+    CastAheadDB.saveButtons = CastAheadDB.saveButtons or {}
+    CastAheadDB.saveButtons[spec] = CastAheadDB.saveButtons[spec] or {}
+    CastAheadDB.saveButtons[spec][size] = list
+    S.Refresh()
+end
+
+function S.ResetSpec()
+    local spec = S.SpecID()
+    if spec and CastAheadDB and CastAheadDB.saveButtons then CastAheadDB.saveButtons[spec] = nil end
+    S.Refresh()
 end
 
 function S.Button(size)
