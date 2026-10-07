@@ -16,6 +16,9 @@ DMG_MAXHP, DMG_AMOUNT, DMG_OVERKILL, DMG_ABSORBED = 15, 31, 33, 37
 # A cast still open this long before its caster died was stopped by something
 # else first; only a death inside a cast's own length ended it.
 CAST_CEILING = 6.0
+# A channel whose aura left this close before its caster died ended with the
+# death, not with a stun or a kick.
+DEATH_GRACE = 0.5
 
 
 def ts(s):
@@ -42,7 +45,7 @@ def newrec():
     # running in - but once it starts acting the order tends to hold.
     return {"cast": [], "iv": [], "runs": {}, "first": [], "offset": [],
             "name": "", "mob": "", "hits": [], "dmg": [], "kicked": 0,
-            "starts": 0, "boss": False}
+            "starts": 0, "boss": False, "chan": []}
 
 
 out = defaultdict(lambda: defaultdict(lambda: defaultdict(newrec)))
@@ -61,6 +64,8 @@ def scan(path):
     pending = {}        # caster guid -> what its last finished cast has hit
     pulls = {}          # guid -> how many times this spawn was engaged afresh
     in_encounter = False  # inside a boss fight: those casts are not trash
+    open_chan = {}      # (guid, spell) -> when a cast with no START went out
+    removed_at = {}     # guid -> (rec, t) of its last channel end, undone by a death right after
 
     def flush(guid):
         """Book a finished cast's damage against the spell that caused it."""
@@ -77,7 +82,7 @@ def scan(path):
     def reset(guid):
         """A spawn idle past ENGAGE_RESET starts over: nothing from its last pull carries."""
         flush(guid)
-        for store in (open_cast, last_start, breaks):
+        for store in (open_cast, last_start, breaks, open_chan):
             for key in [k for k in store if k[0] == guid]:
                 del store[key]
         completed.difference_update([k for k in completed if k[0] == guid])
@@ -140,6 +145,8 @@ def scan(path):
                     acted_at.clear()
                     pending.clear()
                     pulls.clear()
+                    open_chan.clear()
+                    removed_at.clear()
                     in_encounter = False
                 else:
                     flush_all()
@@ -151,7 +158,8 @@ def scan(path):
             isdmg = any(e in line for e in DMG_EVENTS)
             iskick = "SPELL_INTERRUPT" in line
             isdeath = "UNIT_DIED" in line
-            if not iscast and not isdmg and not iskick and not isdeath:
+            isremoved = "SPELL_AURA_REMOVED" in line
+            if not iscast and not isdmg and not iskick and not isdeath and not isremoved:
                 continue
             try:
                 stamp, rest = line.split("  ", 1)
@@ -202,8 +210,22 @@ def scan(path):
                 except (ValueError, IndexError):
                     pass
                 continue
+            if ev == "SPELL_AURA_REMOVED":
+                try:
+                    key = (p[1], int(p[9]))
+                except (ValueError, IndexError):
+                    continue
+                started = open_chan.pop(key, None)
+                if started is not None:
+                    rec = out[cur][int(p[1].split("-")[5])][key[1]]
+                    rec["chan"].append(round(t - started, 2))
+                    removed_at[p[1]] = (rec, t)
+                continue
             if ev == "UNIT_DIED":
                 guid = p[5]
+                ended = removed_at.pop(guid, None)
+                if ended and t - ended[1] <= DEATH_GRACE:
+                    ended[0]["chan"].pop()
                 if guid.startswith("Creature-"):
                     for key in [k for k in open_cast if k[0] == guid]:
                         if t - open_cast.pop(key) <= CAST_CEILING:
@@ -260,6 +282,7 @@ def scan(path):
                     # and no order at all - and its `first`-less generated row
                     # would then shadow the curated Extra row that has one.
                     note_opening(rec, guid, spellid, t)
+                    open_chan[key] = t
                     prev = last_start.get(key)
                     if prev is not None and key in completed:
                         gap = round(t - prev, 1)
