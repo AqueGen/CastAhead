@@ -2707,6 +2707,13 @@ do
         "an item on cooldown stays in the list, not available")
     check(b[3] and b[3].kind == "item" and b[3].available == false and b[3].icon == 3777,
         "an item not in the bags shows its use spell's icon, not available")
+    C_Spell.GetSpellCooldownDuration = function() return { HasSecretValues = function() return false end, IsZero = function() return false end } end
+    CastAheadSaves.Refresh()
+    local cool = CastAheadSaves.ViewRows(9000)
+    for _, r in ipairs(cool) do if r.id == 806 then zap = r end end
+    check(zap.buttons[1].kind == "spell" and zap.buttons[1].available == false, "the view marks a known spell on cooldown not available")
+    C_Spell.GetSpellCooldownDuration = nil
+    CastAheadSaves.Refresh()
     local hex = by[809]
     check(hex and hex.wins == "KICK", "a kickable cast with no curated category beats the save, as in the game")
     check(bolt and bolt.trigger.cast and not bolt.trigger.bar and bolt.wins == "DODGE" and bolt.name == "Bolt",
@@ -3309,12 +3316,14 @@ do
 
     local cd, secret = true, false
     local obj = { HasSecretValues = function() return secret end, IsZero = function() return not cd end }
-    C_Spell.GetSpellCooldownDuration = function() return obj end
+    local ignoreGCD
+    C_Spell.GetSpellCooldownDuration = function(_, ignore) ignoreGCD = ignore return obj end
     local textureSaved = C_Spell.GetSpellTexture
     C_Spell.GetSpellTexture = function(id) return id == 108416 and 7001 or textures[id] end
 
     local small = CastAheadSaves.Available("small")
     check(small[1].kind == "item" and small[1].id == 5512, "Dark Pact on cooldown: the analog Healthstone leads")
+    check(ignoreGCD == true, "the cooldown query ignores the global cooldown")
     check(#small == 3 and small[2].id == 5509 and small[3].id == 262000, "stones and potion follow")
 
     advance(1)
@@ -3330,6 +3339,13 @@ do
     check(#icons == 3 and icons[1] == 7001 and icons[2] == 9000 + 512 and icons[3] == 9000 + 509,
         "small icons: Dark Pact, Demonic Healthstone, Healthstone (max 3)")
 
+    advance(1)
+    CastAheadDB.saveButtons = { [265] = { small = { 108416 } } }
+    CastAheadSaves.Refresh()
+    cd = true
+    check(#CastAheadSaves.Available("small") == 0, "every known spell on cooldown: empty, not the shipped list")
+    CastAheadDB.saveButtons = nil
+    CastAheadSaves.Refresh()
     advance(1)
     C_Spell.GetSpellCooldownDuration = nil
     cd = true

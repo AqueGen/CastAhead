@@ -17,7 +17,7 @@ end
 local function SpellReady(id)
     local get = C_Spell and C_Spell.GetSpellCooldownDuration
     if not get then return true end
-    local ok, d = pcall(get, id)
+    local ok, d = pcall(get, id, true)
     if not ok or not d or not d.HasSecretValues or d:HasSecretValues() then return true end
     local ok2, zero = pcall(d.IsZero, d)
     if not ok2 then return true end
