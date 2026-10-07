@@ -2469,6 +2469,21 @@ advance(1.5)                  -- 3.5 s before: inside lead 4.0
 check(Alerts() == 1, string.format("one save heads-up inside the lead, got %d", Alerts()))
 reset()
 
+-- A cast id known only through the alias table gets the damage spell's save call.
+CastAheadDefensives = { spells = { [999] = { DAMAGER = "BIG", lead = 4.0 } }, alias = { [100] = 999 } }
+CastAheadDB = { centerText = true, leadSeconds = 0 }
+CastAheadCore.ReapplyData()
+enter()
+castFor(3.0)
+sounds, spoken, clips = 0, 0, 0
+advance(15.0)
+check(Alerts() == 0, "no aliased heads-up before the save lead")
+advance(1.5)
+check(Alerts() == 1, string.format("an aliased cast gets the save heads-up, got %d", Alerts()))
+reset()
+CastAheadDefensives = { spells = { [100] = { DAMAGER = "BIG", lead = 4.0 } }, alias = {} }
+CastAheadCore.ReapplyData()
+
 -- A save call with the voice off still beeps once.
 CastAheadDB = { voice = false }
 sounds, spoken, clips = 0, 0, 0

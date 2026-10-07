@@ -94,10 +94,14 @@ local function MergeCuration()
             end
         end
         local learned = CastAheadDB and CastAheadDB.dispel
+        local defensives = CastAheadDefensives
+        local spells = defensives and defensives.spells or {}
+        local alias = defensives and defensives.alias or {}
         for i = 1, #rows do
-            rows[i].prio = CastAheadPriority and CastAheadPriority[rows[i].spell] or nil
-            rows[i].dispel = learned and learned[rows[i].spell] or nil
-            rows[i].save = CastAheadDefensives and CastAheadDefensives.spells[rows[i].spell] or nil
+            local spell = rows[i].spell
+            rows[i].prio = CastAheadPriority and CastAheadPriority[spell] or nil
+            rows[i].dispel = learned and learned[spell] or nil
+            rows[i].save = spells[spell] or (alias[spell] and spells[alias[spell]]) or nil
         end
     end
 end
