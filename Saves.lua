@@ -119,7 +119,7 @@ function S.Move(key, remaining, lead, now)
     if not c then return false end
     c.endAt = (c.pausedAt or now) + remaining
     c.fireAt = c.endAt - lead
-    if c.fired and c.fireAt > now then c.fired = nil end
+    if c.fired and c.fireAt > now and c.fireAt - (c.firedAt or now) >= lead then c.fired = nil end
     return true
 end
 
@@ -139,7 +139,7 @@ function S.Tick(now)
     for key, c in pairs(scheduled) do
         if not c.pausedAt then
             if not c.fired and now >= c.fireAt and now < c.endAt then
-                c.fired = true
+                c.fired, c.firedAt = true, now
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice, true) end
             end
             if now >= c.endAt then scheduled[key] = nil end

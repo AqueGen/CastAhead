@@ -2673,6 +2673,13 @@ A.OnBar("dbm", "t0", 1299684, 10, now)
 advance(7.5)
 advance(5)
 check(Alerts() == 0, "a bar outside an encounter schedules nothing")
+IsEncounterInProgress = function() return true end
+A.OnBar("dbm", "tp", 1299684, 10, now)
+advance(7.5)
+advance(5)
+IsEncounterInProgress = nil
+check(Alerts() == 1, string.format("a pull bar sent before our ENCOUNTER_START still calls, got %d", Alerts()))
+sounds, spoken, clips = 0, 0, 0
 fire("ENCOUNTER_START", 1234)
 do
     local savedPriority = CastAheadPriority
@@ -2721,6 +2728,16 @@ advance(7.5)
 A.OnUpdate("dbm", "t7", 7.5, 10.2, now)
 advance(6)
 check(Alerts() == 1, string.format("an update that keeps a fired call inside its lead does not call again, got %d", Alerts()))
+advance(5)
+A.OnBar("dbm", "t12", 1299684, 10, now)
+sounds, spoken, clips = 0, 0, 0
+advance(7.0)
+advance(0.5)
+A.OnUpdate("dbm", "t12", 7.5, 10.6, now)
+advance(0.2)
+advance(2)
+advance(2)
+check(Alerts() == 1, string.format("a small correction after the call does not call again, got %d", Alerts()))
 advance(5)
 A.OnBar("dbm", "t10", 1299684, 10, now)
 sounds, spoken, clips = 0, 0, 0

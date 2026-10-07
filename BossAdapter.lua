@@ -29,7 +29,8 @@ end
 
 function A.OnBar(source, barKey, spellID, duration, now)
     barsSeen = true
-    if not (inEncounter and CastAheadSaves) then return end
+    if not CastAheadSaves then return end
+    if not (inEncounter or (IsEncounterInProgress and IsEncounterInProgress())) then return end
     spellID, duration = tonumber(spellID), tonumber(duration)
     if not (spellID and duration) or duration <= 0 then return end
     local id, lead, advice = Verdict(spellID)
