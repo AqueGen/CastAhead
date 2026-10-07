@@ -2446,9 +2446,9 @@ CastAheadSaves.Refresh()
 CastAheadDB = { centerText = true }
 check(CastAheadSaves.Button("big") == 104773, "the shipped big button for the spec")
 check(CastAheadSaves.Icon(CastAheadMatch.ADVICE.BIG) == 2001, "its icon")
-CastAheadDB.saveButtons = { [265] = { big = 108416 } }
+CastAheadDB.saveButtons = { [265] = { big = { 108416 } } }
 check(CastAheadSaves.Button("big") == 108416, "an override wins")
-CastAheadDB.saveButtons = { [265] = { big = 999 } }
+CastAheadDB.saveButtons = { [265] = { big = { 999, 104773 } } }
 check(CastAheadSaves.Button("big") == 104773, "an override the character does not know falls back")
 CastAheadDB.saveButtons = nil
 GetSpecializationInfo = function() return 70 end
@@ -2904,6 +2904,55 @@ do
     setfenv(chunk, env)
     chunk()
     check(#overwritten == 0, "Recorder.lua assigns no existing game global (a taint source for Blizzard code), got " .. table.concat(overwritten, ", "))
+end
+
+do
+    local bags = { [0] = { 5512, 191380 } }
+    local counts, cds, useOf = { [5512] = 3, [191380] = 1 }, { [5512] = { 0, 0 }, [191380] = { 0, 0 } }, { [5512] = 452930, [191380] = 371024 }
+    local saved = { C_Container = C_Container, GetItemCount = C_Item and C_Item.GetItemCount }
+    C_Container = { GetContainerNumSlots = function(b) return bags[b] and #bags[b] or 0 end,
+                    GetContainerItemID = function(b, s) return bags[b] and bags[b][s] end }
+    C_Item = C_Item or {}
+    C_Item.GetItemSpell = function(id) if useOf[id] then return "Use", useOf[id] end end
+    C_Item.GetItemCount = function(id) return counts[id] or 0 end
+    C_Item.GetItemCooldown = function(id) local c = cds[id] or { 0, 0 } return c[1], c[2], true end
+    C_Item.GetItemIconByID = function(id) return 9000 + (id % 1000) end
+    GetSpecialization = function() return 1 end
+    GetSpecializationRole = function() return "DAMAGER" end
+    GetSpecializationInfo = function() return 265 end
+    IsPlayerSpell = function(id) return id == 108416 or id == 104773 end
+    InCombatLockdown = function() return false end
+    CastAheadSaveButtons = { [265] = { small = { 108416, { use = 452930 } }, big = { 104773 }, heal = { { use = 452930 } } } }
+    CastAheadDB = {}
+    CastAheadSaves.ScanBags()
+    local small = CastAheadSaves.Available("small")
+    check(#small == 2 and small[1].kind == "spell" and small[2].kind == "item" and small[2].id == 5512, "spell then healthstone item")
+    counts[5512] = 0
+    check(#CastAheadSaves.Available("small") == 1, "an item with count 0 is not available, read live")
+    counts[5512] = 3
+    cds[5512] = { now - 10, 60 }
+    check(#CastAheadSaves.Available("heal") == 0, "an item on cooldown is not available")
+    cds[5512] = { 0, 0 }
+    CastAheadDB.saveButtons = { [265] = { big = { 999, 104773 } } }
+    check(CastAheadSaves.Available("big")[1].id == 104773, "an override skips an unknown spell to the next entry")
+    check(#CastAheadSaves.Available("small") == 2, "a size missing from the override keeps the shipped list")
+    CastAheadDB = { saveButtons = { [265] = { small = 108416 } } }
+    CastAheadConfig.Migrate()
+    check(type(CastAheadDB.saveButtons[265].small) == "table" and CastAheadDB.saveButtons[265].small[1] == 108416, "old single-number override migrates to a list")
+    InCombatLockdown = function() return true end
+    bags[0][3] = 191380
+    CastAheadSaves.ScanBags()
+    check(CastAheadSaves.BagsPending(), "no bag scan in combat, marked pending")
+    InCombatLockdown = function() return false end
+    fire("PLAYER_REGEN_ENABLED")
+    check(not CastAheadSaves.BagsPending(), "the pending scan runs after combat")
+    CastAheadDB = {}
+    check(#CastAheadSaves.Icons(CastAheadMatch.ADVICE.SMALL) == 2, "icons follow the available list")
+    C_Container, C_Item.GetItemCount = saved.C_Container, saved.GetItemCount
+    C_Item.GetItemSpell, C_Item.GetItemCooldown, C_Item.GetItemIconByID = nil, nil, nil
+    GetSpecialization, GetSpecializationRole, GetSpecializationInfo, IsPlayerSpell, InCombatLockdown = nil, nil, nil, nil, nil
+    CastAheadSaveButtons = {}
+    CastAheadDB = {}
 end
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))

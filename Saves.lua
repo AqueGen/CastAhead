@@ -3,7 +3,6 @@ local S = CastAheadSaves
 local M = CastAheadMatch
 
 local scheduled = {}
-local iconCache = {}
 
 function S.SpecID()
     if not (GetSpecialization and GetSpecializationInfo) then return nil end
@@ -15,28 +14,84 @@ local function Known(id)
     return type(id) == "number" and IsPlayerSpell and IsPlayerSpell(id)
 end
 
-function S.Button(size)
+local useToItem = {}
+local bagsPending = false
+
+local function Shipped(spec, size)
+    local s = CastAheadSaveButtons and CastAheadSaveButtons[spec]
+    return s and s[size] or {}
+end
+
+function S.List(size)
     local spec = S.SpecID()
-    if not spec then return nil end
-    local picks = CastAheadDB and CastAheadDB.saveButtons and CastAheadDB.saveButtons[spec]
-    local pick = picks and picks[size]
-    if Known(pick) then return pick end
-    local shipped = CastAheadSaveButtons and CastAheadSaveButtons[spec]
-    for _, id in ipairs(shipped and shipped[size] or {}) do
-        if Known(id) then return id end
+    if not spec then return {} end
+    local o = CastAheadDB and CastAheadDB.saveButtons and CastAheadDB.saveButtons[spec]
+    if o and type(o[size]) == "table" then return o[size] end
+    return Shipped(spec, size)
+end
+
+function S.ScanBags()
+    if InCombatLockdown and InCombatLockdown() then bagsPending = true return end
+    bagsPending = false
+    wipe(useToItem)
+    if not (C_Container and C_Item and C_Item.GetItemSpell) then return end
+    for bag = 0, 5 do
+        for slot = 1, C_Container.GetContainerNumSlots(bag) or 0 do
+            local item = C_Container.GetContainerItemID(bag, slot)
+            if item then
+                local _, use = C_Item.GetItemSpell(item)
+                if use and not useToItem[use] then useToItem[use] = item end
+            end
+        end
+    end
+end
+
+function S.BagsPending() return bagsPending end
+
+local function ItemReady(item)
+    if not (C_Item and C_Item.GetItemCount and (C_Item.GetItemCount(item) or 0) > 0) then return false end
+    local start, duration = 0, 0
+    if C_Item.GetItemCooldown then start, duration = C_Item.GetItemCooldown(item) end
+    return (start or 0) == 0 or (start + (duration or 0)) <= GetTime()
+end
+
+function S.Available(size)
+    local out = {}
+    for _, e in ipairs(S.List(size)) do
+        if type(e) == "number" then
+            if Known(e) then
+                out[#out + 1] = { kind = "spell", id = e, icon = C_Spell and C_Spell.GetSpellTexture(e) }
+            end
+        elseif type(e) == "table" and e.use then
+            local item = useToItem[e.use]
+            if item and ItemReady(item) then
+                out[#out + 1] = { kind = "item", id = item, icon = C_Item.GetItemIconByID and C_Item.GetItemIconByID(item) }
+            end
+        end
+    end
+    return out
+end
+
+function S.Button(size)
+    for _, e in ipairs(S.Available(size)) do
+        if e.kind == "spell" then return e.id end
     end
     return nil
 end
 
-function S.Icon(advice)
-    if not M.IsSave(advice) then return nil end
-    local size = advice == M.ADVICE.BIG and "big" or "small"
-    if iconCache[size] == nil then
-        local id = S.Button(size)
-        iconCache[size] = id and C_Spell and C_Spell.GetSpellTexture(id) or false
+local SIZE = { SMALL = "small", BIG = "big", HEAL = "heal" }
+function S.Icons(advice)
+    local size = advice and SIZE[advice.key]
+    local out = {}
+    if not size then return out end
+    for _, e in ipairs(S.Available(size)) do
+        if e.icon then out[#out + 1] = e.icon end
+        if #out == 3 then break end
     end
-    return iconCache[size] or nil
+    return out
 end
+
+function S.Icon(advice) return S.Icons(advice)[1] end
 
 local SOUND_ROOT = "Interface\\AddOns\\CastAhead\\Sounds\\en\\"
 local auraIDs = {}
@@ -83,7 +138,6 @@ function S.AuraSoundCount() return #auraIDs end
 function S.AuraPending() return auraPending end
 
 function S.Refresh()
-    wipe(iconCache)
     RegisterAuraSounds()
 end
 

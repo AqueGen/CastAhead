@@ -197,5 +197,10 @@ function C.Migrate()
             end
         end
     end
+    for _, picks in pairs(type(CastAheadDB.saveButtons) == "table" and CastAheadDB.saveButtons or {}) do
+        for size, value in pairs(type(picks) == "table" and picks or {}) do
+            if type(value) == "number" then picks[size] = { value } end
+        end
+    end
     CastAheadDB.schema = 2
 end

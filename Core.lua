@@ -2122,6 +2122,10 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     if event == "PLAYER_REGEN_ENABLED" or event == "CHALLENGE_MODE_COMPLETED" or event == "ENCOUNTER_END" then
         if CastAheadSaves and CastAheadSaves.AuraPending() then CastAheadSaves.Refresh() end
     end
+    if CastAheadSaves and (event == "BAG_UPDATE_DELAYED" or event == "PLAYER_ENTERING_WORLD"
+        or (event == "PLAYER_REGEN_ENABLED" and CastAheadSaves.BagsPending())) then
+        CastAheadSaves.ScanBags()
+    end
     if event == "ADDON_LOADED" then
         if unit == "CastAhead" then
             CastAheadConfig.AdoptOldName()
@@ -2605,7 +2609,7 @@ end)
 for _, event in ipairs({
     "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "PLAYER_SPECIALIZATION_CHANGED", "SPELLS_CHANGED",
     "ENCOUNTER_START", "ENCOUNTER_END", "CHALLENGE_MODE_START", "CHALLENGE_MODE_COMPLETED",
-    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
+    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "BAG_UPDATE_DELAYED",
     "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH",
     "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP",
     "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",
