@@ -425,6 +425,9 @@ for id, row in pairs(CastAheadDefensives.spells) do
     for _, role in ipairs({ "DAMAGER", "HEALER", "TANK" }) do
         check(row[role] == nil or row[role] == "SMALL" or row[role] == "BIG", "spell " .. id .. " has a valid " .. role .. " verdict")
     end
+    check(type(row.name) == "string" and type(row.mob) == "string" and type(row.boss) == "string", "spell " .. id .. " carries name, mob and boss strings")
+    check(CastAheadData[row.dungeon] ~= nil, "spell " .. id .. " names a known dungeon")
+    check(type(row.bar) == "boolean", "spell " .. id .. " has a boolean bar flag")
 end
 
 print(string.format("%d dungeons, %d spells, %d unresolvable after two casts, %d needing the mob check",
