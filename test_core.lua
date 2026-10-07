@@ -2971,6 +2971,16 @@ do
     CastAheadDB.saveButtons[265].big = {}
     CastAheadSaves.Refresh()
     check(#CastAheadSaves.Available("big") == 0, "an empty override still disables the size")
+    CastAheadDB.saveButtons[265].heal = { { use = 371024 } }
+    cds[191380] = { now - 10, 60 }
+    CastAheadSaves.Refresh()
+    check(#CastAheadSaves.Available("heal") == 0 and not CastAheadSaves.HealReady(),
+        "an override potion on cooldown gives no heal, the shipped Healthstone does not stand in")
+    cds[191380] = { 0, 0 }
+    counts[191380] = 0
+    CastAheadSaves.Refresh()
+    check(#CastAheadSaves.Available("heal") == 0, "an override potion at count 0 gives no heal either")
+    counts[191380] = 1
 
     local realInfo = C_Spell.GetSpellInfo
     C_Spell.GetSpellInfo = function(q)
@@ -2986,7 +2996,18 @@ do
     entry = Parse("|cffffffff|Hitem:5512::::::::80:::::|h[Healthstone]|h|r")
     check(type(entry) == "table" and entry.use == 452930, "an item link parses to its use spell")
     check(Parse(" Unending Resolve ") == 104773, "a known spell name parses to its id")
-    local none, why = Parse("Fireball")
+    check(Parse("|cff71d5ff|Hspell:104773:0|h[Unending Resolve]|h|r") == 104773, "a spell link parses to the spell")
+    local none, why = Parse("|cff71d5ff|Hspell:133:0|h[Fireball]|h|r")
+    check(none == nil and why == NOT_FOUND, "a link to a spell the character does not know is rejected")
+    local loading = {}
+    C_Item.RequestLoadItemDataByID = function(id) loading[id] = true end
+    none, why = Parse("777777")
+    check(none == nil and why == "Loading item data, try again" and loading[777777], "an uncached item asks the client to load it")
+    C_Item.IsItemDataCachedByID = function() return true end
+    none, why = Parse("777777")
+    check(none == nil and why == NOT_FOUND, "a cached item without a use effect is rejected")
+    C_Item.RequestLoadItemDataByID, C_Item.IsItemDataCachedByID = nil, nil
+    none, why = Parse("Fireball")
     check(none == nil and why == NOT_FOUND, "a spell name the character does not know is rejected")
     none, why = Parse("424242")
     check(none == nil and why == NOT_FOUND, "an unknown number is rejected")

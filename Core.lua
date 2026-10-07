@@ -2123,6 +2123,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         if event == "SPELLS_CHANGED" or unit == "player" then
             InvalidateCapabilities()
             if CastAheadSaves then CastAheadSaves.Refresh() end
+            if CastAheadOptions and CastAheadOptions.RefreshDefensives then CastAheadOptions.RefreshDefensives() end
             if CastAheadCore then CastAheadCore.Reapply() end
         end
         return
@@ -2133,6 +2134,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     if CastAheadSaves and (event == "BAG_UPDATE_DELAYED" or event == "PLAYER_ENTERING_WORLD"
         or (event == "PLAYER_REGEN_ENABLED" and CastAheadSaves.BagsPending())) then
         CastAheadSaves.ScanBags()
+        if CastAheadOptions and CastAheadOptions.RefreshDefensives then CastAheadOptions.RefreshDefensives() end
     end
     if event == "ADDON_LOADED" then
         if unit == "CastAhead" then

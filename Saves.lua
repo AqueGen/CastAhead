@@ -58,18 +58,22 @@ local function ItemReady(item)
 end
 
 local function Collect(list, out)
+    local resolved = false
     for _, e in ipairs(list) do
         if type(e) == "number" then
             if Known(e) then
+                resolved = true
                 out[#out + 1] = { kind = "spell", id = e, icon = C_Spell and C_Spell.GetSpellTexture(e) }
             end
         elseif type(e) == "table" and e.use then
             local item = useToItem[e.use]
+            resolved = resolved or item ~= nil
             if item and ItemReady(item) then
                 out[#out + 1] = { kind = "item", id = item, icon = C_Item.GetItemIconByID and C_Item.GetItemIconByID(item) }
             end
         end
     end
+    return resolved
 end
 
 function S.Available(size)
@@ -79,8 +83,7 @@ function S.Available(size)
     local out = {}
     memo[size] = { stamp = stamp, list = out }
     local list = S.List(size)
-    Collect(list, out)
-    if #out == 0 and #list > 0 then
+    if not Collect(list, out) and #list > 0 then
         local shipped = Shipped(S.SpecID(), size)
         if shipped ~= list then Collect(shipped, out) end
     end
@@ -92,9 +95,14 @@ function S.ItemFor(use) return useToItem[use] end
 local NOT_FOUND = "Not a spell you know or an item with a use effect"
 
 local function ItemEntry(item)
-    if not (C_Item and C_Item.GetItemSpell) then return nil end
+    if not (C_Item and C_Item.GetItemSpell) then return nil, NOT_FOUND end
     local _, use = C_Item.GetItemSpell(item)
-    return use and { use = use } or nil
+    if use then return { use = use } end
+    if C_Item.GetItemInfoInstant and not C_Item.GetItemInfoInstant(item) then return nil, NOT_FOUND end
+    if C_Item.IsItemDataCachedByID and C_Item.IsItemDataCachedByID(item) then return nil, NOT_FOUND end
+    if not C_Item.RequestLoadItemDataByID then return nil, NOT_FOUND end
+    C_Item.RequestLoadItemDataByID(item)
+    return nil, "Loading item data, try again"
 end
 
 local function SameEntry(a, b)
@@ -104,18 +112,21 @@ end
 
 function S.ParseEntry(text, list)
     text = tostring(text or ""):match("^%s*(.-)%s*$")
-    local link = text:match("|Hitem:(%d+)")
+    local itemLink = tonumber(text:match("|Hitem:(%d+)"))
+    local spellLink = tonumber(text:match("|Hspell:(%d+)"))
     local number = tonumber(text)
-    local entry
-    if link then
-        entry = ItemEntry(tonumber(link))
+    local entry, why
+    if itemLink then
+        entry, why = ItemEntry(itemLink)
+    elseif spellLink then
+        entry = Known(spellLink) and spellLink or nil
     elseif number then
-        entry = Known(number) and number or ItemEntry(number)
+        if Known(number) then entry = number else entry, why = ItemEntry(number) end
     elseif text ~= "" and C_Spell and C_Spell.GetSpellInfo then
         local info = C_Spell.GetSpellInfo(text)
         if info and Known(info.spellID) then entry = info.spellID end
     end
-    if not entry then return nil, NOT_FOUND end
+    if not entry then return nil, why or NOT_FOUND end
     for _, e in ipairs(list or {}) do
         if SameEntry(e, entry) then return nil, "Already in the list" end
     end

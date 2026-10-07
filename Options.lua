@@ -555,6 +555,23 @@ local function RefreshAll()
     for _, refresh in ipairs(refreshers) do refresh() end
 end
 
+local listRefreshers = {}
+function CastAheadOptions.RefreshDefensives()
+    for _, refresh in ipairs(listRefreshers) do refresh() end
+end
+
+local addBoxes = {}
+local function InsertLink(text)
+    for _, box in ipairs(addBoxes) do
+        if text and box:IsVisible() and box:HasFocus() then box:SetText(text) end
+    end
+end
+if ChatFrameUtil and ChatFrameUtil.InsertLink then
+    hooksecurefunc(ChatFrameUtil, "InsertLink", InsertLink)
+elseif ChatEdit_InsertLink then
+    hooksecurefunc("ChatEdit_InsertLink", InsertLink)
+end
+
 local function BuildSaveList(panel, size, title, column)
     local S = CastAheadSaves
     local group = BuildGroup(panel, title, column, LIST_H)
@@ -587,6 +604,7 @@ local function BuildSaveList(panel, size, title, column)
     box:SetSize(COL_W - 96, 20)
     box:SetPoint("TOPLEFT", group, "TOPLEFT", 18, LIST_TOP - LIST_ROWS * LIST_ROW_H - 18)
     box:SetAutoFocus(false)
+    addBoxes[#addBoxes + 1] = box
     local add = CreateFrame("Button", nil, group, "UIPanelButtonTemplate")
     add:SetSize(56, 22)
     add:SetPoint("LEFT", box, "RIGHT", 6, 0)
@@ -616,21 +634,26 @@ local function BuildSaveList(panel, size, title, column)
     box:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(title, 1, 1, 1)
-        GameTooltip:AddLine("A spell id or a spell name you know, an item id, or an item link. An item is stored by its use effect, so any item in your bags with that effect counts.", nil, nil, nil, true)
+        GameTooltip:AddLine("A spell id or a spell name you know, an item id, or a shift-clicked spell or item link. An item is stored by its use effect, so any item in your bags with that effect counts.", nil, nil, nil, true)
         GameTooltip:Show()
     end)
     box:SetScript("OnLeave", GameTooltip_Hide)
 
-    table.insert(refreshers, function()
+    local function Paint()
         local list = S.List(size)
         for i, row in ipairs(rows) do
             row.text:SetText(list[i] and EntryLabel(list[i]) or "")
             row.remove:SetShown(list[i] ~= nil)
         end
-        if #list == 0 then rows[1].text:SetText("|cffaaaaaaEmpty - this call shows no button|r") end
+        if #list == 0 then
+            rows[1].text:SetText(size == "heal" and "|cffaaaaaaEmpty - no heal up call|r"
+                or "|cffaaaaaaEmpty - this call shows no button|r")
+        end
         more:SetText(#list > LIST_ROWS and string.format("|cffaaaaaa+%d more|r", #list - LIST_ROWS) or "")
         reason:SetText("")
-    end)
+    end
+    table.insert(refreshers, Paint)
+    table.insert(listRefreshers, Paint)
     return group
 end
 
@@ -675,13 +698,15 @@ function BuildDefensives(panel)
     note:SetJustifyH("LEFT")
     note:SetText("|cffaaaaaaDefensive buttons ship for Warlock, Paladin and Demon Hunter; more specs are coming.|r")
 
-    table.insert(refreshers, function()
+    local function PaintSpec()
         local spec = CastAheadSaves and CastAheadSaves.SpecID()
         local shipped = spec and CastAheadSaveButtons and CastAheadSaveButtons[spec] and true or false
         note:SetShown(not shipped)
         for _, list in ipairs(lists) do list:SetShown(shipped) end
         reset:SetShown(shipped)
-    end)
+    end
+    table.insert(refreshers, PaintSpec)
+    table.insert(listRefreshers, PaintSpec)
 end
 
 local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
