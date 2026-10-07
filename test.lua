@@ -391,7 +391,6 @@ M.PlayerRole, M.PlayerCanHandle = savedRole, savedCan
 M.SpecRole = function() return "DAMAGER" end
 local saveRow = { spell = 900, cast = 2.0, save = { DAMAGER = "BIG", TANK = "SMALL", lead = 2.5 }, hits = 5, dmg = 0.6 }
 check(M.Advice(saveRow) == M.ADVICE.BIG, "a dps gets BIG where the table says BIG for dps")
-check(M.Advice(saveRow) ~= M.ADVICE.AOE, "and BIG replaces the AOE the statistics would give")
 M.SpecRole = function() return "HEALER" end
 check(M.Advice(saveRow) == M.ADVICE.AOE, "a healer with no verdict keeps the old call")
 M.SpecRole = function() return "TANK" end
@@ -404,6 +403,7 @@ check(M.IsSave(M.ADVICE.BIG) and M.IsSave(M.ADVICE.SMALL) and not M.IsSave(M.ADV
 local savedPlayerRole = M.PlayerRole
 M.PlayerRole = function() return nil end
 check(M.Important({ spell = 904, save = { TANK = "SMALL" } }), "a save row is important even with the role filter off")
+check(not M.Important({ spell = 905, kickable = true, save = { TANK = "BIG" } }), "a kickable save row is not important by its verdict")
 M.PlayerRole = savedPlayerRole
 M.SpecRole = function() return nil end
 check(M.Advice(saveRow) == M.ADVICE.AOE, "outside the game no role means no save call")

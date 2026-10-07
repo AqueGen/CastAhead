@@ -38,11 +38,6 @@ function S.Icon(advice)
     return iconCache[size] or nil
 end
 
-function S.Lead(spellID)
-    local row = CastAheadDefensives and CastAheadDefensives.spells[spellID]
-    return row and row.lead or nil
-end
-
 local SOUND_ROOT = "Interface\\AddOns\\CastAhead\\Sounds\\en\\"
 local auraIDs = {}
 local auraPending = false
@@ -59,18 +54,27 @@ local function Blocked()
         or (C_ChatInfo and C_ChatInfo.InChatMessagingLockdown and C_ChatInfo.InChatMessagingLockdown())
 end
 
+local function PickedFile(advice)
+    local name = CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[advice.key]
+    local lsm = name and LibStub and LibStub("LibSharedMedia-3.0", true)
+    local sound = lsm and lsm:Fetch("sound", name, true)
+    return type(sound) == "string" and sound or nil
+end
+
 local function RegisterAuraSounds()
     if not (C_UnitAuras and C_UnitAuras.AddAuraSound and Enum and Enum.UnitAuraSoundTrigger) then return end
     if Blocked() then auraPending = true return end
     auraPending = false
     ClearAuraSounds()
-    if not CastAheadConfig.Enabled("saveCalls") then return end
+    if not (CastAheadConfig.Enabled("saveCalls") and CastAheadConfig.Enabled("sound") and CastAheadConfig.Enabled("voice")) then
+        return
+    end
     for spellID, row in pairs(CastAheadDefensives and CastAheadDefensives.spells or {}) do
         local advice = row.aura and M.SaveAdvice({ save = row })
         if advice then
             local ok, id = pcall(C_UnitAuras.AddAuraSound, Enum.UnitAuraSoundTrigger.Added, {
                 unitToken = "player", spellID = spellID,
-                soundFileName = SOUND_ROOT .. advice.file .. ".ogg", outputChannel = "Master" })
+                soundFileName = PickedFile(advice) or SOUND_ROOT .. advice.file .. ".ogg", outputChannel = "Master" })
             if ok and id then auraIDs[#auraIDs + 1] = id end
         end
     end
@@ -134,7 +138,7 @@ end
 function S.Tick(now)
     for key, c in pairs(scheduled) do
         if not c.pausedAt then
-            if not c.fired and now >= c.fireAt then
+            if not c.fired and now >= c.fireAt and now < c.endAt then
                 c.fired = true
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice, true) end
             end

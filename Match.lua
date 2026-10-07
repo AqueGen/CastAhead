@@ -138,6 +138,13 @@ end
 
 M.SpecRole = function() return nil end
 
+function M.SaveRow(id)
+    local data = CastAheadDefensives
+    local spells, alias = data and data.spells, data and data.alias
+    if not spells then return nil end
+    return spells[id] or (alias and alias[id] and spells[alias[id]]) or nil
+end
+
 function M.SaveAdvice(row)
     local save = row and row.save
     local role = save and M.SpecRole()
@@ -367,7 +374,8 @@ M.PlayerCanHandle = function() return true end
 -- player can act on it. Kept as functions here so the display filter and the
 -- sound gate agree on the meaning.
 function M.Important(row)
-    if M.SaveAdvice(row) then return true end
+    local base = BaseAdvice(row)
+    if M.SaveAdvice(row) and base ~= M.ADVICE.KICK and base ~= M.ADVICE.CC then return true end
     if not row.prio then return false end
     local hides = M.ROLE_HIDES[M.PlayerRole()]
     if hides and hides[row.prio] then return false end

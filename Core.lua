@@ -94,14 +94,11 @@ local function MergeCuration()
             end
         end
         local learned = CastAheadDB and CastAheadDB.dispel
-        local defensives = CastAheadDefensives
-        local spells = defensives and defensives.spells or {}
-        local alias = defensives and defensives.alias or {}
         for i = 1, #rows do
             local spell = rows[i].spell
             rows[i].prio = CastAheadPriority and CastAheadPriority[spell] or nil
             rows[i].dispel = learned and learned[spell] or nil
-            rows[i].save = spells[spell] or (alias[spell] and spells[alias[spell]]) or nil
+            rows[i].save = CastAheadMatch.SaveRow(spell)
         end
     end
 end
@@ -290,6 +287,7 @@ CastAheadMatch.PlayerRole = function()
 end
 
 CastAheadMatch.SpecRole = function()
+    if not CastAheadConfig.Enabled("saveCalls") then return nil end
     if not (GetSpecialization and GetSpecializationRole) then return nil end
     local spec = GetSpecialization()
     return spec and GetSpecializationRole(spec) or nil

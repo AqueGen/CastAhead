@@ -76,6 +76,15 @@ local function Redraw()
     if CastAheadCore and CastAheadCore.Reapply then CastAheadCore.Reapply() end
 end
 
+local function SaveRefresh()
+    if CastAheadSaves then CastAheadSaves.Refresh() end
+end
+
+local function RedrawAndSaves()
+    Redraw()
+    SaveRefresh()
+end
+
 -- Every switch the General page offers, with the group it belongs to. The
 -- page used to be one flat column of checkboxes plus a pile of sliders on the
 -- right, and nothing said which slider went with which switch - the centre
@@ -259,8 +268,8 @@ function BuildGeneral(panel)
 
     -- Sound ---------------------------------------------------------------
     local audio = BuildGroup(panel, "Sound", 2, 86)
-    local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 })
-    BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 })
+    local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 }, RedrawAndSaves)
+    BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 }, RedrawAndSaves)
 
     -- Development mode ----------------------------------------------------
     local extra = BuildGroup(panel, "Advanced", 2, 62,
@@ -517,23 +526,32 @@ function BuildDevelopment(panel)
         "probe clear", "Forget the collected probe results. /ca probe clear")
 end
 
-local function SaveRefresh()
-    if CastAheadSaves then CastAheadSaves.Refresh() end
-end
-
 local function SpellLabel(id)
     local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(id) or tostring(id)
     local icon = C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(id)
     return icon and string.format("|T%s:16|t %s", icon, name) or name
 end
 
+local CLASS_SPECS = {
+    { 265, 266, 267 },
+    { 65, 66, 70 },
+    { 577, 581, 1480 },
+}
+
 local function SaveChoices(spec, size)
-    local shipped = CastAheadSaveButtons and CastAheadSaveButtons[spec]
     local ids, seen = {}, {}
     local function add(id)
-        if id and not seen[id] then seen[id] = true ids[#ids + 1] = id end
+        if id and not seen[id] and IsPlayerSpell and IsPlayerSpell(id) then seen[id] = true ids[#ids + 1] = id end
     end
-    for _, id in ipairs(shipped and shipped[size] or {}) do add(id) end
+    for _, specs in ipairs(CLASS_SPECS) do
+        if tContains(specs, spec) then
+            for _, classSpec in ipairs(specs) do
+                local shipped = CastAheadSaveButtons and CastAheadSaveButtons[classSpec] or {}
+                for _, id in ipairs(shipped.small or {}) do add(id) end
+                for _, id in ipairs(shipped.big or {}) do add(id) end
+            end
+        end
+    end
     local picks = CastAheadDB and CastAheadDB.saveButtons and CastAheadDB.saveButtons[spec]
     add(picks and picks[size])
     return ids
@@ -542,7 +560,13 @@ end
 function BuildDefensives(panel)
     local group = BuildGroup(panel, "Defensive calls", 1, 260)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, SaveRefresh)
-    local boss = BuildSwitch(panel, "bossAdapter", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 })
+    local boss = BuildSwitch(panel, "bossAdapter", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, function(on)
+        Redraw()
+        if not on and CastAheadSaves then
+            CastAheadSaves.CancelPrefix("dbm:")
+            CastAheadSaves.CancelPrefix("bw:")
+        end
+    end)
 
     local status = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     status:SetPoint("TOPLEFT", boss, "BOTTOMLEFT", 4, -6)
@@ -711,6 +735,7 @@ function BuildSounds(panel)
                     CastAheadDB = CastAheadDB or {}
                     CastAheadDB.sounds = CastAheadDB.sounds or {}
                     CastAheadDB.sounds[key] = name
+                    SaveRefresh()
                 end, advice)
         end)
 
