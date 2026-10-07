@@ -119,6 +119,7 @@ function S.Move(key, remaining, lead, now)
     if not c then return false end
     c.endAt = (c.pausedAt or now) + remaining
     c.fireAt = c.endAt - lead
+    if c.fired and c.fireAt > now then c.fired = nil end
     return true
 end
 

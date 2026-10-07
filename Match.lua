@@ -142,7 +142,10 @@ function M.SaveRow(id)
     local data = CastAheadDefensives
     local spells, alias = data and data.spells, data and data.alias
     if not spells then return nil end
-    return spells[id] or (alias and alias[id] and spells[alias[id]]) or nil
+    if spells[id] then return spells[id], id end
+    local to = alias and alias[id]
+    if to and spells[to] then return spells[to], to end
+    return nil
 end
 
 function M.SaveAdvice(row)

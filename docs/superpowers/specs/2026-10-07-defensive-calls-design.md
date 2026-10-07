@@ -44,7 +44,8 @@ This feature reverses two earlier decisions for itself only: the 2026-10-01 feat
 - Bosses: new module `BossAdapter.lua`.
   - BigWigs: `BigWigsLoader.RegisterMessage` for `BigWigs_StartBar` (module, key, text, duration, icon), `BigWigs_Timer`, `BigWigs_StopBar`, `BigWigs_PauseBar`, `BigWigs_ResumeBar`, `BigWigs_StopBars`, `BigWigs_OnBossDisable`. MRT's Reminder.lua listens to the same set.
   - DBM: `DBM:RegisterCallback` for `DBM_TimerBegin`, `DBM_TimerStop`, `DBM_TimerPause`, `DBM_TimerResume`, `DBM_TimerUpdate`.
-  - A bar whose spell id has a verdict schedules a call at bar end minus lead; stop, pause and resume follow the bar.
+  - Only one boss mod drives calls: DBM when it is loaded, BigWigs otherwise. Bars count only between `ENCOUNTER_START` and `ENCOUNTER_END`; BigWigs bars are keyed by module and bar text.
+  - A bar whose spell id has a verdict schedules a call at bar end minus lead, unless the spell's curated category outranks the save; stop, pause and resume follow the bar.
   - Health check: if a boss mod is loaded and no bar arrives within 30 s of `ENCOUNTER_START`, print one chat line. DBM renamed its timer callback once and MRT went silent without a word; this guards that.
   - Disabled with a setting; silent when no boss mod is loaded.
 

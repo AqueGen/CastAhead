@@ -2669,6 +2669,21 @@ local A = CastAheadBossAdapter
 reset()
 enter()
 sounds, spoken, clips = 0, 0, 0
+A.OnBar("dbm", "t0", 1299684, 10, now)
+advance(7.5)
+advance(5)
+check(Alerts() == 0, "a bar outside an encounter schedules nothing")
+fire("ENCOUNTER_START", 1234)
+do
+    local savedPriority = CastAheadPriority
+    CastAheadPriority = { [1299684] = "CC" }
+    A.OnBar("dbm", "tc", 1299684, 10, now)
+    A.OnBar("dbm", "ta", 1299680, 10, now)
+    advance(7.5)
+    advance(5)
+    CastAheadPriority = savedPriority
+    check(Alerts() == 0, "a curated stun outranks the boss save call, through the alias too")
+end
 A.OnBar("dbm", "t1", 1299680, 10, now)
 advance(6.5)
 check(Alerts() == 0, "quiet until bar end minus lead")
@@ -2692,10 +2707,6 @@ A.OnBar("dbm", "t5", 4242, 10, now)
 sounds, spoken, clips = 0, 0, 0
 advance(12)
 check(Alerts() == 0, "string keys, nil ids and spells without a verdict are ignored")
-A.OnBar("bw", "Sever", 1299684, 10, now)
-A.OnStopAll("bw")
-advance(12)
-check(Alerts() == 0, "StopBars clears every BigWigs call")
 A.OnBar("dbm", "t6", 1299684, 10, now)
 A.OnUpdate("dbm", "t6", 0, 20, now)
 advance(7.5)
@@ -2706,9 +2717,20 @@ advance(5)
 A.OnBar("dbm", "t7", 1299684, 10, now)
 sounds, spoken, clips = 0, 0, 0
 advance(7.5)
-A.OnUpdate("dbm", "t7", 0, 5, now)
+A.OnUpdate("dbm", "t7", 7.5, 10.2, now)
 advance(6)
-check(Alerts() == 1, string.format("an update after the call fired does not call again, got %d", Alerts()))
+check(Alerts() == 1, string.format("an update that keeps a fired call inside its lead does not call again, got %d", Alerts()))
+advance(5)
+A.OnBar("dbm", "t10", 1299684, 10, now)
+sounds, spoken, clips = 0, 0, 0
+advance(7.5)
+A.OnUpdate("dbm", "t10", 7.5, 30, now)
+advance(0.1)
+check(Alerts() == 1, string.format("extending a bar after its call is not an immediate second call, got %d", Alerts()))
+advance(19.3)
+check(Alerts() == 1, "the extended bar stays quiet until its new end minus lead")
+advance(0.2)
+check(Alerts() == 2, string.format("and calls again 3 s before the new end, got %d", Alerts()))
 advance(5)
 A.OnBar("dbm", "t8", 1299684, 10, now)
 A.OnPause("dbm", "t8", now)
@@ -2722,6 +2744,14 @@ advance(6.5)
 check(Alerts() == 0, "the updated bar counts from where it paused")
 advance(1.0)
 check(Alerts() == 1, "and calls once after resuming")
+advance(5)
+A.OnBar("dbm", "t11", 1299684, 10, now)
+sounds, spoken, clips = 0, 0, 0
+advance(2)
+fire("ENCOUNTER_END", 1234)
+advance(5.5)
+advance(5)
+check(Alerts() == 0, string.format("ENCOUNTER_END cancels a live call, got %d", Alerts()))
 do
     local savedSaves = CastAheadSaves
     CastAheadSaves = nil
@@ -2766,10 +2796,14 @@ do
     reset()
 end
 
--- BigWigs: StartBar keys the call by bar text and takes the spell from the option key.
+-- BigWigs: StartBar keys the call by module and bar text and takes the spell from the option key.
 do
     local bw = {}
     BigWigsLoader = { RegisterMessage = function(_, event, fn) bw[event] = fn end }
+    DBM = { RegisterCallback = function() end }
+    check(CastAheadBossAdapter.Connect() == "DBM" and next(bw) == nil, "with both boss mods only DBM drives calls")
+    check(CastAheadBossAdapter.Status() == "DBM connected", "and the status names DBM")
+    DBM = nil
     check(CastAheadBossAdapter.Connect() == "BigWigs", "BigWigs is detected")
     GetSpecialization = function() return 1 end
     GetSpecializationRole = function() return "DAMAGER" end
@@ -2777,6 +2811,23 @@ do
     local mod = {}
     reset()
     enter()
+    fire("ENCOUNTER_START", 1234)
+    sounds, spoken, clips = 0, 0, 0
+    local modA, modB = {}, {}
+    bw.BigWigs_StartBar("BigWigs_StartBar", modA, 1299684, "Sever", 10)
+    bw.BigWigs_StartBar("BigWigs_StartBar", modB, 1299684, "Sever", 10)
+    bw.BigWigs_StopBars("BigWigs_StopBars", modA)
+    advance(7.5)
+    check(Alerts() == 1, string.format("StopBars of one module leaves the other's same-text bar, got %d", Alerts()))
+    advance(5)
+    bw.BigWigs_StartBar("BigWigs_StartBar", modA, 1299684, "Sever", 10)
+    bw.BigWigs_StartBar("BigWigs_StartBar", modB, 1299684, "Sever", 10)
+    bw.BigWigs_OnBossDisable("BigWigs_OnBossDisable", modA)
+    bw.BigWigs_OnBossDisable("BigWigs_OnBossDisable", modB)
+    sounds, spoken, clips = 0, 0, 0
+    advance(7.5)
+    advance(5)
+    check(Alerts() == 0, string.format("OnBossDisable cancels the module's calls, got %d", Alerts()))
     sounds, spoken, clips = 0, 0, 0
     bw.BigWigs_StartBar("BigWigs_StartBar", mod, 1299684, "Sever", 10)
     advance(7.5)
@@ -2812,6 +2863,7 @@ do
     advance(12)
     check(ok, "secret bar arguments raise no error: " .. tostring(err))
     check(Alerts() == 0, string.format("and schedule nothing, got %d", Alerts()))
+    fire("ENCOUNTER_END", 1234)
     BigWigsLoader = nil
     CastAheadBossAdapter.Connect()
     reset()

@@ -2,11 +2,12 @@ CastAheadBossAdapter = {}
 local A = CastAheadBossAdapter
 local M = CastAheadMatch
 local connected
-local barsSeen, encounterAt, healthWarned = false, nil, false
+local barsSeen, encounterAt, healthWarned, inEncounter = false, nil, false, false
 local barSpells = {}
 local HEALTH_WAIT = 30
 
 local function Key(source, barKey) return source .. ":" .. tostring(barKey) end
+local function BigWigsSource(module) return "bw:" .. tostring(module) end
 
 local function Secret(...)
     if not issecretvalue then return false end
@@ -17,15 +18,18 @@ local function Secret(...)
 end
 
 local function Verdict(spellID)
-    local row = M.SaveRow(spellID)
-    local advice = row and M.SaveAdvice({ save = row })
-    if not advice or not CastAheadConfig.Enabled("bossAdapter") then return nil end
+    if not CastAheadConfig.Enabled("bossAdapter") then return nil end
+    local row, resolvedId = M.SaveRow(spellID)
+    if not row then return nil end
+    local advice = M.Advice({ prio = CastAheadPriority and (CastAheadPriority[spellID] or CastAheadPriority[resolvedId]),
+                              save = row })
+    if not M.IsSave(advice) then return nil end
     return spellID, row.lead or 3, advice
 end
 
 function A.OnBar(source, barKey, spellID, duration, now)
     barsSeen = true
-    if not CastAheadSaves then return end
+    if not (inEncounter and CastAheadSaves) then return end
     spellID, duration = tonumber(spellID), tonumber(duration)
     if not (spellID and duration) or duration <= 0 then return end
     local id, lead, advice = Verdict(spellID)
@@ -100,47 +104,50 @@ function A.Connect()
         end)
         dbm = true
     end
-    if type(BigWigsLoader) == "table" and BigWigsLoader.RegisterMessage then
-        BigWigsLoader.RegisterMessage(A, "BigWigs_StartBar", function(_, _, key, text, duration)
-            if Secret(key, text, duration) then barsSeen = true return end
-            A.OnBar("bw", text, key, duration, GetTime())
+    if not dbm and type(BigWigsLoader) == "table" and BigWigsLoader.RegisterMessage then
+        BigWigsLoader.RegisterMessage(A, "BigWigs_StartBar", function(_, module, key, text, duration)
+            if Secret(module, key, text, duration) then barsSeen = true return end
+            A.OnBar(BigWigsSource(module), text, key, duration, GetTime())
         end)
-        BigWigsLoader.RegisterMessage(A, "BigWigs_Timer", function(_, _, key, duration, _, text, _, _, _, isBarEnabled)
-            if Secret(key, duration, text, isBarEnabled) then barsSeen = true return end
+        BigWigsLoader.RegisterMessage(A, "BigWigs_Timer", function(_, module, key, duration, _, text, _, _, _, isBarEnabled)
+            if Secret(module, key, duration, text, isBarEnabled) then barsSeen = true return end
             if isBarEnabled then return end
-            A.OnBar("bw", text, key, duration, GetTime())
+            A.OnBar(BigWigsSource(module), text, key, duration, GetTime())
         end)
-        BigWigsLoader.RegisterMessage(A, "BigWigs_StopBar", function(_, _, text)
-            if Secret(text) then return end
-            A.OnStop("bw", text)
+        BigWigsLoader.RegisterMessage(A, "BigWigs_StopBar", function(_, module, text)
+            if Secret(module, text) then return end
+            A.OnStop(BigWigsSource(module), text)
         end)
-        BigWigsLoader.RegisterMessage(A, "BigWigs_PauseBar", function(_, _, text)
-            if Secret(text) then return end
-            A.OnPause("bw", text, GetTime())
+        BigWigsLoader.RegisterMessage(A, "BigWigs_PauseBar", function(_, module, text)
+            if Secret(module, text) then return end
+            A.OnPause(BigWigsSource(module), text, GetTime())
         end)
-        BigWigsLoader.RegisterMessage(A, "BigWigs_ResumeBar", function(_, _, text)
-            if Secret(text) then return end
-            A.OnResume("bw", text, GetTime())
+        BigWigsLoader.RegisterMessage(A, "BigWigs_ResumeBar", function(_, module, text)
+            if Secret(module, text) then return end
+            A.OnResume(BigWigsSource(module), text, GetTime())
         end)
-        BigWigsLoader.RegisterMessage(A, "BigWigs_StopBars", function() A.OnStopAll("bw") end)
-        BigWigsLoader.RegisterMessage(A, "BigWigs_OnBossDisable", function() A.OnStopAll("bw") end)
+        local function StopModule(_, module)
+            if Secret(module) then return end
+            A.OnStopAll(BigWigsSource(module))
+        end
+        BigWigsLoader.RegisterMessage(A, "BigWigs_StopBars", StopModule)
+        BigWigsLoader.RegisterMessage(A, "BigWigs_OnBossDisable", StopModule)
         bw = true
     end
-    connected = dbm and bw and "both" or dbm and "DBM" or bw and "BigWigs" or nil
+    connected = dbm and "DBM" or bw and "BigWigs" or nil
     return connected
 end
 
 function A.Status()
-    if connected == "both" then return "DBM and BigWigs connected" end
     if connected then return connected .. " connected" end
     return "No boss mod"
 end
 
 function A.OnEncounter(event)
     if event == "ENCOUNTER_START" then
-        barsSeen, encounterAt = false, GetTime()
+        barsSeen, encounterAt, inEncounter = false, GetTime(), true
     else
-        encounterAt = nil
+        encounterAt, inEncounter = nil, false
         A.OnStopAll("dbm")
         A.OnStopAll("bw")
     end
@@ -150,7 +157,6 @@ function A.Tick(now)
     if encounterAt and connected and not barsSeen and not healthWarned and now - encounterAt > HEALTH_WAIT
         and CastAheadConfig.Enabled("saveCalls") and CastAheadConfig.Enabled("bossAdapter") then
         encounterAt, healthWarned = nil, true
-        local name = connected == "both" and "DBM and BigWigs" or connected
-        print("|cff33ff99Cast Ahead|r " .. name .. " sent no boss timers this fight - boss save calls are off until it does.")
+        print("|cff33ff99Cast Ahead|r " .. connected .. " sent no boss timers this fight - boss save calls are off until it does.")
     end
 end
