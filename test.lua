@@ -394,7 +394,12 @@ check(M.Advice(saveRow) == M.ADVICE.BIG, "a dps gets BIG where the table says BI
 M.SpecRole = function() return "HEALER" end
 check(M.Advice(saveRow) == M.ADVICE.AOE, "a healer with no verdict keeps the old call")
 M.SpecRole = function() return "TANK" end
-check(M.Advice(saveRow) == M.ADVICE.SMALL, "a tank gets the tank verdict")
+check(M.Advice(saveRow) == M.ADVICE.AOE, "a hit that also lands on dps is no tank save, the old call stays")
+check(M.Advice({ spell = 908, save = { TANK = "BIG" } }) == M.ADVICE.BIG, "a hit only the tank takes is a tank buster save")
+check(M.Advice({ spell = 909, prio = "TANK", save = { DAMAGER = "SMALL", TANK = "BIG" } }) == M.ADVICE.BIG,
+    "a curated tank buster keeps the tank save even when dps were hit too")
+check(M.SaveKey({ DAMAGER = "BIG", TANK = "SMALL" }, "TANK") == nil and M.SaveKey({ DAMAGER = "BIG", TANK = "SMALL" }, "DAMAGER") == "BIG",
+    "SaveKey applies the tank buster rule to tanks only")
 local kickRow = { spell = 901, cast = 2.0, kickable = true, save = { TANK = "BIG" } }
 check(M.Advice(kickRow) == M.ADVICE.KICK, "a kickable cast still says interrupt")
 check(M.Advice({ spell = 902, prio = "KICK", save = { TANK = "BIG" } }) == M.ADVICE.KICK, "a curated kick still wins")

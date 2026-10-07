@@ -149,10 +149,15 @@ function M.SaveRow(id)
     return nil
 end
 
+function M.SaveKey(save, role, prio)
+    if role == "TANK" and prio ~= "TANK" and (save.DAMAGER or save.HEALER) then return nil end
+    return save[role]
+end
+
 function M.SaveAdvice(row)
     local save = row and row.save
     local role = save and M.SpecRole()
-    local key = role and save[role]
+    local key = role and M.SaveKey(save, role, row.prio)
     return key and M.ADVICE[key] or nil
 end
 

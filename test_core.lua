@@ -2713,6 +2713,14 @@ do
     check(zap.buttons[1].kind == "spell" and zap.buttons[1].available == false, "the view marks a known spell on cooldown not available")
     C_Spell.GetSpellCooldownDuration = nil
     CastAheadSaves.Refresh()
+    local savedSpecRole = CastAheadMatch.SpecRole
+    CastAheadMatch.SpecRole = function() return "TANK" end
+    CastAheadDefensives.spells[810] = { DAMAGER = "BIG", TANK = "SMALL", lead = 2.0, aura = false, name = "Quake", mob = "Brute", boss = "", dungeon = 9000, bar = false }
+    local tankIds = {}
+    for _, r in ipairs(CastAheadSaves.ViewRows(9000)) do tankIds[#tankIds + 1] = r.id end
+    check(table.concat(tankIds, ",") == "805", "a tank sees only tank busters in the Saves view, got " .. table.concat(tankIds, ","))
+    CastAheadDefensives.spells[810] = nil
+    CastAheadMatch.SpecRole = savedSpecRole
     local hex = by[809]
     check(hex and hex.wins == "KICK", "a kickable cast with no curated category beats the save, as in the game")
     check(bolt and bolt.trigger.cast and not bolt.trigger.bar and bolt.wins == "DODGE" and bolt.name == "Bolt",

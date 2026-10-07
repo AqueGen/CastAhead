@@ -37,7 +37,7 @@ Icon rows step sideways by the words under them, so labels never touch; **Fixed 
 
 ## Defensive calls (alpha)
 
-Cast Ahead can also tell you when to press a defensive. It says "small defensive" or "big defensive" (SMALL SAVE and BIG SAVE on screen) and shows up to three icons of the buttons you can press right now. The calls come from three places: trash casts, dangerous debuffs on you (sound only), and boss abilities read from DBM or BigWigs bars. Which call a spell gets comes from a table built from measured top-player runs.
+Cast Ahead can also tell you when to press a defensive. It says "small defensive" or "big defensive" (SMALL SAVE and BIG SAVE on screen) and shows up to three icons of the buttons you can press right now. The calls come from three places: trash casts, dangerous debuffs on you (sound only), and boss abilities read from DBM or BigWigs bars. Which call a spell gets comes from a table built from measured top-player runs. Tanks get a save call only for tank busters: hits that land on the tank alone in those runs, or casts the priority list marks as a tank buster. A hit that also lands on the rest of the group keeps its normal call for a tank.
 
 Each size has its own list of buttons, in order. If the first one is on cooldown (when the game lets addons read it), the next one in the same list takes its place; a small call never offers a big button and the other way round. Healthstones and potions are found in your bags by what they do, so any rank or version of the item works, and they drop off the icons while they are on cooldown or used up.
 

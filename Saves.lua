@@ -316,7 +316,7 @@ function S.ViewRows(instanceID)
         end
     end
     for id, row in pairs(spells) do
-        local size = row[role]
+        local size = M.SaveKey(row, role, CastAheadPriority and CastAheadPriority[id])
         if size and (row.dungeon == instanceID or cast[id]) then
             buttons[size] = buttons[size] or ViewButtons(SIZE[size])
             out[#out + 1] = {
@@ -367,7 +367,7 @@ local function RegisterAuraSounds()
     if not (CastAheadConfig.Enabled("saveCalls") and CastAheadConfig.Enabled("sound")) then return end
     local voice = CastAheadConfig.Enabled("voice")
     for spellID, row in pairs(CastAheadDefensives and CastAheadDefensives.spells or {}) do
-        local advice = row.aura and M.SaveAdvice({ save = row })
+        local advice = row.aura and M.SaveAdvice({ save = row, prio = CastAheadPriority and CastAheadPriority[spellID] })
         local file = advice and (PickedFile(advice) or voice and SOUND_ROOT .. advice.file .. ".ogg")
         if file then
             local ok, id = pcall(C_UnitAuras.AddAuraSound, Enum.UnitAuraSoundTrigger.Added, {
