@@ -7,7 +7,7 @@ CastAheadOptions = {}
 
 -- Development is last on purpose: it is hidden unless the player asks for
 -- it, and hiding the final tab leaves the strip intact.
-CastAheadOptions.TABS = { "General", "Sounds", "Development" }
+CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Development" }
 local panels
 -- One row of groups, each in its own column, so nothing is stacked and every
 -- setting is reachable without reading up and down the page. UI.lua takes the
@@ -22,7 +22,7 @@ CastAheadOptions.MIN_WIDTH = COL_X * 2 + COLUMNS * COL_W + (COLUMNS - 1) * COL_G
 CastAheadOptions.MIN_HEIGHT = 404
 -- Forward declarations: BuildWindow calls these, and Lua resolves a local by
 -- what it holds at call time, so they must exist as upvalues before it runs.
-local BuildGeneral, BuildSounds, BuildDevelopment
+local BuildGeneral, BuildSounds, BuildDefensives, BuildDevelopment
 -- Widgets are painted once, when a panel is first built, but storage can
 -- change behind their back: the /ca anchor|grow|offset|center slash commands
 -- and the Move button all write it. Every widget that displays stored state
@@ -106,6 +106,10 @@ local SWITCHES = {
         tip = "Adds the Development tab and starts recording everything for improving the addon's data (the Record everything switch there, on by default). Nothing here changes what the addon calls out." },
     recordAll = { label = "Record everything",
         tip = "The game's combat log with advanced logging in every dungeon (off again when you leave, unless you had started it yourself), a journal of each key, and what the game lets an addon read off each enemy cast. Keeps the last 12 keys. No names of people are recorded. /reload after a key saves it to disk." },
+    saveCalls = { label = "Defensive calls",
+        tip = "Call a small or big defensive ahead of damage that needs one, and show your button for it in the centre." },
+    bossAdapter = { label = "Boss calls from DBM / BigWigs",
+        tip = "Also call defensives for boss abilities announced by DBM or BigWigs." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
         tip = "A panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. Only while recording. The key bindings and /ca mark work without it." },
 }
@@ -207,6 +211,7 @@ local function Build(host)
 
     BuildGeneral(panels.General)
     BuildSounds(panels.Sounds)
+    BuildDefensives(panels.Defensives)
     BuildDevelopment(panels.Development)
 end
 
@@ -512,8 +517,102 @@ function BuildDevelopment(panel)
         "probe clear", "Forget the collected probe results. /ca probe clear")
 end
 
+local function SaveRefresh()
+    if CastAheadSaves then CastAheadSaves.Refresh() end
+end
+
+local function SpellLabel(id)
+    local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(id) or tostring(id)
+    local icon = C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(id)
+    return icon and string.format("|T%s:16|t %s", icon, name) or name
+end
+
+local function SaveChoices(spec, size)
+    local shipped = CastAheadSaveButtons and CastAheadSaveButtons[spec]
+    local ids, seen = {}, {}
+    local function add(id)
+        if id and not seen[id] then seen[id] = true ids[#ids + 1] = id end
+    end
+    for _, id in ipairs(shipped and shipped[size] or {}) do add(id) end
+    local picks = CastAheadDB and CastAheadDB.saveButtons and CastAheadDB.saveButtons[spec]
+    add(picks and picks[size])
+    return ids
+end
+
+function BuildDefensives(panel)
+    local group = BuildGroup(panel, "Defensive calls", 1, 232)
+    local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, SaveRefresh)
+    local boss = BuildSwitch(panel, "bossAdapter", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 })
+
+    local status = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    status:SetPoint("TOPLEFT", boss, "BOTTOMLEFT", 4, -6)
+    status:SetWidth(COL_W - 24)
+    status:SetJustifyH("LEFT")
+    table.insert(refreshers, function()
+        status:SetText("|cffaaaaaa" .. (CastAheadBossAdapter and CastAheadBossAdapter.Status() or "No boss mod") .. "|r")
+    end)
+
+    local dropdowns = {}
+    local anchor = status
+    for _, entry in ipairs({ { "small", "Small defensive" }, { "big", "Big defensive" } }) do
+        local size = entry[1]
+        local label = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -12)
+        label:SetText(entry[2])
+        local dropdown = CreateFrame("DropdownButton", nil, panel, "WowStyle1DropdownTemplate")
+        dropdown:SetSize(COL_W - 40, 24)
+        dropdown:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -4)
+        dropdown:SetupMenu(function(_, root)
+            local spec = CastAheadSaves and CastAheadSaves.SpecID()
+            if not spec then return end
+            for _, id in ipairs(SaveChoices(spec, size)) do
+                root:CreateRadio(SpellLabel(id),
+                    function() return CastAheadSaves.Button(size) == id end,
+                    function()
+                        CastAheadDB = CastAheadDB or {}
+                        CastAheadDB.saveButtons = CastAheadDB.saveButtons or {}
+                        CastAheadDB.saveButtons[spec] = CastAheadDB.saveButtons[spec] or {}
+                        CastAheadDB.saveButtons[spec][size] = id
+                        SaveRefresh()
+                    end)
+            end
+        end)
+        dropdowns[#dropdowns + 1] = dropdown
+        anchor = dropdown
+    end
+
+    local reset = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    reset:SetSize(110, 22)
+    reset:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -14)
+    reset:SetText("Reset to default")
+    reset:SetScript("OnClick", function()
+        local spec = CastAheadSaves and CastAheadSaves.SpecID()
+        if spec and CastAheadDB and CastAheadDB.saveButtons then CastAheadDB.saveButtons[spec] = nil end
+        SaveRefresh()
+        for _, refresh in ipairs(refreshers) do refresh() end
+    end)
+
+    local note = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    note:SetPoint("TOPLEFT", group, "BOTTOMLEFT", 0, -10)
+    note:SetWidth(COL_W * 2)
+    note:SetJustifyH("LEFT")
+    note:SetText("|cffaaaaaaDefensive buttons ship for Warlock, Paladin and Demon Hunter; more specs are coming.|r")
+
+    table.insert(refreshers, function()
+        local spec = CastAheadSaves and CastAheadSaves.SpecID()
+        local shipped = spec and CastAheadSaveButtons and CastAheadSaveButtons[spec]
+        note:SetShown(not shipped)
+        for _, dropdown in ipairs(dropdowns) do
+            dropdown:SetShown(shipped and true or false)
+            dropdown:GenerateMenu()
+        end
+        reset:SetShown(shipped and true or false)
+    end)
+end
+
 local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
-    "POISON", "CURSE", "MAGIC", "DISEASE", "BLEED", "SOOTHE", "PURGE", "SWITCH", "ALERT" }
+    "POISON", "CURSE", "MAGIC", "DISEASE", "BLEED", "SOOTHE", "PURGE", "SWITCH", "ALERT",
+    "SMALL", "BIG" }
 local SOUND_ROW_H = 26
 
 -- Default plus every sound LibSharedMedia knows. Shared with the casts
