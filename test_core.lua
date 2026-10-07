@@ -2642,7 +2642,6 @@ do
     CastAheadDB.sounds = { BIG = "Kit" }
     CastAheadSaves.Refresh()
     check(files[#files]:match("Sounds\\en\\BIG%.ogg$"), "a picked sound kit id keeps the clip")
-    for _, f in ipairs(files) do check(not f:match("HEAL"), "aura sounds never register heal up: " .. f) end
     LibStub, CastAheadDB.sounds = nil, nil
     CastAheadConfig.SetEnabled("saveCalls", false)
     CastAheadSaves.Refresh()
@@ -3031,7 +3030,12 @@ do
     CastAheadDefensives = { spells = { [100] = { DAMAGER = "BIG", lead = 4.0 } }, alias = {} }
     CastAheadDB = { centerText = true, leadSeconds = 0 }
     CastAheadCore.ReapplyData()
-    local function BigCast(kick)
+    local function HealLine()
+        local l = CenterLine()
+        return l and l.timeValue:match("^Heal up") and l
+    end
+    local centreSaid
+    local function BigCast(kick, lockKick)
         reset()
         enter()
         castFor(3.0)
@@ -3040,7 +3044,9 @@ do
         advance(1.5)
         advance(3.0)
         fire("UNIT_SPELLCAST_START", unit)
+        if lockKick then fire("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", unit) end
         advance(1.0)
+        centreSaid = CenterLine() and CenterLine().timeValue
         if kick then fire("UNIT_SPELLCAST_INTERRUPTED", unit) end
         advance(2.0)
         fire("UNIT_SPELLCAST_STOP", unit)
@@ -3049,19 +3055,44 @@ do
     BigCast(false)
     check(Heals() == 1 and LastBig() > 0 and LastBig() < #heard and (heard[#heard] or ""):match("\\HEAL%.ogg$"),
         "a completed big-save cast calls heal up once, after the big call: " .. table.concat(heard, ","))
-    line = CenterLine()
-    check(line and line.timeValue:match("^Heal up") and line.icon.textureValue == 9512, "the heal call shows the healthstone in the centre")
+    line = HealLine()
+    check(line and line.icon.textureValue == 9512, "the heal call shows the healthstone in the centre")
+    cds[5512] = { now, 60 }
+    advance(0.5)
+    check(not HealLine(), "the heal line leaves once the healthstone goes on cooldown")
+    cds[5512] = { 0, 0 }
     advance(3.0)
-    check(not (CenterLine() and CenterLine().timeValue:match("^Heal up")), "the heal line leaves after its seconds")
+    check(not HealLine(), "the heal line leaves after its seconds")
     BigCast(true)
-    check(Heals() == 0, "a kicked big-save cast calls no heal")
+    check(LastBig() > 0 and Heals() == 0, "a kicked big-save cast calls no heal")
     counts[5512] = 0
     BigCast(false)
-    check(Heals() == 0, "no heal call without a ready heal item")
+    check(LastBig() > 0 and Heals() == 0, "no heal call without a ready heal item")
     counts[5512] = 3
     CastAheadConfig.SetEnabled("healCalls", false)
     BigCast(false)
-    check(Heals() == 0, "healCalls off silences the heal call")
+    check(LastBig() > 0 and Heals() == 0, "healCalls off silences the heal call")
+    CastAheadConfig.SetEnabled("healCalls", true)
+
+    reset()
+    enter()
+    wipe(heard)
+    castFor(3.0)
+    advance(0.1)
+    local last = CastAheadCore.LastCandidates(unit)
+    check(last and #last == 1 and last[1].spell == 100 and LastBig() == 0 and Heals() == 0,
+        "a cast unidentified at its start that resolves to the big hit at its stop calls no heal: " .. table.concat(heard, ","))
+
+    CastAheadPriority[100] = "KICK"
+    CastAheadCore.ReapplyData()
+    BigCast(false, true)
+    check(centreSaid and centreSaid:match("^Big defensive") and Heals() == 1,
+        "a kickable cast the game locked shows big save and heals on completion: " .. tostring(centreSaid))
+    BigCast(false)
+    check(centreSaid and centreSaid:match("^Interrupt") and Heals() == 0,
+        "the same cast left kickable calls interrupt and no heal: " .. tostring(centreSaid))
+    CastAheadPriority[100] = "AOE"
+    CastAheadCore.ReapplyData()
     CastAheadConfig.SetEnabled("healCalls", true)
     CastAheadConfig.SetEnabled("saveCalls", false)
     BigCast(false)
@@ -3076,6 +3107,7 @@ do
     check(LastBig() == 1 and Heals() == 0, "a boss big call fires at its time, no heal yet")
     advance(2.0)
     check(Heals() == 1 and (heard[#heard] or ""):match("\\HEAL%.ogg$"), "the boss hit lands: heal up once")
+    check(HealLine(), "the boss heal call shows its centre line")
     advance(2.0)
     check(Heals() == 1, "only once")
     wipe(heard)

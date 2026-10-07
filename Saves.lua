@@ -199,14 +199,17 @@ function S.Pending(now)
     wipe(pending)
     for _, c in pairs(scheduled) do
         if not c.pausedAt and c.fired and c.endAt > now then
-            pending[#pending + 1] = { endAt = c.endAt, advice = c.advice, row = { spell = c.spell },
-                                      icons = S.Icons(c.advice) }
+            local icons = S.Icons(c.advice)
+            if c.advice ~= M.ADVICE.HEAL or #icons > 0 then
+                pending[#pending + 1] = { endAt = c.endAt, advice = c.advice, row = { spell = c.spell }, icons = icons }
+            end
         end
     end
     return pending
 end
 
 function S.Tick(now)
+    local healed = false
     for key, c in pairs(scheduled) do
         if not c.pausedAt then
             if not c.fired and now >= c.fireAt and now < c.endAt then
@@ -217,9 +220,11 @@ function S.Tick(now)
                 if c.fired and c.advice == M.ADVICE.BIG and S.HealReady()
                     and CastAheadCore and CastAheadCore.Announce then
                     CastAheadCore.Announce(M.ADVICE.HEAL)
+                    healed = true
                 end
                 scheduled[key] = nil
             end
         end
     end
+    if healed then S.Flash(M.ADVICE.HEAL, now, 3) end
 end
