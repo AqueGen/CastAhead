@@ -39,7 +39,7 @@ Icon rows step sideways by the words under them, so labels never touch; **Fixed 
 
 Cast Ahead can also tell you when to press a defensive. It says "small defensive" or "big defensive" (SMALL SAVE and BIG SAVE on screen) and shows up to three icons of the buttons you can press right now. The calls come from three places: trash casts, dangerous debuffs on you (sound only), and boss abilities read from DBM or BigWigs bars. Which call a spell gets comes from a table built from measured top-player runs.
 
-Each size has its own list of buttons, in order. If the first one is on cooldown, the next one in the same list takes its place; a small call never offers a big button and the other way round. Healthstones and potions are found in your bags by what they do, so any rank or version of the item works, and they drop off the icons while they are on cooldown or used up.
+Each size has its own list of buttons, in order. If the first one is on cooldown (when the game lets addons read it), the next one in the same list takes its place; a small call never offers a big button and the other way round. Healthstones and potions are found in your bags by what they do, so any rank or version of the item works, and they drop off the icons while they are on cooldown or used up.
 
 After a big hit lands, Cast Ahead says "heal up" (HEAL UP on screen) if something from your heal list is ready: a Healthstone, a potion, or a self-heal. This only follows a hit that got a big call, on trash when the cast finishes and on bosses when the bar runs out. Debuff calls never get a heal call.
 

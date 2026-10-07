@@ -46,24 +46,47 @@ function S.ScanBags()
     bagsPending = false
     wipe(memo)
     wipe(useToItem)
-    if not (C_Container and C_Item and C_Item.GetItemSpell) then return end
+    if not (C_Container and C_Container.GetContainerNumSlots and C_Container.GetContainerItemID
+        and C_Item and C_Item.GetItemSpell) then return end
     for bag = 0, 5 do
         for slot = 1, C_Container.GetContainerNumSlots(bag) or 0 do
             local item = C_Container.GetContainerItemID(bag, slot)
             if item then
                 local _, use = C_Item.GetItemSpell(item)
-                if use and not useToItem[use] then useToItem[use] = item end
+                if use then
+                    local items = useToItem[use] or {}
+                    useToItem[use] = items
+                    local seen = false
+                    for _, known in ipairs(items) do seen = seen or known == item end
+                    if not seen then items[#items + 1] = item end
+                end
             end
         end
     end
+end
+
+local function ItemFor(use)
+    local items = useToItem[use]
+    if not items then return nil end
+    if C_Item and C_Item.GetItemCount then
+        for _, item in ipairs(items) do
+            if (C_Item.GetItemCount(item) or 0) > 0 then return item end
+        end
+    end
+    return items[1]
+end
+
+local function SpellTexture(id)
+    return C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(id) or nil
 end
 
 function S.BagsPending() return bagsPending end
 
 local function ItemReady(item)
     if not (C_Item and C_Item.GetItemCount and (C_Item.GetItemCount(item) or 0) > 0) then return false end
-    local start, duration = 0, 0
-    if C_Item.GetItemCooldown then start, duration = C_Item.GetItemCooldown(item) end
+    local start, duration, enable = 0, 0, true
+    if C_Item.GetItemCooldown then start, duration, enable = C_Item.GetItemCooldown(item) end
+    if enable == false then return false end
     return (start or 0) == 0 or (start + (duration or 0)) <= GetTime()
 end
 
@@ -73,10 +96,10 @@ local function Collect(list, out)
         if type(e) == "number" then
             if Known(e) then
                 resolved = true
-                if SpellReady(e) then out[#out + 1] = { kind = "spell", id = e, icon = C_Spell and C_Spell.GetSpellTexture(e) } end
+                if SpellReady(e) then out[#out + 1] = { kind = "spell", id = e, icon = SpellTexture(e) } end
             end
         elseif type(e) == "table" and e.use then
-            local item = useToItem[e.use]
+            local item = ItemFor(e.use)
             resolved = resolved or item ~= nil
             if item and ItemReady(item) then
                 out[#out + 1] = { kind = "item", id = item, icon = C_Item.GetItemIconByID and C_Item.GetItemIconByID(item) }
@@ -100,7 +123,7 @@ function S.Available(size)
     return out
 end
 
-function S.ItemFor(use) return useToItem[use] end
+S.ItemFor = ItemFor
 
 local NOT_FOUND = "Not a spell you know or an item with a use effect"
 
@@ -235,26 +258,18 @@ if StaticPopupDialogs then
     }
 end
 
-function S.Button(size)
-    for _, e in ipairs(S.Available(size)) do
-        if e.kind == "spell" then return e.id end
-    end
-    return nil
-end
-
 local SIZE = { SMALL = "small", BIG = "big", HEAL = "heal" }
+local NO_ICONS = {}
 function S.Icons(advice)
     local size = advice and SIZE[advice.key]
+    if not size then return NO_ICONS end
     local out = {}
-    if not size then return out end
     for _, e in ipairs(S.Available(size)) do
         if e.icon then out[#out + 1] = e.icon end
         if #out == 3 then break end
     end
     return out
 end
-
-function S.Icon(advice) return S.Icons(advice)[1] end
 
 local function Wins(row)
     local advice = M.Beats(row)
@@ -268,12 +283,12 @@ local function ViewButtons(size)
     for _, e in ipairs(S.List(size)) do
         if type(e) == "number" then
             out[#out + 1] = { kind = "spell", id = e, available = ready["spell" .. e] == true,
-                icon = C_Spell and C_Spell.GetSpellTexture(e) }
+                icon = SpellTexture(e) }
         elseif type(e) == "table" and e.use then
-            local item = useToItem[e.use]
+            local item = ItemFor(e.use)
             local icon = item and C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(item)
             out[#out + 1] = { kind = "item", id = item, available = item ~= nil and ready["item" .. item] == true,
-                icon = icon or C_Spell and C_Spell.GetSpellTexture(e.use) }
+                icon = icon or SpellTexture(e.use) }
         end
     end
     return out

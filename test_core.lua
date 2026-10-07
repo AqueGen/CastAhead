@@ -2446,18 +2446,17 @@ CastAheadSaveButtons = { [265] = { small = { 108416 }, big = { 104773 } } }
 CastAheadDefensives = { spells = { [100] = { DAMAGER = "BIG", lead = 4.0 } }, alias = {} }
 CastAheadSaves.Refresh()
 CastAheadDB = { centerText = true }
-check(CastAheadSaves.Button("big") == 104773, "the shipped big button for the spec")
-check(CastAheadSaves.Icon(CastAheadMatch.ADVICE.BIG) == 2001, "its icon")
+check(CastAheadSaves.Icons(CastAheadMatch.ADVICE.BIG)[1] == 2001, "the shipped big button for the spec")
 CastAheadDB.saveButtons = { [265] = { big = { 108416 } } }
 CastAheadSaves.Refresh()
-check(CastAheadSaves.Button("big") == 108416, "an override wins")
+check(CastAheadSaves.Icons(CastAheadMatch.ADVICE.BIG)[1] == 2002, "an override wins")
 CastAheadDB.saveButtons = { [265] = { big = { 999, 104773 } } }
 CastAheadSaves.Refresh()
-check(CastAheadSaves.Button("big") == 104773, "an override the character does not know falls back")
+check(CastAheadSaves.Icons(CastAheadMatch.ADVICE.BIG)[1] == 2001, "an override the character does not know falls back")
 CastAheadDB.saveButtons = nil
 GetSpecializationInfo = function() return 70 end
 CastAheadSaves.Refresh()
-check(CastAheadSaves.Button("big") == nil, "a spec without a table has no button")
+check(#CastAheadSaves.Icons(CastAheadMatch.ADVICE.BIG) == 0, "a spec without a table has no button")
 GetSpecializationInfo = function() return 265 end
 CastAheadSaves.Refresh()
 
@@ -3027,6 +3026,19 @@ do
     check(#CastAheadSaves.Available("heal") == 0, "an item on cooldown is not available")
     advance(1)
     cds[5512] = { 0, 0 }
+    local readCooldown = C_Item.GetItemCooldown
+    C_Item.GetItemCooldown = function() return 0, 0, false end
+    check(#CastAheadSaves.Available("heal") == 0, "an item whose cooldown has not started yet is not available")
+    C_Item.GetItemCooldown = readCooldown
+    advance(1)
+    bags[0][3], useOf[7777], counts[7777] = 7777, 452930, 2
+    CastAheadSaves.ScanBags()
+    counts[5512] = 0
+    local heal = CastAheadSaves.Available("heal")
+    check(#heal == 1 and heal[1].id == 7777, "a second item with the same use spell takes over when the first runs out")
+    bags[0][3], counts[5512] = nil, 3
+    CastAheadSaves.ScanBags()
+    advance(1)
     CastAheadDB.saveButtons = { [265] = { big = { 999, 104773 } } }
     check(CastAheadSaves.Available("big")[1].id == 104773, "an override skips an unknown spell to the next entry")
     check(#CastAheadSaves.Available("small") == 2, "a size missing from the override keeps the shipped list")

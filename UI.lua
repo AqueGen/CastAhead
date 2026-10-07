@@ -199,8 +199,8 @@ local COLUMNS = {
       sort = function(e) return SpellSound(e) or "" end },
 }
 
-local MAX_SAVE_ICONS = 5   -- ponytail: longer lists are cut at 5 icons; widen the column if lists grow
-local TRIGGER_WORDS = { { "cast", "cast" }, { "bar", "DBM bar" }, { "debuff", "debuff" } }
+local MAX_SAVE_ICONS = 5
+local TRIGGER_WORDS = { { "cast", "cast" }, { "bar", "boss bar" }, { "debuff", "debuff" } }
 
 local SAVE_COLUMNS = {
     { key = "size", header = "Save", width = 50,
