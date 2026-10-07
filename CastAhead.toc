@@ -28,6 +28,7 @@ Traits.lua
 Packs.lua
 Match.lua
 Saves.lua
+BossAdapter.lua
 Timeline.lua
 Core.lua
 Recorder.lua

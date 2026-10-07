@@ -2131,6 +2131,10 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         end
         return
     end
+    if event == "PLAYER_LOGIN" then
+        if CastAheadBossAdapter then CastAheadBossAdapter.Connect() end
+        return
+    end
     if event == "PLAYER_ENTERING_WORLD" then
         ProbeRestore()
         if CastAheadRecorder then
@@ -2194,6 +2198,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     end
     if event == "ENCOUNTER_START" or event == "ENCOUNTER_END" then
         inEncounter = event == "ENCOUNTER_START"
+        if CastAheadBossAdapter then CastAheadBossAdapter.OnEncounter(event) end
         if inEncounter then
             -- Everything on screen belongs to the pull that just ended; the
             -- centre call clears itself once no plate is casting.
@@ -2503,6 +2508,7 @@ frame:SetScript("OnUpdate", function()
     if not dungeon then return end
     local now = GetTime()
     if CastAheadSaves and CastAheadConfig.Enabled("saveCalls") then CastAheadSaves.Tick(now) end
+    if CastAheadBossAdapter then CastAheadBossAdapter.Tick(now) end
     UpdateCenter(now)
     if now >= pollAt then
         pollAt = now + COMBAT_POLL_INTERVAL
@@ -2599,7 +2605,7 @@ persist:SetScript("OnEvent", function()
 end)
 
 for _, event in ipairs({
-    "ADDON_LOADED", "PLAYER_ENTERING_WORLD", "PLAYER_SPECIALIZATION_CHANGED", "SPELLS_CHANGED",
+    "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "PLAYER_SPECIALIZATION_CHANGED", "SPELLS_CHANGED",
     "ENCOUNTER_START", "ENCOUNTER_END", "CHALLENGE_MODE_START", "CHALLENGE_MODE_COMPLETED",
     "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
     "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH",

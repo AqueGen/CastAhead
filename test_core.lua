@@ -287,6 +287,7 @@ CastAheadDefensives = { spells = {}, alias = {} }
 dofile("Config.lua")
 dofile("Match.lua")
 dofile("Saves.lua")
+dofile("BossAdapter.lua")
 dofile("Timeline.lua")
 -- UI.lua only needs the stubs above for its option helpers.
 UISpecialFrames = {}
@@ -2575,6 +2576,77 @@ check(CastAheadDB.bossAdapter == false and CastAheadConfig.Enabled("saveCalls"),
 CastAheadDB = nil
 CastAheadCore.ReapplyData()
 CastAheadDB = nil
+
+-- Boss bars: a DBM timer for a spell with a verdict schedules a call at bar end minus lead.
+GetSpecialization = function() return 1 end
+GetSpecializationRole = function() return "DAMAGER" end
+CastAheadDefensives = { spells = { [1299684] = { DAMAGER = "BIG", lead = 3.0 } }, alias = { [1299680] = 1299684 } }
+local A = CastAheadBossAdapter
+reset()
+enter()
+sounds, spoken, clips = 0, 0, 0
+A.OnBar("dbm", "t1", 1299680, 10, now)
+advance(6.5)
+check(Alerts() == 0, "quiet until bar end minus lead")
+advance(1.0)
+check(Alerts() == 1, "one call 3 s before the hit, through the alias")
+A.OnBar("dbm", "t2", 1299684, 10, now)
+A.OnStop("dbm", "t2")
+sounds, spoken, clips = 0, 0, 0
+advance(10)
+check(Alerts() == 0, "a stopped bar never calls")
+A.OnBar("dbm", "t3", 1299684, 10, now)
+A.OnPause("dbm", "t3", now)
+advance(20)
+check(Alerts() == 0, "a paused bar waits")
+A.OnResume("dbm", "t3", now)
+advance(7.5)
+check(Alerts() == 1, "and resumes where it stopped")
+A.OnBar("bw", "Sever", "sever_option", 10, now)
+A.OnBar("dbm", "t4", nil, 10, now)
+A.OnBar("dbm", "t5", 4242, 10, now)
+sounds, spoken, clips = 0, 0, 0
+advance(12)
+check(Alerts() == 0, "string keys, nil ids and spells without a verdict are ignored")
+A.OnBar("bw", "Sever", 1299684, 10, now)
+A.OnStopAll("bw")
+advance(12)
+check(Alerts() == 0, "StopBars clears every BigWigs call")
+A.OnBar("dbm", "t6", 1299684, 10, now)
+A.OnUpdate("dbm", "t6", 0, 20, now)
+advance(7.5)
+check(Alerts() == 0, "an extended bar moves its call")
+advance(10)
+check(Alerts() == 1, "to the new end minus lead")
+reset()
+GetSpecialization, GetSpecializationRole = nil, nil
+CastAheadDefensives = { spells = {}, alias = {} }
+
+-- Connect: with a stub DBM the adapter registers and reports it.
+local registered = {}
+DBM = { RegisterCallback = function(_, event, fn) registered[event] = fn end }
+check(CastAheadBossAdapter.Connect() == "DBM", "DBM is detected")
+check(registered.DBM_TimerBegin and registered.DBM_TimerStop and registered.DBM_TimerPause and registered.DBM_TimerResume
+    and registered.DBM_TimerUpdate, "the five DBM timer callbacks are registered")
+
+-- Health check: a connected boss mod that sends no bars for 30 s into a fight gets one chat line.
+do
+    local savedPrint, printed = print, 0
+    print = function() printed = printed + 1 end
+    registered = {}
+    fire("PLAYER_LOGIN")
+    local connectedAtLogin = registered.DBM_TimerBegin ~= nil
+    DBM = nil
+    enter()
+    fire("ENCOUNTER_START", 1234)
+    advance(31)
+    advance(10)
+    print = savedPrint
+    check(connectedAtLogin, "Core connects the adapter at login")
+    check(printed == 1, string.format("one chat line when no boss timers arrive, got %d", printed))
+    fire("ENCOUNTER_END", 1234)
+    reset()
+end
 
 do
     local overwritten = {}
