@@ -118,3 +118,26 @@ def test_coverage_splits_the_dungeon_into_missed_not_cast_and_shown(tmp_path):
     assert "Beam (700) DODGE, cast 1" in missed and "Big" not in missed
     assert "Drain (610)" in not_cast
     assert "Big (100)" in text.split("Shown")[1]
+
+
+def test_coverage_leaves_out_casts_inside_a_boss_encounter(tmp_path):
+    data = ('CastAheadData = {\n    [1877] = { name = "T",\n'
+            '        { spell = 700, npc = 7, mob = "G", name = "Beam", cast = 2.0, cd = { 30.0 }, first = 6.0, n = 9, firstN = 9, level = 91, offset = 0.0, },\n'
+            '    },\n}\n')
+    sv = ('CastAheadDB = {\n["journal"] = {\n["keys"] = {\n{\n["instance"] = 1877,\n["level"] = 12,\n'
+          '["lines"] = {\n"9000|START|2.2|0|-|-||0",\n},\n},\n},\n},\n}\n')
+    golem = "Creature-0-1-2-3-7-0000000002"
+    cast = '10/3/2026 12:0%d:00.000  SPELL_CAST_START,%s,"G",0xa48,0x0,0000000000000000,nil,0x0,0x0,700,"Beam",0x1'
+    log = [
+        '10/3/2026 12:00:00.000  CHALLENGE_MODE_START,"T",1877,1,12,[10]',
+        cast % (1, golem),
+        '10/3/2026 12:02:00.000  ENCOUNTER_START,2127,"Boss",8,5,1877',
+        cast % (3, golem),
+        cast % (4, golem),
+        '10/3/2026 12:05:00.000  ENCOUNTER_END,2127,"Boss",8,5,1,180000',
+        '10/3/2026 12:10:00.000  CHALLENGE_MODE_END,1877,1,12,600000',
+    ]
+    path = tmp_path / "log.txt"
+    path.write_text("\n".join(log) + "\n", encoding="utf-8")
+    text = coverage_report(sv, [str(path)], data, {700: "DODGE"})
+    assert "Beam (700) DODGE, cast 1, shown 0" in text.split("Missed")[1].split("Not cast")[0]
