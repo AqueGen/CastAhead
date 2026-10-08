@@ -66,7 +66,9 @@ local function BuildSlider(panel, spec)
     local slider = CreateFrame("Frame", nil, panel, "MinimalSliderWithSteppersTemplate")
     slider:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 6, -12)
     slider:SetSize(spec.width or SLIDER_W, 19)
-    for _, edge in ipairs({ slider.MinText, slider.MaxText }) do
+    for corner, edge in pairs({ BOTTOMLEFT = slider.MinText, BOTTOMRIGHT = slider.MaxText }) do
+        edge:ClearAllPoints()
+        edge:SetPoint("TOP", slider.Slider, corner, 0, -1)
         edge:SetFontObject("GameFontHighlightSmall")
         edge:SetTextColor(unpack(T.muted))
     end
@@ -844,9 +846,10 @@ function BuildDefensives(panel)
 
     local note = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     note:SetPoint("TOPLEFT", group, "BOTTOMLEFT", 0, -10)
-    note:SetPoint("RIGHT", panel, "RIGHT", -8, 0)
     note:SetJustifyH("LEFT")
+    note:SetJustifyV("TOP")
     note:SetWordWrap(true)
+    panel:HookScript("OnSizeChanged", function(_, width) note:SetWidth(math.max(width - 2 * COL_X, 1)) end)
     note:SetText("|cffaaaaaaNo shipped defensive lists for this specialization.|r")
 
     local function PaintSpec()
@@ -899,8 +902,9 @@ end
 function BuildSounds(panel)
     local hint = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     hint:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -4)
-    hint:SetPoint("RIGHT", panel, "RIGHT", -4, 0)
+    hint:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -4, -4)
     hint:SetJustifyH("LEFT")
+    hint:SetJustifyV("TOP")
     hint:SetWordWrap(true)
     hint:SetText("|cffaaaaaaVoice = the spoken call (a stock beep when it cannot speak). A sound plays instead of the voice.|r")
 

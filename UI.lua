@@ -250,12 +250,15 @@ local function RegisterSettingsCategory()
 
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 16, -16)
+    title:SetPoint("TOPRIGHT", -16, -16)
+    title:SetJustifyH("LEFT")
     title:SetText("Cast Ahead")
 
     local blurb = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     blurb:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
-    blurb:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
+    blurb:SetPoint("TOPRIGHT", title, "BOTTOMRIGHT", 0, -10)
     blurb:SetJustifyH("LEFT")
+    blurb:SetJustifyV("TOP")
     blurb:SetText("Everything Cast Ahead has is in its own window: the tracked casts, "
         .. "what gets called out, where it is drawn and how it sounds.\n\n"
         .. "Open it with |cffffd100/ca|r, the minimap button, or the button below.")
