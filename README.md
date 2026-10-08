@@ -43,13 +43,21 @@ Each size has its own list of buttons, in order. If the first one is on cooldown
 
 After a big hit lands, Cast Ahead says "heal up" (HEAL UP on screen) if something from your heal list is ready: a Healthstone, a potion, or a self-heal. This only follows a hit that got a big call, on trash when the cast finishes and on bosses when the bar runs out. Debuff calls never get a heal call.
 
-Lists ship for these specs so far. Healthstones and the Silvermoon health potions sit in the heal list of every spec, not in the small one: they heal rather than reduce damage, so they are called after the hit, not before it. You can still add them to a list yourself.
+Every spec ships its own lists, picked from what top players press in +18 keys on Warcraft Logs. Only personal defensives are listed: externals and raid cooldowns are left out, and so are buttons pressed on rotation (Ironfur, Ignore Pain, Shield Block, Purifying Brew). A spec with a single personal defensive has it in both the small and the big list. Healthstones and the Silvermoon health potions sit in the heal list of every spec, not in the small one: they heal rather than reduce damage, so they are called after the hit, not before it. You can still add them to a list yourself.
 
-- Warlock, all three specs: Dark Pact (small), Unending Resolve (big), Mortal Coil (heal).
-- Paladin, Protection: Ardent Defender and Sentinel (small), Guardian of Ancient Kings and Divine Shield (big), Word of Glory and Lay on Hands (heal). Holy and Retribution: Divine Protection (small), Divine Shield and Blessing of Protection (big), Lay on Hands and Word of Glory (heal).
+- Death Knight: Anti-Magic Shell (small, plus Lichborne for Frost and Unholy), Icebound Fortitude (big, after Vampiric Blood for Blood), Death Pact (heal).
 - Demon Hunter, Havoc and Devourer: Blur (small), Darkness (big). Vengeance: Demon Spikes (small), Fiery Brand and Metamorphosis (big).
-
-Other specs get the generic call without button icons. More specs will follow.
+- Druid: Barkskin (small). Big is Survival Instincts for Feral and Guardian, Bear Form for Balance and Restoration. Heal is Frenzied Regeneration for Balance, Feral and Guardian, plus Regrowth for Balance and Feral.
+- Evoker: Obsidian Scales (small and big), Verdant Embrace (heal).
+- Hunter: Survival of the Fittest (small), Aspect of the Turtle (big), Exhilaration (heal).
+- Mage: the spec's barrier and Mirror Image (small), Ice Cold and Greater Invisibility (big), Alter Time (heal).
+- Monk, Brewmaster: Celestial Infusion (small), Fortifying Brew (big), Expel Harm (heal). Windwalker: Touch of Karma (small), Fortifying Brew (big). Mistweaver: Fortifying Brew (small and big).
+- Paladin, Protection: Ardent Defender and Sentinel (small), Guardian of Ancient Kings and Divine Shield (big), Word of Glory and Lay on Hands (heal). Holy and Retribution: Divine Protection (small), Divine Shield and Blessing of Protection (big), Lay on Hands and Word of Glory (heal).
+- Priest: Fade (small, plus Power Word: Shield for Discipline and Shadow), Desperate Prayer (big, after Dispersion for Shadow), Vampiric Embrace (heal, Shadow).
+- Rogue: Feint (small), Cloak of Shadows and Evasion (big), Crimson Vial (heal).
+- Shaman: Astral Shift (small and big), Healing Surge (heal, Elemental and Enhancement).
+- Warlock: Dark Pact (small), Unending Resolve (big), Mortal Coil (heal).
+- Warrior: Spell Reflection (small). Big is Die by the Sword for Arms, Enraged Regeneration for Fury, Shield Wall for Protection. Impending Victory (heal).
 
 The Defensives tab in the settings has a "Defensive calls" switch, a "Boss calls from DBM / BigWigs" switch, a "Heal up after a big hit" switch and the three lists for your current spec. Click a row to move it to another list or remove it. "Add from list" offers your class's defensives and the stones and potions; the Add box takes a spell or item id, a name, or a shift-clicked link. Reset to default asks first, then restores the shipped lists. The status line shows which boss mod is connected. Boss calls need DBM or BigWigs installed; without one, trash and debuff calls still work.
 

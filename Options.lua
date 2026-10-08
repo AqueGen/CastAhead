@@ -762,7 +762,7 @@ function BuildDefensives(panel)
     note:SetPoint("TOPLEFT", group, "BOTTOMLEFT", 0, -10)
     note:SetWidth(COL_W * 2)
     note:SetJustifyH("LEFT")
-    note:SetText("|cffaaaaaaDefensive buttons ship for Warlock, Paladin and Demon Hunter; more specs are coming.|r")
+    note:SetText("|cffaaaaaaNo shipped defensive lists for this specialization.|r")
 
     local function PaintSpec()
         local spec = CastAheadSaves and CastAheadSaves.SpecID()
