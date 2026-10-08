@@ -2158,39 +2158,41 @@ R.EndKey("completed")
 Loud()
 CastAheadDB = nil
 
-CastAheadDB = { devMode = true }
-local popups = {}
-local savedPopup = StaticPopup_Show
-StaticPopup_Show = function(name) popups[#popups + 1] = name end
-local function PlayKeys(n)
-    Quiet()
-    for i = 1, n do
-        R.StartKey({ instance = 1877, name = "Key " .. i, level = 12 })
-        R.Note("PULL", nil, "in")
-        R.EndKey("completed")
+do
+    CastAheadDB = { devMode = true }
+    local popups = {}
+    local savedPopup = StaticPopup_Show
+    StaticPopup_Show = function(name) popups[#popups + 1] = name end
+    local function PlayKeys(n)
+        Quiet()
+        for i = 1, n do
+            R.StartKey({ instance = 1877, name = "Key " .. i, level = 12 })
+            R.Note("PULL", nil, "in")
+            R.EndKey("completed")
+        end
+        Loud()
     end
+    PlayKeys(8)
+    check(#CastAheadDB.journal.keys == 8, "a day of eight keys is kept whole, got " .. #CastAheadDB.journal.keys)
+    check(#popups == 0, "a key that leaves the journal short of full asks nothing, got " .. #popups)
+    PlayKeys(R.MAX_KEYS - 8 + 2)
+    check(#popups == 1 and popups[1] == "CASTAHEAD_RELOAD" and StaticPopupDialogs.CASTAHEAD_RELOAD,
+        "the key that fills the journal asks for a reload once, later keys do not, got " .. #popups)
+    R.StartKey({ instance = 1877, name = "Open", level = 12 })
+    R.Note("PULL", nil, "in")
+    R.Clear()
+    check(#CastAheadDB.journal.keys == 1 and R.Current() and R.Current().name == "Open", "clearing keeps only the key in progress")
+    PlayKeys(R.MAX_KEYS)
+    check(#popups == 2, "after a clear the full journal asks again, got " .. #popups)
+    SlashCmdList.CASTAHEAD("journal clear")
+    check(popups[3] == "CASTAHEAD_CLEAR_JOURNAL" and #CastAheadDB.journal.keys > 1, "/ca journal clear asks first and clears nothing yet")
+    Quiet()
+    StaticPopupDialogs.CASTAHEAD_CLEAR_JOURNAL.OnAccept()
     Loud()
+    check(#CastAheadDB.journal.keys <= 1, "accepting the question clears the journal")
+    StaticPopup_Show = savedPopup
+    CastAheadDB = nil
 end
-PlayKeys(8)
-check(#CastAheadDB.journal.keys == 8, "a day of eight keys is kept whole, got " .. #CastAheadDB.journal.keys)
-check(#popups == 0, "a key that leaves the journal short of full asks nothing, got " .. #popups)
-PlayKeys(R.MAX_KEYS - 8 + 2)
-check(#popups == 1 and popups[1] == "CASTAHEAD_RELOAD" and StaticPopupDialogs.CASTAHEAD_RELOAD,
-    "the key that fills the journal asks for a reload once, later keys do not, got " .. #popups)
-R.StartKey({ instance = 1877, name = "Open", level = 12 })
-R.Note("PULL", nil, "in")
-R.Clear()
-check(#CastAheadDB.journal.keys == 1 and R.Current() and R.Current().name == "Open", "clearing keeps only the key in progress")
-PlayKeys(R.MAX_KEYS)
-check(#popups == 2, "after a clear the full journal asks again, got " .. #popups)
-SlashCmdList.CASTAHEAD("journal clear")
-check(popups[3] == "CASTAHEAD_CLEAR_JOURNAL" and #CastAheadDB.journal.keys > 1, "/ca journal clear asks first and clears nothing yet")
-Quiet()
-StaticPopupDialogs.CASTAHEAD_CLEAR_JOURNAL.OnAccept()
-Loud()
-check(#CastAheadDB.journal.keys <= 1, "accepting the question clears the journal")
-StaticPopup_Show = savedPopup
-CastAheadDB = nil
 
 -- Core runs with no recorder loaded at all.
 local recorder, report = CastAheadRecorder, CastAheadReport
