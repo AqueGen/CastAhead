@@ -307,7 +307,7 @@ local function ViewButtons(size)
         elseif type(e) == "table" and e.use then
             local item = ItemFor(e.use)
             local icon = item and C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(item)
-            out[#out + 1] = { kind = "item", id = item, available = item ~= nil and ready["item" .. item] == true,
+            out[#out + 1] = { kind = "item", id = item, use = e.use, available = item ~= nil and ready["item" .. item] == true,
                 icon = icon or SpellTexture(e.use) }
         end
     end
@@ -350,6 +350,49 @@ function S.ViewRows(instanceID)
     end
     table.sort(out, ViewOrder)
     return out
+end
+
+local function SpellName(id)
+    local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(id)
+    return name or ("spell " .. id)
+end
+
+local function ButtonName(b)
+    local name = b.kind == "item" and b.id and C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(b.id)
+    return name or SpellName(b.kind == "item" and b.use or b.id)
+end
+
+local function Heard(t)
+    local how = {}
+    if t.cast then how[#how + 1] = "cast" end
+    if t.bar then how[#how + 1] = "boss timer" end
+    if t.debuff then how[#how + 1] = "debuff on you" end
+    return #how > 0 and table.concat(how, ", ") or "not heard"
+end
+
+local function GuideLine(r)
+    local names = {}
+    for _, b in ipairs(r.buttons) do names[#names + 1] = ButtonName(b) end
+    local press = #names > 0 and table.concat(names, ", then ") or "no button in your list"
+    local line = string.format("- %s from %s (%s): %s save - %s", r.name, r.mob or "?", Heard(r.trigger),
+        r.size == "BIG" and "big" or "small", press)
+    if r.size == "BIG" and #S.List("heal") > 0 then line = line .. "; heal up after the hit" end
+    local wins = r.wins and M.ADVICE[r.wins]
+    if wins then line = line .. string.format(" (%s comes first)", wins.say) end
+    return line
+end
+
+function S.GuideLines(instanceID)
+    local lines, group = {}, nil
+    for _, r in ipairs(S.ViewRows(instanceID)) do
+        if r.boss ~= group then
+            group = r.boss
+            if #lines > 0 then lines[#lines + 1] = "" end
+            lines[#lines + 1] = r.boss ~= "" and ("Boss: " .. r.boss) or "Trash"
+        end
+        lines[#lines + 1] = GuideLine(r)
+    end
+    return lines
 end
 
 function S.HealReady()

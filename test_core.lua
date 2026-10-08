@@ -2757,6 +2757,16 @@ do
     check(zap.buttons[1].kind == "spell" and zap.buttons[1].available == false, "the view marks a known spell on cooldown not available")
     C_Spell.GetSpellCooldownDuration = nil
     CastAheadSaves.Refresh()
+    local nameSaved = C_Spell.GetSpellName
+    C_Spell.GetSpellName = function(id) return ({ [104773] = "Unending Resolve" })[id] end
+    local guide = CastAheadSaves.GuideLines(9000)
+    local text = table.concat(guide, "\n")
+    check(guide[1] == "Boss: Abe" and text:find("\nBoss: Boss A\n", 1, true) and text:find("\nTrash\n", 1, true),
+        "the guide groups bosses by name, then trash")
+    check(guide[2]:find("Zap from Abe (boss timer): big save - Unending Resolve", 1, true) and guide[2]:find("(interrupt comes first)", 1, true),
+        "a guide line names the hit, the mob, how it is heard, the size, the first button and what wins")
+    check(text:find("Burn from ground effect (debuff on you): big save", 1, true), "a debuff-only hit says it lands on you")
+    C_Spell.GetSpellName = nameSaved
     local savedSpecRole = CastAheadMatch.SpecRole
     CastAheadMatch.SpecRole = function() return "TANK" end
     CastAheadDefensives.spells[810] = { DAMAGER = "BIG", TANK = "SMALL", lead = 2.0, aura = false, name = "Quake", mob = "Brute", boss = "", dungeon = 9000, bar = false }

@@ -32,6 +32,8 @@ local ShowTab
 local currentTab = "Casts"
 local CASTS_TAB = "Casts"
 local SAVES_TAB = "Saves"
+local GUIDE_TAB = "Guide"
+local guidePage, guideText
 -- Declared here because ShowTab, defined above BuildWindow, calls it.
 local BuildWindow
 
@@ -609,6 +611,18 @@ end
 
 local ROLE_NAMES = { DAMAGER = "Damage", HEALER = "Healer", TANK = "Tank" }
 
+local function RefreshGuide()
+    if not (guidePage and guidePage:IsVisible()) then return end
+    PaintDungeons()
+    local lines = CastAheadSaves and CastAheadSaves.GuideLines and CastAheadSaves.GuideLines(selectedInstanceID) or {}
+    if #lines == 0 then
+        lines = { CastAheadMatch.SpecRole() and "Nothing in this dungeon calls a save for your role."
+            or "No specialization role - pick a spec to see your guide." }
+    end
+    guideText:SetText(table.concat(lines, "\n"))
+    guideText:GetParent():SetHeight(guideText:GetStringHeight() + 8)
+end
+
 local function RefreshSaves()
     if not (savesPage and savesPage:IsVisible()) then return end
     PaintDungeons()
@@ -662,7 +676,10 @@ local function RefreshSaves()
     savesPage.role:SetText(line)
 end
 
-CastAheadUI.RefreshSaves = RefreshSaves
+function CastAheadUI.RefreshSaves()
+    RefreshSaves()
+    RefreshGuide()
+end
 
 -- The test drive stops by itself when the last sample cast runs out, so the
 -- button is repainted from the addon's state rather than from what was
@@ -694,16 +711,19 @@ function ShowTab(name)
     for tab, button in pairs(tabButtons or {}) do
         button:SetEnabled(tab ~= name)
     end
-    local settings = name ~= CASTS_TAB and name ~= SAVES_TAB
+    local settings = name ~= CASTS_TAB and name ~= SAVES_TAB and name ~= GUIDE_TAB
     if not settings and CastAheadOptions then CastAheadOptions.HideAll() end
     settingsHost:SetShown(settings)
     dungeonList:SetShown(not settings)
     castsPage:SetShown(name == CASTS_TAB)
     savesPage:SetShown(name == SAVES_TAB)
+    guidePage:SetShown(name == GUIDE_TAB)
     if name == CASTS_TAB then
         Refresh()
     elseif name == SAVES_TAB then
         RefreshSaves()
+    elseif name == GUIDE_TAB then
+        RefreshGuide()
     elseif CastAheadOptions then
         CastAheadOptions.ShowPanel(settingsHost, name)
     end
@@ -834,9 +854,10 @@ function BuildWindow()
         if #names == 1 then
             names[#names + 1] = CASTS_TAB
             names[#names + 1] = SAVES_TAB
+            names[#names + 1] = GUIDE_TAB
         end
     end
-    if #names == 0 then names = { CASTS_TAB, SAVES_TAB } end
+    if #names == 0 then names = { CASTS_TAB, SAVES_TAB, GUIDE_TAB } end
     for _, name in ipairs(names) do
         local button = CreateFrame("Button", nil, body, "UIPanelButtonTemplate")
         button:SetSize(78, 20)
@@ -906,7 +927,9 @@ function BuildWindow()
         button.text:SetText(string.format("%s |cff777777(%d)|r", entry.name, entry.count))
         button:SetScript("OnClick", function(self)
             selectedInstanceID = self.instanceID
-            if currentTab == SAVES_TAB then RefreshSaves() else Refresh() end
+            if currentTab == SAVES_TAB then RefreshSaves()
+            elseif currentTab == GUIDE_TAB then RefreshGuide()
+            else Refresh() end
         end)
         button:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
         dungeonButtons[i] = button
@@ -974,6 +997,27 @@ function BuildWindow()
     saveRows = {}
     savesPage.role = savesPage:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     savesPage.role:SetPoint("BOTTOMLEFT", body, "BOTTOMLEFT", 16, 12)
+
+    guidePage = CreateFrame("Frame", nil, body)
+    guidePage:SetPoint("TOPLEFT", body, "TOPLEFT", 0, -30)
+    guidePage:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", 0, 0)
+    guidePage:Hide()
+    local guideScroll = CreateFrame("ScrollFrame", nil, guidePage, "UIPanelScrollFrameTemplate")
+    guideScroll:SetPoint("TOPLEFT", body, "TOPLEFT", LIST_WIDTH + 24, -36)
+    guideScroll:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", -34, 34)
+    local guideBody = CreateFrame("Frame", nil, guideScroll)
+    guideBody:SetSize(600, 1)
+    guideScroll:SetScrollChild(guideBody)
+    guideText = guideBody:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    guideText:SetPoint("TOPLEFT", guideBody, "TOPLEFT", 4, -4)
+    guideText:SetWidth(592)
+    guideText:SetJustifyH("LEFT")
+    guideText:SetSpacing(3)
+    guideScroll:SetScript("OnSizeChanged", function(_, width)
+        guideBody:SetWidth(width)
+        guideText:SetWidth(width - 8)
+        RefreshGuide()
+    end)
     local saved = CastAheadDB and CastAheadDB.window
     if saved and saved.width and saved.height then
         window:SetSize(math.max(saved.width, WindowWidth()), math.max(saved.height, WindowHeight()))
@@ -1057,7 +1101,7 @@ SlashCmdList.CASTAHEAD = function(msg)
         return
     end
     if word == "option" or word == "options" or word == "config" or word == "settings" then
-        if window and window:IsShown() and currentTab ~= CASTS_TAB and currentTab ~= SAVES_TAB then
+        if window and window:IsShown() and currentTab ~= CASTS_TAB and currentTab ~= SAVES_TAB and currentTab ~= GUIDE_TAB then
             window:Hide()
         else
             CastAheadUI.ShowTab("General")
