@@ -334,8 +334,11 @@ def key_windows(log_paths):
 def casts_in(window, spells):
     _, _, start, end, path = window
     counts = {}
+    boss = False
     for ms, p in log_events(path):
-        if start <= ms <= end and p[0] in ("SPELL_CAST_START", "SPELL_CAST_SUCCESS") and p[1].startswith("Creature-"):
+        if p[0] in ("ENCOUNTER_START", "ENCOUNTER_END"):
+            boss = p[0] == "ENCOUNTER_START"
+        elif not boss and start <= ms <= end and p[0] in ("SPELL_CAST_START", "SPELL_CAST_SUCCESS") and p[1].startswith("Creature-"):
             spell = int(p[9])
             if spell in spells and (p[0] == "SPELL_CAST_START" or spells[spell]["channel"]):
                 counts[spell] = counts.get(spell, 0) + 1
