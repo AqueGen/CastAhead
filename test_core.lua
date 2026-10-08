@@ -298,6 +298,9 @@ SlashCmdList = {}
 SearchBoxTemplate_OnTextChanged = function() end
 GameTooltip = setmetatable({}, { __index = function() return function() end end })
 GameTooltip_Hide = function() end
+dofile("Window.lua")
+dofile("CastsPage.lua")
+dofile("SavesPage.lua")
 dofile("UI.lua")
 dofile("Core.lua")
 dofile("Recorder.lua")
@@ -844,6 +847,27 @@ check(not CastAheadUI.OptionEnabled("nameplates"), "unchecking turns it off")
 CastAheadUI.SetOption("nameplates", true)
 check(CastAheadUI.OptionEnabled("nameplates"), "and checking turns it back on")
 CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
+
+do
+    local keys = table.concat(CastAheadUI.VisibleColumns(false), ",")
+    check(keys == "check,hear,icon,advice,spell,mob,cast,cd", "outside Development mode the cast table shows 8 columns, got " .. keys)
+    check(#CastAheadUI.VisibleColumns(true) == 18, "Development mode shows every column")
+    check(CastAheadUI.VisibleSortKey("n", false) == "advice", "a hidden sort column falls back to Do outside Development mode")
+    check(CastAheadUI.VisibleSortKey("n", true) == "n", "Development mode keeps a development sort column")
+    check(CastAheadUI.VisibleSortKey("cast", false) == "cast", "a visible sort column is kept")
+
+    local savedDungeon, savedAdvice = CastAheadWindow.Dungeon, CastAheadMatch.Advice
+    local labels = { [1] = "KICK", [3] = "TANK" }
+    CastAheadData.sortcase = { { spell = 1, name = "A" }, { spell = 2, name = "B" }, { spell = 3, name = "C" } }
+    CastAheadWindow.Dungeon = function() return "sortcase" end
+    CastAheadMatch.Advice = function(e) return labels[e.spell] and { label = labels[e.spell] } end
+    local order = {}
+    for i, e in ipairs(CastAheadUI.SortedRows()) do order[i] = e.spell end
+    check(table.concat(order, ",") == "3,1,2",
+        "before the Casts page is built Play list sorts by Do, descending, with no-verdict rows last, got " .. table.concat(order, ","))
+    CastAheadData.sortcase = nil
+    CastAheadWindow.Dungeon, CastAheadMatch.Advice = savedDungeon, savedAdvice
+end
 
 -- The anchor has to belong to the plate, or every icon stacks in the middle of
 -- the screen instead of sitting beside its mob.
@@ -3632,6 +3656,180 @@ do
     GetSpecialization, GetSpecializationInfo, IsPlayerSpell = nil, nil, nil
     CastAheadSaveButtons, CastAheadDB = savedButtons, savedDB
     S.Refresh()
+end
+
+do
+    local ok, err = pcall(dofile, "Options.lua")
+    check(ok and CastAheadOptions and CastAheadOptions.Flow, "Options.lua loads and exposes Flow " .. tostring(err))
+    local Flow = CastAheadOptions and CastAheadOptions.Flow or function() return {}, 0 end
+    local pos, total = Flow(250, 250, 8, { 100, 50, 70 })
+    check(#pos == 3 and pos[1].x == 0 and pos[1].y == 0 and pos[2].y == 108 and pos[3].y == 166 and total == 236,
+        "one column stacks groups with the gap")
+    pos, total = Flow(508, 250, 8, { 100, 50, 70 })
+    check(pos[1].x == 0 and pos[2].x == 258 and pos[2].y == 0 and pos[3].x == 258 and pos[3].y == 58 and total == 128,
+        "two columns: each group goes to the shortest column")
+    pos = Flow(100, 250, 8, { 10 })
+    check(pos[1].x == 0 and pos[1].y == 0, "narrower than one column still gives one column")
+    pos, total = Flow(1040, 250, 8, { 300, 20, 20, 20 })
+    check(pos[4].x == 774 and pos[4].y == 0 and total == 300, "four columns, the tallest decides the height")
+end
+
+do
+    local function Group(h, shown)
+        local g = { h = h, shown = shown }
+        function g:GetHeight() return self.h end
+        function g:IsShown() return self.shown end
+        function g:ClearAllPoints() self.point = nil end
+        function g:SetPoint(_, _, _, x, y) self.point = { x = x, y = y } end
+        return g
+    end
+    local a, b, c = Group(100, true), Group(50, false), Group(70, true)
+    local panel = { groups = { a, b, c } }
+    function panel:GetWidth() return 250 end
+    function panel:SetHeight(h) self.height = h end
+    local relayout = CastAheadOptions and CastAheadOptions.RelayoutGroups
+    check(relayout ~= nil, "Options.lua exposes RelayoutGroups")
+    if relayout then relayout(panel) end
+    check(c.point and c.point.y == -(6 + 108) and panel.height == 6 + 178 + 12,
+        "a hidden group leaves no gap: the next one takes its slot")
+
+    local d, e = Group(100, true), Group(50, true)
+    local wide = { groups = { d, e }, w = 515 }
+    function wide:GetWidth() return self.w end
+    function wide:SetHeight(h) self.height = h end
+    if relayout then relayout(wide) end
+    check(e.point and e.point.x == 8 and e.point.y == -(6 + 108),
+        "a second column that would cross the page edge wraps under the first")
+    wide.w = 516
+    if relayout then relayout(wide) end
+    check(e.point and e.point.x == 8 + 258 and e.point.y == -6, "two columns once both fit inside the page margin")
+    wide.flowBottom = function() return 30 end
+    if relayout then relayout(wide) end
+    check(wide.height == 6 + 100 + 30 + 12, "a note under the groups adds its height to the panel")
+end
+
+do
+    local sized = 0
+    local made, scripts, panelsShown = {}, {}, {}
+    local savedCreate, savedShowPanel = CreateFrame, CastAheadOptions.ShowPanel
+    CastAheadOptions.ShowPanel = function(_, name) panelsShown[#panelsShown + 1] = name end
+    CreateFrame = function(kind, name, ...)
+        local f = savedCreate(kind, name, ...)
+        local setScript = f.SetScript
+        f.SetScript = function(self, script, fn)
+            setScript(self, script, fn)
+            scripts[self] = scripts[self] or {}
+            scripts[self][script] = fn
+        end
+        made[#made + 1] = f
+        if name == "CastAheadMainWindow" then
+            f.SetSize = function(self, w, h) sized = sized + 1 self.w, self.h = w, h end
+            f.GetWidth = function(self) return self.w or 0 end
+            f.GetHeight = function(self) return self.h or 0 end
+        end
+        return f
+    end
+    UIParent = { GetWidth = function() return 1920 end, GetHeight = function() return 1080 end }
+    CastAheadDB = { window = { width = 300, height = 200 } }
+    CastAheadUI.ShowTab("Casts")
+    local f = CastAheadWindow.Frame()
+    check(f and f.w == 600 and f.h == 420, "a saved size below the minimum opens at the minimum")
+    local before = sized
+    CastAheadUI.ShowTab("General")
+    CastAheadUI.ShowTab("Saves")
+    CastAheadUI.ShowTab("Guide")
+    local clicked = false
+    for _, b in ipairs(made) do
+        if rawget(b, "instanceID") and scripts[b] and scripts[b].OnClick then
+            scripts[b].OnClick(b)
+            clicked = true
+        end
+    end
+    check(clicked, "the dungeon grid has a button to click")
+    CastAheadDB.devMode = true
+    CastAheadUI.RefreshTabs()
+    CastAheadUI.ShowTab("Development")
+    CastAheadDB.devMode = nil
+    CastAheadUI.RefreshTabs()
+    check(CastAheadWindow.Current() == "General", "Development switched off while open shows General")
+    check(panelsShown[#panelsShown] == "General", "each settings page shows its own panel")
+    check(sized == before, "switching pages, dungeons and Development mode never resizes the window")
+
+    SlashCmdList.CASTAHEAD("sounds")
+    check(f:IsShown() and CastAheadWindow.Current() == "Sounds", "/ca sounds opens the Sounds page")
+    SlashCmdList.CASTAHEAD("sounds")
+    check(not f:IsShown(), "/ca sounds on the open Sounds page closes the window")
+    CastAheadDB.window.page = "Guide"
+    CastAhead_Toggle()
+    check(f:IsShown() and CastAheadWindow.Current() == "Guide", "/ca on a closed window opens the last saved page")
+    CastAhead_Toggle()
+    check(not f:IsShown(), "and /ca again closes it")
+
+    CastAheadDB.devMode = true
+    CastAheadUI.ShowTab("Development")
+    CastAhead_Toggle()
+    CastAheadDB.devMode = nil
+    CastAheadUI.RefreshTabs()
+    check(not f:IsShown(), "Development switched off on a closed window does not open it")
+    check(CastAheadWindow.Current() == "General" and CastAheadDB.window.page == "General",
+        "and the window will reopen on General")
+    CastAheadUI.ShowTab("Sounds")
+    CastAhead_Toggle()
+    CastAheadDB.window.page = "Development"
+    CastAheadWindow.Toggle()
+    check(CastAheadWindow.Current() == "General", "a saved hidden page opens the first visible page of its group")
+    check(sized == before, "opening and closing never resizes the window")
+    CastAheadOptions.ShowPanel = savedShowPanel
+
+    CastAheadDB = { window = { width = 1900, height = 560 } }
+    dofile("Window.lua")
+    CastAheadWindow.Register("TestA", "Dungeon", function() end, function() end)
+    CastAheadWindow.Show("TestA")
+    f = CastAheadWindow.Frame()
+    check(f and f.w == 1900 and f.h == 560, "a saved size above the minimum is kept as is")
+    CreateFrame = savedCreate
+    UIParent = nil
+    CastAheadDB = nil
+end
+
+do
+    local savedData, savedInfo, savedCreate = CastAheadData, GetInstanceInfo, CreateFrame
+    local here
+    GetInstanceInfo = function() return "d", "party", 0, "", 0, 0, false, here end
+    CastAheadData = { [1] = { name = "Alpha" }, [2] = { name = "Beta" } }
+    local made = {}
+    CreateFrame = function(kind, name, ...)
+        local f = savedCreate(kind, name, ...)
+        local setScript = f.SetScript
+        f.SetScript = function(self, script, fn)
+            setScript(self, script, fn)
+            if script == "OnClick" then rawset(self, "onClick", fn) end
+        end
+        if name == "CastAheadMainWindow" then
+            f.GetWidth = function() return 900 end
+            f.GetHeight = function() return 560 end
+        end
+        made[#made + 1] = f
+        return f
+    end
+    UIParent = { GetWidth = function() return 1920 end, GetHeight = function() return 1080 end }
+    CastAheadDB = {}
+    dofile("Window.lua")
+    local W = CastAheadWindow
+    check(W.Dungeon() == 1, "outside a dungeon the selection is the first dungeon")
+    here = 2
+    check(W.Dungeon() == 2, "until a dungeon is picked the selection follows the current instance")
+    here = 99
+    check(W.Dungeon() == 1, "an instance with no data falls back to the first dungeon")
+    W.Register("TestA", "Dungeon", function() end, function() end)
+    W.Show("TestA")
+    for _, b in ipairs(made) do
+        if rawget(b, "instanceID") == 2 then b.onClick(b) end
+    end
+    here = 1
+    check(W.Dungeon() == 2, "a clicked dungeon stays selected wherever the player goes")
+    CastAheadData, GetInstanceInfo, CreateFrame = savedData, savedInfo, savedCreate
+    UIParent, CastAheadDB = nil, nil
 end
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
