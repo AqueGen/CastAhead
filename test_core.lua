@@ -845,6 +845,12 @@ CastAheadUI.SetOption("nameplates", true)
 check(CastAheadUI.OptionEnabled("nameplates"), "and checking turns it back on")
 CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
+do
+    local keys = table.concat(CastAheadUI.VisibleColumns(false), ",")
+    check(keys == "check,hear,icon,advice,spell,mob,cast,cd", "outside Development mode the cast table shows 8 columns, got " .. keys)
+    check(#CastAheadUI.VisibleColumns(true) == 18, "Development mode shows every column")
+end
+
 -- The anchor has to belong to the plate, or every icon stacks in the middle of
 -- the screen instead of sitting beside its mob.
 CastAheadData[1877][1].n = 40

@@ -20,7 +20,7 @@ local WINDOW_HEIGHT = 560
 local COLUMN_GAP = 4
 local THIN_EVIDENCE = 5      -- fewer samples than this and the row is dimmed
 
-local window, body, dungeonButtons, rows, rowParent, headers
+local window, body, dungeonButtons, rows, rowParent, headers, headerStrip, tableFrame
 local selectedInstanceID, sortKey, sortDescending, searchText
 -- The window is a book: the casts page (dungeon list, search, table) and one
 -- page per settings group, built by Options.lua into `settingsHost`.
@@ -130,7 +130,7 @@ local COLUMNS = {
     { key = "icon", width = 20 },
     -- A star marks the curated priority set - what "Only important casts"
     -- keeps. The enable checkbox is the player's own choice, this is ours.
-    { key = "prio", header = "Imp", width = 28,
+    { key = "prio", dev = true, header = "Imp", width = 28,
       text = function(e) return e.prio and "|A:auctionhouse-icon-favorite:12:12|a" or "" end,
       sort = function(e) return e.prio and 1 or 0 end },
     {
@@ -157,7 +157,7 @@ local COLUMNS = {
     { key = "mob", header = "Mob", width = 120,
       text = function(e) return "|cff9999ff" .. (e.mob or "?") .. "|r" end,
       sort = function(e) return e.mob or "" end },
-    { key = "level", header = "Lvl", width = 28, justify = "RIGHT",
+    { key = "level", dev = true, header = "Lvl", width = 28, justify = "RIGHT",
       text = function(e) return e.level and tostring(e.level) or "-" end,
       sort = function(e) return e.level or 0 end },
     { key = "cast", header = "Cast", width = 46, justify = "RIGHT",
@@ -166,37 +166,37 @@ local COLUMNS = {
     { key = "cd", header = "Cooldown", width = 84, justify = "RIGHT",
       text = function(e) return (FormatRotation(e)) end,
       sort = function(e) return select(2, FormatRotation(e)) end },
-    { key = "first", header = "Open", width = 44, justify = "RIGHT",
+    { key = "first", dev = true, header = "Open", width = 44, justify = "RIGHT",
       text = function(e) return e.first and string.format("%.1fs", e.first) or "-" end,
       sort = function(e) return e.first or -1 end },
-    { key = "offset", header = "After", width = 44, justify = "RIGHT",
+    { key = "offset", dev = true, header = "After", width = 44, justify = "RIGHT",
       text = function(e) return e.offset and string.format("%.1fs", e.offset) or "-" end,
       sort = function(e) return e.offset or -1 end },
-    { key = "n", header = "Seen", width = 36, justify = "RIGHT",
+    { key = "n", dev = true, header = "Seen", width = 36, justify = "RIGHT",
       text = function(e) return tostring(e.n or 0) end,
       sort = function(e) return e.n or 0 end },
-    { key = "hits", header = "Tgt", width = 32, justify = "RIGHT",
+    { key = "hits", dev = true, header = "Tgt", width = 32, justify = "RIGHT",
       text = function(e) return e.hits and string.format("%.0f", e.hits) or "-" end,
       sort = function(e) return e.hits or -1 end },
-    { key = "dmg", header = "%HP", width = 40, justify = "RIGHT",
+    { key = "dmg", dev = true, header = "%HP", width = 40, justify = "RIGHT",
       text = function(e) return e.dmg and string.format("%d%%", e.dmg * 100) or "-" end,
       sort = function(e) return e.dmg or -1 end },
     -- Two different facts, deliberately side by side. "Kick" is capability -
     -- green when the game lets the cast be interrupted at all - with how often
     -- the group actually did it. "Stop" is everything else that ended the cast
     -- early, which in practice means a stun or another control.
-    { key = "kick", header = "Kick", width = 40, justify = "RIGHT",
+    { key = "kick", dev = true, header = "Kick", width = 40, justify = "RIGHT",
       text = function(e)
           local seen = (e.kick or 0) > 0 and string.format("%d%%", e.kick * 100) or "-"
           return e.kickable and ("|cff40dd60" .. seen .. "|r") or ("|cff886666" .. seen .. "|r")
       end,
       sort = function(e) return (e.kickable and 100 or 0) + (e.kick or 0) end },
-    { key = "cc", header = "Stop", width = 40, justify = "RIGHT",
+    { key = "cc", dev = true, header = "Stop", width = 40, justify = "RIGHT",
       text = function(e) return (e.cc or 0) > 0 and string.format("%d%%", e.cc * 100) or "-" end,
       sort = function(e) return e.cc or 0 end },
     -- Inherit ticked: the category's alert (Sounds tab), shown greyed. Unticked:
     -- the player's own pick for this one cast, ahead of the category's.
-    { key = "sound", header = "Sound override", width = 12 + 22 + 110,
+    { key = "sound", dev = true, header = "Sound override", width = 12 + 22 + 110,
       text = function(e) return CastAheadMatch.Advice(e) and "" or "|cff555555-|r" end,
       sort = function(e) return SpellSound(e) or "" end },
 }
@@ -231,8 +231,24 @@ local SAVE_COLUMNS = {
       end },
 }
 
+local function SelectColumns(dev)
+    local list = {}
+    for _, column in ipairs(COLUMNS) do
+        if dev or not column.dev then list[#list + 1] = column end
+    end
+    return list
+end
+
+function CastAheadUI.VisibleColumns(dev)
+    local keys = {}
+    for i, column in ipairs(SelectColumns(dev)) do keys[i] = column.key end
+    return keys
+end
+
+local tableColumns = COLUMNS
+
 local function ColumnOffset(index, columns)
-    columns = columns or COLUMNS
+    columns = columns or tableColumns
     local x = 0
     for i = 1, index - 1 do
         x = x + columns[i].width + COLUMN_GAP
@@ -241,11 +257,11 @@ local function ColumnOffset(index, columns)
 end
 
 local function TableWidth()
-    return ColumnOffset(#COLUMNS + 1)
+    return ColumnOffset(#tableColumns + 1)
 end
 
 local function WindowWidth()
-    return LIST_WIDTH + 24 + TableWidth() + 34
+    return LIST_WIDTH + 24 + ColumnOffset(#COLUMNS + 1, COLUMNS) + 34
 end
 
 local function WindowHeight()
@@ -400,8 +416,8 @@ local function CreateRow(parent, index)
     row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -(index - 1) * ROW_HEIGHT)
     row.cells = {}
 
-    for i = 1, #COLUMNS do
-        local column = COLUMNS[i]
+    for i = 1, #tableColumns do
+        local column = tableColumns[i]
         local x = ColumnOffset(i)
         if column.key == "check" then
             row.check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
@@ -505,7 +521,7 @@ function Refresh()
     PaintDungeons()
 
     for i = 1, #headers do
-        local column = COLUMNS[i]
+        local column = tableColumns[i]
         if column.header then
             local arrow = ""
             if sortKey == column.key then
@@ -539,11 +555,13 @@ function Refresh()
             -- Nothing to say for a row with no verdict - no speaker, no sound.
             row.hear:SetShown(CastAheadMatch.Advice(entry) ~= nil)
             local hasAdvice = CastAheadMatch.Advice(entry) ~= nil
-            row.inherit:SetShown(hasAdvice)
-            row.sound:SetShown(hasAdvice)
-            row.inherit:SetChecked(SpellSound(entry) == nil)
-            row.sound:SetEnabled(SpellSound(entry) ~= nil)
-            row.sound:GenerateMenu()
+            if row.sound then
+                row.inherit:SetShown(hasAdvice)
+                row.sound:SetShown(hasAdvice)
+                row.inherit:SetChecked(SpellSound(entry) == nil)
+                row.sound:SetEnabled(SpellSound(entry) ~= nil)
+                row.sound:GenerateMenu()
+            end
             row.check:SetChecked(not IsDisabled(entry.spell))
             row.check:SetScript("OnClick", function(self)
                 SetDisabled(entry.spell, not self:GetChecked())
@@ -569,6 +587,27 @@ function Refresh()
         summary = "|cffff3333Both outputs are off - nothing will be shown in combat|r"
     end
     window.summary:SetText(summary)
+end
+
+local function RebuildTable()
+    for i = 1, #headers do
+        headers[i]:Hide()
+        headers[i]:SetParent(nil)
+    end
+    for i = 1, #rows do
+        rows[i]:Hide()
+        rows[i]:SetParent(nil)
+    end
+    headers, rows = {}, {}
+    tableColumns = SelectColumns(CastAheadConfig.Dev())
+    local width = TableWidth()
+    tableFrame:SetWidth(width + 26)
+    headerStrip:SetWidth(width)
+    rowParent:SetWidth(width)
+    for i = 1, #tableColumns do
+        headers[i] = CreateHeader(headerStrip, i, tableColumns[i])
+    end
+    Refresh()
 end
 
 local function CreateSaveRow(parent, index)
@@ -693,6 +732,9 @@ end
 -- button leaves the rest of the strip where it was. Called when the switch on
 -- the General page is clicked, and once while the strip is built.
 function CastAheadUI.RefreshTabs()
+    if headerStrip and #SelectColumns(CastAheadConfig.Dev()) ~= #tableColumns then
+        RebuildTable()
+    end
     local button = tabButtons and tabButtons.Development
     if not button then return end
     local on = CastAheadOptions and CastAheadOptions.DevMode and CastAheadOptions.DevMode()
@@ -939,33 +981,43 @@ function BuildWindow()
     -- The table lives in a clipping container: shrink the window and the
     -- rightmost columns are simply cut off at the frame edge instead of
     -- hanging outside it. Nothing forces the window to stay table-wide.
-    local clip = CreateFrame("Frame", nil, castsPage)
-    clip:SetPoint("TOPLEFT", body, "TOPLEFT", LIST_WIDTH + 24, -36)
-    clip:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", -8, 34)   -- above the summary line
-    if clip.SetClipsChildren then clip:SetClipsChildren(true) end
+    local sideScroll = CreateFrame("ScrollFrame", nil, castsPage)
+    sideScroll:SetPoint("TOPLEFT", body, "TOPLEFT", LIST_WIDTH + 24, -36)
+    sideScroll:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", -8, 34)   -- above the summary line
+    tableFrame = CreateFrame("Frame", nil, sideScroll)
+    tableFrame:SetSize(1, 1)
+    sideScroll:SetScrollChild(tableFrame)
+    sideScroll:SetScript("OnSizeChanged", function(_, _, height) tableFrame:SetHeight(height) end)
+    local function ScrollSideways(delta)
+        local range = sideScroll:GetHorizontalScrollRange()
+        sideScroll:SetHorizontalScroll(math.max(0, math.min(range, sideScroll:GetHorizontalScroll() - delta * 60)))
+    end
+    sideScroll:EnableMouseWheel(true)
+    sideScroll:SetScript("OnMouseWheel", function(_, delta) ScrollSideways(delta) end)
 
-    local headerStrip = CreateFrame("Frame", nil, clip)
-    headerStrip:SetSize(TableWidth(), HEADER_HEIGHT)
-    headerStrip:SetPoint("TOPLEFT", clip, "TOPLEFT", 0, 0)
+    headerStrip = CreateFrame("Frame", nil, tableFrame)
+    headerStrip:SetHeight(HEADER_HEIGHT)
+    headerStrip:SetPoint("TOPLEFT", tableFrame, "TOPLEFT", 0, 0)
     local rule = headerStrip:CreateTexture(nil, "ARTWORK")
     rule:SetPoint("TOPLEFT", headerStrip, "BOTTOMLEFT", 0, -1)
     rule:SetPoint("TOPRIGHT", headerStrip, "BOTTOMRIGHT", 0, -1)
     rule:SetHeight(1)
     rule:SetColorTexture(1, 1, 1, 0.25)
-    headers = {}
-    for i = 1, #COLUMNS do
-        headers[i] = CreateHeader(headerStrip, i, COLUMNS[i])
-    end
 
-    local scroll = CreateFrame("ScrollFrame", nil, clip, "UIPanelScrollFrameTemplate")
+    local scroll = CreateFrame("ScrollFrame", nil, tableFrame, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", headerStrip, "BOTTOMLEFT", 0, -4)
-    scroll:SetPoint("BOTTOMRIGHT", clip, "BOTTOMRIGHT", -26, 0)
+    scroll:SetPoint("BOTTOMRIGHT", tableFrame, "BOTTOMRIGHT", -26, 0)
     local content = CreateFrame("Frame", nil, scroll)
-    content:SetSize(TableWidth(), 1)
+    content:SetSize(1, 1)
     scroll:SetScrollChild(content)
+    local rowWheel = scroll:GetScript("OnMouseWheel")
+    scroll:SetScript("OnMouseWheel", function(self, delta)
+        if IsShiftKeyDown() then ScrollSideways(delta) else rowWheel(self, delta) end
+    end)
 
-    rows = {}
+    headers, rows = {}, {}
     rowParent = content
+    RebuildTable()
 
     local saveClip = CreateFrame("Frame", nil, savesPage)
     saveClip:SetPoint("TOPLEFT", body, "TOPLEFT", LIST_WIDTH + 24, -36)
