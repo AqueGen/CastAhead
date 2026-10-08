@@ -168,13 +168,14 @@ function M.IsSave(advice)
 end
 
 local SAVE_REPLACES = {
-    [M.ADVICE.AOE] = true, [M.ADVICE.TANK] = true, [M.ADVICE.TARGET] = true,
+    [M.ADVICE.AOE] = true, [M.ADVICE.TANK] = true,
     [M.ADVICE.BLEED] = true, [M.ADVICE.ALERT] = true,
 }
 
 function M.Beats(row, interruptible)
     local base = BaseAdvice(row, interruptible)
     if base and not SAVE_REPLACES[base] then return base end
+    if row and row.targeted and M.SaveAdvice(row) then return M.ADVICE.TARGET end
     return nil
 end
 

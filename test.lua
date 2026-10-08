@@ -407,7 +407,9 @@ local kickRow = { spell = 901, cast = 2.0, kickable = true, save = { TANK = "BIG
 check(M.Advice(kickRow) == M.ADVICE.KICK, "a kickable cast still says interrupt")
 check(M.Advice({ spell = 902, prio = "KICK", save = { TANK = "BIG" } }) == M.ADVICE.KICK, "a curated kick still wins")
 check(M.Advice({ spell = 903, prio = "DODGE", save = { TANK = "BIG" } }) == M.ADVICE.DODGE, "a curated dodge outranks BIG")
-check(M.Advice({ spell = 903, prio = "TARGET", save = { TANK = "BIG" } }) == M.ADVICE.BIG, "BIG outranks a curated target")
+check(M.Advice({ spell = 903, prio = "TARGET", save = { TANK = "BIG" } }) == M.ADVICE.TARGET, "a curated target keeps its call, the save may be someone else's")
+check(M.Advice({ spell = 910, targeted = true, save = { TANK = "BIG" } }) == M.ADVICE.TARGET, "a cast the game shows a target for says targeted instead of a save")
+check(M.Advice({ spell = 911, targeted = false, save = { TANK = "BIG" } }) == M.ADVICE.BIG, "an untargeted cast keeps its save")
 check(M.Advice({ spell = 903, prio = "TARGET", dispel = "Poison", save = { TANK = "BIG" } }) == M.ADVICE.POISON, "a dispel outranks BIG")
 check(M.Advice({ spell = 903, prio = "BLEED", save = { TANK = "BIG" } }) == M.ADVICE.BIG, "BIG outranks a curated bleed")
 check(M.IsSave(M.ADVICE.BIG) and M.IsSave(M.ADVICE.SMALL) and not M.IsSave(M.ADVICE.AOE), "IsSave names the two save calls")
@@ -418,7 +420,7 @@ check(not M.Important({ spell = 905, kickable = true, save = { TANK = "BIG" } })
 local savedCanHandle = M.PlayerCanHandle
 M.PlayerCanHandle = function() return false end
 check(not M.Important({ spell = 906, prio = "MAGIC", save = { TANK = "BIG" } }), "a dispel row the player cannot handle is not made important by a save it does not call")
-check(M.Important({ spell = 907, prio = "TARGET", save = { TANK = "BIG" } }), "a save that replaces a target call is important")
+check(M.Important({ spell = 907, prio = "TARGET", save = { TANK = "BIG" } }), "a curated target with a save verdict stays important")
 M.PlayerCanHandle = savedCanHandle
 M.PlayerRole = savedPlayerRole
 M.SpecRole = function() return nil end
