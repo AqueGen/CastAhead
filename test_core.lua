@@ -3634,5 +3634,21 @@ do
     S.Refresh()
 end
 
+do
+    local ok, err = pcall(dofile, "Options.lua")
+    check(ok and CastAheadOptions and CastAheadOptions.Flow, "Options.lua loads and exposes Flow " .. tostring(err))
+    local Flow = CastAheadOptions and CastAheadOptions.Flow or function() return {}, 0 end
+    local pos, total = Flow(250, 250, 8, { 100, 50, 70 })
+    check(#pos == 3 and pos[1].x == 0 and pos[1].y == 0 and pos[2].y == 108 and pos[3].y == 166 and total == 236,
+        "one column stacks groups with the gap")
+    pos, total = Flow(508, 250, 8, { 100, 50, 70 })
+    check(pos[1].x == 0 and pos[2].x == 258 and pos[2].y == 0 and pos[3].x == 258 and pos[3].y == 58 and total == 128,
+        "two columns: each group goes to the shortest column")
+    pos = Flow(100, 250, 8, { 10 })
+    check(pos[1].x == 0 and pos[1].y == 0, "narrower than one column still gives one column")
+    pos, total = Flow(1040, 250, 8, { 300, 20, 20, 20 })
+    check(pos[4].x == 774 and pos[4].y == 0 and total == 300, "four columns, the tallest decides the height")
+end
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

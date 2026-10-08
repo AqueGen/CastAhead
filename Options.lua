@@ -17,6 +17,24 @@ local COL_W, COL_GAP, COL_X = 250, 8, 8
 local COLUMNS = 5
 local SLIDER_W = COL_W - 40
 CastAheadOptions.MIN_WIDTH = COL_X * 2 + COLUMNS * COL_W + (COLUMNS - 1) * COL_GAP
+
+function CastAheadOptions.Flow(width, colWidth, gap, heights)
+    local columns = math.max(1, math.floor((width + gap) / (colWidth + gap)))
+    local bottoms = {}
+    for c = 1, columns do bottoms[c] = 0 end
+    local positions, total = {}, 0
+    for i, h in ipairs(heights) do
+        local c = 1
+        for k = 2, columns do
+            if bottoms[k] < bottoms[c] then c = k end
+        end
+        positions[i] = { x = (c - 1) * (colWidth + gap), y = bottoms[c] }
+        bottoms[c] = bottoms[c] + h + gap
+        total = math.max(total, bottoms[c] - gap)
+    end
+    return positions, total
+end
+
 -- The tallest column: the nameplate group, where the anchor square sits above
 -- three sliders and their reset.
 CastAheadOptions.MIN_HEIGHT = 404
