@@ -552,7 +552,7 @@ local function EntryLabel(e)
     if not use then return tostring(e) end
     local item = CastAheadSaves.ItemFor(use)
     local name = item and C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(item)
-        or "Item with " .. (C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(use) or tostring(use))
+        or "|cff888888" .. (C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(use) or tostring(use)) .. " (not in bags)|r"
     local icon = item and C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(item)
         or C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(use)
     return IconLabel(icon, name)
