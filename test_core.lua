@@ -3388,8 +3388,8 @@ do
     check(#CastAheadSaves.Available("small") == 0, "Dark Pact on cooldown: stones and potions do not stand in for a small save")
     check(ignoreGCD == true, "the cooldown query ignores the global cooldown")
     local heal = CastAheadSaves.Available("heal")
-    check(#heal == 3 and heal[1].id == 5512 and heal[2].id == 5509 and heal[3].id == 262000,
-        "stones and the health potion sit in the heal list")
+    check(#heal == 3 and heal[1].id == 5512 and heal[2].id == 262000 and heal[3].id == 5509,
+        "stones and the health potion sit in the heal list, most pressed first")
 
     advance(1)
     secret = true
