@@ -1080,6 +1080,15 @@ SlashCmdList.CASTAHEAD = function(msg)
         if CastAheadReport then CastAheadReport.Toggle() end
         return
     end
+    if word == "journal" then
+        if msg:match("^%s*%a+%s+clear") and StaticPopup_Show then
+            StaticPopup_Show("CASTAHEAD_CLEAR_JOURNAL")
+        elseif CastAheadRecorder then
+            print(string.format("|cff33ff99Cast Ahead|r key journal: %d of %d keys - /ca journal clear empties it",
+                #CastAheadRecorder.Keys(), CastAheadRecorder.MAX_KEYS))
+        end
+        return
+    end
     if word == "mark" then
         if CastAheadRecorder and CastAheadRecorder.Enabled() then
             local n, key = CastAheadRecorder.Mark()
