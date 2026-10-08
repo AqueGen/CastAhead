@@ -2783,9 +2783,14 @@ do
     local text = table.concat(guide, "\n")
     check(guide[1] == "Boss: Abe" and text:find("\nBoss: Boss A\n", 1, true) and text:find("\nTrash\n", 1, true),
         "the guide groups bosses by name, then trash")
-    check(guide[2]:find("Zap from Abe (boss timer): big save - Unending Resolve", 1, true) and guide[2]:find("(interrupt comes first)", 1, true),
+    check(guide[2]:find("Zap from Abe (boss timer): big save - |T2001:16|t Unending Resolve", 1, true) and guide[2]:find("(interrupt comes first)", 1, true),
         "a guide line names the hit, the mob, how it is heard, the size, the first button and what wins")
     check(text:find("Burn from ground effect (debuff on you): big save", 1, true), "a debuff-only hit says it lands on you")
+    check(guide[2]:find("big save - |T2001:16|t Unending Resolve", 1, true), "a button carries its icon")
+    local textureSaved = C_Spell.GetSpellTexture
+    C_Spell.GetSpellTexture = function(id) return id == 806 and 4242 or textureSaved(id) end
+    check(CastAheadSaves.GuideLines(9000)[2]:find("^%- |T4242:16|t Zap from Abe"), "a hit carries its spell icon in front of its name")
+    C_Spell.GetSpellTexture = textureSaved
     check(text:find("Bolt from Caster (cast): small save", 1, true) and text:find("first ~12s after the pull, then every ~20s", 1, true),
         "a cast with one cooldown gives its first cast and its period")
     check(text:find("~9s, ~16s, ~9s x2, repeating", 1, true), "a cooldown cycle is spelled out, repeats folded")

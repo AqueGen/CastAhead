@@ -399,11 +399,13 @@ local function Cadence(r)
     return #parts > 0 and table.concat(parts, ", ") or nil
 end
 
+local function Icon(texture) return texture and ("|T" .. texture .. ":16|t ") or "" end
+
 local function GuideLine(r)
     local names = {}
-    for _, b in ipairs(r.buttons) do names[#names + 1] = ButtonName(b) end
+    for _, b in ipairs(r.buttons) do names[#names + 1] = Icon(b.icon) .. ButtonName(b) end
     local press = #names > 0 and table.concat(names, ", then ") or "no button in your list"
-    local line = string.format("- %s from %s (%s): %s save - %s", r.name, r.mob or "?", Heard(r.trigger),
+    local line = string.format("- %s%s from %s (%s): %s save - %s", Icon(SpellTexture(r.id)), r.name, r.mob or "?", Heard(r.trigger),
         r.size == "BIG" and "big" or "small", press)
     if r.size == "BIG" and #S.List("heal") > 0 then line = line .. "; heal up after the hit" end
     local wins = r.wins and M.ADVICE[r.wins]
