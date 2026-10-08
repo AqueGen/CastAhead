@@ -427,7 +427,7 @@ function S.GuideLines(instanceID)
 end
 
 function S.HealReady()
-    return CastAheadConfig.Enabled("saveCalls") and CastAheadConfig.Enabled("healCalls") and #S.Available("heal") > 0
+    return CastAheadConfig.Enabled("saveCalls") and CastAheadConfig.Get("healCalls") == true and #S.Available("heal") > 0
 end
 
 local SOUND_ROOT = "Interface\\AddOns\\CastAhead\\Sounds\\en\\"

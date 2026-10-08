@@ -3317,6 +3317,18 @@ do
         fire("UNIT_SPELLCAST_STOP", unit)
         advance(0.1)
     end
+    CastAheadConfig.Set("healCalls", nil)
+    BigCast(false)
+    check(LastBig() > 0 and Heals() == 0, "heal up is off by default")
+    CastAheadConfig.Set("smallCalls", false)
+    BigCast(false)
+    check(LastBig() > 0, "switching small calls off keeps big calls")
+    CastAheadConfig.Set("smallCalls", nil)
+    CastAheadConfig.Set("bigCalls", false)
+    BigCast(false)
+    check(LastBig() == 0, "switching big calls off silences them")
+    CastAheadConfig.Set("bigCalls", nil)
+    CastAheadConfig.Set("healCalls", true)
     BigCast(false)
     check(Heals() == 1 and LastBig() > 0 and LastBig() < #heard and (heard[#heard] or ""):match("\\HEAL%.ogg$"),
         "a completed big-save cast calls heal up once, after the big call: " .. table.concat(heard, ","))
@@ -3337,7 +3349,7 @@ do
     CastAheadConfig.SetEnabled("healCalls", false)
     BigCast(false)
     check(LastBig() > 0 and Heals() == 0, "healCalls off silences the heal call")
-    CastAheadConfig.SetEnabled("healCalls", true)
+    CastAheadConfig.Set("healCalls", true)
 
     reset()
     enter()
@@ -3358,7 +3370,7 @@ do
         "the same cast left kickable calls interrupt and no heal: " .. tostring(centreSaid))
     CastAheadPriority[100] = "AOE"
     CastAheadCore.ReapplyData()
-    CastAheadConfig.SetEnabled("healCalls", true)
+    CastAheadConfig.Set("healCalls", true)
     CastAheadConfig.SetEnabled("saveCalls", false)
     BigCast(false)
     check(Heals() == 0 and LastBig() == 0, "saveCalls off silences big and heal")

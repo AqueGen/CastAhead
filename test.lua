@@ -396,6 +396,9 @@ check(M.Advice(saveRow) == M.ADVICE.AOE, "a healer with no verdict keeps the old
 M.SpecRole = function() return "TANK" end
 check(M.Advice(saveRow) == M.ADVICE.AOE, "a hit that also lands on dps is no tank save, the old call stays")
 check(M.Advice({ spell = 908, save = { TANK = "BIG" } }) == M.ADVICE.BIG, "a hit only the tank takes is a tank buster save")
+M.SizeOn = function(key) return key ~= "BIG" end
+check(M.SaveAdvice({ spell = 908, save = { TANK = "BIG" } }) == nil, "a size switched off gives no save call")
+M.SizeOn = function() return true end
 check(M.Advice({ spell = 909, prio = "TANK", save = { DAMAGER = "SMALL", TANK = "BIG" } }) == M.ADVICE.BIG,
     "a curated tank buster keeps the tank save even when dps were hit too")
 check(M.SaveKey({ DAMAGER = "BIG", TANK = "SMALL" }, "TANK") == nil and M.SaveKey({ DAMAGER = "BIG", TANK = "SMALL" }, "DAMAGER") == "BIG",

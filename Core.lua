@@ -288,6 +288,10 @@ CastAheadMatch.PlayerRole = function()
     return spec and GetSpecializationRole(spec) or nil
 end
 
+CastAheadMatch.SizeOn = function(key)
+    return CastAheadConfig.Enabled(key == "SMALL" and "smallCalls" or "bigCalls")
+end
+
 CastAheadMatch.SpecRole = function()
     if not CastAheadConfig.Enabled("saveCalls") then return nil end
     if not (GetSpecialization and GetSpecializationRole) then return nil end

@@ -154,11 +154,13 @@ function M.SaveKey(save, role, prio)
     return save[role]
 end
 
+M.SizeOn = function() return true end
+
 function M.SaveAdvice(row)
     local save = row and row.save
     local role = save and M.SpecRole()
     local key = role and M.SaveKey(save, role, row.prio)
-    return key and M.ADVICE[key] or nil
+    return key and M.SizeOn(key) and M.ADVICE[key] or nil
 end
 
 function M.IsSave(advice)

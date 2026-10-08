@@ -119,7 +119,11 @@ local SWITCHES = {
         tip = "Call a small or big defensive ahead of damage that needs one, and show your button for it in the centre." },
     bossAdapter = { label = "Boss calls from DBM / BigWigs",
         tip = "Also call defensives for boss abilities announced by DBM or BigWigs." },
-    healCalls = { label = "Heal up after a big hit",
+    smallCalls = { label = "Small defensive calls",
+        tip = "Say \"small defensive\" ahead of hits that need a small save." },
+    bigCalls = { label = "Big defensive calls",
+        tip = "Say \"big defensive\" ahead of hits that need a big save." },
+    healCalls = { label = "Heal up after a big hit", defaultOff = true,
         tip = "Right after a hit that called a big defensive, say \"heal up\" when your Healthstone or potion is ready." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
         tip = "A panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. Only while recording. The key bindings and /ca mark work without it." },
@@ -761,8 +765,9 @@ local function BuildSaveList(panel, size, column, hint)
 end
 
 function BuildDefensives(panel)
-    local group = BuildGroup(panel, "Defensive calls", 1, ListHeight(LIST_MIN_ROWS))
-    local function Fit() group:SetHeight(ListHeight(ListRows())) end
+    local SWITCHES_H = 270
+    local group = BuildGroup(panel, "Defensive calls", 1, math.max(SWITCHES_H, ListHeight(LIST_MIN_ROWS)))
+    local function Fit() group:SetHeight(math.max(SWITCHES_H, ListHeight(ListRows()))) end
     table.insert(refreshers, Fit)
     table.insert(listRefreshers, Fit)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, SaveRefresh)
@@ -773,7 +778,9 @@ function BuildDefensives(panel)
             CastAheadSaves.CancelPrefix("bw:")
         end
     end)
-    local heal = BuildSwitch(panel, "healCalls", { "TOPLEFT", boss, "BOTTOMLEFT", 0, -4 })
+    local small = BuildSwitch(panel, "smallCalls", { "TOPLEFT", boss, "BOTTOMLEFT", 0, -4 }, SaveRefresh)
+    local big = BuildSwitch(panel, "bigCalls", { "TOPLEFT", small, "BOTTOMLEFT", 0, -4 }, SaveRefresh)
+    local heal = BuildSwitch(panel, "healCalls", { "TOPLEFT", big, "BOTTOMLEFT", 0, -4 })
 
     local status = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     status:SetPoint("TOPLEFT", heal, "BOTTOMLEFT", 4, -6)
