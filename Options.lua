@@ -623,14 +623,14 @@ local function BuildSaveList(panel, size, column, hint)
         if rows[i] then return rows[i] end
         local y = LIST_TOP - (i - 1) * LIST_ROW_H
         local hit = CreateFrame("Button", nil, group)
-        hit:SetSize(COL_W - 84, LIST_ROW_H)
+        hit:SetSize(COL_W - 92, LIST_ROW_H)
         hit:SetPoint("TOPLEFT", group, "TOPLEFT", 8, y)
         hit:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         hit:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
         hit:SetScript("OnClick", function(self) RowMenu(self, i) end)
         local text = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         text:SetPoint("TOPLEFT", group, "TOPLEFT", 12, y - 4)
-        text:SetWidth(COL_W - 90)
+        text:SetWidth(COL_W - 98)
         text:SetJustifyH("LEFT")
         text:SetWordWrap(false)
         local remove = CreateFrame("Button", nil, group, "UIPanelCloseButton")
@@ -639,12 +639,18 @@ local function BuildSaveList(panel, size, column, hint)
         remove:SetScript("OnClick", function() Remove(i) end)
         local function Arrow(dir, x, step, tip)
             local b = CreateFrame("Button", nil, group)
-            b:SetSize(18, 18)
-            b:SetPoint("TOPRIGHT", group, "TOPRIGHT", x, y - 1)
-            local file = "Interface\\Buttons\\UI-ScrollBar-Scroll" .. dir .. "Button-"
+            b:SetSize(22, 22)
+            b:SetPoint("TOPRIGHT", group, "TOPRIGHT", x, y + 1)
+            local file = "Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-"
             b:SetNormalTexture(file .. "Up")
             b:SetPushedTexture(file .. "Down")
-            b:SetHighlightTexture(file .. "Highlight", "ADD")
+            b:SetDisabledTexture(file .. "Disabled")
+            b:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+            if dir == "Up" then
+                for _, tex in ipairs({ b:GetNormalTexture(), b:GetPushedTexture(), b:GetDisabledTexture() }) do
+                    tex:SetTexCoord(0, 1, 1, 0)
+                end
+            end
             b:SetScript("OnClick", function()
                 S.Shift(size, i, step)
                 RefreshAll()
@@ -657,8 +663,8 @@ local function BuildSaveList(panel, size, column, hint)
             b:SetScript("OnLeave", GameTooltip_Hide)
             return b
         end
-        local up = Arrow("Up", -50, -1, "Move up: called before the one above")
-        local down = Arrow("Down", -30, 1, "Move down")
+        local up = Arrow("Up", -54, -1, "Move up: called before the one above")
+        local down = Arrow("Down", -31, 1, "Move down")
         rows[i] = { text = text, remove = remove, hit = hit, up = up, down = down }
         return rows[i]
     end
@@ -728,8 +734,10 @@ local function BuildSaveList(panel, size, column, hint)
             row.text:SetText(list[i] and EntryLabel(list[i]) or "")
             row.remove:SetShown(list[i] ~= nil)
             row.hit:SetShown(list[i] ~= nil)
-            row.up:SetShown(list[i] ~= nil and i > 1)
-            row.down:SetShown(list[i + 1] ~= nil)
+            row.up:SetShown(list[i] ~= nil)
+            row.down:SetShown(list[i] ~= nil)
+            row.up:SetEnabled(i > 1)
+            row.down:SetEnabled(list[i + 1] ~= nil)
         end
         if #list == 0 then
             rows[1].text:SetText(size == "heal" and "|cffaaaaaaEmpty - no heal up call|r"
