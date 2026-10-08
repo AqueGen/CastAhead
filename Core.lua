@@ -1555,6 +1555,12 @@ local function OnlyChannel(state)
             end
         end
     end
+    if not only then return nil end
+    for _, trait in ipairs(traitRows or {}) do
+        if npcs[trait.npc] and trait.npc ~= only.npc and trait.channels and #trait.channels > 0 then
+            return nil
+        end
+    end
     return only
 end
 
@@ -1948,6 +1954,7 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
     track.candidates = candidates
     track.lastStartAt = startAt
     track.measured = true
+    track.firstChannel = nil
     track.length = duration
     track.index = index
     track.due = nil

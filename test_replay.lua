@@ -403,6 +403,7 @@ for _, run in ipairs(CastAheadReplay) do
             end
         elseif ev.e == "CHAN" then
             open[unit] = nil
+            targets[unit] = nil
             traceStart(unit, ev.spell, true)
             fire("UNIT_SPELLCAST_CHANNEL_START", unit)
             judgeStart(unit, ev.spell, run.instance)

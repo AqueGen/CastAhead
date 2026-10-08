@@ -1331,6 +1331,19 @@ reset()
 do
     local savedLevel = levels[unit]
     levels[unit] = 94
+    local twin
+    for _, row in ipairs(CastAheadTraits[1877]) do
+        if row.npc == 12 then twin = row end
+    end
+    local twinChannels = twin.channels
+    enter()
+    fire("UNIT_SPELLCAST_CHANNEL_START", unit)
+    local guarded = CastAheadCore.Casting(unit)
+    check(not (guarded and guarded.row),
+        "a lookalike creature with a channel of its own keeps the first channel unnamed")
+    fire("UNIT_SPELLCAST_CHANNEL_STOP", unit)
+    reset()
+    twin.channels = nil
     enter()
     fire("UNIT_SPELLCAST_CHANNEL_START", unit)
     local firstChannel = CastAheadCore.Casting(unit)
@@ -1345,6 +1358,17 @@ do
         "a later channel on the same plate is not named by that rule, it may be a death channel")
     fire("UNIT_SPELLCAST_CHANNEL_STOP", unit)
     reset()
+    enter()
+    fire("UNIT_SPELLCAST_CHANNEL_START", unit)
+    advance(6.0)
+    fire("UNIT_SPELLCAST_CHANNEL_STOP", unit)
+    local stillGuessed = false
+    for _, track in pairs(CastAheadCore.Tracks(unit) or {}) do
+        if track.firstChannel then stillGuessed = true end
+    end
+    check(not stillGuessed, "a first-channel guess measured in full becomes an ordinary track")
+    reset()
+    twin.channels = twinChannels
     levels[unit] = savedLevel
 end
 
