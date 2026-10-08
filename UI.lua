@@ -12,8 +12,8 @@ local SCALE_STEPS = { 75, 100, 125, 150 }
 local SCALE_MIN, SCALE_MAX, SCALE_DEFAULT = 75, 150, 100
 local TITLE_HEIGHT = 22
 local LIST_WIDTH = 190
--- Default and minimum window size: wide enough for every column and for the
--- settings page's row of groups, so nothing is ever cut off. The grip resizes
+-- Default and minimum window size: wide enough for every column, so nothing
+-- is ever cut off. The grip resizes
 -- the window within that floor (more rows); the Scale dropdown scales the
 -- whole frame, text and chrome alike, the way Details and Plater do it.
 local WINDOW_HEIGHT = 560
@@ -245,13 +245,11 @@ local function TableWidth()
 end
 
 local function WindowWidth()
-    local settings = (CastAheadOptions and CastAheadOptions.MIN_WIDTH or 0) + 24
-    return math.max(LIST_WIDTH + 24 + TableWidth() + 34, settings)
+    return LIST_WIDTH + 24 + TableWidth() + 34
 end
 
 local function WindowHeight()
-    local settings = (CastAheadOptions and CastAheadOptions.MIN_HEIGHT or 0) + 68
-    return math.max(WINDOW_HEIGHT, settings)
+    return WINDOW_HEIGHT
 end
 
 -- Never larger than the screen: a window that overflows it hides its own

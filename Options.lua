@@ -9,14 +9,8 @@ CastAheadOptions = {}
 -- it, and hiding the final tab leaves the strip intact.
 CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Development" }
 local panels
--- One row of groups, each in its own column, so nothing is stacked and every
--- setting is reachable without reading up and down the page. UI.lua takes the
--- total as the window's resize floor: the panels do not scroll, so a narrower
--- window would simply draw the last column outside the frame.
 local COL_W, COL_GAP, COL_X = 250, 8, 8
-local COLUMNS = 5
 local SLIDER_W = COL_W - 40
-CastAheadOptions.MIN_WIDTH = COL_X * 2 + COLUMNS * COL_W + (COLUMNS - 1) * COL_GAP
 
 function CastAheadOptions.Flow(width, colWidth, gap, heights)
     local columns = math.max(1, math.floor((width + gap) / (colWidth + gap)))
@@ -35,9 +29,6 @@ function CastAheadOptions.Flow(width, colWidth, gap, heights)
     return positions, total
 end
 
--- The tallest column: the nameplate group, where the anchor square sits above
--- three sliders and their reset.
-CastAheadOptions.MIN_HEIGHT = 404
 -- Forward declarations: BuildWindow calls these, and Lua resolves a local by
 -- what it holds at call time, so they must exist as upvalues before it runs.
 local BuildGeneral, BuildSounds, BuildDefensives, BuildDevelopment
@@ -160,17 +151,12 @@ local function SetSwitch(key, on)
     end
 end
 
--- A titled box. Widgets are anchored to what it returns, so a group can be
--- moved by changing one SetPoint.
-local function BuildGroup(panel, title, column, height, point)
+-- A titled box. Widgets are anchored to what it returns; the panel's
+-- Relayout places the box itself.
+local function BuildGroup(panel, title, height)
     local box = CreateFrame("Frame", nil, panel, "BackdropTemplate")
     box:SetSize(COL_W, height)
-    if point then
-        box:SetPoint(unpack(point))
-    else
-        box:SetPoint("TOPLEFT", panel, "TOPLEFT",
-            COL_X + (column - 1) * (COL_W + COL_GAP), -6)
-    end
+    table.insert(panel.groups, box)
     box:SetBackdrop({
         bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -237,10 +223,28 @@ local function Build(host)
     panels = {}
     for _, name in ipairs(CastAheadOptions.TABS) do
         local panel = CreateFrame("Frame", nil, host)
-        panel:SetAllPoints(host)
+        panel:SetPoint("TOPLEFT", host, "TOPLEFT")
+        panel:SetPoint("TOPRIGHT", host, "TOPRIGHT")
         panel:Hide()
+        panel.groups = {}
+        function panel:Relayout()
+            local heights = {}
+            for i, g in ipairs(self.groups) do heights[i] = g:GetHeight() end
+            local pos, total = CastAheadOptions.Flow(self:GetWidth(), COL_W, COL_GAP, heights)
+            local top = self.flowTop or 6
+            for i, g in ipairs(self.groups) do
+                g:ClearAllPoints()
+                g:SetPoint("TOPLEFT", self, "TOPLEFT", COL_X + pos[i].x, -(top + pos[i].y))
+            end
+            self:SetHeight(top + total + 12)
+        end
         panels[name] = panel
     end
+    host:HookScript("OnSizeChanged", function()
+        for _, panel in pairs(panels) do
+            if panel:IsShown() then panel:Relayout() end
+        end
+    end)
 
     BuildGeneral(panels.General)
     BuildSounds(panels.Sounds)
@@ -257,6 +261,7 @@ function CastAheadOptions.ShowPanel(host, name)
     for tab, panel in pairs(panels) do
         panel:SetShown(tab == name)
     end
+    panels[name]:Relayout()
 end
 
 -- The main window switching to a non-settings tab.
@@ -265,12 +270,12 @@ function CastAheadOptions.HideAll()
     for _, panel in pairs(panels) do panel:Hide() end
 end
 
--- Three columns of groups: what is announced at all on the left, the two
--- places it is drawn in the middle and on the right. Each group carries its
--- own on/off switch, so nothing has to be traced across the page.
+-- Groups in reading order: what is announced at all first, then the places
+-- it is drawn. Each group carries its own on/off switch, so nothing has to be
+-- traced across the page.
 function BuildGeneral(panel)
     -- What is announced ---------------------------------------------------
-    local what = BuildGroup(panel, "What to call out", 1, 180)
+    local what = BuildGroup(panel, "What to call out", 180)
     local important = BuildSwitch(panel, "importantOnly",
         { "TOPLEFT", what, "TOPLEFT", 10, -26 })
     local role = BuildSwitch(panel, "roleFilter",
@@ -291,19 +296,18 @@ function BuildGeneral(panel)
     })
 
     -- Sound ---------------------------------------------------------------
-    local audio = BuildGroup(panel, "Sound", 2, 86)
+    local audio = BuildGroup(panel, "Sound", 86)
     local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 }, RedrawAndSaves)
     BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 }, RedrawAndSaves)
 
     -- Development mode ----------------------------------------------------
-    local extra = BuildGroup(panel, "Advanced", 2, 62,
-        { "TOPLEFT", audio, "BOTTOMLEFT", 0, -12 })
+    local extra = BuildGroup(panel, "Advanced", 62)
     BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
         if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
     end)
 
     -- Where the icons go --------------------------------------------------
-    local plates = BuildGroup(panel, "Nameplate icons", 3, 396)
+    local plates = BuildGroup(panel, "Nameplate icons", 396)
     local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 })
     BuildSwitch(panel, "fullLabels", { "TOPLEFT", platesOn, "BOTTOMLEFT", 0, -4 })
 
@@ -398,7 +402,7 @@ function BuildGeneral(panel)
     -- Everything drawn on a nameplate icon in one place: the icon sets the
     -- size and the two texts on it are a share of that, so changing the icon
     -- keeps them in proportion.
-    local sizes = BuildGroup(panel, "Icon size", 4, 396)
+    local sizes = BuildGroup(panel, "Icon size", 396)
 
     local iconSlider = BuildSlider(panel, {
         key = "iconSize",
@@ -467,7 +471,7 @@ function BuildGeneral(panel)
         { "iconSize", "labelScale", "timeScale", "iconGap", "fixedSpacing", "strata" }, Redraw)
 
     -- Centre call ---------------------------------------------------------
-    local centre = BuildGroup(panel, "Centre call", 5, 218)
+    local centre = BuildGroup(panel, "Centre call", 218)
     BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 })
 
     local centerScale = function()
@@ -531,8 +535,8 @@ function BuildDevelopment(panel)
     intro:SetJustifyH("LEFT")
     intro:SetText("|cffaaaaaaRecord everything: combat log in dungeons, key journal, enemy casts. Nothing on this page changes what the addon calls out.|r")
 
-    local recording = BuildGroup(panel, "Recording", 1, 86,
-        { "TOPLEFT", intro, "BOTTOMLEFT", 0, -14 })
+    panel.flowTop = 30
+    local recording = BuildGroup(panel, "Recording", 86)
     local recordAll = BuildSwitch(panel, "recordAll", { "TOPLEFT", recording, "TOPLEFT", 10, -26 }, function()
         if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
     end)
@@ -540,8 +544,7 @@ function BuildDevelopment(panel)
         if CastAheadReport then CastAheadReport.Refresh() end
     end)
 
-    local group = BuildGroup(panel, "Recorded enemy data", 2, 62,
-        { "TOPLEFT", recording, "TOPRIGHT", COL_GAP, 0 })
+    local group = BuildGroup(panel, "Recorded enemy data", 62)
     local show = DevButton(panel, "Show", 70, { "TOPLEFT", group, "TOPLEFT", 16, -28 },
         "probe show", "Print which facts each unit API returned readable, secret or empty. /ca probe show")
     local sweep = DevButton(panel, "Sweep", 70, { "LEFT", show, "RIGHT", 4, 0 },
@@ -549,8 +552,7 @@ function BuildDevelopment(panel)
     DevButton(panel, "Clear", 60, { "LEFT", sweep, "RIGHT", 4, 0 },
         "probe clear", "Forget the collected probe results. /ca probe clear")
 
-    local journal = BuildGroup(panel, "Key journal", 3, 62,
-        { "TOPLEFT", group, "TOPRIGHT", COL_GAP, 0 })
+    local journal = BuildGroup(panel, "Key journal", 62)
     local count = DevButton(panel, "Count", 70, { "TOPLEFT", journal, "TOPLEFT", 16, -28 },
         "journal", "Print how many keys the journal holds. /ca journal")
     DevButton(panel, "Clear journal", 110, { "LEFT", count, "RIGHT", 4, 0 },
@@ -611,10 +613,10 @@ elseif ChatEdit_InsertLink then
     hooksecurefunc("ChatEdit_InsertLink", InsertLink)
 end
 
-local function BuildSaveList(panel, size, column, hint)
+local function BuildSaveList(panel, size, hint)
     local S = CastAheadSaves
     local title = LIST_TITLES[size]
-    local group = BuildGroup(panel, title, column, ListHeight(LIST_MIN_ROWS))
+    local group = BuildGroup(panel, title, ListHeight(LIST_MIN_ROWS))
     if hint then
         local line = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         line:SetPoint("TOPLEFT", group.title, "BOTTOMLEFT", 0, -3)
@@ -775,6 +777,7 @@ local function BuildSaveList(panel, size, column, hint)
         box:ClearAllPoints()
         box:SetPoint("TOPLEFT", group, "TOPLEFT", 18, LIST_TOP - n * LIST_ROW_H - 6)
         group:SetHeight(ListHeight(n))
+        panel:Relayout()
         reason:SetText("")
     end
     table.insert(refreshers, Paint)
@@ -783,11 +786,7 @@ local function BuildSaveList(panel, size, column, hint)
 end
 
 function BuildDefensives(panel)
-    local SWITCHES_H = 330
-    local group = BuildGroup(panel, "Defensive calls", 1, math.max(SWITCHES_H, ListHeight(LIST_MIN_ROWS)))
-    local function Fit() group:SetHeight(math.max(SWITCHES_H, ListHeight(ListRows()))) end
-    table.insert(refreshers, Fit)
-    table.insert(listRefreshers, Fit)
+    local group = BuildGroup(panel, "Defensive calls", 330)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, SaveRefresh)
     local boss = BuildSwitch(panel, "bossAdapter", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, function(on)
         Redraw()
@@ -822,9 +821,9 @@ function BuildDefensives(panel)
     end)
 
     local lists = {
-        BuildSaveList(panel, "small", 2),
-        BuildSaveList(panel, "big", 3),
-        BuildSaveList(panel, "heal", 4, "Pressed right after a big hit lands: stone, potion, self-heal."),
+        BuildSaveList(panel, "small"),
+        BuildSaveList(panel, "big"),
+        BuildSaveList(panel, "heal", "Pressed right after a big hit lands: stone, potion, self-heal."),
     }
 
     local reset = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
@@ -926,7 +925,7 @@ function BuildSounds(panel)
 
     local scroll = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", tts, "BOTTOMLEFT", 4, -8)
-    scroll:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -26, 4)
+    scroll:SetPoint("BOTTOMRIGHT", panel:GetParent(), "BOTTOMRIGHT", -26, 4)
     local body = CreateFrame("Frame", nil, scroll)
     body:SetSize(400, #SOUND_ROWS * SOUND_ROW_H)
     scroll:SetScrollChild(body)
