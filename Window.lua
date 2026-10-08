@@ -18,13 +18,14 @@ local DEFAULT_W, DEFAULT_H = 900, 560
 local TITLE_H, MENU_W, FOOTER_H = 26, 120, 20
 local ENTRY_H, HEADER_H, GAP, PAD, SCROLLBAR_W = 20, 18, 4, 8, 24
 local PER_ROW = 4
-local GROUPS = { "Dungeon", "Settings" }
+local GROUPS = { "Settings", "Dungeon" }
 local SCALE_STEPS = { 75, 100, 125, 150 }
 local SCALE_MIN, SCALE_MAX, SCALE_DEFAULT = 75, 150, 100
 local SIDE_HINT = "Shift + mouse wheel scrolls sideways"
 local FLAT = { bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 }
 
 local frame, titleBar, titleAnchor, scaleDrop, menu, content, grid, scroll, footerText, footerHint
+local sizing = false
 local pages, order, headers, dungeonButtons = {}, {}, {}, {}
 local current, dungeon, picked
 
@@ -271,13 +272,18 @@ local function Build()
         end)
         dungeonButtons[i] = b
     end
-    content:SetScript("OnSizeChanged", function(_, width) LayoutGrid(width) end)
+    content:SetScript("OnSizeChanged", function(_, width)
+        if not sizing then LayoutGrid(width) end
+    end)
 
     scroll = CreateFrame("ScrollFrame", nil, content, "UIPanelScrollFrameTemplate")
-    scroll:SetScript("OnSizeChanged", function(_, width)
+    local function FitHosts(width)
         for _, p in ipairs(order) do
             if p.host then p.host:SetWidth(width) end
         end
+    end
+    scroll:SetScript("OnSizeChanged", function(_, width)
+        if not sizing then FitHosts(width) end
     end)
 
     local grip = CreateFrame("Button", nil, frame)
@@ -290,10 +296,14 @@ local function Build()
         local left, top = frame:GetLeft(), frame:GetTop()
         frame:ClearAllPoints()
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+        sizing = true
         frame:StartSizing("BOTTOMRIGHT")
     end)
     grip:SetScript("OnMouseUp", function()
         frame:StopMovingOrSizing()
+        sizing = false
+        LayoutGrid(content:GetWidth() or 0)
+        FitHosts(scroll:GetWidth() or 0)
         local s = Saved()
         s.width, s.height = frame:GetWidth(), frame:GetHeight()
         W.ApplyScale()
