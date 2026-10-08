@@ -331,7 +331,7 @@ function S.ViewRows(instanceID)
     for _, c in ipairs(CastAheadData and CastAheadData[instanceID] or {}) do
         local _, id = M.SaveRow(c.spell)
         if id then
-            cast[id] = true
+            cast[id] = cast[id] or c
             wins[id] = wins[id] or Wins(c)
         end
     end
@@ -342,7 +342,8 @@ function S.ViewRows(instanceID)
             out[#out + 1] = {
                 id = id, name = row.name or "", boss = row.boss or "", size = size, lead = row.lead,
                 mob = row.mob == "Environment" and "ground effect" or row.mob,
-                trigger = { cast = cast[id] == true, bar = row.bar == true, debuff = row.aura == true },
+                trigger = { cast = cast[id] ~= nil, bar = row.bar == true, debuff = row.aura == true },
+                first = cast[id] and cast[id].first, cd = cast[id] and cast[id].cd,
                 wins = wins[id] or Wins({ prio = CastAheadPriority and CastAheadPriority[id] }),
                 buttons = buttons[size],
             }
@@ -370,6 +371,27 @@ local function Heard(t)
     return #how > 0 and table.concat(how, ", ") or "not heard"
 end
 
+local function Seconds(s) return string.format("~%ds", math.floor(s + 0.5)) end
+
+local function Cadence(r)
+    local parts = {}
+    if r.first then parts[#parts + 1] = "first " .. Seconds(r.first) .. " after the pull" end
+    local cd = r.cd or {}
+    if #cd == 1 then
+        parts[#parts + 1] = "then every " .. Seconds(cd[1])
+    elseif #cd > 1 then
+        local steps, i = {}, 1
+        while i <= #cd do
+            local word, n = Seconds(cd[i]), 1
+            while cd[i + n] and Seconds(cd[i + n]) == word do n = n + 1 end
+            steps[#steps + 1] = n > 1 and (word .. " x" .. n) or word
+            i = i + n
+        end
+        parts[#parts + 1] = "then " .. table.concat(steps, ", ") .. ", repeating"
+    end
+    return #parts > 0 and table.concat(parts, ", ") or nil
+end
+
 local function GuideLine(r)
     local names = {}
     for _, b in ipairs(r.buttons) do names[#names + 1] = ButtonName(b) end
@@ -379,6 +401,8 @@ local function GuideLine(r)
     if r.size == "BIG" and #S.List("heal") > 0 then line = line .. "; heal up after the hit" end
     local wins = r.wins and M.ADVICE[r.wins]
     if wins then line = line .. string.format(" (%s comes first)", wins.say) end
+    local cadence = Cadence(r)
+    if cadence then line = line .. ". Casts " .. cadence end
     return line
 end
 

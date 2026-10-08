@@ -2728,7 +2728,8 @@ do
         [808] = { DAMAGER = "BIG", lead = 2.0, aura = false, name = "Elsewhere", mob = "Other", boss = "", dungeon = 9001, bar = false },
         [809] = { DAMAGER = "SMALL", lead = 2.0, aura = false, name = "Hex", mob = "Witch", boss = "", dungeon = 9000, bar = false },
     }, alias = { [902] = 802 } }
-    CastAheadData[9000] = { name = "Fixture", { spell = 902, prio = "DODGE" }, { spell = 807, prio = "AOE", kickable = true },
+    CastAheadData[9000] = { name = "Fixture", { spell = 902, prio = "DODGE", first = 12.2, cd = { 20.4 } },
+                            { spell = 807, prio = "AOE", kickable = true, cd = { 8.5, 15.8, 8.5, 8.5 } },
                             { spell = 809, kickable = true }, { spell = 950 } }
     CastAheadPriority[806] = "KICK"
 
@@ -2766,6 +2767,10 @@ do
     check(guide[2]:find("Zap from Abe (boss timer): big save - Unending Resolve", 1, true) and guide[2]:find("(interrupt comes first)", 1, true),
         "a guide line names the hit, the mob, how it is heard, the size, the first button and what wins")
     check(text:find("Burn from ground effect (debuff on you): big save", 1, true), "a debuff-only hit says it lands on you")
+    check(text:find("Bolt from Caster (cast): small save", 1, true) and text:find("first ~12s after the pull, then every ~20s", 1, true),
+        "a cast with one cooldown gives its first cast and its period")
+    check(text:find("then ~9s, ~16s, ~9s x2, repeating", 1, true), "a cooldown cycle is spelled out, repeats folded")
+    check(not text:find("Burn from ground effect (debuff on you): big save[^\n]*every"), "a hit without cast data gets no cadence")
     C_Spell.GetSpellName = nameSaved
     local savedSpecRole = CastAheadMatch.SpecRole
     CastAheadMatch.SpecRole = function() return "TANK" end
