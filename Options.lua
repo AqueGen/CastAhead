@@ -1,12 +1,10 @@
--- The settings panels. They are pages of the main window (UI.lua owns the
--- frame and the tab strip); this file only knows how to build and show them.
+-- The settings panels. They are pages of the main window (Window.lua owns the
+-- frame and the side menu); this file only knows how to build and show them.
 -- A second floating window was the first attempt and it overlapped the table
 -- it was meant to configure.
 
 CastAheadOptions = {}
 
--- Development is last on purpose: it is hidden unless the player asks for
--- it, and hiding the final tab leaves the strip intact.
 CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Development" }
 local panels
 local COL_W, COL_GAP, COL_X = 250, 8, 8
@@ -46,7 +44,7 @@ function CastAheadOptions.RelayoutGroups(panel)
     panel:SetHeight(top + total + 12)
 end
 
--- Forward declarations: BuildWindow calls these, and Lua resolves a local by
+-- Forward declarations: Build calls these, and Lua resolves a local by
 -- what it holds at call time, so they must exist as upvalues before it runs.
 local BuildGeneral, BuildSounds, BuildDefensives, BuildDevelopment
 -- Widgets are painted once, when a panel is first built, but storage can
@@ -244,14 +242,12 @@ local function Build(host)
         panel:SetPoint("TOPRIGHT", host, "TOPRIGHT")
         panel:Hide()
         panel.groups = {}
-        panel.Relayout = CastAheadOptions.RelayoutGroups
+        panel.Relayout = function(self)
+            CastAheadOptions.RelayoutGroups(self)
+            if self:IsShown() then self:GetParent():SetHeight(self:GetHeight()) end
+        end
         panels[name] = panel
     end
-    host:HookScript("OnSizeChanged", function()
-        for _, panel in pairs(panels) do
-            if panel:IsShown() then panel:Relayout() end
-        end
-    end)
 
     BuildGeneral(panels.General)
     BuildSounds(panels.Sounds)
@@ -262,10 +258,28 @@ end
 -- Show one settings page inside `host`, building them all on first use.
 -- Every stateful widget is repainted first: the slash commands write the same
 -- storage from outside, so what was drawn last time may be stale.
+local hooked = {}
+
+local function RelayoutShown()
+    for _, panel in pairs(panels) do
+        if panel:IsShown() then panel:Relayout() end
+    end
+end
+
 function CastAheadOptions.ShowPanel(host, name)
     if not panels then Build(host) end
+    if not hooked[host] then
+        hooked[host] = true
+        host:HookScript("OnSizeChanged", RelayoutShown)
+    end
     for _, refresh in ipairs(refreshers) do refresh() end
     for tab, panel in pairs(panels) do
+        if tab == name then
+            panel:SetParent(host)
+            panel:ClearAllPoints()
+            panel:SetPoint("TOPLEFT", host, "TOPLEFT")
+            panel:SetPoint("TOPRIGHT", host, "TOPRIGHT")
+        end
         panel:SetShown(tab == name)
     end
     panels[name]:Relayout()
@@ -931,12 +945,10 @@ function BuildSounds(panel)
         PaintTTS()
     end)
 
-    local scroll = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", tts, "BOTTOMLEFT", 4, -8)
-    scroll:SetPoint("BOTTOMRIGHT", panel:GetParent(), "BOTTOMRIGHT", -26, 4)
-    local body = CreateFrame("Frame", nil, scroll)
+    local body = CreateFrame("Frame", nil, panel)
+    body:SetPoint("TOPLEFT", tts, "BOTTOMLEFT", 4, -8)
     body:SetSize(400, #SOUND_ROWS * SOUND_ROW_H)
-    scroll:SetScrollChild(body)
+    panel.flowTop = 4 + 12 + 4 + 22 + 8 + #SOUND_ROWS * SOUND_ROW_H
 
     for i, key in ipairs(SOUND_ROWS) do
         local advice = CastAheadMatch.ADVICE[key]
@@ -971,4 +983,11 @@ function BuildSounds(panel)
             if CastAheadCore and CastAheadCore.PreviewSound then CastAheadCore.PreviewSound(advice) end
         end)
     end
+end
+
+for _, name in ipairs(CastAheadOptions.TABS) do
+    local host
+    CastAheadWindow.Register(name, "Settings",
+        function(h) host = h end,
+        function() CastAheadOptions.ShowPanel(host, name) end)
 end

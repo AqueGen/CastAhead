@@ -195,8 +195,8 @@ local function Build()
     titleText:SetTextColor(unpack(T.gold))
     titleText:SetText("Cast Ahead")
 
-    local close = CreateFrame("Button", nil, titleBar, "UIPanelCloseButtonNoScripts")
-    close:SetPoint("RIGHT", titleBar, "RIGHT", -1, 0)
+    local close = W.Button(titleBar, "X", ENTRY_H, false)
+    close:SetPoint("RIGHT", titleBar, "RIGHT", -(TITLE_H - ENTRY_H) / 2, 0)
     close:SetScript("OnClick", function() frame:Hide() end)
     titleAnchor = close
 
@@ -298,12 +298,16 @@ local function Build()
     W.ApplyScale()
 end
 
-function W.Register(name, group, build, refresh)
+function W.Register(name, group, build, refresh, before)
     local page = pages[name]
     if not page then
         page = { name = name, shown = true }
         pages[name] = page
-        order[#order + 1] = page
+        local at = #order + 1
+        for i, p in ipairs(order) do
+            if p.name == before then at = i end
+        end
+        table.insert(order, at, page)
     end
     page.group, page.build, page.refresh = group, build, refresh
     if menu then
@@ -318,16 +322,7 @@ function W.Show(name)
     if not page then return end
     if not frame then Build() end
     frame:Show()
-    local previous = pages[current]
-    if previous and previous ~= page and previous.host then previous.host:Hide() end
     current = name
-    if not page.host then
-        page.host = CreateFrame("Frame", nil, scroll)
-        page.host:SetSize(scroll:GetWidth() or 1, 1)
-        page.build(page.host)
-    end
-    scroll:SetScrollChild(page.host)
-    page.host:Show()
     local dungeonPage = page.group == "Dungeon"
     grid:SetShown(dungeonPage)
     scroll:ClearAllPoints()
@@ -337,9 +332,27 @@ function W.Show(name)
         scroll:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
     end
     scroll:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", -SCROLLBAR_W, 0)
+    LayoutGrid(content:GetWidth() or 0)
+    for _, p in ipairs(order) do
+        if p.host and p ~= page then p.host:Hide() end
+    end
+    if not page.host then
+        page.host = CreateFrame("Frame", nil, scroll)
+        page.host:SetSize(scroll:GetWidth() or 1, 1)
+        page.build(page.host)
+    end
+    scroll:SetScrollChild(page.host)
+    page.host:Show()
     PaintMenu()
     Saved().page = name
+    W.SetFooter("")
     page.refresh()
+end
+
+local function FirstShown(group)
+    for _, p in ipairs(order) do
+        if p.group == group and p.shown then return p.name end
+    end
 end
 
 function W.Toggle()
@@ -347,8 +360,9 @@ function W.Toggle()
         frame:Hide()
         return
     end
-    local saved = CastAheadDB and CastAheadDB.window and CastAheadDB.window.page
-    local name = (pages[saved] and pages[saved].shown and saved) or current or (order[1] and order[1].name)
+    local saved = pages[CastAheadDB and CastAheadDB.window and CastAheadDB.window.page]
+    local name = saved and (saved.shown and saved.name or FirstShown(saved.group))
+        or current or (order[1] and order[1].name)
     if name then W.Show(name) end
 end
 
@@ -358,11 +372,13 @@ function W.SetMenuShown(name, shown)
     page.shown = shown and true or false
     if menu then LayoutMenu() end
     if page.shown or current ~= name then return end
-    for _, p in ipairs(order) do
-        if p.group == page.group and p.shown then
-            W.Show(p.name)
-            return
-        end
+    local fallback = FirstShown(page.group)
+    if not fallback then return end
+    if frame and frame:IsShown() then
+        W.Show(fallback)
+    else
+        current = fallback
+        Saved().page = fallback
     end
 end
 

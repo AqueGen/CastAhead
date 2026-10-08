@@ -299,6 +299,8 @@ SearchBoxTemplate_OnTextChanged = function() end
 GameTooltip = setmetatable({}, { __index = function() return function() end end })
 GameTooltip_Hide = function() end
 dofile("Window.lua")
+dofile("CastsPage.lua")
+dofile("SavesPage.lua")
 dofile("UI.lua")
 dofile("Core.lua")
 dofile("Recorder.lua")
@@ -3682,9 +3684,18 @@ end
 
 do
     local sized = 0
-    local savedCreate = CreateFrame
+    local made, scripts, panelsShown = {}, {}, {}
+    local savedCreate, savedShowPanel = CreateFrame, CastAheadOptions.ShowPanel
+    CastAheadOptions.ShowPanel = function(_, name) panelsShown[#panelsShown + 1] = name end
     CreateFrame = function(kind, name, ...)
         local f = savedCreate(kind, name, ...)
+        local setScript = f.SetScript
+        f.SetScript = function(self, script, fn)
+            setScript(self, script, fn)
+            scripts[self] = scripts[self] or {}
+            scripts[self][script] = fn
+        end
+        made[#made + 1] = f
         if name == "CastAheadMainWindow" then
             f.SetSize = function(self, w, h) sized = sized + 1 self.w, self.h = w, h end
             f.GetWidth = function(self) return self.w or 0 end
@@ -3694,27 +3705,55 @@ do
     end
     UIParent = { GetWidth = function() return 1920 end, GetHeight = function() return 1080 end }
     CastAheadDB = { window = { width = 300, height = 200 } }
-    CastAheadWindow.Register("TestA", "Dungeon", function() end, function() end)
-    CastAheadWindow.Register("TestB", "Settings", function() end, function() end)
-    CastAheadWindow.Show("TestA")
+    CastAheadUI.ShowTab("Casts")
     local f = CastAheadWindow.Frame()
     check(f and f.w == 600 and f.h == 420, "a saved size below the minimum opens at the minimum")
     local before = sized
-    CastAheadWindow.Show("TestB")
-    CastAheadWindow.Show("TestA")
+    CastAheadUI.ShowTab("General")
+    CastAheadUI.ShowTab("Saves")
+    CastAheadUI.ShowTab("Guide")
+    local clicked = false
+    for _, b in ipairs(made) do
+        if rawget(b, "instanceID") and scripts[b] and scripts[b].OnClick then
+            scripts[b].OnClick(b)
+            clicked = true
+        end
+    end
+    check(clicked, "the dungeon grid has a button to click")
     CastAheadDB.devMode = true
-    if CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
+    CastAheadUI.RefreshTabs()
+    CastAheadUI.ShowTab("Development")
     CastAheadDB.devMode = nil
-    if CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
-    check(sized == before, "switching pages and Development mode never resizes the window")
-
-    CastAheadWindow.SetMenuShown("TestB", false)
-    CastAheadWindow.Register("General", "Settings", function() end, function() end)
-    CastAheadWindow.Register("Development", "Settings", function() end, function() end)
-    CastAheadWindow.Show("Development")
-    CastAheadWindow.SetMenuShown("Development", false)
+    CastAheadUI.RefreshTabs()
     check(CastAheadWindow.Current() == "General", "Development switched off while open shows General")
-    check(sized == before, "hiding a menu entry never resizes the window")
+    check(panelsShown[#panelsShown] == "General", "each settings page shows its own panel")
+    check(sized == before, "switching pages, dungeons and Development mode never resizes the window")
+
+    SlashCmdList.CASTAHEAD("sounds")
+    check(f:IsShown() and CastAheadWindow.Current() == "Sounds", "/ca sounds opens the Sounds page")
+    SlashCmdList.CASTAHEAD("sounds")
+    check(not f:IsShown(), "/ca sounds on the open Sounds page closes the window")
+    CastAheadDB.window.page = "Guide"
+    CastAhead_Toggle()
+    check(f:IsShown() and CastAheadWindow.Current() == "Guide", "/ca on a closed window opens the last saved page")
+    CastAhead_Toggle()
+    check(not f:IsShown(), "and /ca again closes it")
+
+    CastAheadDB.devMode = true
+    CastAheadUI.ShowTab("Development")
+    CastAhead_Toggle()
+    CastAheadDB.devMode = nil
+    CastAheadUI.RefreshTabs()
+    check(not f:IsShown(), "Development switched off on a closed window does not open it")
+    check(CastAheadWindow.Current() == "General" and CastAheadDB.window.page == "General",
+        "and the window will reopen on General")
+    CastAheadUI.ShowTab("Sounds")
+    CastAhead_Toggle()
+    CastAheadDB.window.page = "Development"
+    CastAheadWindow.Toggle()
+    check(CastAheadWindow.Current() == "General", "a saved hidden page opens the first visible page of its group")
+    check(sized == before, "opening and closing never resizes the window")
+    CastAheadOptions.ShowPanel = savedShowPanel
 
     CastAheadDB = { window = { width = 1900, height = 560 } }
     dofile("Window.lua")

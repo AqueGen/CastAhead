@@ -34,6 +34,8 @@ Timeline.lua
 Core.lua
 Recorder.lua
 Window.lua
+CastsPage.lua
+SavesPage.lua
 UI.lua
 Options.lua
 Minimap.lua
