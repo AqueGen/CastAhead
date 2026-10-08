@@ -95,28 +95,31 @@ class Run:
         self.events.append({"t": t, "e": "ADD", "u": slot, "level": level,
                             "power": power, "npc": self.pending_add.pop(guid)})
 
-    def end_channel(self, guid):
+    def end_channel(self, guid, closed_at=None):
         ch = self.channel.pop(guid, None)
         if not ch:
             return
         length = self.lengths[ch["spell"]]
         seen = [x for x in (ch["removed"], ch["tick"]) if x is not None]
-        end = min(max(seen), ch["t"] + length) if seen else ch["t"] + length
+        end = min(max(seen) if seen else ch["t"] + length, ch["t"] + length)
+        if closed_at is not None:
+            end = min(end, closed_at)
+        full = end - ch["t"] >= length * CHANNEL_FULL
         event = self.cast("CHANEND", guid, ch["spell"], end)
-        if event is not None:
-            event["full"] = end - ch["t"] >= length * CHANNEL_FULL
+        if event is not None and (seen or not full):
+            event["full"] = full
 
     def channel_tick(self, guid, name, t):
         ch = self.channel.get(guid)
         if ch and name == ch["name"] and t <= ch["t"] + self.lengths[ch["spell"]] + 0.5:
             ch["tick"] = t
 
-    def end_channels(self):
+    def end_channels(self, closed_at=None):
         for guid in list(self.channel):
-            self.end_channel(guid)
+            self.end_channel(guid, closed_at)
 
     def remove(self, guid, t, dead=False):
-        self.end_channel(guid)
+        self.end_channel(guid, t)
         slot = self.slot.pop(guid, None)
         self.pending_add.pop(guid, None)
         self.open.pop(guid, None)
@@ -189,7 +192,7 @@ def scan(path, runs, kickable, channels=None):
         for line in f:
             if "CHALLENGE_MODE_" in line:
                 if run:
-                    run.end_channels()
+                    run.end_channels(stamp(line.split("  ", 1)[0]) - run.t0)
                     runs.append(run)
                     run = None
                 if "CHALLENGE_MODE_START" in line:
@@ -254,7 +257,7 @@ def scan(path, runs, kickable, channels=None):
                         opened[2]["target"] = dst not in ("0000000000000000", "")
                     run.cast("STOP", src, spell, t)
                 elif not opened and spell in channels:
-                    run.end_channel(src)
+                    run.end_channel(src, t)
                     run.channel[src] = {"spell": spell, "name": p[10], "t": t, "removed": None, "tick": None}
                     run.cast("CHAN", src, spell, t)
                 else:
@@ -269,7 +272,7 @@ def scan(path, runs, kickable, channels=None):
                     running["removed"] = t
             elif ev == "SPELL_CAST_START":
                 run.touch(src, t)
-                run.end_channel(src)
+                run.end_channel(src, t)
                 try:
                     spell = int(p[9])
                 except (ValueError, IndexError):
