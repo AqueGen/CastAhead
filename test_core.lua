@@ -1321,6 +1321,50 @@ fire("UNIT_SPELLCAST_CHANNEL_STOP", unit)
 check(not IconShown(610), "an interrupted channel is not identified by its shortened length")
 reset()
 
+do
+    local savedLevel = levels[unit]
+    levels[unit] = 94
+    local twin
+    for _, row in ipairs(CastAheadTraits[1877]) do
+        if row.npc == 12 then twin = row end
+    end
+    local twinChannels = twin.channels
+    enter()
+    fire("UNIT_SPELLCAST_CHANNEL_START", unit)
+    local guarded = CastAheadCore.Casting(unit)
+    check(not (guarded and guarded.row),
+        "a lookalike creature with a channel of its own keeps the first channel unnamed")
+    fire("UNIT_SPELLCAST_CHANNEL_STOP", unit)
+    reset()
+    twin.channels = nil
+    enter()
+    fire("UNIT_SPELLCAST_CHANNEL_START", unit)
+    local firstChannel = CastAheadCore.Casting(unit)
+    check(firstChannel and firstChannel.row and firstChannel.row.spell == 610,
+        "the plate's first channel is named at its start when it is the only channel its creatures have")
+    advance(1.4)
+    fire("UNIT_SPELLCAST_CHANNEL_STOP", unit)
+    advance(5.0)
+    fire("UNIT_SPELLCAST_CHANNEL_START", unit)
+    local laterChannel = CastAheadCore.Casting(unit)
+    check(not (laterChannel and laterChannel.row),
+        "a later channel on the same plate is not named by that rule, it may be a death channel")
+    fire("UNIT_SPELLCAST_CHANNEL_STOP", unit)
+    reset()
+    enter()
+    fire("UNIT_SPELLCAST_CHANNEL_START", unit)
+    advance(6.0)
+    fire("UNIT_SPELLCAST_CHANNEL_STOP", unit)
+    local stillGuessed = false
+    for _, track in pairs(CastAheadCore.Tracks(unit) or {}) do
+        if track.firstChannel then stillGuessed = true end
+    end
+    check(not stillGuessed, "a first-channel guess measured in full becomes an ordinary track")
+    reset()
+    twin.channels = twinChannels
+    levels[unit] = savedLevel
+end
+
 -- A channel starting exactly where a cast was predicted is not that cast.
 -- Attributing it across kinds handed the channel the cast's track: the cast's
 -- timeline event was finished early and its call was voiced for a spell that

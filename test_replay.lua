@@ -122,6 +122,10 @@ if os.getenv("CA_PACKS_COMPANY") == "0" then
     CastAheadCore.Tuning.packsCompany = false
     knobs[#knobs + 1] = "packsCompany=off"
 end
+if os.getenv("CA_FIRST_CHANNEL") == "0" then
+    CastAheadCore.Tuning.firstChannel = false
+    knobs[#knobs + 1] = "firstChannel=off"
+end
 if os.getenv("CA_CLAIM_WINDOW") then
     CastAheadCore.Tuning.claimWindow = tonumber(os.getenv("CA_CLAIM_WINDOW"))
     knobs[#knobs + 1] = "claimWindow=" .. os.getenv("CA_CLAIM_WINDOW")
@@ -191,8 +195,55 @@ local missed = {}          -- truth spell -> count of none/ambiguous
 local names = {}
 local startRight, startWrong, startWrongPairs = 0, 0, {}
 local voicedRight, voicedWrong, voicedWrongPairs = 0, 0, {}
+local startsBySpell = {}   -- truth spell -> { n, right, wrong } over every start, finished or not
+local cutChannels, unknownChannels = 0, 0
 
 local function bump(t, key) t[key] = (t[key] or 0) + 1 end
+
+-- CA_TRACE=<spellID> prints the plate's tracks as each start of that spell
+-- arrives: which predictions existed and how far from now they pointed.
+local TRACE = tonumber(os.getenv("CA_TRACE") or "")
+
+local function traceStart(unit, spell, channel)
+    if TRACE ~= spell then return end
+    print(string.format("\nTRACE %d %s on %s at %.1f", spell, channel and "channel" or "cast", unit, now))
+    for _, track in pairs(CastAheadCore.Tracks(unit) or {}) do
+        local ids = {}
+        for _, c in ipairs(track.candidates or {}) do ids[#ids + 1] = tostring(c.spell) end
+        print(string.format("   track %-28s channel %-5s next %s", table.concat(ids, " "), tostring(track.channel == true),
+            track.nextAt and string.format("%+.1f", track.nextAt - now) or "-"))
+    end
+end
+
+local function judgeStart(unit, spell, instance)
+    local tally = startsBySpell[spell] or { n = 0, right = 0, wrong = 0 }
+    startsBySpell[spell] = tally
+    tally.n = tally.n + 1
+    local claim = CastAheadCore.Casting(unit)
+    if not (claim and claim.row) then return end
+    local truth = tabled[instance] and tabled[instance][spell]
+    names[claim.row.spell] = claim.row.name
+    if truth then names[spell] = truth.name end
+    if truth and (claim.row.spell == spell
+        or CastAheadMatch.Advice(truth) == CastAheadMatch.Advice(claim.row)) then
+        startRight = startRight + 1
+        tally.right = tally.right + 1
+    else
+        startWrong = startWrong + 1
+        tally.wrong = tally.wrong + 1
+        bump(startWrongPairs, spell .. " -> " .. claim.row.spell)
+    end
+    local said = CastAheadMatch.AnyImportant(claim.candidates)
+        and CastAheadMatch.ConsensusAdvice(claim.candidates)
+    if said then
+        if truth and said == CastAheadMatch.Advice(truth) then
+            voicedRight = voicedRight + 1
+        else
+            voicedWrong = voicedWrong + 1
+            bump(voicedWrongPairs, spell .. " -> " .. claim.row.spell)
+        end
+    end
+end
 
 local CHANNELS = os.getenv("CA_CHANNELS") ~= "0"
 if not CHANNELS then print("knobs: follow-up channels off") end
@@ -339,37 +390,31 @@ for _, run in ipairs(CastAheadReplay) do
         elseif ev.e == "START" then
             open[unit] = ev.spell
             targets[unit] = ev.target
+            traceStart(unit, ev.spell, false)
             fire("UNIT_SPELLCAST_START", unit)
             if settling and settling ~= "kicked" then score(unit, settling, run.instance, d) end
-            local claim = CastAheadCore.Casting(unit)
-            if claim and claim.row then
-                local truth = tabled[run.instance] and tabled[run.instance][ev.spell]
-                names[claim.row.spell] = claim.row.name
-                if truth then names[ev.spell] = truth.name end
-                if truth and (claim.row.spell == ev.spell
-                    or CastAheadMatch.Advice(truth) == CastAheadMatch.Advice(claim.row)) then
-                    startRight = startRight + 1
-                else
-                    startWrong = startWrong + 1
-                    bump(startWrongPairs, ev.spell .. " -> " .. claim.row.spell)
-                end
-                local said = CastAheadMatch.AnyImportant(claim.candidates)
-                    and CastAheadMatch.ConsensusAdvice(claim.candidates)
-                if said then
-                    if truth and said == CastAheadMatch.Advice(truth) then
-                        voicedRight = voicedRight + 1
-                    else
-                        voicedWrong = voicedWrong + 1
-                        bump(voicedWrongPairs, ev.spell .. " -> " .. claim.row.spell)
-                    end
-                end
-            end
+            judgeStart(unit, ev.spell, run.instance)
             -- The game says whether the cast can be kicked a moment after it
             -- starts; the extractor took the answer from MDT.
             if ev.kick == true then
                 fire("UNIT_SPELLCAST_INTERRUPTIBLE", unit)
             elseif ev.kick == false then
                 fire("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", unit)
+            end
+        elseif ev.e == "CHAN" then
+            open[unit] = nil
+            targets[unit] = nil
+            traceStart(unit, ev.spell, true)
+            fire("UNIT_SPELLCAST_CHANNEL_START", unit)
+            judgeStart(unit, ev.spell, run.instance)
+        elseif ev.e == "CHANEND" then
+            fire("UNIT_SPELLCAST_CHANNEL_STOP", unit)
+            if ev.full == true then
+                score(unit, ev.spell, run.instance, d)
+            elseif ev.full == false then
+                cutChannels = cutChannels + 1
+            else
+                unknownChannels = unknownChannels + 1
             end
         elseif settling == "kicked" then
             open[unit] = nil
@@ -457,6 +502,14 @@ top(missed, 12, "left unidentified (ambiguous or none), most frequent first:")
 top(untabledSpells, 12, "cast but absent from Data.lua, most frequent first:")
 print("")
 print(string.format("claimed at cast start: %d with the right call, %d with a wrong one", startRight, startWrong))
+print(string.format("  (%d pure channels cut short and %d whose end the log does not show, judged at their start only)",
+    cutChannels, unknownChannels))
+-- CA_SPELLS=<id,id,...> lists those spells' starts, finished or not.
+for id in (os.getenv("CA_SPELLS") or ""):gmatch("%d+") do
+    local tally = startsBySpell[tonumber(id)] or { n = 0, right = 0, wrong = 0 }
+    print(string.format("  start %-8s %-24s starts %3d  right %3d  wrong %3d  unclaimed %3d", id,
+        tostring(names[tonumber(id)]), tally.n, tally.right, tally.wrong, tally.n - tally.right - tally.wrong))
+end
 top(startWrongPairs, 12, "wrong calls at cast start, most frequent first:")
 print(string.format("voiced at cast start: %d right, %d wrong", voicedRight, voicedWrong))
 top(voicedWrongPairs, 12, "wrong voiced calls at cast start, most frequent first:")
