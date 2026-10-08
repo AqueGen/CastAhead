@@ -144,6 +144,12 @@ end
 
 -- Seconds before a predicted cast to announce it; 0 switches the heads-up
 -- off. Clamped rather than rejected: a saved variable can hold anything.
+C.SAVE_LEAD_MAX = 10
+
+function C.SaveLead()
+    return C.Number("saveLeadSeconds", 0, 0, C.SAVE_LEAD_MAX)
+end
+
 function C.Lead()
     local seconds = tonumber(C.Get("leadSeconds"))
     if not seconds then return C.LEAD_DEFAULT end

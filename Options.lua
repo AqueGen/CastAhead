@@ -765,7 +765,7 @@ local function BuildSaveList(panel, size, column, hint)
 end
 
 function BuildDefensives(panel)
-    local SWITCHES_H = 270
+    local SWITCHES_H = 330
     local group = BuildGroup(panel, "Defensive calls", 1, math.max(SWITCHES_H, ListHeight(LIST_MIN_ROWS)))
     local function Fit() group:SetHeight(math.max(SWITCHES_H, ListHeight(ListRows()))) end
     table.insert(refreshers, Fit)
@@ -781,9 +781,22 @@ function BuildDefensives(panel)
     local small = BuildSwitch(panel, "smallCalls", { "TOPLEFT", boss, "BOTTOMLEFT", 0, -4 }, SaveRefresh)
     local big = BuildSwitch(panel, "bigCalls", { "TOPLEFT", small, "BOTTOMLEFT", 0, -4 }, SaveRefresh)
     local heal = BuildSwitch(panel, "healCalls", { "TOPLEFT", big, "BOTTOMLEFT", 0, -4 })
+    local early = BuildSlider(panel, {
+        key = "saveLeadSeconds",
+        default = 0,
+        min = 0, max = CastAheadConfig.SAVE_LEAD_MAX,
+        low = "off", high = CastAheadConfig.SAVE_LEAD_MAX .. "s",
+        point = { "TOPLEFT", heal, "BOTTOMLEFT", 6, -12 },
+        width = COL_W - 50,
+        caption = function(value)
+            return value > 0
+                and string.format("Save early warning: %ds", value)
+                or "Save early warning: off"
+        end,
+    })
 
     local status = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    status:SetPoint("TOPLEFT", heal, "BOTTOMLEFT", 4, -6)
+    status:SetPoint("TOPLEFT", early, "BOTTOMLEFT", -6, -18)
     status:SetWidth(COL_W - 24)
     status:SetJustifyH("LEFT")
     table.insert(refreshers, function()

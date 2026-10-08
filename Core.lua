@@ -2633,11 +2633,12 @@ frame:SetScript("OnUpdate", function()
                             local lead = CastAheadConfig.Lead()
                             local first = entry.candidates and entry.candidates[1]
                             local saveLead = CastAheadSaves and CastAheadConfig.Enabled("saveCalls")
-                                and first and first.save and (first.save.lead or 3)
-                            local window = math.max(lead, saveLead or 0)
+                                and first and first.save and CastAheadConfig.SaveLead() or 0
+                            local window = math.max(lead, saveLead)
                             if window > 0 and remaining <= window then
                                 local heads = CastAheadMatch.ConsensusAdvice(entry.candidates)
-                                if remaining <= lead or CastAheadMatch.IsSave(heads) then
+                                local isSave = CastAheadSaves and CastAheadMatch.IsSave(heads)
+                                if isSave and remaining <= saveLead or not isSave and remaining <= lead then
                                     entry.track.warned = true
                                     Record("HEADS", unit, heads and heads.key or "-", Ids(entry.candidates))
                                     PlayAdviceSound(heads, true, entry.candidates)

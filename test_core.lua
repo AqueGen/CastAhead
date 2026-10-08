@@ -2523,22 +2523,45 @@ check(#CastAheadSaves.Icons(CastAheadMatch.ADVICE.BIG) == 0, "a spec without a t
 GetSpecializationInfo = function() return 265 end
 CastAheadSaves.Refresh()
 
--- Heads-up for a save call fires at the row's own lead even with the global lead off.
 reset()
 CastAheadDB = { centerText = true, leadSeconds = 0 }
+CastAheadCore.ReapplyData()
+enter()
+castFor(3.0)
+sounds, spoken, clips = 0, 0, 0
+advance(15.0)
+advance(1.5)
+advance(1.5)
+check(Alerts() == 0, string.format("the save heads-up is off by default, got %d", Alerts()))
+reset()
+
+reset()
+CastAheadDB = { centerText = true, leadSeconds = 0, saveLeadSeconds = 4 }
 CastAheadCore.ReapplyData()
 enter()
 castFor(3.0)                  -- spell 100 identified, next one in 20 s
 sounds, spoken, clips = 0, 0, 0
 advance(15.0)                 -- 5 s before the next cast: nothing yet
 check(Alerts() == 0, "no heads-up before the save lead")
-advance(1.5)                  -- 3.5 s before: inside lead 4.0
-check(Alerts() == 1, string.format("one save heads-up inside the lead, got %d", Alerts()))
+advance(1.5)                  -- 3.5 s before: inside the 4 s save lead
+check(Alerts() == 1, string.format("one save heads-up inside its own lead, got %d", Alerts()))
+reset()
+
+reset()
+CastAheadDB = { centerText = true, leadSeconds = 5, saveLeadSeconds = 0 }
+CastAheadCore.ReapplyData()
+enter()
+castFor(3.0)
+sounds, spoken, clips = 0, 0, 0
+advance(15.0)
+advance(1.5)
+advance(1.5)
+check(Alerts() == 0, string.format("the general early warning does not pre-announce a save, got %d", Alerts()))
 reset()
 
 -- A cast id known only through the alias table gets the damage spell's save call.
 CastAheadDefensives = { spells = { [999] = { DAMAGER = "BIG", lead = 4.0 } }, alias = { [100] = 999 } }
-CastAheadDB = { centerText = true, leadSeconds = 0 }
+CastAheadDB = { centerText = true, leadSeconds = 0, saveLeadSeconds = 4 }
 CastAheadCore.ReapplyData()
 enter()
 castFor(3.0)
