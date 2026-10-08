@@ -3650,5 +3650,25 @@ do
     check(pos[4].x == 774 and pos[4].y == 0 and total == 300, "four columns, the tallest decides the height")
 end
 
+do
+    local function Group(h, shown)
+        local g = { h = h, shown = shown }
+        function g:GetHeight() return self.h end
+        function g:IsShown() return self.shown end
+        function g:ClearAllPoints() self.point = nil end
+        function g:SetPoint(_, _, _, x, y) self.point = { x = x, y = y } end
+        return g
+    end
+    local a, b, c = Group(100, true), Group(50, false), Group(70, true)
+    local panel = { groups = { a, b, c } }
+    function panel:GetWidth() return 250 end
+    function panel:SetHeight(h) self.height = h end
+    local relayout = CastAheadOptions and CastAheadOptions.RelayoutGroups
+    check(relayout ~= nil, "Options.lua exposes RelayoutGroups")
+    if relayout then relayout(panel) end
+    check(c.point and c.point.y == -(6 + 108) and panel.height == 6 + 178 + 12,
+        "a hidden group leaves no gap: the next one takes its slot")
+end
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

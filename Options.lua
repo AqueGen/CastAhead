@@ -29,6 +29,23 @@ function CastAheadOptions.Flow(width, colWidth, gap, heights)
     return positions, total
 end
 
+function CastAheadOptions.RelayoutGroups(panel)
+    local shown, heights = {}, {}
+    for _, g in ipairs(panel.groups) do
+        if g:IsShown() then
+            shown[#shown + 1] = g
+            heights[#heights + 1] = g:GetHeight()
+        end
+    end
+    local pos, total = CastAheadOptions.Flow(panel:GetWidth(), COL_W, COL_GAP, heights)
+    local top = panel.flowTop or 6
+    for i, g in ipairs(shown) do
+        g:ClearAllPoints()
+        g:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X + pos[i].x, -(top + pos[i].y))
+    end
+    panel:SetHeight(top + total + 12)
+end
+
 -- Forward declarations: BuildWindow calls these, and Lua resolves a local by
 -- what it holds at call time, so they must exist as upvalues before it runs.
 local BuildGeneral, BuildSounds, BuildDefensives, BuildDevelopment
@@ -227,17 +244,7 @@ local function Build(host)
         panel:SetPoint("TOPRIGHT", host, "TOPRIGHT")
         panel:Hide()
         panel.groups = {}
-        function panel:Relayout()
-            local heights = {}
-            for i, g in ipairs(self.groups) do heights[i] = g:GetHeight() end
-            local pos, total = CastAheadOptions.Flow(self:GetWidth(), COL_W, COL_GAP, heights)
-            local top = self.flowTop or 6
-            for i, g in ipairs(self.groups) do
-                g:ClearAllPoints()
-                g:SetPoint("TOPLEFT", self, "TOPLEFT", COL_X + pos[i].x, -(top + pos[i].y))
-            end
-            self:SetHeight(top + total + 12)
-        end
+        panel.Relayout = CastAheadOptions.RelayoutGroups
         panels[name] = panel
     end
     host:HookScript("OnSizeChanged", function()
@@ -846,6 +853,7 @@ function BuildDefensives(panel)
         note:SetShown(not shipped)
         for _, list in ipairs(lists) do list:SetShown(shipped) end
         reset:SetShown(shipped)
+        panel:Relayout()
     end
     table.insert(refreshers, PaintSpec)
     table.insert(listRefreshers, PaintSpec)
