@@ -298,6 +298,7 @@ SlashCmdList = {}
 SearchBoxTemplate_OnTextChanged = function() end
 GameTooltip = setmetatable({}, { __index = function() return function() end end })
 GameTooltip_Hide = function() end
+dofile("Window.lua")
 dofile("UI.lua")
 dofile("Core.lua")
 dofile("Recorder.lua")
@@ -3677,6 +3678,53 @@ do
     if relayout then relayout(panel) end
     check(c.point and c.point.y == -(6 + 108) and panel.height == 6 + 178 + 12,
         "a hidden group leaves no gap: the next one takes its slot")
+end
+
+do
+    local sized = 0
+    local savedCreate = CreateFrame
+    CreateFrame = function(kind, name, ...)
+        local f = savedCreate(kind, name, ...)
+        if name == "CastAheadMainWindow" then
+            f.SetSize = function(self, w, h) sized = sized + 1 self.w, self.h = w, h end
+            f.GetWidth = function(self) return self.w or 0 end
+            f.GetHeight = function(self) return self.h or 0 end
+        end
+        return f
+    end
+    UIParent = { GetWidth = function() return 1920 end, GetHeight = function() return 1080 end }
+    CastAheadDB = { window = { width = 300, height = 200 } }
+    CastAheadWindow.Register("TestA", "Dungeon", function() end, function() end)
+    CastAheadWindow.Register("TestB", "Settings", function() end, function() end)
+    CastAheadWindow.Show("TestA")
+    local f = CastAheadWindow.Frame()
+    check(f and f.w == 600 and f.h == 420, "a saved size below the minimum opens at the minimum")
+    local before = sized
+    CastAheadWindow.Show("TestB")
+    CastAheadWindow.Show("TestA")
+    CastAheadDB.devMode = true
+    if CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
+    CastAheadDB.devMode = nil
+    if CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
+    check(sized == before, "switching pages and Development mode never resizes the window")
+
+    CastAheadWindow.SetMenuShown("TestB", false)
+    CastAheadWindow.Register("General", "Settings", function() end, function() end)
+    CastAheadWindow.Register("Development", "Settings", function() end, function() end)
+    CastAheadWindow.Show("Development")
+    CastAheadWindow.SetMenuShown("Development", false)
+    check(CastAheadWindow.Current() == "General", "Development switched off while open shows General")
+    check(sized == before, "hiding a menu entry never resizes the window")
+
+    CastAheadDB = { window = { width = 1900, height = 560 } }
+    dofile("Window.lua")
+    CastAheadWindow.Register("TestA", "Dungeon", function() end, function() end)
+    CastAheadWindow.Show("TestA")
+    f = CastAheadWindow.Frame()
+    check(f and f.w == 1900 and f.h == 560, "a saved size above the minimum is kept as is")
+    CreateFrame = savedCreate
+    UIParent = nil
+    CastAheadDB = nil
 end
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))

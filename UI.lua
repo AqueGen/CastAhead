@@ -8,8 +8,6 @@
 local ROW_HEIGHT = 24
 local WIDGET_HEIGHT = 20
 local HEADER_HEIGHT = 18
-local SCALE_STEPS = { 75, 100, 125, 150 }
-local SCALE_MIN, SCALE_MAX, SCALE_DEFAULT = 75, 150, 100
 local TITLE_HEIGHT = 22
 local LIST_WIDTH = 190
 -- Default and minimum window size: wide enough for every column, so nothing
@@ -273,14 +271,6 @@ end
 
 local function WindowHeight()
     return WINDOW_HEIGHT
-end
-
--- Never larger than the screen: a window that overflows it hides its own
--- controls, the Scale dropdown included, and there is no way back.
-local function ApplyScale()
-    local wanted = CastAheadConfig.Number("uiScale", SCALE_DEFAULT, SCALE_MIN, SCALE_MAX) / 100
-    local fits = math.min(UIParent:GetWidth() / window:GetWidth(), UIParent:GetHeight() / window:GetHeight())
-    window:SetScale(math.min(wanted, fits))
 end
 
 -- Data ---------------------------------------------------------------------
@@ -786,7 +776,7 @@ function CastAheadUI.ShowTab(name)
 end
 
 function BuildWindow()
-    window = CreateFrame("Frame", "CastAheadWindow", UIParent, "BasicFrameTemplateWithInset")
+    window = CreateFrame("Frame", "CastAheadLegacyWindow", UIParent, "BasicFrameTemplateWithInset")
     window:SetSize(WindowWidth(), WindowHeight())
     window:SetPoint("CENTER")
     window:SetMovable(true)
@@ -799,29 +789,11 @@ function BuildWindow()
     if window.SetResizeBounds then
         window:SetResizeBounds(WindowWidth(), WindowHeight())
     end
-    ApplyScale()
+    CastAheadWindow.ApplyScale(window)
 
     body = CreateFrame("Frame", nil, window)
     body:SetPoint("TOPLEFT", window, "TOPLEFT", 0, -TITLE_HEIGHT)
     body:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", 0, 0)
-
-    -- Whole-window scale, text included, for anyone the default is too small
-    -- for. Bottom right next to the grip, on every page.
-    local scale = CreateFrame("DropdownButton", nil, window, "WowStyle1DropdownTemplate")
-    scale:SetSize(80, 20)
-    scale:SetPoint("TOPRIGHT", window, "TOPRIGHT", -130, -28)
-    scale.text = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    scale.text:SetPoint("RIGHT", scale, "LEFT", -6, 0)
-    scale.text:SetText("Scale")
-    local function Scale() return CastAheadConfig.Number("uiScale", SCALE_DEFAULT, SCALE_MIN, SCALE_MAX) end
-    scale:SetupMenu(function(_, root)
-        for _, value in ipairs(SCALE_STEPS) do
-            root:CreateRadio(value .. "%", function() return Scale() == value end, function()
-                CastAheadConfig.Set("uiScale", value ~= SCALE_DEFAULT and value or nil)
-                ApplyScale()
-            end)
-        end
-    end)
 
     local function RememberSize()
         CastAheadDB = CastAheadDB or {}
@@ -851,10 +823,10 @@ function BuildWindow()
     grip:SetScript("OnMouseUp", function()
         window:StopMovingOrSizing()
         RememberSize()
-        ApplyScale()
+        CastAheadWindow.ApplyScale(window)
         Refresh()
     end)
-    table.insert(UISpecialFrames, "CastAheadWindow")   -- Escape closes it
+    table.insert(UISpecialFrames, "CastAheadLegacyWindow")   -- Escape closes it
     window.TitleText:SetText("Cast Ahead - tracked casts")
 
     -- Dry run of the selected dungeon's calls: icons, sounds, timeline. It sat
@@ -879,8 +851,6 @@ function BuildWindow()
     listButton = CreateFrame("Button", nil, body, "UIPanelButtonTemplate")
     listButton:SetSize(90, 20)
     listButton:SetPoint("RIGHT", testButton, "LEFT", -4, 0)
-    scale:ClearAllPoints()
-    scale:SetPoint("RIGHT", listButton, "LEFT", -12, 0)
     listButton:SetScript("OnClick", function()
         if CastAheadCore and CastAheadCore.Test then CastAheadCore.Test(selectedInstanceID, SortedRows()) end
     end)
@@ -1080,7 +1050,7 @@ function BuildWindow()
     if saved and saved.width and saved.height then
         window:SetSize(math.max(saved.width, WindowWidth()), math.max(saved.height, WindowHeight()))
     end
-    ApplyScale()
+    CastAheadWindow.ApplyScale(window)
     sortKey = sortKey or "n"
     if sortDescending == nil then sortDescending = true end
 end

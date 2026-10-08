@@ -33,6 +33,7 @@ BossAdapter.lua
 Timeline.lua
 Core.lua
 Recorder.lua
+Window.lua
 UI.lua
 Options.lua
 Minimap.lua
