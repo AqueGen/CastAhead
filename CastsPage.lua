@@ -93,7 +93,7 @@ local COLUMNS = {
         end,
         sort = function(e)
             local advice = CastAheadMatch.Advice(e)
-            return advice and advice.label or "~"
+            return advice and advice.label
         end,
     },
     { key = "spell", header = "Spell", width = 130, text = SpellName, sort = SpellName },
@@ -198,15 +198,19 @@ local function SortedRows()
         end
     end
 
+    local key = CastAheadUI.VisibleSortKey(sortKey or "n", CastAheadConfig.Dev())
+    local descending = sortDescending ~= false
     local column
     for i = 1, #COLUMNS do
-        if COLUMNS[i].key == sortKey then column = COLUMNS[i] end
+        if COLUMNS[i].key == key then column = COLUMNS[i] end
     end
     if column and column.sort then
         table.sort(list, function(a, b)
             local x, y = column.sort(a), column.sort(b)
             if x == y then return SpellName(a) < SpellName(b) end
-            if sortDescending then x, y = y, x end
+            if x == nil then return false end
+            if y == nil then return true end
+            if descending then x, y = y, x end
             return x < y
         end)
     end

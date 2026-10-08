@@ -855,6 +855,18 @@ do
     check(CastAheadUI.VisibleSortKey("n", false) == "advice", "a hidden sort column falls back to Do outside Development mode")
     check(CastAheadUI.VisibleSortKey("n", true) == "n", "Development mode keeps a development sort column")
     check(CastAheadUI.VisibleSortKey("cast", false) == "cast", "a visible sort column is kept")
+
+    local savedDungeon, savedAdvice = CastAheadWindow.Dungeon, CastAheadMatch.Advice
+    local labels = { [1] = "KICK", [3] = "TANK" }
+    CastAheadData.sortcase = { { spell = 1, name = "A" }, { spell = 2, name = "B" }, { spell = 3, name = "C" } }
+    CastAheadWindow.Dungeon = function() return "sortcase" end
+    CastAheadMatch.Advice = function(e) return labels[e.spell] and { label = labels[e.spell] } end
+    local order = {}
+    for i, e in ipairs(CastAheadUI.SortedRows()) do order[i] = e.spell end
+    check(table.concat(order, ",") == "3,1,2",
+        "before the Casts page is built Play list sorts by Do, descending, with no-verdict rows last, got " .. table.concat(order, ","))
+    CastAheadData.sortcase = nil
+    CastAheadWindow.Dungeon, CastAheadMatch.Advice = savedDungeon, savedAdvice
 end
 
 -- The anchor has to belong to the plate, or every icon stacks in the middle of
