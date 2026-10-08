@@ -146,8 +146,10 @@ local function StubRegion()
     -- `textureValue` is a real field: the catch-all __index below hands back a
     -- fresh closure for anything unknown, so a test reading an unset field would
     -- always see two "different" values and could never fail.
-    local r = { textureValue = false }
+    local r = { textureValue = false, shown = false }
     r.SetTexture = function(_, tex) r.textureValue = tex end
+    r.Show = function() r.shown = true end
+    r.Hide = function() r.shown = false end
     setmetatable(r, { __index = function() return function() return r end end })
     return r
 end
@@ -281,12 +283,17 @@ CastAheadExtra = {
     },
 }
 
+CastAheadSaveButtons = {}
+CastAheadDefensives = { spells = {}, alias = {} }
+StaticPopupDialogs = {}
+
 dofile("Config.lua")
 dofile("Match.lua")
+dofile("Saves.lua")
+dofile("BossAdapter.lua")
 dofile("Timeline.lua")
 -- UI.lua only needs the stubs above for its option helpers.
 UISpecialFrames = {}
-StaticPopupDialogs = {}
 SlashCmdList = {}
 SearchBoxTemplate_OnTextChanged = function() end
 GameTooltip = setmetatable({}, { __index = function() return function() end end })
@@ -2490,6 +2497,645 @@ GetInstanceInfo = savedGolemInfo
 fire("PLAYER_ENTERING_WORLD")
 CastAheadDB = nil
 
+-- Save calls on trash: the dps verdict replaces AOE, the centre shows the player's button.
+local specRole2 = "DAMAGER"
+GetSpecialization = function() return 1 end
+GetSpecializationRole = function() return specRole2 end
+GetSpecializationInfo = function() return 265 end
+IsPlayerSpell = function(id) return id == 104773 or id == 108416 end
+textures[104773] = 2001
+textures[108416] = 2002
+CastAheadSaveButtons = { [265] = { small = { 108416 }, big = { 104773 } } }
+CastAheadDefensives = { spells = { [100] = { DAMAGER = "BIG", lead = 4.0 } }, alias = {} }
+CastAheadSaves.Refresh()
+CastAheadDB = { centerText = true }
+check(CastAheadSaves.Icons(CastAheadMatch.ADVICE.BIG)[1] == 2001, "the shipped big button for the spec")
+CastAheadDB.saveButtons = { [265] = { big = { 108416 } } }
+CastAheadSaves.Refresh()
+check(CastAheadSaves.Icons(CastAheadMatch.ADVICE.BIG)[1] == 2002, "an override wins")
+CastAheadDB.saveButtons = { [265] = { big = { 999, 104773 } } }
+CastAheadSaves.Refresh()
+check(CastAheadSaves.Icons(CastAheadMatch.ADVICE.BIG)[1] == 2001, "an override the character does not know falls back")
+CastAheadDB.saveButtons = nil
+GetSpecializationInfo = function() return 70 end
+CastAheadSaves.Refresh()
+check(#CastAheadSaves.Icons(CastAheadMatch.ADVICE.BIG) == 0, "a spec without a table has no button")
+GetSpecializationInfo = function() return 265 end
+CastAheadSaves.Refresh()
+
+reset()
+CastAheadDB = { centerText = true, leadSeconds = 0 }
+CastAheadCore.ReapplyData()
+enter()
+castFor(3.0)
+sounds, spoken, clips = 0, 0, 0
+advance(15.0)
+advance(1.5)
+advance(1.5)
+check(Alerts() == 0, string.format("the save heads-up is off by default, got %d", Alerts()))
+reset()
+
+reset()
+CastAheadDB = { centerText = true, leadSeconds = 0, saveLeadSeconds = 4 }
+CastAheadCore.ReapplyData()
+enter()
+castFor(3.0)                  -- spell 100 identified, next one in 20 s
+sounds, spoken, clips = 0, 0, 0
+advance(15.0)                 -- 5 s before the next cast: nothing yet
+check(Alerts() == 0, "no heads-up before the save lead")
+advance(1.5)                  -- 3.5 s before: inside the 4 s save lead
+check(Alerts() == 1, string.format("one save heads-up inside its own lead, got %d", Alerts()))
+reset()
+
+reset()
+CastAheadDB = { centerText = true, leadSeconds = 5, saveLeadSeconds = 0 }
+CastAheadCore.ReapplyData()
+enter()
+castFor(3.0)
+sounds, spoken, clips = 0, 0, 0
+advance(15.0)
+advance(1.5)
+advance(1.5)
+check(Alerts() == 0, string.format("the general early warning does not pre-announce a save, got %d", Alerts()))
+reset()
+
+-- A cast id known only through the alias table gets the damage spell's save call.
+CastAheadDefensives = { spells = { [999] = { DAMAGER = "BIG", lead = 4.0 } }, alias = { [100] = 999 } }
+CastAheadDB = { centerText = true, leadSeconds = 0, saveLeadSeconds = 4 }
+CastAheadCore.ReapplyData()
+enter()
+castFor(3.0)
+sounds, spoken, clips = 0, 0, 0
+advance(15.0)
+check(Alerts() == 0, "no aliased heads-up before the save lead")
+advance(1.5)
+check(Alerts() == 1, string.format("an aliased cast gets the save heads-up, got %d", Alerts()))
+reset()
+CastAheadDefensives = { spells = { [100] = { DAMAGER = "BIG", lead = 4.0 } }, alias = {} }
+CastAheadCore.ReapplyData()
+
+-- Save calls off: the cast keeps its old call and its own icon, and no save heads-up comes early.
+do
+    local function CenterLine()
+        for i = 1, #allFrames do
+            local f = allFrames[i]
+            if f.shown and type(f.icon) == "table" and not IsBar(f) and f.timeValue then return f end
+        end
+    end
+    local row100 = CastAheadData[1877][1]
+    CastAheadDB = { centerText = true, leadSeconds = 0 }
+    check(CastAheadMatch.Advice(row100) == CastAheadMatch.ADVICE.BIG, "save calls on: the dps verdict")
+    CastAheadConfig.SetEnabled("saveCalls", false)
+    check(CastAheadMatch.SpecRole() == nil and CastAheadMatch.Advice(row100) == CastAheadMatch.ADVICE.AOE,
+        "save calls off: the old AOE call")
+    reset()
+    enter()
+    castFor(3.0)
+    sounds, spoken, clips = 0, 0, 0
+    advance(15.0)
+    advance(1.5)
+    check(Alerts() == 0, string.format("no save heads-up with save calls off, got %d", Alerts()))
+    advance(3.0)
+    fire("UNIT_SPELLCAST_START", unit)
+    advance(1.0)
+    local line = CenterLine()
+    check(line and line.timeValue:match("^Aoe damage") and line.icon.textureValue == textures[100],
+        "the centre shows the old call with the spell's own icon: " .. tostring(line and line.timeValue))
+    advance(2.0)
+    fire("UNIT_SPELLCAST_STOP", unit)
+    reset()
+    CastAheadConfig.SetEnabled("saveCalls", true)
+
+    row100.targeted = true
+    CastAheadCore.ReapplyData()
+    local savedIsTarget = PlayerIsSpellTarget
+    PlayerIsSpellTarget = function(u) return "secret:" .. u end
+    reset()
+    enter()
+    castFor(3.0)
+    advance(15.0)
+    advance(1.5)
+    advance(3.0)
+    fire("UNIT_SPELLCAST_START", unit)
+    advance(0.5)
+    for _, f in ipairs(allFrames) do
+        f.SetAlphaFromBoolean = function(self, v, yes, no) self.alphaBool, self.alphaYes, self.alphaNo = v, yes, no end
+        f.alphaBool = nil
+    end
+    advance(0.1)
+    local targetedLine, saveLine
+    for _, f in ipairs(allFrames) do
+        if f.shown and type(f.icon) == "table" and not IsBar(f) and f.timeValue then
+            if f.timeValue:match("^Targeted") then targetedLine = f end
+            if f.timeValue:match("^Big defensive") then saveLine = f end
+        end
+    end
+    check(targetedLine and rawget(targetedLine, "alphaBool") == nil, "a targeted cast shows targeted in the centre, always visible")
+    check(saveLine and rawget(saveLine, "alphaBool") == "secret:" .. unit and saveLine.alphaYes == 1 and saveLine.alphaNo == 0,
+        "its save line is drawn only when the game says the cast is on the player")
+    advance(2.0)
+    fire("UNIT_SPELLCAST_STOP", unit)
+    reset()
+    PlayerIsSpellTarget = savedIsTarget
+    row100.targeted = nil
+    CastAheadCore.ReapplyData()
+end
+
+-- A save call with the voice off still beeps once.
+CastAheadDB = { voice = false }
+sounds, spoken, clips = 0, 0, 0
+CastAheadCore.Announce(CastAheadMatch.ADVICE.BIG, true)
+CastAheadCore.Announce(CastAheadMatch.ADVICE.SMALL, nil)
+check(sounds == 2 and Alerts() == 2, string.format("each save call beeps once with the voice off, got %d", Alerts()))
+
+-- A scheduled save call fires once at its time and shows in the centre until it ends.
+reset()
+CastAheadDB = { centerText = true }
+enter()
+CastAheadSaves.Schedule("test:1", 100, now + 2, now + 5, CastAheadMatch.ADVICE.BIG)
+sounds, spoken, clips = 0, 0, 0
+advance(1.0)
+check(Alerts() == 0, "a scheduled call is quiet before its time")
+advance(1.5)
+check(Alerts() == 1, "and speaks once at its time")
+advance(1.0)
+check(Alerts() == 1, "only once")
+check(#CastAheadSaves.Pending(now) == 1, "it stays in the centre until the hit")
+advance(2.0)
+check(#CastAheadSaves.Pending(now) == 0, "and leaves after it")
+CastAheadSaves.Schedule("test:2", 100, now + 2, now + 5, CastAheadMatch.ADVICE.BIG)
+CastAheadSaves.Cancel("test:2")
+sounds, spoken, clips = 0, 0, 0
+advance(3.0)
+check(Alerts() == 0, "a cancelled call never fires")
+reset()
+
+-- Save calls off: a scheduled call stays quiet, and one whose hit passed meanwhile never fires later.
+CastAheadDB = { centerText = true }
+enter()
+CastAheadSaves.Schedule("test:3", 100, now + 2, now + 5, CastAheadMatch.ADVICE.BIG)
+CastAheadConfig.SetEnabled("saveCalls", false)
+sounds, spoken, clips = 0, 0, 0
+advance(3.0)
+check(Alerts() == 0, "no scheduled call fires with save calls off")
+advance(3.0)
+CastAheadConfig.SetEnabled("saveCalls", true)
+advance(0.1)
+check(Alerts() == 0, "a call whose hit passed while off never fires after switching back on")
+reset()
+
+-- After an update and /reload a new TOC file is missing until a client restart.
+local savedSaves = CastAheadSaves
+CastAheadSaves = nil
+CastAheadDB = { centerText = true, leadSeconds = 5 }
+local ok, err = pcall(function()
+    fire("SPELLS_CHANGED")
+    sounds, spoken, clips = 0, 0, 0
+    enter()
+    castFor(3.0)
+    advance(13.9)
+    advance(0.1)
+end)
+check(ok, "no error without the Saves module: " .. tostring(err))
+check(Alerts() == 1, string.format("the ordinary heads-up still fires once, got %d", Alerts()))
+reset()
+CastAheadSaves = savedSaves
+
+-- Aura sounds: registered for the player's role out of combat only, replaced on spec change.
+do
+    local added, removed, inCombat = {}, {}, false
+    C_UnitAuras.AddAuraSound = function(trigger, info) added[#added + 1] = info.spellID return #added end
+    C_UnitAuras.RemoveAuraSound = function(id) removed[#removed + 1] = id end
+    C_ChatInfo = { InChatMessagingLockdown = function() return false end }
+    InCombatLockdown = function() return inCombat end
+    Enum.UnitAuraSoundTrigger = { Added = 0 }
+    GetSpecialization = function() return 1 end
+    local role = "DAMAGER"
+    GetSpecializationRole = function() return role end
+    GetSpecializationInfo = function() return 265 end
+    CastAheadDefensives = { spells = { [373693] = { DAMAGER = "BIG", aura = true }, [5] = { TANK = "BIG", aura = true },
+                                       [6] = { DAMAGER = "SMALL" } }, alias = {} }
+    CastAheadDB = {}
+    inCombat = true
+    CastAheadSaves.Refresh()
+    check(#added == 0, "nothing is registered in combat")
+    inCombat = false
+    fire("PLAYER_REGEN_ENABLED")
+    check(#added == 1 and added[1] == 373693, "leaving combat registers the dps aura only")
+    role = "TANK"
+    fire("PLAYER_SPECIALIZATION_CHANGED", "player")
+    check(#removed == 1 and added[#added] == 5, "a spec change swaps the registrations")
+    CastAheadConfig.SetEnabled("sound", false)
+    CastAheadSaves.Refresh()
+    check(CastAheadSaves.AuraSoundCount() == 0, "sound off registers no aura sound")
+    CastAheadConfig.SetEnabled("sound", true)
+    CastAheadConfig.SetEnabled("voice", false)
+    CastAheadSaves.Refresh()
+    check(CastAheadSaves.AuraSoundCount() == 0, "voice off with no picked sound registers no aura sound")
+    local files = {}
+    C_UnitAuras.AddAuraSound = function(trigger, info) files[#files + 1] = info.soundFileName return #files end
+    LibStub = function() return { Fetch = function(_, _, name) return name == "Path" and "custom/path.ogg" or 12345 end } end
+    CastAheadDB.sounds = { BIG = "Path" }
+    CastAheadSaves.Refresh()
+    check(CastAheadSaves.AuraSoundCount() == 1 and files[#files] == "custom/path.ogg",
+        "voice off with a picked file registers that file")
+    CastAheadDB.sounds = { BIG = "Kit" }
+    CastAheadSaves.Refresh()
+    check(CastAheadSaves.AuraSoundCount() == 0, "voice off with a picked sound kit registers no clip")
+    CastAheadConfig.SetEnabled("voice", true)
+    local lockdown = true
+    C_ChatInfo.InChatMessagingLockdown = function() return lockdown end
+    CastAheadSaves.Refresh()
+    check(CastAheadSaves.AuraPending(), "chat lockdown leaves the registration pending")
+    lockdown = false
+    fire("ENCOUNTER_END", 1234)
+    check(not CastAheadSaves.AuraPending() and CastAheadSaves.AuraSoundCount() == 1, "ENCOUNTER_END retries a pending registration")
+    lockdown = true
+    CastAheadSaves.Refresh()
+    lockdown = false
+    fire("CHALLENGE_MODE_COMPLETED")
+    check(not CastAheadSaves.AuraPending() and CastAheadSaves.AuraSoundCount() == 1, "CHALLENGE_MODE_COMPLETED retries a pending registration")
+    CastAheadDB.sounds = { BIG = "Path" }
+    CastAheadSaves.Refresh()
+    check(files[#files] == "custom/path.ogg", "a picked sound with a file path replaces the clip")
+    CastAheadDB.sounds = { BIG = "Kit" }
+    CastAheadSaves.Refresh()
+    check(files[#files]:match("Sounds\\en\\BIG%.ogg$"), "a picked sound kit id keeps the clip")
+    LibStub, CastAheadDB.sounds = nil, nil
+    CastAheadConfig.SetEnabled("saveCalls", false)
+    CastAheadSaves.Refresh()
+    check(CastAheadSaves.AuraSoundCount() == 0, "switching save calls off removes them")
+    CastAheadConfig.SetEnabled("saveCalls", true)
+    C_UnitAuras.AddAuraSound = function() error("restricted") end
+    check(pcall(CastAheadSaves.Refresh) and CastAheadSaves.AuraSoundCount() == 0, "a failing AddAuraSound is skipped")
+    C_UnitAuras.AddAuraSound, C_UnitAuras.RemoveAuraSound = nil, nil
+    C_ChatInfo, InCombatLockdown, Enum.UnitAuraSoundTrigger = nil, nil, nil
+    CastAheadDefensives = { spells = {}, alias = {} }
+    CastAheadDB = nil
+end
+
+-- Saves view: every hit that calls a save for the player's role in one dungeon.
+do
+    local role, savedButtons = "DAMAGER", CastAheadSaveButtons
+    GetSpecialization = function() return 1 end
+    GetSpecializationRole = function() return role end
+    GetSpecializationInfo = function() return 265 end
+    IsPlayerSpell = function(id) return id == 104773 end
+    local savedContainer, savedItem = C_Container, C_Item
+    C_Container = { GetContainerNumSlots = function(b) return b == 0 and 1 or 0 end,
+                    GetContainerItemID = function(b, s) return b == 0 and s == 1 and 5512 or nil end }
+    C_Item = { GetItemSpell = function(id) if id == 5512 then return "Use", 452930 end end,
+               GetItemCount = function(id) return id == 5512 and 3 or 0 end,
+               GetItemCooldown = function() return now - 1, 60, true end,
+               GetItemIconByID = function(id) return 9000 + (id % 1000) end }
+    textures[777] = 3777
+    CastAheadSaveButtons = { [265] = { small = {}, big = { 104773, { use = 452930 }, { use = 777 } } } }
+    CastAheadDB = {}
+    CastAheadSaves.ScanBags()
+    CastAheadSaves.Refresh()
+    CastAheadDefensives = { spells = {
+        [801] = { DAMAGER = "SMALL", lead = 2.0, aura = false, name = "Slam", mob = "Boss A", boss = "Boss A", dungeon = 9000, bar = true },
+        [806] = { DAMAGER = "BIG", lead = 1.5, aura = false, name = "Zap", mob = "Abe", boss = "Abe", dungeon = 9000, bar = true },
+        [802] = { DAMAGER = "SMALL", lead = 3.0, aura = false, name = "Bolt", mob = "Caster", boss = "", dungeon = 9000, bar = false },
+        [803] = { DAMAGER = "BIG", lead = 2.5, aura = true, name = "Burn", mob = "Environment", boss = "", dungeon = 9000, bar = false },
+        [804] = { DAMAGER = "SMALL", lead = 4.0, aura = false, name = "Ache", mob = "Grunt", boss = "", dungeon = 9000, bar = false },
+        [805] = { TANK = "BIG", lead = 4.0, aura = false, name = "Crush", mob = "Brute", boss = "", dungeon = 9000, bar = false },
+        [807] = { DAMAGER = "BIG", lead = 2.0, aura = false, name = "Magma", mob = "Pool", boss = "", dungeon = 9001, bar = false },
+        [808] = { DAMAGER = "BIG", lead = 2.0, aura = false, name = "Elsewhere", mob = "Other", boss = "", dungeon = 9001, bar = false },
+        [809] = { DAMAGER = "SMALL", lead = 2.0, aura = false, name = "Hex", mob = "Witch", boss = "", dungeon = 9000, bar = false },
+    }, alias = { [902] = 802 } }
+    CastAheadData[9000] = { name = "Fixture", { spell = 902, prio = "DODGE", first = 12.2, cd = { 20.4 } },
+                            { spell = 807, prio = "AOE", kickable = true, cd = { 8.5, 15.8, 8.5, 8.5 } },
+                            { spell = 809, kickable = true }, { spell = 950 } }
+    CastAheadPriority[806] = "KICK"
+
+    local list = CastAheadSaves.ViewRows and CastAheadSaves.ViewRows(9000) or {}
+    local order = {}
+    for i, r in ipairs(list) do order[i] = r.id end
+    check(table.concat(order, ",") == "806,801,803,807,804,802,809",
+        "bosses by name first, then trash BIG before SMALL by name, got " .. table.concat(order, ","))
+    local by = {}
+    for _, r in ipairs(list) do by[r.id] = r end
+    local zap, slam, bolt, burn, ache, magma = by[806], by[801], by[802], by[803], by[804], by[807]
+    check(slam and slam.size == "SMALL" and slam.trigger.bar and not slam.trigger.cast and not slam.trigger.debuff
+        and slam.wins == nil and slam.lead == 2.0 and slam.boss == "Boss A", "a boss row with a bar")
+    check(zap and zap.size == "BIG" and zap.wins == "KICK", "a boss bar takes its wins from the row's own priority")
+    local b = zap and zap.buttons or {}
+    check(#b == 3 and b[1].kind == "spell" and b[1].id == 104773 and b[1].available and b[1].icon == 2001,
+        "the big list in order: the known spell first, available")
+    check(b[2] and b[2].kind == "item" and b[2].id == 5512 and b[2].available == false and b[2].icon == 9512,
+        "an item on cooldown stays in the list, not available")
+    check(b[3] and b[3].kind == "item" and b[3].available == false and b[3].icon == 3777,
+        "an item not in the bags shows its use spell's icon, not available")
+    C_Spell.GetSpellCooldownDuration = function() return { HasSecretValues = function() return false end, IsZero = function() return false end } end
+    CastAheadSaves.Refresh()
+    local cool = CastAheadSaves.ViewRows(9000)
+    for _, r in ipairs(cool) do if r.id == 806 then zap = r end end
+    check(zap.buttons[1].kind == "spell" and zap.buttons[1].available == false, "the view marks a known spell on cooldown not available")
+    C_Spell.GetSpellCooldownDuration = nil
+    CastAheadSaves.Refresh()
+    local nameSaved = C_Spell.GetSpellName
+    C_Spell.GetSpellName = function(id) return ({ [104773] = "Unending Resolve" })[id] end
+    local guide = CastAheadSaves.GuideLines(9000)
+    local text = table.concat(guide, "\n")
+    check(guide[1] == "Boss: Abe" and text:find("\nBoss: Boss A\n", 1, true) and text:find("\nTrash\n", 1, true),
+        "the guide groups bosses by name, then trash")
+    check(guide[2]:find("Zap from Abe (boss timer): big save - |T2001:16|t Unending Resolve", 1, true) and guide[2]:find("(interrupt comes first)", 1, true),
+        "a guide line names the hit, the mob, how it is heard, the size, the first button and what wins")
+    check(text:find("Burn from ground effect (debuff on you): big save", 1, true), "a debuff-only hit says it lands on you")
+    check(guide[2]:find("big save - |T2001:16|t Unending Resolve", 1, true), "a button carries its icon")
+    local textureSaved = C_Spell.GetSpellTexture
+    C_Spell.GetSpellTexture = function(id) return id == 806 and 4242 or textureSaved(id) end
+    check(CastAheadSaves.GuideLines(9000)[2]:find("^%- |T4242:16|t Zap from Abe"), "a hit carries its spell icon in front of its name")
+    C_Spell.GetSpellTexture = textureSaved
+    check(text:find("Bolt from Caster (cast): small save", 1, true) and text:find("first ~12s after the pull, then every ~20s", 1, true),
+        "a cast with one cooldown gives its first cast and its period")
+    check(text:find("~9s, ~16s, ~9s x2, repeating", 1, true), "a cooldown cycle is spelled out, repeats folded")
+    check(not text:find("Burn from ground effect (debuff on you): big save[^\n]*every"), "a hit without cast data gets no cadence")
+    CastAheadBossCadence = { [801] = { first = 9.6, cd = { 25.0, 40.2, 25.0 }, steady = false }, [806] = { first = 7.0, cd = { 40.0 }, steady = true } }
+    text = table.concat(CastAheadSaves.GuideLines(9000), "\n")
+    check(text:find("Slam from Boss A %(boss timer%): small save[^\n]*Casts first ~10s after the pull, then ~25s, ~40s, ~25s\n")
+        and text:find("Zap from Abe[^\n]*first ~7s after the pull, then every ~40s"),
+        "a boss hit takes its cadence from the boss table, a sequence without repeating")
+    check(text:find("Magma from Pool %(cast%): big save[^\n]*Casts with gaps of ~9s, ~16s, ~9s x2, repeating"),
+        "a cycle without a first cast reads as gaps")
+    CastAheadBossCadence = nil
+    C_Spell.GetSpellName = nameSaved
+    local savedSpecRole = CastAheadMatch.SpecRole
+    CastAheadMatch.SpecRole = function() return "TANK" end
+    CastAheadDefensives.spells[810] = { DAMAGER = "BIG", TANK = "SMALL", lead = 2.0, aura = false, name = "Quake", mob = "Brute", boss = "", dungeon = 9000, bar = false }
+    local tankIds = {}
+    for _, r in ipairs(CastAheadSaves.ViewRows(9000)) do tankIds[#tankIds + 1] = r.id end
+    check(table.concat(tankIds, ",") == "805", "a tank sees only tank busters in the Saves view, got " .. table.concat(tankIds, ","))
+    CastAheadDefensives.spells[810] = nil
+    CastAheadMatch.SpecRole = savedSpecRole
+    local hex = by[809]
+    check(hex and hex.wins == "KICK", "a kickable cast with no curated category beats the save, as in the game")
+    check(bolt and bolt.trigger.cast and not bolt.trigger.bar and bolt.wins == "DODGE" and bolt.name == "Bolt",
+        "a trash row reached by an aliased Data cast, beaten by its DODGE")
+    check(burn and burn.trigger.debuff and not burn.trigger.cast and burn.mob == "ground effect",
+        "an aura-only row, its Environment caster shown as a ground effect")
+    check(ache and not (ache.trigger.cast or ache.trigger.bar or ache.trigger.debuff) and #ache.buttons == 0,
+        "a row with no trigger, and no small button to show")
+    check(magma and magma.trigger.cast and magma.wins == nil,
+        "a hit from another dungeon's table reached by this one's cast, its curated AOE over kickable does not beat it")
+    check(not by[805] and not by[808], "other roles' rows and other dungeons' rows stay out")
+    role = "TANK"
+    list = CastAheadSaves.ViewRows and CastAheadSaves.ViewRows(9000) or {}
+    check(#list == 1 and list[1].id == 805 and list[1].size == "BIG", "a tank sees the tank list")
+    role = nil
+    check(CastAheadSaves.ViewRows and #CastAheadSaves.ViewRows(9000) == 0, "no role, no list")
+    local saved = CastAheadDefensives
+    CastAheadDefensives = nil
+    check(CastAheadSaves.ViewRows and #CastAheadSaves.ViewRows(9000) == 0, "no defensive table, no list")
+    CastAheadDefensives = saved
+    CastAheadData[9000] = nil
+    CastAheadPriority[806] = nil
+    textures[777] = nil
+    C_Container, C_Item = savedContainer, savedItem
+    CastAheadSaves.ScanBags()
+    CastAheadSaveButtons, CastAheadDB = savedButtons, nil
+end
+
+GetSpecialization, GetSpecializationRole, GetSpecializationInfo, IsPlayerSpell = nil, nil, nil, nil
+CastAheadDefensives = { spells = {}, alias = {} }
+CastAheadDB = {}
+check(CastAheadConfig.Enabled("saveCalls") and CastAheadConfig.Enabled("bossAdapter"), "save and boss calls are on by default")
+CastAheadConfig.SetEnabled("bossAdapter", false)
+check(CastAheadDB.bossAdapter == false and CastAheadConfig.Enabled("saveCalls"), "the boss switch is separate")
+CastAheadDB = nil
+CastAheadCore.ReapplyData()
+CastAheadDB = nil
+
+-- Boss bars: a DBM timer for a spell with a verdict schedules a call at bar end minus lead.
+GetSpecialization = function() return 1 end
+GetSpecializationRole = function() return "DAMAGER" end
+CastAheadDefensives = { spells = { [1299684] = { DAMAGER = "BIG", lead = 3.0 } }, alias = { [1299680] = 1299684 } }
+local A = CastAheadBossAdapter
+reset()
+enter()
+sounds, spoken, clips = 0, 0, 0
+A.OnBar("dbm", "t0", 1299684, 10, now)
+advance(7.5)
+advance(5)
+check(Alerts() == 0, "a bar outside an encounter schedules nothing")
+IsEncounterInProgress = function() return true end
+A.OnBar("dbm", "tp", 1299684, 10, now)
+advance(7.5)
+advance(5)
+IsEncounterInProgress = nil
+check(Alerts() == 1, string.format("a pull bar sent before our ENCOUNTER_START still calls, got %d", Alerts()))
+sounds, spoken, clips = 0, 0, 0
+fire("ENCOUNTER_START", 1234)
+do
+    local savedPriority = CastAheadPriority
+    CastAheadPriority = { [1299684] = "CC" }
+    A.OnBar("dbm", "tc", 1299684, 10, now)
+    A.OnBar("dbm", "ta", 1299680, 10, now)
+    advance(7.5)
+    advance(5)
+    CastAheadPriority = savedPriority
+    check(Alerts() == 0, "a curated stun outranks the boss save call, through the alias too")
+end
+A.OnBar("dbm", "t1", 1299680, 10, now)
+advance(6.5)
+check(Alerts() == 0, "quiet until bar end minus lead")
+advance(1.0)
+check(Alerts() == 1, "one call 3 s before the hit, through the alias")
+A.OnBar("dbm", "t2", 1299684, 10, now)
+A.OnStop("dbm", "t2")
+sounds, spoken, clips = 0, 0, 0
+advance(7.5)
+advance(2.5)
+check(Alerts() == 0, "a stopped bar never calls")
+A.OnBar("dbm", "t3", 1299684, 10, now)
+A.OnPause("dbm", "t3", now)
+advance(20)
+check(Alerts() == 0, "a paused bar waits")
+A.OnResume("dbm", "t3", now)
+advance(7.5)
+check(Alerts() == 1, "and resumes where it stopped")
+A.OnBar("bw", "Sever", "sever_option", 10, now)
+A.OnBar("dbm", "t4", nil, 10, now)
+A.OnBar("dbm", "t5", 4242, 10, now)
+sounds, spoken, clips = 0, 0, 0
+advance(12)
+check(Alerts() == 0, "string keys, nil ids and spells without a verdict are ignored")
+A.OnBar("dbm", "t6", 1299684, 10, now)
+A.OnUpdate("dbm", "t6", 0, 20, now)
+advance(7.5)
+check(Alerts() == 0, "an extended bar moves its call")
+advance(10)
+check(Alerts() == 1, "to the new end minus lead")
+advance(5)
+A.OnBar("dbm", "t7", 1299684, 10, now)
+sounds, spoken, clips = 0, 0, 0
+advance(7.5)
+A.OnUpdate("dbm", "t7", 7.5, 10.2, now)
+advance(6)
+check(Alerts() == 1, string.format("an update that keeps a fired call inside its lead does not call again, got %d", Alerts()))
+advance(5)
+A.OnBar("dbm", "t12", 1299684, 10, now)
+sounds, spoken, clips = 0, 0, 0
+advance(7.0)
+advance(0.5)
+A.OnUpdate("dbm", "t12", 7.5, 10.6, now)
+advance(0.2)
+advance(2)
+advance(2)
+check(Alerts() == 1, string.format("a small correction after the call does not call again, got %d", Alerts()))
+advance(5)
+A.OnBar("dbm", "t10", 1299684, 10, now)
+sounds, spoken, clips = 0, 0, 0
+advance(7.5)
+A.OnUpdate("dbm", "t10", 7.5, 30, now)
+advance(0.1)
+check(Alerts() == 1, string.format("extending a bar after its call is not an immediate second call, got %d", Alerts()))
+advance(19.3)
+check(Alerts() == 1, "the extended bar stays quiet until its new end minus lead")
+advance(0.2)
+check(Alerts() == 2, string.format("and calls again 3 s before the new end, got %d", Alerts()))
+advance(5)
+A.OnBar("dbm", "t8", 1299684, 10, now)
+A.OnPause("dbm", "t8", now)
+sounds, spoken, clips = 0, 0, 0
+advance(20)
+A.OnUpdate("dbm", "t8", 0, 10, now)
+advance(20)
+check(Alerts() == 0, "an update while paused keeps the bar paused")
+A.OnResume("dbm", "t8", now)
+advance(6.5)
+check(Alerts() == 0, "the updated bar counts from where it paused")
+advance(1.0)
+check(Alerts() == 1, "and calls once after resuming")
+advance(5)
+A.OnBar("dbm", "t11", 1299684, 10, now)
+sounds, spoken, clips = 0, 0, 0
+advance(2)
+fire("ENCOUNTER_END", 1234)
+advance(5.5)
+advance(5)
+check(Alerts() == 0, string.format("ENCOUNTER_END cancels a live call, got %d", Alerts()))
+do
+    local savedSaves = CastAheadSaves
+    CastAheadSaves = nil
+    local ok, err = pcall(function()
+        A.OnBar("dbm", "t9", 1299684, 10, now)
+        A.OnUpdate("dbm", "t9", 0, 20, now)
+        A.OnStop("dbm", "t9")
+        fire("ENCOUNTER_START", 1234)
+        fire("ENCOUNTER_END", 1234)
+    end)
+    CastAheadSaves = savedSaves
+    check(ok, "the boss adapter needs no Saves module: " .. tostring(err))
+end
+reset()
+GetSpecialization, GetSpecializationRole = nil, nil
+CastAheadDefensives = { spells = {}, alias = {} }
+
+-- Connect: with a stub DBM the adapter registers and reports it.
+local registered = {}
+DBM = { RegisterCallback = function(_, event, fn) registered[event] = fn end }
+check(CastAheadBossAdapter.Connect() == "DBM", "DBM is detected")
+check(registered.DBM_TimerBegin and registered.DBM_TimerStop and registered.DBM_TimerPause and registered.DBM_TimerResume
+    and registered.DBM_TimerUpdate, "the five DBM timer callbacks are registered")
+
+-- Health check: a connected boss mod that sends no bars for 30 s into a fight gets one chat line.
+do
+    local savedPrint, printed = print, 0
+    print = function() printed = printed + 1 end
+    registered = {}
+    fire("PLAYER_LOGIN")
+    local connectedAtLogin = registered.DBM_TimerBegin ~= nil
+    DBM = nil
+    enter()
+    fire("ENCOUNTER_START", 1234)
+    advance(31)
+    advance(10)
+    print = savedPrint
+    check(connectedAtLogin, "Core connects the adapter at login")
+    check(printed == 1, string.format("one chat line when no boss timers arrive, got %d", printed))
+    fire("ENCOUNTER_END", 1234)
+    CastAheadBossAdapter.Connect()
+    reset()
+end
+
+-- BigWigs: StartBar keys the call by module and bar text and takes the spell from the option key.
+do
+    local bw = {}
+    BigWigsLoader = { RegisterMessage = function(_, event, fn) bw[event] = fn end }
+    DBM = { RegisterCallback = function() end }
+    check(CastAheadBossAdapter.Connect() == "DBM" and next(bw) == nil, "with both boss mods only DBM drives calls")
+    check(CastAheadBossAdapter.Status() == "DBM connected", "and the status names DBM")
+    DBM = nil
+    check(CastAheadBossAdapter.Connect() == "BigWigs", "BigWigs is detected")
+    GetSpecialization = function() return 1 end
+    GetSpecializationRole = function() return "DAMAGER" end
+    CastAheadDefensives = { spells = { [1299684] = { DAMAGER = "BIG", lead = 3.0 } }, alias = {} }
+    local mod = {}
+    reset()
+    enter()
+    fire("ENCOUNTER_START", 1234)
+    sounds, spoken, clips = 0, 0, 0
+    local modA, modB = {}, {}
+    bw.BigWigs_StartBar("BigWigs_StartBar", modA, 1299684, "Sever", 10)
+    bw.BigWigs_StartBar("BigWigs_StartBar", modB, 1299684, "Sever", 10)
+    bw.BigWigs_StopBars("BigWigs_StopBars", modA)
+    advance(7.5)
+    check(Alerts() == 1, string.format("StopBars of one module leaves the other's same-text bar, got %d", Alerts()))
+    advance(5)
+    bw.BigWigs_StartBar("BigWigs_StartBar", modA, 1299684, "Sever", 10)
+    bw.BigWigs_StartBar("BigWigs_StartBar", modB, 1299684, "Sever", 10)
+    bw.BigWigs_OnBossDisable("BigWigs_OnBossDisable", modA)
+    bw.BigWigs_OnBossDisable("BigWigs_OnBossDisable", modB)
+    sounds, spoken, clips = 0, 0, 0
+    advance(7.5)
+    advance(5)
+    check(Alerts() == 0, string.format("OnBossDisable cancels the module's calls, got %d", Alerts()))
+    sounds, spoken, clips = 0, 0, 0
+    bw.BigWigs_StartBar("BigWigs_StartBar", mod, 1299684, "Sever", 10)
+    advance(7.5)
+    check(Alerts() == 1, string.format("a BigWigs bar calls 3 s before its end, got %d", Alerts()))
+    advance(5)
+    bw.BigWigs_StartBar("BigWigs_StartBar", mod, 1299684, "Sever", 10)
+    bw.BigWigs_StopBar("BigWigs_StopBar", mod, "Sever")
+    sounds, spoken, clips = 0, 0, 0
+    advance(7.5)
+    advance(4.5)
+    check(Alerts() == 0, "StopBar by bar text cancels the call")
+    bw.BigWigs_Timer("BigWigs_Timer", mod, 1299684, 10, 10, "Sever", 1, 0, nil, false)
+    advance(7.5)
+    check(Alerts() == 1, string.format("a timer without a bar still calls, got %d", Alerts()))
+    advance(5)
+    sounds, spoken, clips = 0, 0, 0
+    bw.BigWigs_Timer("BigWigs_Timer", mod, 1299684, 10, 10, "Sever", 1, 0, nil, true)
+    advance(12)
+    check(Alerts() == 0, "a timer with a bar leaves the call to StartBar")
+    issecretvalue = function() return true end
+    local ok, err = pcall(function()
+        bw.BigWigs_StartBar("BigWigs_StartBar", mod, 1299684, "Sever", 10)
+        bw.BigWigs_Timer("BigWigs_Timer", mod, 1299684, 10, 10, "Sever", 1, 0, nil, false)
+        bw.BigWigs_PauseBar("BigWigs_PauseBar", mod, "Sever")
+        bw.BigWigs_ResumeBar("BigWigs_ResumeBar", mod, "Sever")
+        bw.BigWigs_StopBar("BigWigs_StopBar", mod, "Sever")
+        registered.DBM_TimerBegin("DBM_TimerBegin", "t1", "Sever", 10, nil, "cd", 1299684)
+        registered.DBM_TimerUpdate("DBM_TimerUpdate", "t1", 0, 20)
+        registered.DBM_TimerPause("DBM_TimerPause", "t1")
+        registered.DBM_TimerResume("DBM_TimerResume", "t1")
+        registered.DBM_TimerStop("DBM_TimerStop", "t1")
+    end)
+    issecretvalue = nil
+    advance(12)
+    check(ok, "secret bar arguments raise no error: " .. tostring(err))
+    check(Alerts() == 0, string.format("and schedule nothing, got %d", Alerts()))
+    fire("ENCOUNTER_END", 1234)
+    BigWigsLoader = nil
+    CastAheadBossAdapter.Connect()
+    reset()
+    GetSpecialization, GetSpecializationRole = nil, nil
+    CastAheadDefensives = { spells = {}, alias = {} }
+end
+
 do
     local overwritten = {}
     local env = setmetatable({}, {
@@ -2504,6 +3150,488 @@ do
     setfenv(chunk, env)
     chunk()
     check(#overwritten == 0, "Recorder.lua assigns no existing game global (a taint source for Blizzard code), got " .. table.concat(overwritten, ", "))
+end
+
+do
+    local bags = { [0] = { 5512, 191380 } }
+    local counts, cds, useOf = { [5512] = 3, [191380] = 1 }, { [5512] = { 0, 0 }, [191380] = { 0, 0 } }, { [5512] = 452930, [191380] = 371024 }
+    local saved = { C_Container = C_Container, GetItemCount = C_Item and C_Item.GetItemCount }
+    C_Container = { GetContainerNumSlots = function(b) return bags[b] and #bags[b] or 0 end,
+                    GetContainerItemID = function(b, s) return bags[b] and bags[b][s] end }
+    C_Item = C_Item or {}
+    C_Item.GetItemSpell = function(id) if useOf[id] then return "Use", useOf[id] end end
+    C_Item.GetItemCount = function(id) return counts[id] or 0 end
+    C_Item.GetItemCooldown = function(id) local c = cds[id] or { 0, 0 } return c[1], c[2], true end
+    C_Item.GetItemIconByID = function(id) return 9000 + (id % 1000) end
+    GetSpecialization = function() return 1 end
+    GetSpecializationRole = function() return "DAMAGER" end
+    GetSpecializationInfo = function() return 265 end
+    IsPlayerSpell = function(id) return id == 108416 or id == 104773 end
+    InCombatLockdown = function() return false end
+    CastAheadSaveButtons = { [265] = { small = { 108416, { use = 452930 } }, big = { 104773 }, heal = { { use = 452930 } } } }
+    CastAheadDB = {}
+    CastAheadSaves.ScanBags()
+    local small = CastAheadSaves.Available("small")
+    check(#small == 2 and small[1].kind == "spell" and small[2].kind == "item" and small[2].id == 5512, "spell then healthstone item")
+    advance(1)
+    counts[5512] = 0
+    check(#CastAheadSaves.Available("small") == 1, "an item with count 0 is not available, read live")
+    advance(1)
+    counts[5512] = 3
+    cds[5512] = { now - 10, 60 }
+    check(#CastAheadSaves.Available("heal") == 0, "an item on cooldown is not available")
+    advance(1)
+    cds[5512] = { 0, 0 }
+    local readCooldown = C_Item.GetItemCooldown
+    C_Item.GetItemCooldown = function() return 0, 0, false end
+    check(#CastAheadSaves.Available("heal") == 0, "an item whose cooldown has not started yet is not available")
+    C_Item.GetItemCooldown = readCooldown
+    advance(1)
+    bags[0][3], useOf[7777], counts[7777] = 7777, 452930, 2
+    CastAheadSaves.ScanBags()
+    counts[5512] = 0
+    local heal = CastAheadSaves.Available("heal")
+    check(#heal == 1 and heal[1].id == 7777, "a second item with the same use spell takes over when the first runs out")
+    bags[0][3], counts[5512] = nil, 3
+    CastAheadSaves.ScanBags()
+    advance(1)
+    CastAheadDB.saveButtons = { [265] = { big = { 999, 104773 } } }
+    check(CastAheadSaves.Available("big")[1].id == 104773, "an override skips an unknown spell to the next entry")
+    check(#CastAheadSaves.Available("small") == 2, "a size missing from the override keeps the shipped list")
+    advance(1)
+    CastAheadDB = { saveButtons = { [265] = { small = 108416 } } }
+    CastAheadConfig.Migrate()
+    check(type(CastAheadDB.saveButtons[265].small) == "table" and CastAheadDB.saveButtons[265].small[1] == 108416, "old single-number override migrates to a list")
+    InCombatLockdown = function() return true end
+    bags[0][3] = 191380
+    CastAheadSaves.ScanBags()
+    check(CastAheadSaves.BagsPending(), "no bag scan in combat, marked pending")
+    InCombatLockdown = function() return false end
+    fire("PLAYER_REGEN_ENABLED")
+    check(not CastAheadSaves.BagsPending(), "the pending scan runs after combat")
+    CastAheadDB = {}
+    check(#CastAheadSaves.Icons(CastAheadMatch.ADVICE.SMALL) == 2, "icons follow the available list")
+
+    local same = CastAheadSaves.Available("small")
+    check(CastAheadSaves.Available("small") == same, "Available is memoized within a frame")
+    counts[5512] = 0
+    advance(1)
+    check(#CastAheadSaves.Available("small") == 1, "the next frame reflects a changed item count")
+    counts[5512] = 3
+
+    CastAheadDB = { saveButtons = { [265] = { big = { 999 } } } }
+    CastAheadSaves.Refresh()
+    local big = CastAheadSaves.Available("big")
+    check(#big == 1 and big[1].id == 104773, "an override with nothing available falls back to the shipped list")
+    CastAheadDB.saveButtons[265].big = {}
+    CastAheadSaves.Refresh()
+    check(#CastAheadSaves.Available("big") == 0, "an empty override still disables the size")
+    CastAheadDB.saveButtons[265].heal = { { use = 371024 } }
+    cds[191380] = { now - 10, 60 }
+    CastAheadSaves.Refresh()
+    check(#CastAheadSaves.Available("heal") == 0 and not CastAheadSaves.HealReady(),
+        "an override potion on cooldown gives no heal, the shipped Healthstone does not stand in")
+    cds[191380] = { 0, 0 }
+    counts[191380] = 0
+    CastAheadSaves.Refresh()
+    check(#CastAheadSaves.Available("heal") == 0, "an override potion at count 0 gives no heal either")
+    counts[191380] = 1
+
+    local realInfo = C_Spell.GetSpellInfo
+    C_Spell.GetSpellInfo = function(q)
+        if q == "Unending Resolve" then return { spellID = 104773, name = q } end
+        if q == "Fireball" then return { spellID = 133, name = q } end
+        return realInfo(q)
+    end
+    local Parse = CastAheadSaves.ParseEntry
+    local NOT_FOUND = "Not a spell you know or an item with a use effect"
+    check(Parse("104773") == 104773, "a known spell id parses to the spell")
+    local entry = Parse("5512")
+    check(type(entry) == "table" and entry.use == 452930, "an item id parses to its use spell")
+    entry = Parse("|cffffffff|Hitem:5512::::::::80:::::|h[Healthstone]|h|r")
+    check(type(entry) == "table" and entry.use == 452930, "an item link parses to its use spell")
+    check(Parse(" Unending Resolve ") == 104773, "a known spell name parses to its id")
+    check(Parse("|cff71d5ff|Hspell:104773:0|h[Unending Resolve]|h|r") == 104773, "a spell link parses to the spell")
+    local none, why = Parse("|cff71d5ff|Hspell:133:0|h[Fireball]|h|r")
+    check(none == nil and why == NOT_FOUND, "a link to a spell the character does not know is rejected")
+    local loading = {}
+    C_Item.RequestLoadItemDataByID = function(id) loading[id] = true end
+    none, why = Parse("777777")
+    check(none == nil and why == "Loading item data, try again" and loading[777777], "an uncached item asks the client to load it")
+    C_Item.IsItemDataCachedByID = function() return true end
+    none, why = Parse("777777")
+    check(none == nil and why == NOT_FOUND, "a cached item without a use effect is rejected")
+    C_Item.RequestLoadItemDataByID, C_Item.IsItemDataCachedByID = nil, nil
+    none, why = Parse("Fireball")
+    check(none == nil and why == NOT_FOUND, "a spell name the character does not know is rejected")
+    none, why = Parse("424242")
+    check(none == nil and why == NOT_FOUND, "an unknown number is rejected")
+    none, why = Parse("!!garbage")
+    check(none == nil and why == NOT_FOUND, "garbage is rejected")
+    none, why = Parse("", {})
+    check(none == nil and why == NOT_FOUND, "an empty box is rejected")
+    none, why = Parse("5512", { 108416, { use = 452930 } })
+    check(none == nil and why == "Already in the list", "an item already in the list is rejected")
+    none, why = Parse("108416", { 108416 })
+    check(none == nil and why == "Already in the list", "a spell already in the list is rejected")
+    C_Spell.GetSpellInfo = realInfo
+
+    local refreshes = 0
+    local realRefresh = CastAheadSaves.Refresh
+    CastAheadSaves.Refresh = function() refreshes = refreshes + 1 return realRefresh() end
+    CastAheadDB = {}
+    CastAheadSaves.SetList("heal", { 104773, { use = 452930 } })
+    local heal = CastAheadDB.saveButtons[265].heal
+    check(heal[1] == 104773 and heal[2].use == 452930 and refreshes == 1, "SetList writes the spec's list and refreshes")
+    check(CastAheadSaves.List("heal") == heal, "List reads what SetList wrote")
+    CastAheadSaves.ResetSpec()
+    check(CastAheadDB.saveButtons[265] == nil and refreshes == 2, "ResetSpec clears the spec's lists and refreshes")
+    check(CastAheadSaves.List("heal") == CastAheadSaveButtons[265].heal, "after a reset the shipped list is back")
+    CastAheadSaves.Refresh = realRefresh
+    CastAheadDB = {}
+    CastAheadSaves.Refresh()
+
+    CastAheadDB = { centerText = true }
+    CastAheadSaves.Refresh()
+    reset()
+    enter()
+    local function CenterLine()
+        for i = 1, #allFrames do
+            local f = allFrames[i]
+            if f.shown and type(f.icon) == "table" and type(f.extra) == "table" and type(f.extra[1]) == "table" and f.timeValue then return f end
+        end
+    end
+    CastAheadSaves.Schedule("test:icons", 100, now + 1, now + 6, CastAheadMatch.ADVICE.SMALL)
+    advance(1.5)
+    local line = CenterLine()
+    check(line and line.icon.textureValue == 2002 and line.extra[1].textureValue == 9512 and line.extra[1].shown and not line.extra[2].shown,
+        "a small save shows the spell, then the item, no third icon")
+    CastAheadSaves.Cancel("test:icons")
+    CastAheadSaves.Schedule("test:icons2", 100, now + 0.1, now + 5, CastAheadMatch.ADVICE.AOE)
+    advance(1)
+    line = CenterLine()
+    check(line and not line.extra[1].shown and not line.extra[2].shown, "a non-save call shows no extras")
+    CastAheadSaves.Cancel("test:icons2")
+    CastAheadSaveButtons[265].small = { 108416, 104773, { use = 452930 } }
+    CastAheadSaves.Refresh()
+    CastAheadSaves.Schedule("test:icons3", 100, now + 0.1, now + 5, CastAheadMatch.ADVICE.SMALL)
+    advance(1)
+    line = CenterLine()
+    check(line and line.icon.textureValue == 2002 and line.extra[1].textureValue == 2001
+        and line.extra[2].shown and line.extra[2].textureValue == 9512, "three ready buttons fill all three icons")
+    CastAheadSaves.Cancel("test:icons3")
+    CastAheadSaveButtons[265].small = { 108416, { use = 452930 } }
+    CastAheadSaves.Refresh()
+    reset()
+
+    CastAheadDB = { centerText = true, leadSeconds = 0 }
+    CastAheadDefensives = { spells = { [100] = { DAMAGER = "SMALL", lead = 4.0 } }, alias = {} }
+    CastAheadCore.ReapplyData()
+    enter()
+    castFor(3.0)
+    advance(15.0)
+    advance(1.5)
+    advance(3.0)
+    fire("UNIT_SPELLCAST_START", unit)
+    advance(1.0)
+    line = CenterLine()
+    check(line and line.icon.textureValue == 2002 and line.extra[1].shown and line.extra[1].textureValue == 9512
+        and not line.extra[2].shown, "a live small-save cast shows the spell and the item in the centre")
+    advance(2.0)
+    fire("UNIT_SPELLCAST_STOP", unit)
+    reset()
+
+    local heard = {}
+    local realPlay = PlaySoundFile
+    PlaySoundFile = function(path) heard[#heard + 1] = path return realPlay(path) end
+    local function Heals()
+        local n = 0
+        for _, p in ipairs(heard) do if p:match("\\HEAL%.ogg$") then n = n + 1 end end
+        return n
+    end
+    local function LastBig()
+        local at = 0
+        for i, p in ipairs(heard) do if p:match("\\BIG") then at = i end end
+        return at
+    end
+    CastAheadDefensives = { spells = { [100] = { DAMAGER = "BIG", lead = 4.0 } }, alias = {} }
+    CastAheadDB = { centerText = true, leadSeconds = 0 }
+    CastAheadCore.ReapplyData()
+    local function HealLine()
+        local l = CenterLine()
+        return l and l.timeValue:match("^Heal up") and l
+    end
+    local centreSaid
+    local function BigCast(kick, lockKick)
+        reset()
+        enter()
+        castFor(3.0)
+        wipe(heard)
+        advance(15.0)
+        advance(1.5)
+        advance(3.0)
+        fire("UNIT_SPELLCAST_START", unit)
+        if lockKick then fire("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", unit) end
+        advance(1.0)
+        centreSaid = CenterLine() and CenterLine().timeValue
+        if kick then fire("UNIT_SPELLCAST_INTERRUPTED", unit) end
+        advance(2.0)
+        fire("UNIT_SPELLCAST_STOP", unit)
+        advance(0.1)
+    end
+    CastAheadConfig.Set("healCalls", nil)
+    BigCast(false)
+    check(LastBig() > 0 and Heals() == 0, "heal up is off by default")
+    CastAheadConfig.Set("smallCalls", false)
+    BigCast(false)
+    check(LastBig() > 0, "switching small calls off keeps big calls")
+    CastAheadConfig.Set("smallCalls", nil)
+    CastAheadConfig.Set("bigCalls", false)
+    BigCast(false)
+    check(LastBig() == 0, "switching big calls off silences them")
+    CastAheadConfig.Set("bigCalls", nil)
+    CastAheadConfig.Set("healCalls", true)
+    BigCast(false)
+    check(Heals() == 1 and LastBig() > 0 and LastBig() < #heard and (heard[#heard] or ""):match("\\HEAL%.ogg$"),
+        "a completed big-save cast calls heal up once, after the big call: " .. table.concat(heard, ","))
+    line = HealLine()
+    check(line and line.icon.textureValue == 9512, "the heal call shows the healthstone in the centre")
+    cds[5512] = { now, 60 }
+    advance(0.5)
+    check(not HealLine(), "the heal line leaves once the healthstone goes on cooldown")
+    cds[5512] = { 0, 0 }
+    advance(3.0)
+    check(not HealLine(), "the heal line leaves after its seconds")
+    BigCast(true)
+    check(LastBig() > 0 and Heals() == 0, "a kicked big-save cast calls no heal")
+    counts[5512] = 0
+    BigCast(false)
+    check(LastBig() > 0 and Heals() == 0, "no heal call without a ready heal item")
+    counts[5512] = 3
+    CastAheadConfig.SetEnabled("healCalls", false)
+    BigCast(false)
+    check(LastBig() > 0 and Heals() == 0, "healCalls off silences the heal call")
+    CastAheadConfig.Set("healCalls", true)
+
+    reset()
+    enter()
+    wipe(heard)
+    castFor(3.0)
+    advance(0.1)
+    local last = CastAheadCore.LastCandidates(unit)
+    check(last and #last == 1 and last[1].spell == 100 and LastBig() == 0 and Heals() == 0,
+        "a cast unidentified at its start that resolves to the big hit at its stop calls no heal: " .. table.concat(heard, ","))
+
+    CastAheadPriority[100] = "KICK"
+    CastAheadCore.ReapplyData()
+    BigCast(false, true)
+    check(centreSaid and centreSaid:match("^Big defensive") and Heals() == 1,
+        "a kickable cast the game locked shows big save and heals on completion: " .. tostring(centreSaid))
+    BigCast(false)
+    check(centreSaid and centreSaid:match("^Interrupt") and Heals() == 0,
+        "the same cast left kickable calls interrupt and no heal: " .. tostring(centreSaid))
+    CastAheadPriority[100] = "AOE"
+    CastAheadCore.ReapplyData()
+    CastAheadConfig.Set("healCalls", true)
+    CastAheadConfig.SetEnabled("saveCalls", false)
+    BigCast(false)
+    check(Heals() == 0 and LastBig() == 0, "saveCalls off silences big and heal")
+    CastAheadConfig.SetEnabled("saveCalls", true)
+    reset()
+
+    enter()
+    wipe(heard)
+    CastAheadSaves.Schedule("test:heal1", 100, now + 1, now + 3, CastAheadMatch.ADVICE.BIG)
+    advance(1.5)
+    check(LastBig() == 1 and Heals() == 0, "a boss big call fires at its time, no heal yet")
+    advance(2.0)
+    check(Heals() == 1 and (heard[#heard] or ""):match("\\HEAL%.ogg$"), "the boss hit lands: heal up once")
+    check(HealLine(), "the boss heal call shows its centre line")
+    advance(2.0)
+    check(Heals() == 1, "only once")
+    wipe(heard)
+    CastAheadSaves.Schedule("test:heal2", 100, now + 1, now + 3, CastAheadMatch.ADVICE.SMALL)
+    advance(1.5)
+    advance(2.0)
+    check(Heals() == 0, "a small boss call gives no heal")
+    CastAheadSaves.Schedule("test:heal3", 100, now + 1, now + 3, CastAheadMatch.ADVICE.BIG)
+    advance(1.5)
+    CastAheadSaves.Cancel("test:heal3")
+    advance(2.0)
+    check(Heals() == 0, "a cancelled boss bar gives no heal")
+    reset()
+    PlaySoundFile = realPlay
+
+    CastAheadDefensives = { spells = {}, alias = {} }
+    CastAheadCore.ReapplyData()
+    C_Container, C_Item.GetItemCount = saved.C_Container, saved.GetItemCount
+    C_Item.GetItemSpell, C_Item.GetItemCooldown, C_Item.GetItemIconByID = nil, nil, nil
+    GetSpecialization, GetSpecializationRole, GetSpecializationInfo, IsPlayerSpell, InCombatLockdown = nil, nil, nil, nil, nil
+    CastAheadSaveButtons = {}
+    CastAheadDB = {}
+end
+
+do
+    local bags = { [0] = { 5512, 5509, 262000 } }
+    local useOf = { [5512] = 452930, [5509] = 6262, [262000] = 1295247 }
+    local saved = { C_Container = C_Container, spec = nil, build = C_Spell.GetSpellCooldownDuration }
+    C_Container = { GetContainerNumSlots = function(b) return bags[b] and #bags[b] or 0 end,
+                    GetContainerItemID = function(b, s) return bags[b] and bags[b][s] end }
+    C_Item = C_Item or {}
+    C_Item.GetItemSpell = function(id) if useOf[id] then return "Use", useOf[id] end end
+    C_Item.GetItemCount = function() return 1 end
+    C_Item.GetItemCooldown = function() return 0, 0, true end
+    C_Item.GetItemIconByID = function(id) return 9000 + (id % 1000) end
+    GetSpecialization = function() return 1 end
+    GetSpecializationRole = function() return "DAMAGER" end
+    local specID = 265
+    GetSpecializationInfo = function() return specID end
+    IsPlayerSpell = function(id) return id == 108416 or id == 104773 end
+    InCombatLockdown = function() return false end
+    local savedButtons, savedDB = CastAheadSaveButtons, CastAheadDB
+    CastAheadSaveButtons = {}
+    assert(loadfile("SaveButtons.lua"))()
+    CastAheadDB = {}
+    CastAheadSaves.ScanBags()
+
+    local cd, secret = true, false
+    local obj = { HasSecretValues = function() return secret end, IsZero = function() return not cd end }
+    local ignoreGCD
+    C_Spell.GetSpellCooldownDuration = function(_, ignore) ignoreGCD = ignore return obj end
+    local textureSaved = C_Spell.GetSpellTexture
+    C_Spell.GetSpellTexture = function(id) return id == 108416 and 7001 or textures[id] end
+
+    check(#CastAheadSaves.Available("small") == 0, "Dark Pact on cooldown: stones and potions do not stand in for a small save")
+    check(ignoreGCD == true, "the cooldown query ignores the global cooldown")
+    local heal = CastAheadSaves.Available("heal")
+    check(#heal == 3 and heal[1].id == 5512 and heal[2].id == 262000 and heal[3].id == 5509,
+        "stones and the health potion sit in the heal list, most pressed first")
+
+    advance(1)
+    secret = true
+    check(CastAheadSaves.Available("small")[1].id == 108416, "a secret cooldown object leaves Dark Pact first")
+
+    advance(1)
+    secret = false
+    cd = false
+    local icons = CastAheadSaves.Icons(CastAheadMatch.ADVICE.SMALL)
+    check(#icons == 1 and icons[1] == 7001, "small icons: Dark Pact only")
+
+    advance(1)
+    CastAheadDB.saveButtons = { [265] = { heal = { 108416 } } }
+    CastAheadSaves.Refresh()
+    cd = true
+    check(#CastAheadSaves.Available("heal") == 0, "every known spell on cooldown: empty, not the shipped list")
+    CastAheadDB.saveButtons = nil
+    CastAheadSaves.Refresh()
+    advance(1)
+    C_Spell.GetSpellCooldownDuration = nil
+    cd = true
+    check(CastAheadSaves.Available("small")[1].id == 108416, "missing cooldown API leaves the list unchanged")
+
+    advance(1)
+    specID = 65
+    IsPlayerSpell = function() return false end
+    bags[0] = { 5509 }
+    CastAheadSaves.ScanBags()
+    advance(1)
+    local heal = CastAheadSaves.Available("heal")
+    check(#heal == 1 and heal[1].id == 5509, "paladin heal list resolves the regular Healthstone")
+
+    C_Container, C_Spell.GetSpellCooldownDuration, C_Spell.GetSpellTexture = saved.C_Container, saved.build, textureSaved
+    C_Item.GetItemSpell, C_Item.GetItemCount, C_Item.GetItemCooldown, C_Item.GetItemIconByID = nil, nil, nil, nil
+    GetSpecialization, GetSpecializationRole, GetSpecializationInfo, IsPlayerSpell, InCombatLockdown = nil, nil, nil, nil, nil
+    CastAheadSaveButtons, CastAheadDB = savedButtons, savedDB
+    CastAheadSaves.ScanBags()
+end
+
+do
+    local savedButtons, savedDB = CastAheadSaveButtons, CastAheadDB
+    CastAheadSaveButtons = {}
+    assert(loadfile("SaveButtons.lua"))()
+    local S = CastAheadSaves
+
+    local cat = S.Catalogue(66)
+    local seen, spells, items = {}, {}, 0
+    for _, e in ipairs(cat) do
+        local key = type(e) == "table" and "use" .. e.use or e
+        check(not seen[key], "catalogue lists " .. key .. " once")
+        seen[key] = true
+        if type(e) == "number" then spells[e] = true else items = items + 1 end
+    end
+    for _, id in ipairs({ 498, 31850, 389539, 403876, 642, 1022, 86659, 633, 85673 }) do
+        check(spells[id], "paladin catalogue has " .. id)
+    end
+    check(#cat == 13 and items == 4 and cat[1] == 498, "paladin catalogue: 9 paladin spells and 4 items, in first-seen order")
+    check(not (spells[108416] or spells[104773] or spells[6789] or spells[198589] or spells[203720]),
+        "paladin catalogue has no warlock or demon hunter spells")
+    check(#S.Catalogue(9999) == 0 and #S.Catalogue(nil) == 0, "an unsupported spec has an empty catalogue")
+    local shippedSpecs = 0
+    for _ in pairs(CastAheadSaveButtons) do shippedSpecs = shippedSpecs + 1 end
+    check(shippedSpecs == 40, "every one of the 40 specs ships lists, got " .. shippedSpecs)
+    for spec in pairs(CastAheadSaveButtons) do
+        check(#S.Catalogue(spec) > 0, "shipped spec " .. spec .. " has a class catalogue")
+    end
+
+    GetSpecialization = function() return 1 end
+    GetSpecializationInfo = function() return 265 end
+    IsPlayerSpell = function(id) return id == 108416 or id == 104773 end
+    local refreshes = 0
+    local realRefresh = S.Refresh
+    S.Refresh = function() refreshes = refreshes + 1 return realRefresh() end
+
+    CastAheadDB = { saveButtons = { [265] = { small = { 108416, { use = 452930 }, 6789 }, big = { 104773 } } } }
+    S.MoveEntry("small", 2, "big")
+    local o = CastAheadDB.saveButtons[265]
+    check(#o.small == 2 and o.small[1] == 108416 and o.small[2] == 6789, "a moved entry leaves its list")
+    check(#o.big == 2 and o.big[2].use == 452930 and refreshes == 1, "a moved entry is appended to the target, one refresh")
+    o.small = { 104773, 108416 }
+    S.MoveEntry("small", 1, "big")
+    check(#o.small == 1 and o.small[1] == 108416 and #o.big == 2, "moving an entry the target already has only removes it")
+
+    CastAheadDB = {}
+    local shippedSmall = #CastAheadSaveButtons[265].small
+    S.MoveEntry("small", 1, "heal")
+    check(#CastAheadSaveButtons[265].small == shippedSmall and CastAheadDB.saveButtons[265].heal[#CastAheadDB.saveButtons[265].heal] == 108416,
+        "moving out of a shipped list copies it, the shipped table stays")
+
+    CastAheadDB = { saveButtons = { [265] = { small = { 108416, 6789, 104773 } } } }
+    refreshes = 0
+    S.Shift("small", 2, -1)
+    local small = CastAheadDB.saveButtons[265].small
+    check(small[1] == 6789 and small[2] == 108416 and small[3] == 104773 and refreshes == 1, "Shift up swaps with the entry above, one refresh")
+    S.Shift("small", 1, -1)
+    S.Shift("small", 3, 1)
+    check(small[1] == 6789 and small[3] == 104773 and refreshes == 1, "Shift past either end does nothing")
+    CastAheadDB = {}
+    local shippedFirst = CastAheadSaveButtons[265].heal[1]
+    S.Shift("heal", 1, 1)
+    check(CastAheadSaveButtons[265].heal[1] == shippedFirst and CastAheadDB.saveButtons[265].heal[2] == shippedFirst,
+        "Shift on a shipped list writes a copy, the shipped table stays")
+
+    CastAheadDB = { saveButtons = { [265] = { big = {} } } }
+    local add = S.Addable("big")
+    local addSeen = {}
+    for _, e in ipairs(add) do addSeen[type(e) == "table" and "use" .. e.use or e] = true end
+    check(addSeen[104773] and addSeen[108416] and addSeen.use452930 and not addSeen[6789],
+        "Addable lists known class spells and items, not unknown spells")
+    CastAheadDB.saveButtons[265].big = { 104773, { use = 452930 } }
+    add = S.Addable("big")
+    addSeen = {}
+    for _, e in ipairs(add) do addSeen[type(e) == "table" and "use" .. e.use or e] = true end
+    check(not addSeen[104773] and not addSeen.use452930 and addSeen.use6262, "Addable skips what the list already holds")
+
+    local dialog = StaticPopupDialogs.CASTAHEAD_RESET_SAVES
+    check(dialog and dialog.hideOnEscape and dialog.timeout == 0 and type(dialog.OnAccept) == "function",
+        "the reset confirmation is registered")
+    CastAheadDB = { saveButtons = { [265] = { big = {} } } }
+    if dialog then dialog.OnAccept() end
+    check(CastAheadDB.saveButtons[265] == nil, "accepting the reset clears the spec's lists")
+
+    S.Refresh = realRefresh
+    GetSpecialization, GetSpecializationInfo, IsPlayerSpell = nil, nil, nil
+    CastAheadSaveButtons, CastAheadDB = savedButtons, savedDB
+    S.Refresh()
 end
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))

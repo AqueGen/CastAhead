@@ -95,8 +95,10 @@ local function MergeCuration()
         end
         local learned = CastAheadDB and CastAheadDB.dispel
         for i = 1, #rows do
-            rows[i].prio = CastAheadPriority and CastAheadPriority[rows[i].spell] or nil
-            rows[i].dispel = learned and learned[rows[i].spell] or nil
+            local spell = rows[i].spell
+            rows[i].prio = CastAheadPriority and CastAheadPriority[spell] or nil
+            rows[i].dispel = learned and learned[spell] or nil
+            rows[i].save = CastAheadMatch.SaveRow(spell)
         end
     end
 end
@@ -238,6 +240,9 @@ local ADVICE_SOUND = {           -- keyed by CastAheadMatch.ADVICE key
     BLEED = "ALARM_CLOCK_WARNING_3",
     SWITCH = "RAID_WARNING",
     ALERT = "RAID_WARNING",
+    SMALL = "ALARM_CLOCK_WARNING_2",
+    BIG = "RAID_WARNING",
+    HEAL = "ALARM_CLOCK_WARNING_1",
 }
 
 -- Default on: only casts in the curated priority set matter enough for icons,
@@ -278,6 +283,17 @@ end
 -- spec can act on. Off, or outside the game, every curated cast counts.
 CastAheadMatch.PlayerRole = function()
     if not CastAheadConfig.Enabled("roleFilter") then return nil end
+    if not (GetSpecialization and GetSpecializationRole) then return nil end
+    local spec = GetSpecialization()
+    return spec and GetSpecializationRole(spec) or nil
+end
+
+CastAheadMatch.SizeOn = function(key)
+    return CastAheadConfig.Enabled(key == "SMALL" and "smallCalls" or "bigCalls")
+end
+
+CastAheadMatch.SpecRole = function()
+    if not CastAheadConfig.Enabled("saveCalls") then return nil end
     if not (GetSpecialization and GetSpecializationRole) then return nil end
     local spec = GetSpecialization()
     return spec and GetSpecializationRole(spec) or nil
@@ -482,7 +498,7 @@ local function PlayAdviceSound(advice, lead, candidates)
     if not CastAheadConfig.Enabled("sound") then return end
     -- The heads-up is a number of seconds now; 0 means the player does not
     -- want it at all.
-    if lead and CastAheadConfig.Lead() <= 0 then return end
+    if lead and CastAheadConfig.Lead() <= 0 and not CastAheadMatch.IsSave(advice) then return end
     Alert(advice, lead, candidates, CastAheadConfig.Enabled("voice"))
 end
 
@@ -2112,6 +2128,9 @@ end
 local function StopCast(unit, channel)
     local state = plates[unit]
     local open = state and state.castStartAt
+    local casting = state and state.casting
+    local calledBig = casting and Announceable(casting.candidates)
+        and CastAheadMatch.ConsensusAdvice(casting.candidates, state.interruptible) == CastAheadMatch.ADVICE.BIG
     OnCastStop(unit, channel)
     state = plates[unit]
     if open and state and not state.castStartAt and state.lastMeasured then
@@ -2119,6 +2138,10 @@ local function StopCast(unit, channel)
         local advice = final and Announceable(final) and CastAheadMatch.ConsensusAdvice(final)
         Record("STOP", unit, channel and 1 or 0, math.floor(state.lastMeasured * 1000 + 0.5),
             Ids(final), advice and advice.key or "-")
+        if calledBig and CastAheadSaves and CastAheadSaves.HealReady() then
+            PlayAdviceSound(CastAheadMatch.ADVICE.HEAL)
+            CastAheadSaves.Flash(CastAheadMatch.ADVICE.HEAL, GetTime(), 3)
+        end
     end
 end
 
@@ -2137,15 +2160,30 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         -- dispels the character knows.
         if event == "SPELLS_CHANGED" or unit == "player" then
             InvalidateCapabilities()
+            if CastAheadSaves then CastAheadSaves.Refresh() end
+            if CastAheadOptions and CastAheadOptions.RefreshDefensives then CastAheadOptions.RefreshDefensives() end
+            if CastAheadUI and CastAheadUI.RefreshSaves then CastAheadUI.RefreshSaves() end
             if CastAheadCore then CastAheadCore.Reapply() end
         end
         return
+    end
+    if event == "PLAYER_REGEN_ENABLED" or event == "CHALLENGE_MODE_COMPLETED" or event == "ENCOUNTER_END" then
+        if CastAheadSaves and CastAheadSaves.AuraPending() then CastAheadSaves.Refresh() end
+    end
+    if CastAheadSaves and (event == "BAG_UPDATE_DELAYED" or event == "PLAYER_ENTERING_WORLD"
+        or (event == "PLAYER_REGEN_ENABLED" and CastAheadSaves.BagsPending())) then
+        CastAheadSaves.ScanBags()
+        if CastAheadOptions and CastAheadOptions.RefreshDefensives then CastAheadOptions.RefreshDefensives() end
     end
     if event == "ADDON_LOADED" then
         if unit == "CastAhead" then
             CastAheadConfig.AdoptOldName()
             CastAheadConfig.Migrate()
         end
+        return
+    end
+    if event == "PLAYER_LOGIN" then
+        if CastAheadBossAdapter then CastAheadBossAdapter.Connect() end
         return
     end
     if event == "PLAYER_ENTERING_WORLD" then
@@ -2155,6 +2193,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
             if CastAheadRecorder.Enabled() and IsInInstance() then CastAheadRecorder.EnsureKey() end
         end
         if CastAheadReport then CastAheadReport.Refresh() end
+        if CastAheadSaves then CastAheadSaves.Refresh() end
         CastAheadCore.SyncCombatLog()
         wipe(seenAuras)
         wipe(recentCasts)
@@ -2210,6 +2249,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     end
     if event == "ENCOUNTER_START" or event == "ENCOUNTER_END" then
         inEncounter = event == "ENCOUNTER_START"
+        if CastAheadBossAdapter then CastAheadBossAdapter.OnEncounter(event) end
         if inEncounter then
             -- Everything on screen belongs to the pull that just ended; the
             -- centre call clears itself once no plate is casting.
@@ -2351,6 +2391,15 @@ local function CenterFrame()
         -- left edge, so the pair stays centred whatever the words' length.
         line.text:SetPoint("CENTER", line, "CENTER", 25, 0)
         line.icon:SetPoint("RIGHT", line.text, "LEFT", -10, 0)
+        line.extra = {}
+        for k = 1, 2 do
+            local x = line:CreateTexture(nil, "ARTWORK")
+            x:SetSize(20, 20)
+            x:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            x:SetPoint("LEFT", k == 1 and line.icon or line.extra[k - 1], "RIGHT", 4, 0)
+            x:Hide()
+            line.extra[k] = x
+        end
         line.text:SetShadowColor(0, 0, 0, 1)
         line.text:SetShadowOffset(2, -2)
         line:Hide()
@@ -2426,6 +2475,8 @@ local function ToggleMoveCenter()
         PlaceCenter(f)
         local line = f.lines[1]
         line.icon:SetTexture(136243)
+        line.icon:SetPoint("RIGHT", line.text, "LEFT", -10, 0)
+        for k = 1, 2 do line.extra[k]:Hide() end
         line.text:SetText("Tank buster  4.0")
         line.text:SetTextColor(1, 0.45, 0.10)
         line:Show()
@@ -2445,12 +2496,19 @@ end
 local centerPicks = {}
 local function CenterPick(now)
     for i = #centerPicks, 1, -1 do centerPicks[i] = nil end
-    for _, state in pairs(plates) do
+    for unit, state in pairs(plates) do
         local c = state.casting
         if c and c.endAt and c.endAt > now and Announceable(c.candidates) then
             local advice = CastAheadMatch.ConsensusAdvice(c.candidates, state.interruptible)
             if advice then
-                centerPicks[#centerPicks + 1] = { endAt = c.endAt, advice = advice, row = c.row }
+                centerPicks[#centerPicks + 1] = { endAt = c.endAt, advice = advice, row = c.row,
+                                                  icons = CastAheadSaves and CastAheadSaves.Icons(advice) or nil }
+                local save = advice == CastAheadMatch.ADVICE.TARGET and CastAheadSaves and c.candidates[1]
+                    and CastAheadMatch.SaveAdvice(c.candidates[1])
+                if save then
+                    centerPicks[#centerPicks + 1] = { endAt = c.endAt, advice = save, row = c.row,
+                                                      icons = CastAheadSaves.Icons(save), onlyIfTarget = unit }
+                end
             else
                 -- Disagreement is still a cast going out: show both answers
                 -- and let the player pick. Nothing is spoken for these.
@@ -2473,6 +2531,9 @@ local function CenterPick(now)
                 end
             end
         end
+    end
+    if CastAheadSaves and CastAheadConfig.Enabled("saveCalls") then
+        for _, pick in ipairs(CastAheadSaves.Pending(now)) do centerPicks[#centerPicks + 1] = pick end
     end
     table.sort(centerPicks, function(a, b) return a.endAt < b.endAt end)
     return centerPicks
@@ -2498,11 +2559,32 @@ local function UpdateCenter(now)
     for i = 1, CENTER_LINES do
         local line, pick = f.lines[i], picks[i]
         if pick then
-            line.icon:SetTexture(SpellIcon(pick.row.spell))
+            local icons = pick.icons
+            line.icon:SetTexture(icons and icons[1] or SpellIcon(pick.row.spell))
+            local shownExtras = icons and math.min(math.max(#icons - 1, 0), 2) or 0
+            line.icon:SetPoint("RIGHT", line.text, "LEFT", -(10 + 24 * shownExtras), 0)
+            for k = 1, 2 do
+                local x = line.extra[k]
+                if k <= shownExtras then
+                    x:SetTexture(icons[k + 1])
+                    x:Show()
+                else
+                    x:Hide()
+                end
+            end
             -- "Tank buster 4.0": the response in words, not the category code.
             local say = pick.advice.say
             line.text:SetFormattedText("%s  %.1f", say:sub(1, 1):upper() .. say:sub(2), pick.endAt - now)
             line.text:SetTextColor(pick.advice.r, pick.advice.g, pick.advice.b)
+            local ok, mine
+            if pick.onlyIfTarget and PlayerIsSpellTarget and line.SetAlphaFromBoolean then
+                ok, mine = pcall(PlayerIsSpellTarget, pick.onlyIfTarget)
+            end
+            if ok then
+                line:SetAlphaFromBoolean(mine, 1, 0)
+            else
+                line:SetAlpha(pick.onlyIfTarget and 0 or 1)
+            end
             line:Show()
         else
             line:Hide()
@@ -2514,6 +2596,8 @@ end
 frame:SetScript("OnUpdate", function()
     if not dungeon then return end
     local now = GetTime()
+    if CastAheadSaves and CastAheadConfig.Enabled("saveCalls") then CastAheadSaves.Tick(now) end
+    if CastAheadBossAdapter then CastAheadBossAdapter.Tick(now) end
     UpdateCenter(now)
     if now >= pollAt then
         pollAt = now + COMBAT_POLL_INTERVAL
@@ -2560,14 +2644,21 @@ frame:SetScript("OnUpdate", function()
                         -- Heads-up shortly before a predicted cast, once each.
                         -- Not for a cast already going out: its own alert
                         -- fired at START, and "soon" is wrong for it anyway.
-                        local lead = CastAheadConfig.Lead()
-                        if lead > 0 and remaining <= lead and not entry.casting
-                            and entry.track and not entry.track.warned then
-                            entry.track.warned = true
-                            local heads = CastAheadMatch.ConsensusAdvice(entry.candidates)
-                            Record("HEADS", unit, heads and heads.key or "-", Ids(entry.candidates))
-                            PlayAdviceSound(
-                                CastAheadMatch.ConsensusAdvice(entry.candidates), true, entry.candidates)
+                        if not entry.casting and entry.track and not entry.track.warned then
+                            local lead = CastAheadConfig.Lead()
+                            local first = entry.candidates and entry.candidates[1]
+                            local saveLead = CastAheadSaves and CastAheadConfig.Enabled("saveCalls")
+                                and first and first.save and CastAheadConfig.SaveLead() or 0
+                            local window = math.max(lead, saveLead)
+                            if window > 0 and remaining <= window then
+                                local heads = CastAheadMatch.ConsensusAdvice(entry.candidates)
+                                local isSave = CastAheadSaves and CastAheadMatch.IsSave(heads)
+                                if isSave and remaining <= saveLead or not isSave and remaining <= lead then
+                                    entry.track.warned = true
+                                    Record("HEADS", unit, heads and heads.key or "-", Ids(entry.candidates))
+                                    PlayAdviceSound(heads, true, entry.candidates)
+                                end
+                            end
                         end
                         -- Tenths only in the last few seconds, where they
                         -- matter; whole numbers stay readable at a glance.
@@ -2604,9 +2695,9 @@ persist:SetScript("OnEvent", function()
 end)
 
 for _, event in ipairs({
-    "ADDON_LOADED", "PLAYER_ENTERING_WORLD", "PLAYER_SPECIALIZATION_CHANGED", "SPELLS_CHANGED",
+    "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "PLAYER_SPECIALIZATION_CHANGED", "SPELLS_CHANGED",
     "ENCOUNTER_START", "ENCOUNTER_END", "CHALLENGE_MODE_START", "CHALLENGE_MODE_COMPLETED",
-    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
+    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "BAG_UPDATE_DELAYED",
     "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH",
     "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP",
     "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",
@@ -2630,6 +2721,8 @@ end
 -- the dungeon table load, are plates being tracked, what level did we read, and
 -- how far identification got on each one.
 CastAheadCore = {}
+CastAheadCore.Announce = PlayAdviceSound
+CastAheadCore.ReapplyData = function() extrasMerged = false; MergeCuration() end
 CastAheadCore.LastCandidates = LastCandidates   -- replay harness only
 CastAheadCore.Tracks = function(unit) return plates[unit] and plates[unit].tracks end
 CastAheadCore.Casting = function(unit) return plates[unit] and plates[unit].casting end

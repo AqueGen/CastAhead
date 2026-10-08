@@ -29,3 +29,7 @@ mdt.json
 overrides.json
 
 __pycache__/
+
+# Working notes: design specs, plans and agent scratch stay out of the repo.
+docs/superpowers/
+.superpowers/

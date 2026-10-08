@@ -22,9 +22,14 @@ Libs\LibSharedMedia-3.0\lib.xml
 Config.lua
 Data.lua
 Priority.lua
+SaveButtons.lua
+Defensives.lua
+BossCadence.lua
 Traits.lua
 Packs.lua
 Match.lua
+Saves.lua
+BossAdapter.lua
 Timeline.lua
 Core.lua
 Recorder.lua

@@ -25,11 +25,15 @@ local selectedInstanceID, sortKey, sortDescending, searchText
 -- The window is a book: the casts page (dungeon list, search, table) and one
 -- page per settings group, built by Options.lua into `settingsHost`.
 local castsPage, settingsHost, tabButtons, testButton, listButton
+local savesPage, dungeonList, saveRows, saveParent
 -- Forward declaration: RefreshTabs falls back to another page when the
 -- Development tab is switched off, and it is defined above ShowTab.
 local ShowTab
 local currentTab = "Casts"
 local CASTS_TAB = "Casts"
+local SAVES_TAB = "Saves"
+local GUIDE_TAB = "Guide"
+local guidePage, guideText
 -- Declared here because ShowTab, defined above BuildWindow, calls it.
 local BuildWindow
 
@@ -197,10 +201,41 @@ local COLUMNS = {
       sort = function(e) return SpellSound(e) or "" end },
 }
 
-local function ColumnOffset(index)
+local MAX_SAVE_ICONS = 5
+local TRIGGER_WORDS = { { "cast", "cast" }, { "bar", "boss bar" }, { "debuff", "debuff" } }
+
+local SAVE_COLUMNS = {
+    { key = "size", header = "Save", width = 50,
+      text = function(s)
+          local advice = CastAheadMatch.ADVICE[s.size]
+          return string.format("|cff%02x%02x%02x%s|r", advice.r * 255, advice.g * 255, advice.b * 255, advice.short)
+      end },
+    { key = "buttons", header = "Buttons", width = MAX_SAVE_ICONS * 18 },
+    { key = "name", header = "Hit", width = 160, text = function(s) return s.name end },
+    { key = "mob", header = "Mob", width = 150,
+      text = function(s) return "|cff9999ff" .. (s.mob or "?") .. "|r" end },
+    { key = "trigger", header = "Heard by", width = 130,
+      text = function(s)
+          local words = {}
+          for _, w in ipairs(TRIGGER_WORDS) do
+              if s.trigger[w[1]] then words[#words + 1] = w[2] end
+          end
+          return #words > 0 and table.concat(words, ", ") or "|cff777777not heard|r"
+      end },
+    { key = "lead", header = "Lead", width = 44, justify = "RIGHT",
+      text = function(s) return s.lead and string.format("%.1fs", s.lead) or "-" end },
+    { key = "wins", header = "", width = 110,
+      text = function(s)
+          local advice = s.wins and CastAheadMatch.ADVICE[s.wins]
+          return advice and ("|cff777777says|r " .. advice.label) or ""
+      end },
+}
+
+local function ColumnOffset(index, columns)
+    columns = columns or COLUMNS
     local x = 0
     for i = 1, index - 1 do
-        x = x + COLUMNS[i].width + COLUMN_GAP
+        x = x + columns[i].width + COLUMN_GAP
     end
     return x
 end
@@ -458,15 +493,18 @@ end
 
 -- Refresh ------------------------------------------------------------------
 
-function Refresh()
-    if not window or not window:IsShown() then return end
-    local list = SortedRows()
-
+local function PaintDungeons()
     for i = 1, #dungeonButtons do
         local button = dungeonButtons[i]
         local selected = button.instanceID == selectedInstanceID
         button.text:SetTextColor(selected and 1 or 0.8, selected and 0.82 or 0.8, selected and 0 or 0.8)
     end
+end
+
+function Refresh()
+    if not window or not window:IsShown() then return end
+    local list = SortedRows()
+    PaintDungeons()
 
     for i = 1, #headers do
         local column = COLUMNS[i]
@@ -535,6 +573,114 @@ function Refresh()
     window.summary:SetText(summary)
 end
 
+local function CreateSaveRow(parent, index)
+    local row = CreateFrame("Button", nil, parent)
+    row:SetSize(ColumnOffset(#SAVE_COLUMNS + 1, SAVE_COLUMNS), ROW_HEIGHT)
+    row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -(index - 1) * ROW_HEIGHT)
+    row.cells, row.icons = {}, {}
+    for i, column in ipairs(SAVE_COLUMNS) do
+        local x = ColumnOffset(i, SAVE_COLUMNS)
+        if column.key == "buttons" then
+            for j = 1, MAX_SAVE_ICONS do
+                local icon = row:CreateTexture(nil, "ARTWORK")
+                icon:SetSize(16, 16)
+                icon:SetPoint("LEFT", row, "LEFT", x + (j - 1) * 18, 0)
+                icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+                row.icons[j] = icon
+            end
+        else
+            local text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            text:SetPoint("LEFT", row, "LEFT", x, 0)
+            text:SetWidth(column.width)
+            text:SetJustifyH(column.justify or "LEFT")
+            text:SetWordWrap(false)
+            row.cells[column.key] = text
+        end
+    end
+    row.group = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    row.group:SetPoint("LEFT", row, "LEFT", 0, 0)
+    row:SetScript("OnEnter", function(self)
+        if not self.save then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetSpellByID(self.save.id)
+        GameTooltip:Show()
+    end)
+    row:SetScript("OnLeave", GameTooltip_Hide)
+    return row
+end
+
+local ROLE_NAMES = { DAMAGER = "Damage", HEALER = "Healer", TANK = "Tank" }
+
+local function RefreshGuide()
+    if not (guidePage and guidePage:IsVisible()) then return end
+    PaintDungeons()
+    local lines = CastAheadSaves and CastAheadSaves.GuideLines and CastAheadSaves.GuideLines(selectedInstanceID) or {}
+    if #lines == 0 then
+        lines = { CastAheadMatch.SpecRole() and "Nothing in this dungeon calls a save for your role."
+            or "No specialization role - pick a spec to see your guide." }
+    end
+    guideText:SetText(table.concat(lines, "\n"))
+    guideText:GetParent():SetHeight(guideText:GetStringHeight() + 8)
+end
+
+local function RefreshSaves()
+    if not (savesPage and savesPage:IsVisible()) then return end
+    PaintDungeons()
+    local saves = CastAheadSaves and CastAheadSaves.ViewRows and CastAheadSaves.ViewRows(selectedInstanceID) or {}
+    local items, group = {}, nil
+    for _, s in ipairs(saves) do
+        if s.boss ~= group then
+            group = s.boss
+            items[#items + 1] = { header = s.boss ~= "" and ("Boss: " .. s.boss) or "Trash" }
+        end
+        items[#items + 1] = s
+    end
+
+    for i = 1, math.max(#items, #saveRows) do
+        local item = items[i]
+        if item and not saveRows[i] then saveRows[i] = CreateSaveRow(saveParent, i) end
+        local row = saveRows[i]
+        if item then
+            local save = not item.header and item or nil
+            row.save = save
+            row.group:SetText(item.header or "")
+            for _, column in ipairs(SAVE_COLUMNS) do
+                local cell = row.cells[column.key]
+                if cell then cell:SetText(save and column.text(save) or "") end
+            end
+            for j = 1, #row.icons do
+                local button = save and save.buttons[j]
+                row.icons[j]:SetTexture(button and button.icon or nil)
+                row.icons[j]:SetShown(button and button.icon ~= nil or false)
+                row.icons[j]:SetDesaturated(not (button and button.available))
+                row.icons[j]:SetAlpha(button and button.available and 1 or 0.4)
+            end
+            row:Show()
+        else
+            row.save = nil
+            row:Hide()
+        end
+    end
+    saveParent:SetHeight(math.max(#items, 1) * ROW_HEIGHT)
+
+    local role = CastAheadMatch.SpecRole()
+    local line
+    if not CastAheadConfig.Enabled("saveCalls") then
+        line = "Defensive calls are off - switch them on in the Defensives tab."
+    elseif not role then
+        line = "No specialization role - pick a spec to see your saves."
+    else
+        line = "Role: " .. (ROLE_NAMES[role] or role) .. ". Change spec to see another role's list."
+        if #saves == 0 then line = "Nothing here calls a save for your role. " .. line end
+    end
+    savesPage.role:SetText(line)
+end
+
+function CastAheadUI.RefreshSaves()
+    RefreshSaves()
+    RefreshGuide()
+end
+
 -- The test drive stops by itself when the last sample cast runs out, so the
 -- button is repainted from the addon's state rather than from what was
 -- clicked. Core calls this when a run ends.
@@ -558,22 +704,28 @@ function CastAheadUI.RefreshTabs()
     if not on and currentTab == "Development" then ShowTab("General") end
 end
 
--- Switching pages. The casts page and the settings host are siblings filling
--- the same area; exactly one of them is ever shown.
+-- Switching pages. The casts page, the saves page and the settings host are
+-- siblings filling the same area; exactly one of them is ever shown.
 function ShowTab(name)
     currentTab = name
     for tab, button in pairs(tabButtons or {}) do
         button:SetEnabled(tab ~= name)
     end
+    local settings = name ~= CASTS_TAB and name ~= SAVES_TAB and name ~= GUIDE_TAB
+    if not settings and CastAheadOptions then CastAheadOptions.HideAll() end
+    settingsHost:SetShown(settings)
+    dungeonList:SetShown(not settings)
+    castsPage:SetShown(name == CASTS_TAB)
+    savesPage:SetShown(name == SAVES_TAB)
+    guidePage:SetShown(name == GUIDE_TAB)
     if name == CASTS_TAB then
-        if CastAheadOptions then CastAheadOptions.HideAll() end
-        settingsHost:Hide()
-        castsPage:Show()
         Refresh()
-    else
-        castsPage:Hide()
-        settingsHost:Show()
-        if CastAheadOptions then CastAheadOptions.ShowPanel(settingsHost, name) end
+    elseif name == SAVES_TAB then
+        RefreshSaves()
+    elseif name == GUIDE_TAB then
+        RefreshGuide()
+    elseif CastAheadOptions then
+        CastAheadOptions.ShowPanel(settingsHost, name)
     end
 end
 
@@ -693,15 +845,19 @@ function BuildWindow()
     listButton:SetScript("OnLeave", GameTooltip_Hide)
     CastAheadUI.RefreshTest()
 
-    -- Tab strip: General first, then the casts table, then the other settings pages.
+    -- Tab strip: General first, then the casts and saves tables, then the other settings pages.
     tabButtons = {}
     local previousTab
     local names = {}
     for _, name in ipairs(CastAheadOptions and CastAheadOptions.TABS or {}) do
         names[#names + 1] = name
-        if #names == 1 then names[#names + 1] = CASTS_TAB end
+        if #names == 1 then
+            names[#names + 1] = CASTS_TAB
+            names[#names + 1] = SAVES_TAB
+            names[#names + 1] = GUIDE_TAB
+        end
     end
-    if #names == 0 then names[1] = CASTS_TAB end
+    if #names == 0 then names = { CASTS_TAB, SAVES_TAB, GUIDE_TAB } end
     for _, name in ipairs(names) do
         local button = CreateFrame("Button", nil, body, "UIPanelButtonTemplate")
         button:SetSize(78, 20)
@@ -717,11 +873,21 @@ function BuildWindow()
     end
     CastAheadUI.RefreshTabs()
 
-    -- The two pages. Both fill the area under the tab strip; the settings
-    -- panels are built into the host on first use.
+    -- The pages. All fill the area under the tab strip; the settings panels
+    -- are built into the host on first use. The dungeon list belongs to both
+    -- tables, so one selection drives either.
     castsPage = CreateFrame("Frame", nil, body)
     castsPage:SetPoint("TOPLEFT", body, "TOPLEFT", 0, -30)
     castsPage:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", 0, 0)
+
+    savesPage = CreateFrame("Frame", nil, body)
+    savesPage:SetPoint("TOPLEFT", body, "TOPLEFT", 0, -30)
+    savesPage:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", 0, 0)
+    savesPage:Hide()
+
+    dungeonList = CreateFrame("Frame", nil, body)
+    dungeonList:SetPoint("TOPLEFT", body, "TOPLEFT", 0, -30)
+    dungeonList:SetPoint("BOTTOMRIGHT", body, "BOTTOMLEFT", LIST_WIDTH + 24, 0)
 
     settingsHost = CreateFrame("Frame", nil, body)
     settingsHost:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -34)
@@ -752,7 +918,7 @@ function BuildWindow()
     local list = DungeonList()
     local current = CurrentInstanceID()
     for i, entry in ipairs(list) do
-        local button = CreateFrame("Button", nil, castsPage)
+        local button = CreateFrame("Button", nil, dungeonList)
         button:SetSize(LIST_WIDTH, WIDGET_HEIGHT + 2)
         button:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -60 - (i - 1) * (WIDGET_HEIGHT + 2))
         button.instanceID = entry.id
@@ -761,7 +927,9 @@ function BuildWindow()
         button.text:SetText(string.format("%s |cff777777(%d)|r", entry.name, entry.count))
         button:SetScript("OnClick", function(self)
             selectedInstanceID = self.instanceID
-            Refresh()
+            if currentTab == SAVES_TAB then RefreshSaves()
+            elseif currentTab == GUIDE_TAB then RefreshGuide()
+            else Refresh() end
         end)
         button:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
         dungeonButtons[i] = button
@@ -800,6 +968,56 @@ function BuildWindow()
 
     rows = {}
     rowParent = content
+
+    local saveClip = CreateFrame("Frame", nil, savesPage)
+    saveClip:SetPoint("TOPLEFT", body, "TOPLEFT", LIST_WIDTH + 24, -36)
+    saveClip:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", -8, 34)
+    if saveClip.SetClipsChildren then saveClip:SetClipsChildren(true) end
+    local saveWidth = ColumnOffset(#SAVE_COLUMNS + 1, SAVE_COLUMNS)
+    local saveHeader = CreateFrame("Frame", nil, saveClip)
+    saveHeader:SetSize(saveWidth, HEADER_HEIGHT)
+    saveHeader:SetPoint("TOPLEFT", saveClip, "TOPLEFT", 0, 0)
+    for i, column in ipairs(SAVE_COLUMNS) do
+        local label = saveHeader:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        label:SetSize(column.width, HEADER_HEIGHT)
+        label:SetPoint("TOPLEFT", saveHeader, "TOPLEFT", ColumnOffset(i, SAVE_COLUMNS), 0)
+        label:SetText("|cffaaaaaa" .. column.header .. "|r")
+    end
+    local saveRule = saveHeader:CreateTexture(nil, "ARTWORK")
+    saveRule:SetPoint("TOPLEFT", saveHeader, "BOTTOMLEFT", 0, -1)
+    saveRule:SetPoint("TOPRIGHT", saveHeader, "BOTTOMRIGHT", 0, -1)
+    saveRule:SetHeight(1)
+    saveRule:SetColorTexture(1, 1, 1, 0.25)
+    local saveScroll = CreateFrame("ScrollFrame", nil, saveClip, "UIPanelScrollFrameTemplate")
+    saveScroll:SetPoint("TOPLEFT", saveHeader, "BOTTOMLEFT", 0, -4)
+    saveScroll:SetPoint("BOTTOMRIGHT", saveClip, "BOTTOMRIGHT", -26, 0)
+    saveParent = CreateFrame("Frame", nil, saveScroll)
+    saveParent:SetSize(saveWidth, 1)
+    saveScroll:SetScrollChild(saveParent)
+    saveRows = {}
+    savesPage.role = savesPage:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    savesPage.role:SetPoint("BOTTOMLEFT", body, "BOTTOMLEFT", 16, 12)
+
+    guidePage = CreateFrame("Frame", nil, body)
+    guidePage:SetPoint("TOPLEFT", body, "TOPLEFT", 0, -30)
+    guidePage:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", 0, 0)
+    guidePage:Hide()
+    local guideScroll = CreateFrame("ScrollFrame", nil, guidePage, "UIPanelScrollFrameTemplate")
+    guideScroll:SetPoint("TOPLEFT", body, "TOPLEFT", LIST_WIDTH + 24, -36)
+    guideScroll:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", -34, 34)
+    local guideBody = CreateFrame("Frame", nil, guideScroll)
+    guideBody:SetSize(600, 1)
+    guideScroll:SetScrollChild(guideBody)
+    guideText = guideBody:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    guideText:SetPoint("TOPLEFT", guideBody, "TOPLEFT", 4, -4)
+    guideText:SetWidth(592)
+    guideText:SetJustifyH("LEFT")
+    guideText:SetSpacing(3)
+    guideScroll:SetScript("OnSizeChanged", function(_, width)
+        guideBody:SetWidth(width)
+        guideText:SetWidth(width - 8)
+        RefreshGuide()
+    end)
     local saved = CastAheadDB and CastAheadDB.window
     if saved and saved.width and saved.height then
         window:SetSize(math.max(saved.width, WindowWidth()), math.max(saved.height, WindowHeight()))
@@ -892,7 +1110,7 @@ SlashCmdList.CASTAHEAD = function(msg)
         return
     end
     if word == "option" or word == "options" or word == "config" or word == "settings" then
-        if window and window:IsShown() and currentTab ~= CASTS_TAB then
+        if window and window:IsShown() and currentTab ~= CASTS_TAB and currentTab ~= SAVES_TAB and currentTab ~= GUIDE_TAB then
             window:Hide()
         else
             CastAheadUI.ShowTab("General")

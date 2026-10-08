@@ -7,7 +7,7 @@ CastAheadOptions = {}
 
 -- Development is last on purpose: it is hidden unless the player asks for
 -- it, and hiding the final tab leaves the strip intact.
-CastAheadOptions.TABS = { "General", "Sounds", "Development" }
+CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Development" }
 local panels
 -- One row of groups, each in its own column, so nothing is stacked and every
 -- setting is reachable without reading up and down the page. UI.lua takes the
@@ -22,7 +22,7 @@ CastAheadOptions.MIN_WIDTH = COL_X * 2 + COLUMNS * COL_W + (COLUMNS - 1) * COL_G
 CastAheadOptions.MIN_HEIGHT = 404
 -- Forward declarations: BuildWindow calls these, and Lua resolves a local by
 -- what it holds at call time, so they must exist as upvalues before it runs.
-local BuildGeneral, BuildSounds, BuildDevelopment
+local BuildGeneral, BuildSounds, BuildDefensives, BuildDevelopment
 -- Widgets are painted once, when a panel is first built, but storage can
 -- change behind their back: the /ca anchor|grow|offset|center slash commands
 -- and the Move button all write it. Every widget that displays stored state
@@ -76,6 +76,15 @@ local function Redraw()
     if CastAheadCore and CastAheadCore.Reapply then CastAheadCore.Reapply() end
 end
 
+local function SaveRefresh()
+    if CastAheadSaves then CastAheadSaves.Refresh() end
+end
+
+local function RedrawAndSaves()
+    Redraw()
+    SaveRefresh()
+end
+
 -- Every switch the General page offers, with the group it belongs to. The
 -- page used to be one flat column of checkboxes plus a pile of sliders on the
 -- right, and nothing said which slider went with which switch - the centre
@@ -106,6 +115,16 @@ local SWITCHES = {
         tip = "Adds the Development tab and starts recording everything for improving the addon's data (the Record everything switch there, on by default). Nothing here changes what the addon calls out." },
     recordAll = { label = "Record everything",
         tip = "The game's combat log with advanced logging in every dungeon (off again when you leave, unless you had started it yourself), a journal of each key, and what the game lets an addon read off each enemy cast. Holds 12 keys: when the journal fills up it asks you to reload so it reaches the disk, then you copy it off and clear it on this tab. No names of people are recorded." },
+    saveCalls = { label = "Defensive calls",
+        tip = "Call a small or big defensive ahead of damage that needs one, and show your button for it in the centre." },
+    bossAdapter = { label = "Boss calls from DBM / BigWigs",
+        tip = "Also call defensives for boss abilities announced by DBM or BigWigs." },
+    smallCalls = { label = "Small defensive calls",
+        tip = "Say \"small defensive\" ahead of hits that need a small save." },
+    bigCalls = { label = "Big defensive calls",
+        tip = "Say \"big defensive\" ahead of hits that need a big save." },
+    healCalls = { label = "Heal up after a big hit", defaultOff = true,
+        tip = "Right after a hit that called a big defensive, say \"heal up\" when your Healthstone or potion is ready." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
         tip = "A panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. Only while recording. The key bindings and /ca mark work without it." },
 }
@@ -207,6 +226,7 @@ local function Build(host)
 
     BuildGeneral(panels.General)
     BuildSounds(panels.Sounds)
+    BuildDefensives(panels.Defensives)
     BuildDevelopment(panels.Development)
 end
 
@@ -254,8 +274,8 @@ function BuildGeneral(panel)
 
     -- Sound ---------------------------------------------------------------
     local audio = BuildGroup(panel, "Sound", 2, 86)
-    local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 })
-    BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 })
+    local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 }, RedrawAndSaves)
+    BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 }, RedrawAndSaves)
 
     -- Development mode ----------------------------------------------------
     local extra = BuildGroup(panel, "Advanced", 2, 62,
@@ -519,8 +539,304 @@ function BuildDevelopment(panel)
         "journal clear", "Empty the journal after you copied it off the disk; asks first. /ca journal clear")
 end
 
+local function IconLabel(icon, name)
+    return icon and string.format("|T%s:16|t %s", icon, name) or name
+end
+
+local function EntryLabel(e)
+    if type(e) == "number" then
+        return IconLabel(C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(e),
+            C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(e) or tostring(e))
+    end
+    local use = type(e) == "table" and e.use
+    if not use then return tostring(e) end
+    local item = CastAheadSaves.ItemFor(use)
+    local name = item and C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(item)
+        or "|cff888888" .. (C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(use) or tostring(use)) .. " (not in bags)|r"
+    local icon = item and C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(item)
+        or C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(use)
+    return IconLabel(icon, name)
+end
+
+local LIST_MIN_ROWS, LIST_ROW_H = 4, 20
+local LIST_TOP = -48
+local LIST_FOOT = 92
+local LIST_ORDER = { "small", "big", "heal" }
+
+local function ListRows()
+    local n = LIST_MIN_ROWS
+    for _, size in ipairs(LIST_ORDER) do n = math.max(n, #CastAheadSaves.List(size)) end
+    return n
+end
+
+local function ListHeight(rows) return -LIST_TOP + rows * LIST_ROW_H + LIST_FOOT end
+local LIST_TITLES = { small = "Small defensive", big = "Big defensive", heal = "Heal after the hit" }
+
+local function RefreshAll()
+    for _, refresh in ipairs(refreshers) do refresh() end
+end
+
+local listRefreshers = {}
+function CastAheadOptions.RefreshDefensives()
+    for _, refresh in ipairs(listRefreshers) do refresh() end
+end
+
+local addBoxes = {}
+local function InsertLink(text)
+    for _, box in ipairs(addBoxes) do
+        if text and box:IsVisible() and box:HasFocus() then box:SetText(text) end
+    end
+end
+if ChatFrameUtil and ChatFrameUtil.InsertLink then
+    hooksecurefunc(ChatFrameUtil, "InsertLink", InsertLink)
+elseif ChatEdit_InsertLink then
+    hooksecurefunc("ChatEdit_InsertLink", InsertLink)
+end
+
+local function BuildSaveList(panel, size, column, hint)
+    local S = CastAheadSaves
+    local title = LIST_TITLES[size]
+    local group = BuildGroup(panel, title, column, ListHeight(LIST_MIN_ROWS))
+    if hint then
+        local line = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        line:SetPoint("TOPLEFT", group.title, "BOTTOMLEFT", 0, -3)
+        line:SetWidth(COL_W - 20)
+        line:SetJustifyH("LEFT")
+        line:SetText("|cffaaaaaa" .. hint .. "|r")
+    end
+
+    local function Remove(i)
+        local list = {}
+        for j, e in ipairs(S.List(size)) do
+            if j ~= i then list[#list + 1] = e end
+        end
+        S.SetList(size, list)
+        RefreshAll()
+    end
+
+    local function RowMenu(owner, i)
+        if not (MenuUtil and MenuUtil.CreateContextMenu) or not S.List(size)[i] then return end
+        MenuUtil.CreateContextMenu(owner, function(_, root)
+            for _, target in ipairs(LIST_ORDER) do
+                if target ~= size then
+                    root:CreateButton("Move to " .. LIST_TITLES[target], function()
+                        S.MoveEntry(size, i, target)
+                        RefreshAll()
+                    end)
+                end
+            end
+            root:CreateButton("Remove", function() Remove(i) end)
+        end)
+    end
+
+    local rows = {}
+    local function Row(i)
+        if rows[i] then return rows[i] end
+        local y = LIST_TOP - (i - 1) * LIST_ROW_H
+        local hit = CreateFrame("Button", nil, group)
+        hit:SetSize(COL_W - 92, LIST_ROW_H)
+        hit:SetPoint("TOPLEFT", group, "TOPLEFT", 8, y)
+        hit:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        hit:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+        hit:SetScript("OnClick", function(self) RowMenu(self, i) end)
+        local text = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        text:SetPoint("TOPLEFT", group, "TOPLEFT", 12, y - 4)
+        text:SetWidth(COL_W - 98)
+        text:SetJustifyH("LEFT")
+        text:SetWordWrap(false)
+        local remove = CreateFrame("Button", nil, group, "UIPanelCloseButton")
+        remove:SetSize(20, 20)
+        remove:SetPoint("TOPRIGHT", group, "TOPRIGHT", -8, y)
+        remove:SetScript("OnClick", function() Remove(i) end)
+        local function Arrow(dir, x, step, tip)
+            local b = CreateFrame("Button", nil, group)
+            b:SetSize(22, 22)
+            b:SetPoint("TOPRIGHT", group, "TOPRIGHT", x, y + 1)
+            local file = "Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-"
+            b:SetNormalTexture(file .. "Up")
+            b:SetPushedTexture(file .. "Down")
+            b:SetDisabledTexture(file .. "Disabled")
+            b:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+            if dir == "Up" then
+                for _, tex in ipairs({ b:GetNormalTexture(), b:GetPushedTexture(), b:GetDisabledTexture() }) do
+                    tex:SetTexCoord(0, 1, 1, 0)
+                end
+            end
+            b:SetScript("OnClick", function()
+                S.Shift(size, i, step)
+                RefreshAll()
+            end)
+            b:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(tip, 1, 1, 1)
+                GameTooltip:Show()
+            end)
+            b:SetScript("OnLeave", GameTooltip_Hide)
+            return b
+        end
+        local up = Arrow("Up", -54, -1, "Move up: called before the one above")
+        local down = Arrow("Down", -31, 1, "Move down")
+        rows[i] = { text = text, remove = remove, hit = hit, up = up, down = down }
+        return rows[i]
+    end
+
+    local box = CreateFrame("EditBox", nil, group, "InputBoxTemplate")
+    box:SetSize(COL_W - 96, 20)
+    box:SetAutoFocus(false)
+    addBoxes[#addBoxes + 1] = box
+    local add = CreateFrame("Button", nil, group, "UIPanelButtonTemplate")
+    add:SetSize(56, 22)
+    add:SetPoint("LEFT", box, "RIGHT", 6, 0)
+    add:SetText("Add")
+    local pick = CreateFrame("DropdownButton", nil, group, "WowStyle1DropdownTemplate")
+    pick:SetSize(COL_W - 28, 24)
+    pick:SetPoint("TOPLEFT", box, "BOTTOMLEFT", -6, -6)
+    if pick.SetDefaultText then pick:SetDefaultText("Add from list") end
+    pick:SetupMenu(function(_, root)
+        local entries = S.Addable(size)
+        if #entries == 0 then
+            root:CreateTitle("Nothing left to add")
+            return
+        end
+        for _, e in ipairs(entries) do
+            root:CreateButton(EntryLabel(e), function()
+                local copy = { unpack(S.List(size)) }
+                copy[#copy + 1] = type(e) == "table" and { use = e.use } or e
+                S.SetList(size, copy)
+                RefreshAll()
+            end)
+        end
+    end)
+    local reason = group:CreateFontString(nil, "OVERLAY", "GameFontRedSmall")
+    reason:SetPoint("TOPLEFT", pick, "BOTTOMLEFT", 0, -6)
+    reason:SetWidth(COL_W - 24)
+    reason:SetJustifyH("LEFT")
+
+    local function Submit()
+        local list = S.List(size)
+        local entry, why = S.ParseEntry(box:GetText(), list)
+        if not entry then
+            reason:SetText(why)
+            return
+        end
+        local copy = { unpack(list) }
+        copy[#copy + 1] = entry
+        S.SetList(size, copy)
+        box:SetText("")
+        box:ClearFocus()
+        RefreshAll()
+    end
+    add:SetScript("OnClick", Submit)
+    box:SetScript("OnEnterPressed", Submit)
+    box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    box:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(title, 1, 1, 1)
+        GameTooltip:AddLine("A spell id or a spell name you know, an item id, or a shift-clicked spell or item link. An item is stored by its use effect, so any item in your bags with that effect counts.", nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    box:SetScript("OnLeave", GameTooltip_Hide)
+
+    local function Paint()
+        local list = S.List(size)
+        local n = ListRows()
+        for i = 1, math.max(#list, #rows, 1) do
+            local row = Row(i)
+            row.text:SetText(list[i] and EntryLabel(list[i]) or "")
+            row.remove:SetShown(list[i] ~= nil)
+            row.hit:SetShown(list[i] ~= nil)
+            row.up:SetShown(list[i] ~= nil)
+            row.down:SetShown(list[i] ~= nil)
+            row.up:SetEnabled(i > 1)
+            row.down:SetEnabled(list[i + 1] ~= nil)
+        end
+        if #list == 0 then
+            rows[1].text:SetText(size == "heal" and "|cffaaaaaaEmpty - no heal up call|r"
+                or "|cffaaaaaaEmpty - this call shows no button|r")
+        end
+        box:ClearAllPoints()
+        box:SetPoint("TOPLEFT", group, "TOPLEFT", 18, LIST_TOP - n * LIST_ROW_H - 6)
+        group:SetHeight(ListHeight(n))
+        reason:SetText("")
+    end
+    table.insert(refreshers, Paint)
+    table.insert(listRefreshers, Paint)
+    return group
+end
+
+function BuildDefensives(panel)
+    local SWITCHES_H = 330
+    local group = BuildGroup(panel, "Defensive calls", 1, math.max(SWITCHES_H, ListHeight(LIST_MIN_ROWS)))
+    local function Fit() group:SetHeight(math.max(SWITCHES_H, ListHeight(ListRows()))) end
+    table.insert(refreshers, Fit)
+    table.insert(listRefreshers, Fit)
+    local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, SaveRefresh)
+    local boss = BuildSwitch(panel, "bossAdapter", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, function(on)
+        Redraw()
+        if not on and CastAheadSaves then
+            CastAheadSaves.CancelPrefix("dbm:")
+            CastAheadSaves.CancelPrefix("bw:")
+        end
+    end)
+    local small = BuildSwitch(panel, "smallCalls", { "TOPLEFT", boss, "BOTTOMLEFT", 0, -4 }, SaveRefresh)
+    local big = BuildSwitch(panel, "bigCalls", { "TOPLEFT", small, "BOTTOMLEFT", 0, -4 }, SaveRefresh)
+    local heal = BuildSwitch(panel, "healCalls", { "TOPLEFT", big, "BOTTOMLEFT", 0, -4 })
+    local early = BuildSlider(panel, {
+        key = "saveLeadSeconds",
+        default = 0,
+        min = 0, max = CastAheadConfig.SAVE_LEAD_MAX,
+        low = "off", high = CastAheadConfig.SAVE_LEAD_MAX .. "s",
+        point = { "TOPLEFT", heal, "BOTTOMLEFT", 6, -12 },
+        width = COL_W - 50,
+        caption = function(value)
+            return value > 0
+                and string.format("Save early warning: %ds", value)
+                or "Save early warning: off"
+        end,
+    })
+
+    local status = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    status:SetPoint("TOPLEFT", early, "BOTTOMLEFT", -6, -18)
+    status:SetWidth(COL_W - 24)
+    status:SetJustifyH("LEFT")
+    table.insert(refreshers, function()
+        status:SetText("|cffaaaaaa" .. (CastAheadBossAdapter and CastAheadBossAdapter.Status() or "No boss mod") .. "|r")
+    end)
+
+    local lists = {
+        BuildSaveList(panel, "small", 2),
+        BuildSaveList(panel, "big", 3),
+        BuildSaveList(panel, "heal", 4, "Pressed right after a big hit lands: stone, potion, self-heal."),
+    }
+
+    local reset = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    reset:SetSize(110, 22)
+    reset:SetPoint("TOPLEFT", status, "BOTTOMLEFT", -4, -14)
+    reset:SetText("Reset to default")
+    reset:SetScript("OnClick", function()
+        if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_SAVES") end
+    end)
+
+    local note = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    note:SetPoint("TOPLEFT", group, "BOTTOMLEFT", 0, -10)
+    note:SetWidth(COL_W * 2)
+    note:SetJustifyH("LEFT")
+    note:SetText("|cffaaaaaaNo shipped defensive lists for this specialization.|r")
+
+    local function PaintSpec()
+        local spec = CastAheadSaves and CastAheadSaves.SpecID()
+        local shipped = spec and CastAheadSaveButtons and CastAheadSaveButtons[spec] and true or false
+        note:SetShown(not shipped)
+        for _, list in ipairs(lists) do list:SetShown(shipped) end
+        reset:SetShown(shipped)
+    end
+    table.insert(refreshers, PaintSpec)
+    table.insert(listRefreshers, PaintSpec)
+end
+
 local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
-    "POISON", "CURSE", "MAGIC", "DISEASE", "BLEED", "SOOTHE", "PURGE", "SWITCH", "ALERT" }
+    "POISON", "CURSE", "MAGIC", "DISEASE", "BLEED", "SOOTHE", "PURGE", "SWITCH", "ALERT",
+    "SMALL", "BIG", "HEAL" }
 local SOUND_ROW_H = 26
 
 -- Default plus every sound LibSharedMedia knows. Shared with the casts
@@ -617,6 +933,7 @@ function BuildSounds(panel)
                     CastAheadDB = CastAheadDB or {}
                     CastAheadDB.sounds = CastAheadDB.sounds or {}
                     CastAheadDB.sounds[key] = name
+                    SaveRefresh()
                 end, advice)
         end)
 

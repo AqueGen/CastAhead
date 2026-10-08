@@ -51,6 +51,9 @@ M.ADVICE = {
     -- height.
     TANK = { label = "TANKBUSTER", short = "BUSTER", say = "tank buster", r = 1.00, g = 0.45, b = 0.10 },
     AOE  = { label = "AOE", say = "aoe damage", r = 1.00, g = 0.75, b = 0.15 },
+    SMALL = { label = "SMALL SAVE", short = "SMALL", say = "small defensive", r = 0.55, g = 0.85, b = 1.00 },
+    BIG   = { label = "BIG SAVE", short = "BIG", say = "big defensive", r = 1.00, g = 0.35, b = 0.85 },
+    HEAL  = { label = "HEAL UP", short = "HEAL", say = "heal up", r = 0.40, g = 0.95, b = 0.45 },
     -- Categories assigned by the curated priority set (row.prio).
     DODGE   = { label = "DODGE", say = "dodge", r = 0.30, g = 0.90, b = 0.40 },
     FRONTAL = { label = "FRONT", say = "frontal", r = 0.95, g = 0.90, b = 0.30 },
@@ -101,7 +104,7 @@ M.ADVICE.SAVE = M.ADVICE.TANK   -- old name, kept so saved settings still resolv
 M.DISPEL_CATEGORY = { Magic = "MAGIC", Poison = "POISON", Curse = "CURSE", Disease = "DISEASE", Bleed = "BLEED" }
 local REFINABLE = { TARGET = true, ALERT = true, DISPEL = true }
 
-function M.Advice(row, interruptible)
+local function BaseAdvice(row, interruptible)
     if not row then return nil end
     if row.prio and REFINABLE[row.prio] and row.dispel and M.DISPEL_CATEGORY[row.dispel] then
         return M.ADVICE[M.DISPEL_CATEGORY[row.dispel]]
@@ -132,6 +135,53 @@ function M.Advice(row, interruptible)
         return M.ADVICE.TANK
     end
     return nil
+end
+
+M.SpecRole = function() return nil end
+
+function M.SaveRow(id)
+    local data = CastAheadDefensives
+    local spells, alias = data and data.spells, data and data.alias
+    if not spells then return nil end
+    if spells[id] then return spells[id], id end
+    local to = alias and alias[id]
+    if to and spells[to] then return spells[to], to end
+    return nil
+end
+
+function M.SaveKey(save, role, prio)
+    if role == "TANK" and prio ~= "TANK" and (save.DAMAGER or save.HEALER) then return nil end
+    return save[role]
+end
+
+M.SizeOn = function() return true end
+
+function M.SaveAdvice(row)
+    local save = row and row.save
+    local role = save and M.SpecRole()
+    local key = role and M.SaveKey(save, role, row.prio)
+    return key and M.SizeOn(key) and M.ADVICE[key] or nil
+end
+
+function M.IsSave(advice)
+    return advice == M.ADVICE.SMALL or advice == M.ADVICE.BIG
+end
+
+local SAVE_REPLACES = {
+    [M.ADVICE.AOE] = true, [M.ADVICE.TANK] = true,
+    [M.ADVICE.BLEED] = true, [M.ADVICE.ALERT] = true,
+}
+
+function M.Beats(row, interruptible)
+    local base = BaseAdvice(row, interruptible)
+    if base and not SAVE_REPLACES[base] then return base end
+    if row and row.targeted and M.SaveAdvice(row) then return M.ADVICE.TARGET end
+    return nil
+end
+
+function M.Advice(row, interruptible)
+    if not row then return nil end
+    return M.Beats(row, interruptible) or M.SaveAdvice(row) or BaseAdvice(row, interruptible)
 end
 
 M.MIN_OPENING_SAMPLES = 8
@@ -345,6 +395,7 @@ M.PlayerCanHandle = function() return true end
 -- player can act on it. Kept as functions here so the display filter and the
 -- sound gate agree on the meaning.
 function M.Important(row)
+    if M.IsSave(M.Advice(row)) then return true end
     if not row.prio then return false end
     local hides = M.ROLE_HIDES[M.PlayerRole()]
     if hides and hides[row.prio] then return false end

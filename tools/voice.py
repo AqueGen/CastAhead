@@ -44,6 +44,9 @@ LINES = {
     "BLEED": "bleed, defensive",
     "SWITCH": "switch target",
     "ALERT": "danger",
+    "SMALL": "small defensive",
+    "BIG": "big defensive",
+    "HEAL": "heal up",
 }
 
 # Trim the neural voice's padding (about 0.2 s in front, 0.9 s behind): the

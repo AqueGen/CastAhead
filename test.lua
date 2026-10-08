@@ -387,6 +387,78 @@ M.PlayerCanHandle = function() return true end
 check(M.Important({ prio = "POISON" }), "outside the game nothing is hidden")
 M.PlayerRole, M.PlayerCanHandle = savedRole, savedCan
 
+-- Save verdicts: the player's real role picks the verdict, a kick still wins.
+M.SpecRole = function() return "DAMAGER" end
+local saveRow = { spell = 900, cast = 2.0, save = { DAMAGER = "BIG", TANK = "SMALL", lead = 2.5 }, hits = 5, dmg = 0.6 }
+check(M.Advice(saveRow) == M.ADVICE.BIG, "a dps gets BIG where the table says BIG for dps")
+M.SpecRole = function() return "HEALER" end
+check(M.Advice(saveRow) == M.ADVICE.AOE, "a healer with no verdict keeps the old call")
+M.SpecRole = function() return "TANK" end
+check(M.Advice(saveRow) == M.ADVICE.AOE, "a hit that also lands on dps is no tank save, the old call stays")
+check(M.Advice({ spell = 908, save = { TANK = "BIG" } }) == M.ADVICE.BIG, "a hit only the tank takes is a tank buster save")
+M.SizeOn = function(key) return key ~= "BIG" end
+check(M.SaveAdvice({ spell = 908, save = { TANK = "BIG" } }) == nil, "a size switched off gives no save call")
+M.SizeOn = function() return true end
+check(M.Advice({ spell = 909, prio = "TANK", save = { DAMAGER = "SMALL", TANK = "BIG" } }) == M.ADVICE.BIG,
+    "a curated tank buster keeps the tank save even when dps were hit too")
+check(M.SaveKey({ DAMAGER = "BIG", TANK = "SMALL" }, "TANK") == nil and M.SaveKey({ DAMAGER = "BIG", TANK = "SMALL" }, "DAMAGER") == "BIG",
+    "SaveKey applies the tank buster rule to tanks only")
+local kickRow = { spell = 901, cast = 2.0, kickable = true, save = { TANK = "BIG" } }
+check(M.Advice(kickRow) == M.ADVICE.KICK, "a kickable cast still says interrupt")
+check(M.Advice({ spell = 902, prio = "KICK", save = { TANK = "BIG" } }) == M.ADVICE.KICK, "a curated kick still wins")
+check(M.Advice({ spell = 903, prio = "DODGE", save = { TANK = "BIG" } }) == M.ADVICE.DODGE, "a curated dodge outranks BIG")
+check(M.Advice({ spell = 903, prio = "TARGET", save = { TANK = "BIG" } }) == M.ADVICE.TARGET, "a curated target keeps its call, the save may be someone else's")
+check(M.Advice({ spell = 910, targeted = true, save = { TANK = "BIG" } }) == M.ADVICE.TARGET, "a cast the game shows a target for says targeted instead of a save")
+check(M.Advice({ spell = 911, targeted = false, save = { TANK = "BIG" } }) == M.ADVICE.BIG, "an untargeted cast keeps its save")
+check(M.Advice({ spell = 903, prio = "TARGET", dispel = "Poison", save = { TANK = "BIG" } }) == M.ADVICE.POISON, "a dispel outranks BIG")
+check(M.Advice({ spell = 903, prio = "BLEED", save = { TANK = "BIG" } }) == M.ADVICE.BIG, "BIG outranks a curated bleed")
+check(M.IsSave(M.ADVICE.BIG) and M.IsSave(M.ADVICE.SMALL) and not M.IsSave(M.ADVICE.AOE), "IsSave names the two save calls")
+local savedPlayerRole = M.PlayerRole
+M.PlayerRole = function() return nil end
+check(M.Important({ spell = 904, save = { TANK = "SMALL" } }), "a save row is important even with the role filter off")
+check(not M.Important({ spell = 905, kickable = true, save = { TANK = "BIG" } }), "a kickable save row is not important by its verdict")
+local savedCanHandle = M.PlayerCanHandle
+M.PlayerCanHandle = function() return false end
+check(not M.Important({ spell = 906, prio = "MAGIC", save = { TANK = "BIG" } }), "a dispel row the player cannot handle is not made important by a save it does not call")
+check(M.Important({ spell = 907, prio = "TARGET", save = { TANK = "BIG" } }), "a curated target with a save verdict stays important")
+M.PlayerCanHandle = savedCanHandle
+M.PlayerRole = savedPlayerRole
+M.SpecRole = function() return nil end
+check(M.Advice(saveRow) == M.ADVICE.AOE, "outside the game no role means no save call")
+
+dofile("SaveButtons.lua")
+dofile("Defensives.lua")
+dofile("BossCadence.lua")
+for id, c in pairs(CastAheadBossCadence) do
+    local row = CastAheadDefensives.spells[id]
+    check(row and row.boss ~= "", "boss cadence " .. id .. " belongs to a boss row")
+    check(type(c.first) == "number" and type(c.cd) == "table" and type(c.steady) == "boolean", "boss cadence " .. id .. " has first, cd and steady")
+    for _, gap in ipairs(c.cd) do check(type(gap) == "number" and gap > 0, "boss cadence " .. id .. " gaps are positive numbers") end
+end
+local shippedTables = {}
+for spec, lists in pairs(CastAheadSaveButtons) do
+    for _, size in ipairs({ "small", "big", "heal" }) do
+        check(type(lists[size]) == "table" and #lists[size] > 0, "spec " .. spec .. " ships a " .. size .. " list")
+        for _, e in ipairs(lists[size] or {}) do
+            check(type(e) == "number" or type(e) == "table" and type(e.use) == "number",
+                "spec " .. spec .. " " .. size .. " entry is a spell id or an item use")
+            if type(e) == "table" then
+                check(not shippedTables[e], "spec " .. spec .. " " .. size .. " item entry is its own table")
+                shippedTables[e] = true
+            end
+        end
+    end
+end
+for id, row in pairs(CastAheadDefensives.spells) do
+    for _, role in ipairs({ "DAMAGER", "HEALER", "TANK" }) do
+        check(row[role] == nil or row[role] == "SMALL" or row[role] == "BIG", "spell " .. id .. " has a valid " .. role .. " verdict")
+    end
+    check(type(row.name) == "string" and type(row.mob) == "string" and type(row.boss) == "string", "spell " .. id .. " carries name, mob and boss strings")
+    check(row.name ~= "" and row.mob ~= "", "spell " .. id .. " has a non-empty name and mob")
+    check(type(row.dungeon) == "number" and CastAheadData[row.dungeon] ~= nil, "spell " .. id .. " names a known dungeon")
+    check(type(row.bar) == "boolean", "spell " .. id .. " has a boolean bar flag")
+end
+
 print(string.format("%d dungeons, %d spells, %d unresolvable after two casts, %d needing the mob check",
     dungeons, spells, stuck, rescued))
 print(failures == 0 and "OK" or (failures .. " FAILURES"))

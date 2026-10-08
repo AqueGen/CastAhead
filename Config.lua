@@ -144,6 +144,12 @@ end
 
 -- Seconds before a predicted cast to announce it; 0 switches the heads-up
 -- off. Clamped rather than rejected: a saved variable can hold anything.
+C.SAVE_LEAD_MAX = 10
+
+function C.SaveLead()
+    return C.Number("saveLeadSeconds", 0, 0, C.SAVE_LEAD_MAX)
+end
+
 function C.Lead()
     local seconds = tonumber(C.Get("leadSeconds"))
     if not seconds then return C.LEAD_DEFAULT end
@@ -195,6 +201,11 @@ function C.Migrate()
             if type(name) == "string" and name:sub(1, 11) == "CastAhead: " then
                 picks[key] = "Cast Ahead: " .. name:sub(12)
             end
+        end
+    end
+    for _, picks in pairs(type(CastAheadDB.saveButtons) == "table" and CastAheadDB.saveButtons or {}) do
+        for size, value in pairs(type(picks) == "table" and picks or {}) do
+            if type(value) == "number" then picks[size] = { value } end
         end
     end
     CastAheadDB.schema = 2
