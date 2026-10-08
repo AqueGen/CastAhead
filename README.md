@@ -53,7 +53,7 @@ Every spec ships its own lists, picked from what top players press in +18 keys o
 - Mage: the spec's barrier and Mirror Image (small), Ice Cold and Greater Invisibility (big), Alter Time (heal).
 - Monk, Brewmaster: Celestial Infusion (small), Fortifying Brew (big), Expel Harm (heal). Windwalker: Touch of Karma (small), Fortifying Brew (big). Mistweaver: Fortifying Brew (small and big).
 - Paladin, Protection: Ardent Defender and Sentinel (small), Guardian of Ancient Kings and Divine Shield (big), Word of Glory and Lay on Hands (heal). Holy and Retribution: Divine Protection (small), Divine Shield and Blessing of Protection (big), Lay on Hands and Word of Glory (heal).
-- Priest: Fade (small, plus Power Word: Shield for Discipline and Shadow), Desperate Prayer (big, after Dispersion for Shadow), Vampiric Embrace (heal, Shadow).
+- Priest: Fade (small, plus Power Word: Shield for Discipline and Shadow), Desperate Prayer (big, plus Dispersion for Shadow), Vampiric Embrace (heal, Shadow).
 - Rogue: Feint (small), Cloak of Shadows and Evasion (big), Crimson Vial (heal).
 - Shaman: Astral Shift (small and big), Healing Surge (heal, Elemental and Enhancement).
 - Warlock: Dark Pact (small), Unending Resolve (big), Mortal Coil (heal).
