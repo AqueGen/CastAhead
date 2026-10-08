@@ -7,6 +7,8 @@ CastAheadOptions = {}
 
 CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Development" }
 local panels
+local T = CastAheadWindow.THEME
+local FLAT = { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 }
 local COL_W, COL_GAP, COL_X = 250, 8, 8
 local SLIDER_W = COL_W - 40
 
@@ -37,6 +39,7 @@ function CastAheadOptions.RelayoutGroups(panel)
     end
     local pos, total = CastAheadOptions.Flow(panel:GetWidth(), COL_W, COL_GAP, heights)
     local top = panel.flowTop or 6
+    if type(top) == "function" then top = top() end
     for i, g in ipairs(shown) do
         g:ClearAllPoints()
         g:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X + pos[i].x, -(top + pos[i].y))
@@ -60,15 +63,13 @@ local refreshers = {}
 local function BuildSlider(panel, spec)
     local label = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     label:SetPoint(unpack(spec.point))
-    local slider = CreateFrame("Slider", nil, panel, "UISliderTemplateWithLabels")
+    local slider = CreateFrame("Frame", nil, panel, "MinimalSliderWithSteppersTemplate")
     slider:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 6, -12)
-    slider:SetSize(spec.width or SLIDER_W, 16)
-    slider:SetOrientation("HORIZONTAL")
-    slider:SetMinMaxValues(spec.min, spec.max)
-    slider:SetValueStep(spec.step or 1)
-    slider:SetObeyStepOnDrag(true)
-    slider.Low:SetText(spec.low or tostring(spec.min))
-    slider.High:SetText(spec.high or tostring(spec.max))
+    slider:SetSize(spec.width or SLIDER_W, 19)
+    for _, edge in ipairs({ slider.MinText, slider.MaxText }) do
+        edge:SetFontObject("GameFontHighlightSmall")
+        edge:SetTextColor(unpack(T.muted))
+    end
 
     local suppress = false
     local function read()
@@ -84,14 +85,20 @@ local function BuildSlider(panel, spec)
         suppress = false
         paint(value)
     end
+    local step = spec.step or 1
+    local L = MinimalSliderWithSteppersMixin.Label
+    slider:Init(read(), spec.min, spec.max, (spec.max - spec.min) / step, {
+        [L.Min] = function() return spec.low or tostring(spec.min) end,
+        [L.Max] = function() return spec.high or tostring(spec.max) end,
+    })
     show(read())
-    slider:SetScript("OnValueChanged", function(_, value)
+    slider:RegisterCallback(MinimalSliderWithSteppersMixin.Event.OnValueChanged, function(_, value)
         if suppress then return end
-        value = math.floor(value / (spec.step or 1) + 0.5) * (spec.step or 1)
+        value = math.floor(value / step + 0.5) * step
         CastAheadConfig.Set(spec.key, value)
         paint(value)
         if spec.after then spec.after(value) end
-    end)
+    end, slider)
     table.insert(refreshers, function() show(read()) end)
     return slider, label
 end
@@ -172,16 +179,12 @@ local function BuildGroup(panel, title, height)
     local box = CreateFrame("Frame", nil, panel, "BackdropTemplate")
     box:SetSize(COL_W, height)
     table.insert(panel.groups, box)
-    box:SetBackdrop({
-        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        edgeSize = 12,
-        insets = { left = 3, right = 3, top = 3, bottom = 3 },
-    })
-    box:SetBackdropColor(0, 0, 0, 0.25)
-    box:SetBackdropBorderColor(0.45, 0.45, 0.45, 0.8)
+    box:SetBackdrop(FLAT)
+    box:SetBackdropColor(unpack(T.panel))
+    box:SetBackdropBorderColor(unpack(T.border))
     box.title = box:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     box.title:SetPoint("TOPLEFT", box, "TOPLEFT", 10, -8)
+    box.title:SetTextColor(unpack(T.gold))
     box.title:SetText(title)
     return box
 end
@@ -189,8 +192,7 @@ end
 -- One switch, placed against whatever the caller anchors it to.
 local function BuildSwitch(panel, key, point, onClick)
     local option = SWITCHES[key]
-    local box = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
-    box:SetSize(22, 22)
+    local box = CreateFrame("CheckButton", nil, panel, "MinimalCheckboxTemplate")
     box:SetPoint(unpack(point))
     box.text = box:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     box.text:SetPoint("LEFT", box, "RIGHT", 2, 0)
@@ -216,10 +218,8 @@ end
 -- Sizes and offsets belong to the group that draws with them, so each group
 -- resets its own rather than one button clearing settings across the page.
 local function BuildReset(panel, point, keys, after)
-    local reset = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-    reset:SetSize(70, 20)
+    local reset = CastAheadWindow.Button(panel, "Reset", 70)
     reset:SetPoint(unpack(point))
-    reset:SetText("Reset")
     reset:SetScript("OnClick", function()
         for _, key in ipairs(keys) do CastAheadConfig.Set(key, nil) end
         for _, refresh in ipairs(refreshers) do refresh() end
@@ -255,9 +255,6 @@ local function Build(host)
     BuildDevelopment(panels.Development)
 end
 
--- Show one settings page inside `host`, building them all on first use.
--- Every stateful widget is repainted first: the slash commands write the same
--- storage from outside, so what was drawn last time may be stale.
 local hooked = {}
 
 local function RelayoutShown()
@@ -266,6 +263,9 @@ local function RelayoutShown()
     end
 end
 
+-- Show one settings page inside `host`, building them all on first use.
+-- Every stateful widget is repainted first: the slash commands write the same
+-- storage from outside, so what was drawn last time may be stale.
 function CastAheadOptions.ShowPanel(host, name)
     if not panels then Build(host) end
     if not hooked[host] then
@@ -296,7 +296,7 @@ end
 -- traced across the page.
 function BuildGeneral(panel)
     -- What is announced ---------------------------------------------------
-    local what = BuildGroup(panel, "What to call out", 180)
+    local what = BuildGroup(panel, "What to call out", 204)
     local important = BuildSwitch(panel, "importantOnly",
         { "TOPLEFT", what, "TOPLEFT", 10, -26 })
     local role = BuildSwitch(panel, "roleFilter",
@@ -317,36 +317,31 @@ function BuildGeneral(panel)
     })
 
     -- Sound ---------------------------------------------------------------
-    local audio = BuildGroup(panel, "Sound", 86)
+    local audio = BuildGroup(panel, "Sound", 100)
     local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 }, RedrawAndSaves)
     BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 }, RedrawAndSaves)
 
     -- Development mode ----------------------------------------------------
-    local extra = BuildGroup(panel, "Advanced", 62)
+    local extra = BuildGroup(panel, "Advanced", 70)
     BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
         if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
     end)
 
     -- Where the icons go --------------------------------------------------
-    local plates = BuildGroup(panel, "Nameplate icons", 396)
+    local plates = BuildGroup(panel, "Nameplate icons", 417)
     local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 })
     BuildSwitch(panel, "fullLabels", { "TOPLEFT", platesOn, "BOTTOMLEFT", 0, -4 })
 
     local anchorLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    anchorLabel:SetPoint("TOPLEFT", plates, "TOPLEFT", 16, -82)
+    anchorLabel:SetPoint("TOPLEFT", plates, "TOPLEFT", 16, -96)
     anchorLabel:SetText("Position around the plate")
 
     local square = CreateFrame("Frame", nil, panel, "BackdropTemplate")
     square:SetSize(58, 58)
     square:SetPoint("TOPLEFT", anchorLabel, "BOTTOMLEFT", 4, -6)
-    square:SetBackdrop({
-        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        edgeSize = 10,
-        insets = { left = 2, right = 2, top = 2, bottom = 2 },
-    })
-    square:SetBackdropColor(0, 0, 0, 0.4)
-    square:SetBackdropBorderColor(0.6, 0.6, 0.6, 0.8)
+    square:SetBackdrop(FLAT)
+    square:SetBackdropColor(unpack(T.bg))
+    square:SetBackdropBorderColor(unpack(T.border))
     local grid = {
         { "topleft", "top", "topright" },
         { "left", "center", "right" },
@@ -423,7 +418,7 @@ function BuildGeneral(panel)
     -- Everything drawn on a nameplate icon in one place: the icon sets the
     -- size and the two texts on it are a share of that, so changing the icon
     -- keeps them in proportion.
-    local sizes = BuildGroup(panel, "Icon size", 396)
+    local sizes = BuildGroup(panel, "Icon size", 413)
 
     local iconSlider = BuildSlider(panel, {
         key = "iconSize",
@@ -492,7 +487,7 @@ function BuildGeneral(panel)
         { "iconSize", "labelScale", "timeScale", "iconGap", "fixedSpacing", "strata" }, Redraw)
 
     -- Centre call ---------------------------------------------------------
-    local centre = BuildGroup(panel, "Centre call", 218)
+    local centre = BuildGroup(panel, "Centre call", 229)
     BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 })
 
     local centerScale = function()
@@ -503,7 +498,7 @@ function BuildGeneral(panel)
         default = CastAheadConfig.CENTER_DEFAULT,
         min = CastAheadConfig.CENTER_MIN, max = CastAheadConfig.CENTER_MAX, step = 5,
         low = CastAheadConfig.CENTER_MIN .. "%", high = CastAheadConfig.CENTER_MAX .. "%",
-        point = { "TOPLEFT", centre, "TOPLEFT", 16, -56 },
+        point = { "TOPLEFT", centre, "TOPLEFT", 16, -63 },
         caption = function(value) return string.format("Size: %d%%", value) end,
         after = centerScale,
     })
@@ -518,10 +513,8 @@ function BuildGeneral(panel)
         after = centerScale,
     })
 
-    local move = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-    move:SetSize(140, 22)
+    local move = CastAheadWindow.Button(panel, "Move it on screen", 140)
     move:SetPoint("TOPLEFT", centerTextSlider, "BOTTOMLEFT", -6, -18)
-    move:SetText("Move it on screen")
     move:SetScript("OnClick", function()
         if CastAheadCore and CastAheadCore.MoveCenter then CastAheadCore.MoveCenter() end
     end)
@@ -531,10 +524,8 @@ function BuildGeneral(panel)
 end
 
 local function DevButton(panel, label, width, point, command, tip)
-    local button = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-    button:SetSize(width, 22)
+    local button = CastAheadWindow.Button(panel, label, width)
     button:SetPoint(unpack(point))
-    button:SetText(label)
     button:SetScript("OnClick", function()
         SlashCmdList.CASTAHEAD(type(command) == "function" and command() or command)
     end)
@@ -557,7 +548,7 @@ function BuildDevelopment(panel)
     intro:SetText("|cffaaaaaaRecord everything: combat log in dungeons, key journal, enemy casts. Nothing on this page changes what the addon calls out.|r")
 
     panel.flowTop = 30
-    local recording = BuildGroup(panel, "Recording", 86)
+    local recording = BuildGroup(panel, "Recording", 100)
     local recordAll = BuildSwitch(panel, "recordAll", { "TOPLEFT", recording, "TOPLEFT", 10, -26 }, function()
         if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
     end)
@@ -725,10 +716,8 @@ local function BuildSaveList(panel, size, hint)
     box:SetSize(COL_W - 96, 20)
     box:SetAutoFocus(false)
     addBoxes[#addBoxes + 1] = box
-    local add = CreateFrame("Button", nil, group, "UIPanelButtonTemplate")
-    add:SetSize(56, 22)
+    local add = CastAheadWindow.Button(group, "Add", 56)
     add:SetPoint("LEFT", box, "RIGHT", 6, 0)
-    add:SetText("Add")
     local pick = CreateFrame("DropdownButton", nil, group, "WowStyle1DropdownTemplate")
     pick:SetSize(COL_W - 28, 24)
     pick:SetPoint("TOPLEFT", box, "BOTTOMLEFT", -6, -6)
@@ -807,7 +796,7 @@ local function BuildSaveList(panel, size, hint)
 end
 
 function BuildDefensives(panel)
-    local group = BuildGroup(panel, "Defensive calls", 330)
+    local group = BuildGroup(panel, "Defensive calls", 366)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, SaveRefresh)
     local boss = BuildSwitch(panel, "bossAdapter", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, function(on)
         Redraw()
@@ -847,18 +836,17 @@ function BuildDefensives(panel)
         BuildSaveList(panel, "heal", "Pressed right after a big hit lands: stone, potion, self-heal."),
     }
 
-    local reset = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-    reset:SetSize(110, 22)
+    local reset = CastAheadWindow.Button(panel, "Reset to default", 110)
     reset:SetPoint("TOPLEFT", status, "BOTTOMLEFT", -4, -14)
-    reset:SetText("Reset to default")
     reset:SetScript("OnClick", function()
         if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_SAVES") end
     end)
 
     local note = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     note:SetPoint("TOPLEFT", group, "BOTTOMLEFT", 0, -10)
-    note:SetWidth(COL_W * 2)
+    note:SetPoint("RIGHT", panel, "RIGHT", -8, 0)
     note:SetJustifyH("LEFT")
+    note:SetWordWrap(true)
     note:SetText("|cffaaaaaaNo shipped defensive lists for this specialization.|r")
 
     local function PaintSpec()
@@ -911,12 +899,14 @@ end
 function BuildSounds(panel)
     local hint = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     hint:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -4)
+    hint:SetPoint("RIGHT", panel, "RIGHT", -4, 0)
+    hint:SetJustifyH("LEFT")
+    hint:SetWordWrap(true)
     hint:SetText("|cffaaaaaaVoice = the spoken call (a stock beep when it cannot speak). A sound plays instead of the voice.|r")
 
     -- Off by default: the shipped clips speak unless this is on. Gated on the
     -- game's own Combat Audio Alerts setting, which it cannot work without.
-    local tts = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
-    tts:SetSize(22, 22)
+    local tts = CreateFrame("CheckButton", nil, panel, "MinimalCheckboxTemplate")
     tts:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", -4, -4)
     tts.text = tts:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     tts.text:SetPoint("LEFT", tts, "RIGHT", 2, 0)
@@ -948,7 +938,9 @@ function BuildSounds(panel)
     local body = CreateFrame("Frame", nil, panel)
     body:SetPoint("TOPLEFT", tts, "BOTTOMLEFT", 4, -8)
     body:SetSize(400, #SOUND_ROWS * SOUND_ROW_H)
-    panel.flowTop = 4 + 12 + 4 + 22 + 8 + #SOUND_ROWS * SOUND_ROW_H
+    panel.flowTop = function()
+        return 4 + hint:GetStringHeight() + 4 + tts:GetHeight() + 8 + #SOUND_ROWS * SOUND_ROW_H
+    end
 
     for i, key in ipairs(SOUND_ROWS) do
         local advice = CastAheadMatch.ADVICE[key]

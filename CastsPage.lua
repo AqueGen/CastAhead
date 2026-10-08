@@ -312,7 +312,7 @@ local function CreateRow(parent, index)
         local column = tableColumns[i]
         local x = ColumnOffset(i)
         if column.key == "check" then
-            row.check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+            row.check = CreateFrame("CheckButton", nil, row, "MinimalCheckboxTemplate")
             row.check:SetSize(WIDGET_HEIGHT, WIDGET_HEIGHT)
             row.check:SetPoint("LEFT", row, "LEFT", x, 0)
         elseif column.key == "hear" then
@@ -328,7 +328,7 @@ local function CreateRow(parent, index)
                 end
             end)
         elseif column.key == "sound" then
-            row.inherit = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+            row.inherit = CreateFrame("CheckButton", nil, row, "MinimalCheckboxTemplate")
             row.inherit:SetSize(WIDGET_HEIGHT, WIDGET_HEIGHT)
             row.inherit:SetPoint("LEFT", row, "LEFT", x + 12, 0)
             row.inherit:SetScript("OnClick", function(self)
