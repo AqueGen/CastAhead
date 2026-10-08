@@ -18,10 +18,21 @@ local UNCAPPED = { MARK = true, SNAP = true, NOTE = true }
 -- Saved variables reach the disk only on a reload or logout; a crash loses
 -- every key recorded since.
 StaticPopupDialogs.CASTAHEAD_RELOAD = {
-    text = "Cast Ahead: key recorded. Reload now to save it to disk?",
+    text = "Cast Ahead: the key journal is full (" .. R.MAX_KEYS .. " keys). Reload now to save it to disk, copy it off, then clear it on the Development tab.",
     button1 = RELOADUI or "Reload",
     button2 = LATER or "Later",
     OnAccept = function() ReloadUI() end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
+StaticPopupDialogs.CASTAHEAD_CLEAR_JOURNAL = {
+    text = "Cast Ahead: clear the key journal? Copy it off the disk first - cleared keys are gone after the next reload.",
+    button1 = YES or "Yes",
+    button2 = NO or "No",
+    OnAccept = function() R.Clear() end,
     timeout = 0,
     whileDead = true,
     hideOnEscape = true,
@@ -161,8 +172,20 @@ function R.EndKey(result)
     if key.ended == "completed" then
         print(R.Summary(key))
         print(CoverageLine(key))
-        if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RELOAD") end
+        local journal = Journal()
+        if #journal.keys >= R.MAX_KEYS and not journal.fullAsked then
+            journal.fullAsked = true
+            if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RELOAD") end
+        end
     end
+end
+
+function R.Clear()
+    local journal = Journal()
+    local open = R.Current()
+    journal.keys = open and { open } or {}
+    journal.fullAsked = nil
+    print("|cff33ff99Cast Ahead|r key journal cleared")
 end
 
 function R.StartKey(info)
