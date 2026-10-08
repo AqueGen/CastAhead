@@ -203,6 +203,16 @@ function S.MoveEntry(from, index, to)
     S.Refresh()
 end
 
+function S.Shift(size, index, step)
+    local spec = S.SpecID()
+    local list = { unpack(S.List(size)) }
+    local other = index + step
+    if not (spec and list[index] and list[other]) then return end
+    list[index], list[other] = list[other], list[index]
+    Write(spec, size, list)
+    S.Refresh()
+end
+
 local CLASS_SPECS = {
     { 265, 266, 267 },
     { 65, 66, 70 },

@@ -3479,6 +3479,20 @@ do
     check(#CastAheadSaveButtons[265].small == shippedSmall and CastAheadDB.saveButtons[265].heal[#CastAheadDB.saveButtons[265].heal] == 108416,
         "moving out of a shipped list copies it, the shipped table stays")
 
+    CastAheadDB = { saveButtons = { [265] = { small = { 108416, 6789, 104773 } } } }
+    refreshes = 0
+    S.Shift("small", 2, -1)
+    local small = CastAheadDB.saveButtons[265].small
+    check(small[1] == 6789 and small[2] == 108416 and small[3] == 104773 and refreshes == 1, "Shift up swaps with the entry above, one refresh")
+    S.Shift("small", 1, -1)
+    S.Shift("small", 3, 1)
+    check(small[1] == 6789 and small[3] == 104773 and refreshes == 1, "Shift past either end does nothing")
+    CastAheadDB = {}
+    local shippedFirst = CastAheadSaveButtons[265].heal[1]
+    S.Shift("heal", 1, 1)
+    check(CastAheadSaveButtons[265].heal[1] == shippedFirst and CastAheadDB.saveButtons[265].heal[2] == shippedFirst,
+        "Shift on a shipped list writes a copy, the shipped table stays")
+
     CastAheadDB = { saveButtons = { [265] = { big = {} } } }
     local add = S.Addable("big")
     local addSeen = {}

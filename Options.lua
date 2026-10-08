@@ -606,6 +606,13 @@ local function BuildSaveList(panel, size, column, hint)
     local function RowMenu(owner, i)
         if not (MenuUtil and MenuUtil.CreateContextMenu) or not S.List(size)[i] then return end
         MenuUtil.CreateContextMenu(owner, function(_, root)
+            local count = #S.List(size)
+            if i > 1 then
+                root:CreateButton("Move up", function() S.Shift(size, i, -1) RefreshAll() end)
+            end
+            if i < count then
+                root:CreateButton("Move down", function() S.Shift(size, i, 1) RefreshAll() end)
+            end
             for _, target in ipairs(LIST_ORDER) do
                 if target ~= size then
                     root:CreateButton("Move to " .. LIST_TITLES[target], function()
