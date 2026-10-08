@@ -2496,13 +2496,19 @@ end
 local centerPicks = {}
 local function CenterPick(now)
     for i = #centerPicks, 1, -1 do centerPicks[i] = nil end
-    for _, state in pairs(plates) do
+    for unit, state in pairs(plates) do
         local c = state.casting
         if c and c.endAt and c.endAt > now and Announceable(c.candidates) then
             local advice = CastAheadMatch.ConsensusAdvice(c.candidates, state.interruptible)
             if advice then
                 centerPicks[#centerPicks + 1] = { endAt = c.endAt, advice = advice, row = c.row,
                                                   icons = CastAheadSaves and CastAheadSaves.Icons(advice) or nil }
+                local save = advice == CastAheadMatch.ADVICE.TARGET and CastAheadSaves and c.candidates[1]
+                    and CastAheadMatch.SaveAdvice(c.candidates[1])
+                if save then
+                    centerPicks[#centerPicks + 1] = { endAt = c.endAt, advice = save, row = c.row,
+                                                      icons = CastAheadSaves.Icons(save), onlyIfTarget = unit }
+                end
             else
                 -- Disagreement is still a cast going out: show both answers
                 -- and let the player pick. Nothing is spoken for these.
@@ -2570,6 +2576,15 @@ local function UpdateCenter(now)
             local say = pick.advice.say
             line.text:SetFormattedText("%s  %.1f", say:sub(1, 1):upper() .. say:sub(2), pick.endAt - now)
             line.text:SetTextColor(pick.advice.r, pick.advice.g, pick.advice.b)
+            local ok, mine
+            if pick.onlyIfTarget and PlayerIsSpellTarget and line.SetAlphaFromBoolean then
+                ok, mine = pcall(PlayerIsSpellTarget, pick.onlyIfTarget)
+            end
+            if ok then
+                line:SetAlphaFromBoolean(mine, 1, 0)
+            else
+                line:SetAlpha(pick.onlyIfTarget and 0 or 1)
+            end
             line:Show()
         else
             line:Hide()

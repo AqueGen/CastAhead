@@ -2605,6 +2605,40 @@ do
     fire("UNIT_SPELLCAST_STOP", unit)
     reset()
     CastAheadConfig.SetEnabled("saveCalls", true)
+
+    row100.targeted = true
+    CastAheadCore.ReapplyData()
+    local savedIsTarget = PlayerIsSpellTarget
+    PlayerIsSpellTarget = function(u) return "secret:" .. u end
+    reset()
+    enter()
+    castFor(3.0)
+    advance(15.0)
+    advance(1.5)
+    advance(3.0)
+    fire("UNIT_SPELLCAST_START", unit)
+    advance(0.5)
+    for _, f in ipairs(allFrames) do
+        f.SetAlphaFromBoolean = function(self, v, yes, no) self.alphaBool, self.alphaYes, self.alphaNo = v, yes, no end
+        f.alphaBool = nil
+    end
+    advance(0.1)
+    local targetedLine, saveLine
+    for _, f in ipairs(allFrames) do
+        if f.shown and type(f.icon) == "table" and not IsBar(f) and f.timeValue then
+            if f.timeValue:match("^Targeted") then targetedLine = f end
+            if f.timeValue:match("^Big defensive") then saveLine = f end
+        end
+    end
+    check(targetedLine and rawget(targetedLine, "alphaBool") == nil, "a targeted cast shows targeted in the centre, always visible")
+    check(saveLine and rawget(saveLine, "alphaBool") == "secret:" .. unit and saveLine.alphaYes == 1 and saveLine.alphaNo == 0,
+        "its save line is drawn only when the game says the cast is on the player")
+    advance(2.0)
+    fire("UNIT_SPELLCAST_STOP", unit)
+    reset()
+    PlayerIsSpellTarget = savedIsTarget
+    row100.targeted = nil
+    CastAheadCore.ReapplyData()
 end
 
 -- A save call with the voice off still beeps once.
