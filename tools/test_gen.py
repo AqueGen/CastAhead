@@ -36,13 +36,6 @@ def row(**fields):
     return base
 
 
-def test_a_channel_stopped_short_counts_as_controlled_and_kicks_are_taken_out():
-    r = {"cast": [0.0, 0.0, 0.0, 0.0], "chan": [1.4, 1.5, 10.0, 9.95], "kicked": 1, "starts": 0, "hits": [], "dmg": []}
-    t = threat(r, channel_length=10.0)
-    assert (t["kick"], t["cc"]) == (0.25, 0.25)
-    assert threat(r)["cc"] == 0
-
-
 def test_small_drift_keeps_the_anchor():
     old = row()
     new = row(cast=2.6, cd=[20.4], first=6.5, firstN=15, offset=0.8, hits=1.5, dmg=0.35, kick=0.15, cc=0.1,

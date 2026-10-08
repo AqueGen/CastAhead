@@ -45,7 +45,6 @@ MIN_OPENING_SAMPLES = 8
 SHARE_MARGIN = 0.02
 SHARE_STEP = 0.10
 CAST_TOLERANCE = 0.25   # Match.lua CAST_TOLERANCE
-CHANNEL_FULL = 0.9
 CAST_STEP = 0.12        # half of CAST_TOLERANCE
 FIRST_STEP = 2.0        # half of FIRST_TOLERANCE
 OFFSET_STEP = 1.0
@@ -130,7 +129,7 @@ def positional_fit(runs, slots):
     return hit / total if total else 0.0
 
 
-def threat(r, channel_length=None):
+def threat(r):
     """What this cast does to the group, and how people deal with it.
 
     hits - players it typically lands on. dmg - share of the victim's own max
@@ -147,15 +146,6 @@ def threat(r, channel_length=None):
     # see rather than trusting the start counter alone.
     attempts = max(r.get("starts", 0), finished + kicked)
     stopped_otherwise = max(0, attempts - finished - kicked)
-    lengths = r.get("chan", [])
-    if channel_length and lengths and finished:
-        short = sum(1 for d in lengths if d < channel_length * CHANNEL_FULL) / len(lengths)
-        return {
-            "hits": hits,
-            "dmg": dmg,
-            "kick": round(kicked / finished, 2),
-            "cc": round(max(0.0, short - kicked / finished), 2),
-        }
     return {
         "hits": hits,
         "dmg": dmg,
@@ -429,7 +419,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                     lo, hi = offsets[len(offsets) // 10], offsets[-1 - len(offsets) // 10]
                     if hi - lo <= OFFSET_SPREAD:
                         offset = round(statistics.median(offsets), 1)
-                t = threat(r, cast if is_channel else None)
+                t = threat(r)
                 forced = spellid in include
                 if spellid in exclude and not forced:
                     continue
