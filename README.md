@@ -63,7 +63,7 @@ The Defensives tab in the settings has a "Defensive calls" switch, a "Boss calls
 
 The Saves tab in the `/ca` window lists, for the current dungeon or the one you pick, every hit that gets a call: its size, your buttons, the mob or boss, what triggers it (cast, boss bar, debuff) and how early it comes. A hit where a kick, dodge or other mechanic wins over the save says so.
 
-The Guide tab next to it reads the same data as plain text, a cheat sheet for the picked dungeon and your current spec and lists: each boss in turn, then the trash, one line per hit, for example "Living Bomb from Primalist Cinderweaver (debuff on you): big save - Unending Resolve; heal up after the hit". Hits Cast Ahead knows from trash casts also say when they come: the first cast after the pull and the gap to the next one, or the cycle of gaps when the mob alternates.
+The Guide tab next to it reads the same data as plain text, a cheat sheet for the picked dungeon and your current spec and lists: each boss in turn, then the trash, one line per hit, for example "Living Bomb from Primalist Cinderweaver (debuff on you): big save - Unending Resolve; heal up after the hit". Hits also say when they come: the first cast after the pull and the gap to the next one. For trash the gaps are the cycle the mob repeats; for bosses they are the typical gaps in order as measured in top-player runs, so a boss that pauses between phases shows the pause. Boss times are approximate.
 
 Boss coverage is partial today. A boss threat gets a call only when DBM or BigWigs runs a timer for it, because bars that exist only in Blizzard's own timeline give addons no callback. Schedules counted from the pull are the planned next step.
 

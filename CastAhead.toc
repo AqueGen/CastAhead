@@ -24,6 +24,7 @@ Data.lua
 Priority.lua
 SaveButtons.lua
 Defensives.lua
+BossCadence.lua
 Traits.lua
 Packs.lua
 Match.lua

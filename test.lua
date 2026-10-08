@@ -423,6 +423,13 @@ check(M.Advice(saveRow) == M.ADVICE.AOE, "outside the game no role means no save
 
 dofile("SaveButtons.lua")
 dofile("Defensives.lua")
+dofile("BossCadence.lua")
+for id, c in pairs(CastAheadBossCadence) do
+    local row = CastAheadDefensives.spells[id]
+    check(row and row.boss ~= "", "boss cadence " .. id .. " belongs to a boss row")
+    check(type(c.first) == "number" and type(c.cd) == "table" and type(c.steady) == "boolean", "boss cadence " .. id .. " has first, cd and steady")
+    for _, gap in ipairs(c.cd) do check(type(gap) == "number" and gap > 0, "boss cadence " .. id .. " gaps are positive numbers") end
+end
 local shippedTables = {}
 for spec, lists in pairs(CastAheadSaveButtons) do
     for _, size in ipairs({ "small", "big", "heal" }) do

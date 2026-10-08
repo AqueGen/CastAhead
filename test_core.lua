@@ -2769,8 +2769,16 @@ do
     check(text:find("Burn from ground effect (debuff on you): big save", 1, true), "a debuff-only hit says it lands on you")
     check(text:find("Bolt from Caster (cast): small save", 1, true) and text:find("first ~12s after the pull, then every ~20s", 1, true),
         "a cast with one cooldown gives its first cast and its period")
-    check(text:find("then ~9s, ~16s, ~9s x2, repeating", 1, true), "a cooldown cycle is spelled out, repeats folded")
+    check(text:find("~9s, ~16s, ~9s x2, repeating", 1, true), "a cooldown cycle is spelled out, repeats folded")
     check(not text:find("Burn from ground effect (debuff on you): big save[^\n]*every"), "a hit without cast data gets no cadence")
+    CastAheadBossCadence = { [801] = { first = 9.6, cd = { 25.0, 40.2, 25.0 }, steady = false }, [806] = { first = 7.0, cd = { 40.0 }, steady = true } }
+    text = table.concat(CastAheadSaves.GuideLines(9000), "\n")
+    check(text:find("Slam from Boss A %(boss timer%): small save[^\n]*Casts first ~10s after the pull, then ~25s, ~40s, ~25s\n")
+        and text:find("Zap from Abe[^\n]*first ~7s after the pull, then every ~40s"),
+        "a boss hit takes its cadence from the boss table, a sequence without repeating")
+    check(text:find("Magma from Pool %(cast%): big save[^\n]*Casts with gaps of ~9s, ~16s, ~9s x2, repeating"),
+        "a cycle without a first cast reads as gaps")
+    CastAheadBossCadence = nil
     C_Spell.GetSpellName = nameSaved
     local savedSpecRole = CastAheadMatch.SpecRole
     CastAheadMatch.SpecRole = function() return "TANK" end

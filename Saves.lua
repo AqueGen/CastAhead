@@ -322,6 +322,11 @@ local function ViewOrder(a, b)
     return a.id < b.id
 end
 
+local NO_CADENCE = {}
+local function BossCadence(id)
+    return CastAheadBossCadence and CastAheadBossCadence[id] or NO_CADENCE
+end
+
 function S.ViewRows(instanceID)
     local out = {}
     local spells = CastAheadDefensives and CastAheadDefensives.spells
@@ -343,7 +348,8 @@ function S.ViewRows(instanceID)
                 id = id, name = row.name or "", boss = row.boss or "", size = size, lead = row.lead,
                 mob = row.mob == "Environment" and "ground effect" or row.mob,
                 trigger = { cast = cast[id] ~= nil, bar = row.bar == true, debuff = row.aura == true },
-                first = cast[id] and cast[id].first, cd = cast[id] and cast[id].cd,
+                first = (cast[id] or BossCadence(id)).first, cd = (cast[id] or BossCadence(id)).cd,
+                repeating = cast[id] ~= nil,
                 wins = wins[id] or Wins({ prio = CastAheadPriority and CastAheadPriority[id] }),
                 buttons = buttons[size],
             }
@@ -377,8 +383,9 @@ local function Cadence(r)
     local parts = {}
     if r.first then parts[#parts + 1] = "first " .. Seconds(r.first) .. " after the pull" end
     local cd = r.cd or {}
+    local lead = r.first and "then " or ""
     if #cd == 1 then
-        parts[#parts + 1] = "then every " .. Seconds(cd[1])
+        parts[#parts + 1] = lead .. "every " .. Seconds(cd[1])
     elseif #cd > 1 then
         local steps, i = {}, 1
         while i <= #cd do
@@ -387,7 +394,7 @@ local function Cadence(r)
             steps[#steps + 1] = n > 1 and (word .. " x" .. n) or word
             i = i + n
         end
-        parts[#parts + 1] = "then " .. table.concat(steps, ", ") .. ", repeating"
+        parts[#parts + 1] = (r.first and "then " or "with gaps of ") .. table.concat(steps, ", ") .. (r.repeating and ", repeating" or "")
     end
     return #parts > 0 and table.concat(parts, ", ") or nil
 end
