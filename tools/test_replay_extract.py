@@ -15,6 +15,27 @@ def removed(stamp, spell, name):
         stamp, MOB, MOB, spell, name)
 
 
+def tick(stamp, spell, name):
+    return "10/7/2026 22:%s  SPELL_DAMAGE,%s,\"Ashseer Flamelasher\",0xa48,0x0,Player-1-AAAA,\"P\",0x512,0x0,%d,\"%s\",0x4" % (
+        stamp, MOB, spell, name)
+
+
+def test_a_channel_ends_at_its_last_tick_when_that_comes_after_its_aura_left(tmp_path):
+    log = [
+        "10/7/2026 22:05:00.000  CHALLENGE_MODE_START,\"Ruby Life Pools\",2521,399,12,[10]",
+        success("05:30.000", 385536, "Flaming Barrage"),
+        removed("05:31.000", 385536, "Flaming Barrage"),
+        tick("05:39.500", 385567, "Flaming Barrage"),
+        "10/7/2026 22:09:00.000  CHALLENGE_MODE_END,2521,1,12,600000",
+    ]
+    path = tmp_path / "WoWCombatLog-1.txt"
+    path.write_text("\n".join(log) + "\n", encoding="utf-8")
+    runs = []
+    scan(str(path), runs, {}, {385536: 10.0})
+    ends = [e for e in runs[0].events if e["e"] == "CHANEND"]
+    assert len(ends) == 1 and ends[0]["full"] is True and abs(ends[0]["t"] - 39.5) < 0.01
+
+
 def test_a_pure_channel_replays_as_a_channel_start_and_end_marked_full_or_cut(tmp_path):
     log = [
         "10/7/2026 22:05:00.000  CHALLENGE_MODE_START,\"Ruby Life Pools\",2521,399,12,[10]",

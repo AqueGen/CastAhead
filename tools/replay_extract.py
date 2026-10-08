@@ -27,7 +27,10 @@ Writes a Lua table, one entry per keystone run:
 `u` is a nameplate slot, 1..40, recycled the way the game recycles unit
 tokens. A pure channel (no cast bar, listed as a channel in the client's spell
 data passed with --channels) replays as CHAN at its SPELL_CAST_SUCCESS and
-CHANEND when its aura leaves, `full` when it ran at least 90% of its length.
+CHANEND at the later of its aura leaving and its caster's last tick under the
+same spell name, capped at the client length; `full` when it ran at least 90%
+of that length. The aura usually sits on the channel's target, so its removal
+alone can come before the channel ends.
 """
 import csv
 import glob
@@ -41,7 +44,8 @@ LINGER = 45.0          # a creature quiet this long has left the nameplate range
 LEVEL_INDEX = 30       # advanced block on SPELL_CAST_SUCCESS: caster level
 POWER_INDEX = 22       # ... and its power type (0 mana, 1 rage, 3 energy, ...)
 HOSTILE = 0x40
-CHANNEL_FULL = 0.9     # gen.py CHANNEL_FULL
+CHANNEL_FULL = 0.9     # a channel ending past this share of its length ran in full
+TICKS = ("SPELL_PERIODIC_DAMAGE", "SPELL_HEAL", "SPELL_PERIODIC_HEAL", "SPELL_MISSED", "SPELL_PERIODIC_MISSED")
 
 
 def stamp(s):
@@ -66,7 +70,8 @@ class Run:
         self.level = {}         # guid -> (level, power), from the first SUCCESS
         self.kickable = {}      # (npc, spell) -> bool, from MDT
         self.open = {}          # guid -> (spell, t) of the cast in progress
-        self.channel = {}       # guid -> (spell, t) of the pure channel in progress
+        self.channel = {}       # guid -> the pure channel in progress
+        self.lengths = {}       # spell -> client channel length
         self.pending_add = {}   # guid -> npc, waiting for a level
 
     def touch(self, guid, t):
@@ -90,11 +95,31 @@ class Run:
         self.events.append({"t": t, "e": "ADD", "u": slot, "level": level,
                             "power": power, "npc": self.pending_add.pop(guid)})
 
+    def end_channel(self, guid):
+        ch = self.channel.pop(guid, None)
+        if not ch:
+            return
+        length = self.lengths[ch["spell"]]
+        seen = [x for x in (ch["removed"], ch["tick"]) if x is not None]
+        end = min(max(seen), ch["t"] + length) if seen else ch["t"] + length
+        event = self.cast("CHANEND", guid, ch["spell"], end)
+        if event is not None:
+            event["full"] = end - ch["t"] >= length * CHANNEL_FULL
+
+    def channel_tick(self, guid, name, t):
+        ch = self.channel.get(guid)
+        if ch and name == ch["name"] and t <= ch["t"] + self.lengths[ch["spell"]] + 0.5:
+            ch["tick"] = t
+
+    def end_channels(self):
+        for guid in list(self.channel):
+            self.end_channel(guid)
+
     def remove(self, guid, t, dead=False):
+        self.end_channel(guid)
         slot = self.slot.pop(guid, None)
         self.pending_add.pop(guid, None)
         self.open.pop(guid, None)
-        self.channel.pop(guid, None)
         if slot is not None:
             event = {"t": t, "e": "REMOVE", "u": slot}
             if dead:
@@ -164,6 +189,7 @@ def scan(path, runs, kickable, channels=None):
         for line in f:
             if "CHALLENGE_MODE_" in line:
                 if run:
+                    run.end_channels()
                     runs.append(run)
                     run = None
                 if "CHALLENGE_MODE_START" in line:
@@ -172,6 +198,7 @@ def scan(path, runs, kickable, channels=None):
                     run = Run(int(p[2]), p[1], stamp(head))
                     run.level = known
                     run.kickable = kickable
+                    run.lengths = channels
                 continue
             if run is None or "Creature-" not in line and "ENCOUNTER_" not in line:
                 continue
@@ -227,21 +254,22 @@ def scan(path, runs, kickable, channels=None):
                         opened[2]["target"] = dst not in ("0000000000000000", "")
                     run.cast("STOP", src, spell, t)
                 elif not opened and spell in channels:
-                    run.channel[src] = (spell, t)
+                    run.end_channel(src)
+                    run.channel[src] = {"spell": spell, "name": p[10], "t": t, "removed": None, "tick": None}
                     run.cast("CHAN", src, spell, t)
+                else:
+                    run.channel_tick(src, p[10], t)
             elif ev == "SPELL_AURA_REMOVED":
                 try:
                     spell = int(p[9])
                 except (ValueError, IndexError):
                     continue
                 running = run.channel.get(src)
-                if running and running[0] == spell:
-                    run.channel.pop(src)
-                    event = run.cast("CHANEND", src, spell, t)
-                    if event is not None:
-                        event["full"] = t - running[1] >= channels[spell] * CHANNEL_FULL
+                if running and running["spell"] == spell and running["removed"] is None:
+                    running["removed"] = t
             elif ev == "SPELL_CAST_START":
                 run.touch(src, t)
+                run.end_channel(src)
                 try:
                     spell = int(p[9])
                 except (ValueError, IndexError):
@@ -255,7 +283,12 @@ def scan(path, runs, kickable, channels=None):
                     run.cast("FAIL", src, open_spell, t)
             elif ev in ("SPELL_DAMAGE", "SWING_DAMAGE", "SPELL_AURA_APPLIED"):
                 run.touch(src, t)
+                if ev == "SPELL_DAMAGE":
+                    run.channel_tick(src, p[10], t)
+            elif ev in TICKS:
+                run.channel_tick(src, p[10], t)
     if run:
+        run.end_channels()
         runs.append(run)
 
 
