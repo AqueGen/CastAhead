@@ -245,6 +245,13 @@ function CastAheadUI.VisibleColumns(dev)
     return keys
 end
 
+function CastAheadUI.VisibleSortKey(key, dev)
+    for _, column in ipairs(SelectColumns(dev)) do
+        if column.key == key and column.sort then return key end
+    end
+    return "advice"
+end
+
 local tableColumns = COLUMNS
 
 local function ColumnOffset(index, columns)
@@ -600,6 +607,7 @@ local function RebuildTable()
     end
     headers, rows = {}, {}
     tableColumns = SelectColumns(CastAheadConfig.Dev())
+    sortKey = CastAheadUI.VisibleSortKey(sortKey or "n", CastAheadConfig.Dev())
     local width = TableWidth()
     tableFrame:SetWidth(width + 26)
     headerStrip:SetWidth(width)

@@ -849,6 +849,9 @@ do
     local keys = table.concat(CastAheadUI.VisibleColumns(false), ",")
     check(keys == "check,hear,icon,advice,spell,mob,cast,cd", "outside Development mode the cast table shows 8 columns, got " .. keys)
     check(#CastAheadUI.VisibleColumns(true) == 18, "Development mode shows every column")
+    check(CastAheadUI.VisibleSortKey("n", false) == "advice", "a hidden sort column falls back to Do outside Development mode")
+    check(CastAheadUI.VisibleSortKey("n", true) == "n", "Development mode keeps a development sort column")
+    check(CastAheadUI.VisibleSortKey("cast", false) == "cast", "a visible sort column is kept")
 end
 
 -- The anchor has to belong to the plate, or every icon stacks in the middle of
