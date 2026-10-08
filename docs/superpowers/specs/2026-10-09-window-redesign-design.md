@@ -1,6 +1,6 @@
 # Window redesign - design
 
-Date: 2026-10-09. Status: approved in conversation, awaiting written-spec review.
+Date: 2026-10-09. Status: implemented on feat/window-redesign, awaiting the in-game check.
 
 ## Goal
 
