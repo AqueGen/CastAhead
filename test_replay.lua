@@ -196,7 +196,7 @@ local names = {}
 local startRight, startWrong, startWrongPairs = 0, 0, {}
 local voicedRight, voicedWrong, voicedWrongPairs = 0, 0, {}
 local startsBySpell = {}   -- truth spell -> { n, right, wrong } over every start, finished or not
-local cutChannels = 0
+local cutChannels, unknownChannels = 0, 0
 
 local function bump(t, key) t[key] = (t[key] or 0) + 1 end
 
@@ -409,10 +409,12 @@ for _, run in ipairs(CastAheadReplay) do
             judgeStart(unit, ev.spell, run.instance)
         elseif ev.e == "CHANEND" then
             fire("UNIT_SPELLCAST_CHANNEL_STOP", unit)
-            if ev.full then
+            if ev.full == true then
                 score(unit, ev.spell, run.instance, d)
-            else
+            elseif ev.full == false then
                 cutChannels = cutChannels + 1
+            else
+                unknownChannels = unknownChannels + 1
             end
         elseif settling == "kicked" then
             open[unit] = nil
@@ -500,7 +502,8 @@ top(missed, 12, "left unidentified (ambiguous or none), most frequent first:")
 top(untabledSpells, 12, "cast but absent from Data.lua, most frequent first:")
 print("")
 print(string.format("claimed at cast start: %d with the right call, %d with a wrong one", startRight, startWrong))
-print(string.format("  (%d pure channels cut short, judged at their start only)", cutChannels))
+print(string.format("  (%d pure channels cut short and %d whose end the log does not show, judged at their start only)",
+    cutChannels, unknownChannels))
 -- CA_SPELLS=<id,id,...> lists those spells' starts, finished or not.
 for id in (os.getenv("CA_SPELLS") or ""):gmatch("%d+") do
     local tally = startsBySpell[tonumber(id)] or { n = 0, right = 0, wrong = 0 }
