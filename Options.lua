@@ -105,7 +105,7 @@ local SWITCHES = {
     devMode = { label = "Development mode", defaultOff = true,
         tip = "Adds the Development tab and starts recording everything for improving the addon's data (the Record everything switch there, on by default). Nothing here changes what the addon calls out." },
     recordAll = { label = "Record everything",
-        tip = "The game's combat log with advanced logging in every dungeon (off again when you leave, unless you had started it yourself), a journal of each key, and what the game lets an addon read off each enemy cast. Keeps the last 12 keys. No names of people are recorded. /reload after a key saves it to disk." },
+        tip = "The game's combat log with advanced logging in every dungeon (off again when you leave, unless you had started it yourself), a journal of each key, and what the game lets an addon read off each enemy cast. Holds 12 keys: when the journal fills up it asks you to reload so it reaches the disk, then you copy it off and clear it on this tab. No names of people are recorded." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
         tip = "A panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. Only while recording. The key bindings and /ca mark work without it." },
 }
@@ -510,6 +510,13 @@ function BuildDevelopment(panel)
         "probe sweep", "Print every Unit* function that returned something readable. /ca probe sweep")
     DevButton(panel, "Clear", 60, { "LEFT", sweep, "RIGHT", 4, 0 },
         "probe clear", "Forget the collected probe results. /ca probe clear")
+
+    local journal = BuildGroup(panel, "Key journal", 3, 62,
+        { "TOPLEFT", group, "TOPRIGHT", COL_GAP, 0 })
+    local count = DevButton(panel, "Count", 70, { "TOPLEFT", journal, "TOPLEFT", 16, -28 },
+        "journal", "Print how many keys the journal holds. /ca journal")
+    DevButton(panel, "Clear journal", 110, { "LEFT", count, "RIGHT", 4, 0 },
+        "journal clear", "Empty the journal after you copied it off the disk; asks first. /ca journal clear")
 end
 
 local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
