@@ -1,8 +1,3 @@
--- The settings panels. They are pages of the main window (Window.lua owns the
--- frame and the side menu); this file only knows how to build and show them.
--- A second floating window was the first attempt and it overlapped the table
--- it was meant to configure.
-
 CastAheadOptions = {}
 
 CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Development" }
@@ -37,14 +32,14 @@ function CastAheadOptions.RelayoutGroups(panel)
             heights[#heights + 1] = g:GetHeight()
         end
     end
-    local pos, total = CastAheadOptions.Flow(panel:GetWidth(), COL_W, COL_GAP, heights)
+    local pos, total = CastAheadOptions.Flow(panel:GetWidth() - COL_X, COL_W, COL_GAP, heights)
     local top = panel.flowTop or 6
     if type(top) == "function" then top = top() end
     for i, g in ipairs(shown) do
         g:ClearAllPoints()
         g:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X + pos[i].x, -(top + pos[i].y))
     end
-    panel:SetHeight(top + total + 12)
+    panel:SetHeight(top + total + (panel.flowBottom and panel.flowBottom() or 0) + 12)
 end
 
 -- Forward declarations: Build calls these, and Lua resolves a local by
@@ -175,8 +170,6 @@ local function SetSwitch(key, on)
     end
 end
 
--- A titled box. Widgets are anchored to what it returns; the panel's
--- Relayout places the box itself.
 local function BuildGroup(panel, title, height)
     local box = CreateFrame("Frame", nil, panel, "BackdropTemplate")
     box:SetSize(COL_W, height)
@@ -230,10 +223,6 @@ local function BuildReset(panel, point, keys, after)
     return reset
 end
 
-function CastAheadOptions.DevMode()
-    return CastAheadConfig.Dev()
-end
-
 -- Built once, the first time a settings tab is opened, as children of the
 -- host frame the main window hands over.
 local function Build(host)
@@ -285,12 +274,6 @@ function CastAheadOptions.ShowPanel(host, name)
         panel:SetShown(tab == name)
     end
     panels[name]:Relayout()
-end
-
--- The main window switching to a non-settings tab.
-function CastAheadOptions.HideAll()
-    if not panels then return end
-    for _, panel in pairs(panels) do panel:Hide() end
 end
 
 -- Groups in reading order: what is announced at all first, then the places
@@ -544,12 +527,16 @@ end
 -- One switch records everything; the rest of the page only looks at it.
 function BuildDevelopment(panel)
     local intro = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    intro:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -6)
-    intro:SetWidth(600)
+    intro:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -6)
     intro:SetJustifyH("LEFT")
+    intro:SetWordWrap(true)
     intro:SetText("|cffaaaaaaRecord everything: combat log in dungeons, key journal, enemy casts. Nothing on this page changes what the addon calls out.|r")
+    panel:HookScript("OnSizeChanged", function(self, width)
+        intro:SetWidth(math.max(width - 2 * COL_X, 1))
+        if self:IsShown() then self:Relayout() end
+    end)
 
-    panel.flowTop = 30
+    panel.flowTop = function() return 6 + intro:GetStringHeight() + 12 end
     local recording = BuildGroup(panel, "Recording", 100)
     local recordAll = BuildSwitch(panel, "recordAll", { "TOPLEFT", recording, "TOPLEFT", 10, -26 }, function()
         if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
@@ -678,8 +665,7 @@ local function BuildSaveList(panel, size, hint)
         text:SetWidth(COL_W - 98)
         text:SetJustifyH("LEFT")
         text:SetWordWrap(false)
-        local remove = CreateFrame("Button", nil, group, "UIPanelCloseButton")
-        remove:SetSize(20, 20)
+        local remove = CastAheadWindow.Button(group, "X", 20)
         remove:SetPoint("TOPRIGHT", group, "TOPRIGHT", -8, y)
         remove:SetScript("OnClick", function() Remove(i) end)
         local function Arrow(dir, x, step, tip)
@@ -849,8 +835,12 @@ function BuildDefensives(panel)
     note:SetJustifyH("LEFT")
     note:SetJustifyV("TOP")
     note:SetWordWrap(true)
-    panel:HookScript("OnSizeChanged", function(_, width) note:SetWidth(math.max(width - 2 * COL_X, 1)) end)
+    panel:HookScript("OnSizeChanged", function(self, width)
+        note:SetWidth(math.max(width - 2 * COL_X, 1))
+        if self:IsShown() then self:Relayout() end
+    end)
     note:SetText("|cffaaaaaaNo shipped defensive lists for this specialization.|r")
+    panel.flowBottom = function() return note:IsShown() and note:GetStringHeight() + 10 or 0 end
 
     local function PaintSpec()
         local spec = CastAheadSaves and CastAheadSaves.SpecID()

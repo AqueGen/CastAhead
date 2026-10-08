@@ -417,6 +417,7 @@ local function RebuildTable()
     tableFrame:SetWidth(width)
     headerStrip:SetWidth(width)
     rowParent:SetWidth(width)
+    sideScroll:SetHorizontalScroll(0)
     for i = 1, #tableColumns do
         headers[i] = CreateHeader(headerStrip, i, tableColumns[i])
     end
@@ -504,6 +505,7 @@ function Refresh()
         summary = "|cffff3333Both outputs are off - nothing will be shown in combat|r"
     end
     CastAheadWindow.SetFooter(summary)
+    CastAheadWindow.SideHint(sideScroll, tableFrame)
 end
 
 local function Build(page)
@@ -518,30 +520,7 @@ local function Build(page)
         Refresh()
     end)
 
-    -- Header row, then the scrolling body beneath it, both on the same grid.
-    -- The table lives in a clipping container: shrink the window and the
-    -- rightmost columns are simply cut off at the frame edge instead of
-    -- hanging outside it. Nothing forces the window to stay table-wide.
-    sideScroll = CreateFrame("ScrollFrame", nil, host)
-    sideScroll:SetPoint("TOPLEFT", host, "TOPLEFT", 0, -TABLE_TOP)
-    sideScroll:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, -TABLE_TOP)
-    sideScroll:SetHeight(1)
-    tableFrame = CreateFrame("Frame", nil, sideScroll)
-    tableFrame:SetSize(1, 1)
-    sideScroll:SetScrollChild(tableFrame)
-    local function ScrollSideways(delta)
-        local range = sideScroll:GetHorizontalScrollRange()
-        sideScroll:SetHorizontalScroll(math.max(0, math.min(range, sideScroll:GetHorizontalScroll() - delta * 60)))
-    end
-    sideScroll:EnableMouseWheel(true)
-    sideScroll:SetScript("OnMouseWheel", function(_, delta)
-        if IsShiftKeyDown() then
-            ScrollSideways(delta)
-        else
-            local outer = host:GetParent()
-            outer:GetScript("OnMouseWheel")(outer, delta)
-        end
-    end)
+    sideScroll, tableFrame = CastAheadWindow.SideScroll(host, TABLE_TOP)
 
     headerStrip = CreateFrame("Frame", nil, tableFrame)
     headerStrip:SetHeight(HEADER_HEIGHT)

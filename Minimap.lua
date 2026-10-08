@@ -27,7 +27,7 @@ local broker = LDB:NewDataObject("CastAhead", {
     end,
     OnTooltipShow = function(tooltip)
         tooltip:AddLine("Cast Ahead")
-        tooltip:AddLine("Left click: browse tracked casts", 0.8, 0.8, 0.8)
+        tooltip:AddLine("Left click: open Cast Ahead", 0.8, 0.8, 0.8)
         tooltip:AddLine("Right click: print status to chat", 0.6, 0.6, 0.6)
     end,
 })

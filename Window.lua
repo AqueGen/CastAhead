@@ -21,11 +21,12 @@ local PER_ROW = 4
 local GROUPS = { "Dungeon", "Settings" }
 local SCALE_STEPS = { 75, 100, 125, 150 }
 local SCALE_MIN, SCALE_MAX, SCALE_DEFAULT = 75, 150, 100
+local SIDE_HINT = "Shift + mouse wheel scrolls sideways"
 local FLAT = { bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 }
 
-local frame, titleBar, titleAnchor, scaleDrop, menu, content, grid, scroll, footerText
+local frame, titleBar, titleAnchor, scaleDrop, menu, content, grid, scroll, footerText, footerHint
 local pages, order, headers, dungeonButtons = {}, {}, {}, {}
-local current, dungeon
+local current, dungeon, picked
 
 local function Saved()
     CastAheadDB = CastAheadDB or {}
@@ -68,7 +69,7 @@ function W.ApplyScale(target)
 end
 
 function W.Dungeon()
-    if not dungeon then
+    if not picked then
         local _, _, _, _, _, _, _, here = GetInstanceInfo()
         local list = Dungeons()
         dungeon = (here and CastAheadData[here]) and here or (list[1] and list[1].id)
@@ -237,11 +238,17 @@ local function Build()
     footerLine:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, FOOTER_H)
     footerLine:SetHeight(1)
     footerLine:SetColorTexture(unpack(T.line))
+    local madeIn = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    madeIn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -(PAD + 16), 5)
+    madeIn:SetText("|cFF0057B7Made|r |cFFFFD700in Ukraine|r")
+    footerHint = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    footerHint:SetPoint("BOTTOMRIGHT", madeIn, "BOTTOMLEFT", -2 * PAD, 0)
+    footerHint:SetTextColor(unpack(T.muted))
     footerText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     footerText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 5)
-    local madeIn = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    madeIn:SetPoint("BOTTOM", frame, "BOTTOM", 0, 5)
-    madeIn:SetText("|cFF0057B7Made|r |cFFFFD700in Ukraine|r")
+    footerText:SetPoint("RIGHT", footerHint, "LEFT", -2 * PAD, 0)
+    footerText:SetJustifyH("LEFT")
+    footerText:SetWordWrap(false)
 
     content = CreateFrame("Frame", nil, frame)
     content:SetPoint("TOPLEFT", menu, "TOPRIGHT", PAD, -PAD)
@@ -257,15 +264,13 @@ local function Build()
         local b = W.Button(grid, d.name, 1, false)
         b.instanceID = d.id
         b:SetScript("OnClick", function(self)
-            dungeon = self.instanceID
+            dungeon, picked = self.instanceID, true
             PaintDungeons()
             local page = pages[current]
             if page then page.refresh() end
         end)
         dungeonButtons[i] = b
     end
-    W.Dungeon()
-    PaintDungeons()
     content:SetScript("OnSizeChanged", function(_, width) LayoutGrid(width) end)
 
     scroll = CreateFrame("ScrollFrame", nil, content, "UIPanelScrollFrameTemplate")
@@ -333,6 +338,8 @@ function W.Show(name)
     end
     scroll:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", -SCROLLBAR_W, 0)
     LayoutGrid(content:GetWidth() or 0)
+    W.Dungeon()
+    PaintDungeons()
     for _, p in ipairs(order) do
         if p.host and p ~= page then p.host:Hide() end
     end
@@ -346,6 +353,7 @@ function W.Show(name)
     PaintMenu()
     Saved().page = name
     W.SetFooter("")
+    W.SetFooterHint("")
     page.refresh()
 end
 
@@ -384,6 +392,38 @@ end
 
 function W.SetFooter(text)
     if footerText then footerText:SetText(text) end
+end
+
+function W.SetFooterHint(text)
+    if footerHint then footerHint:SetText(text) end
+end
+
+function W.SideHint(side, child)
+    if side:IsVisible() then
+        W.SetFooterHint(child:GetWidth() > side:GetWidth() + 0.5 and SIDE_HINT or "")
+    end
+end
+
+function W.SideScroll(host, top)
+    local side = CreateFrame("ScrollFrame", nil, host)
+    side:SetPoint("TOPLEFT", host, "TOPLEFT", 0, -top)
+    side:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, -top)
+    side:SetHeight(1)
+    local child = CreateFrame("Frame", nil, side)
+    child:SetSize(1, 1)
+    side:SetScrollChild(child)
+    side:EnableMouseWheel(true)
+    side:SetScript("OnMouseWheel", function(self, delta)
+        if IsShiftKeyDown() then
+            local range = self:GetHorizontalScrollRange()
+            self:SetHorizontalScroll(math.max(0, math.min(range, self:GetHorizontalScroll() - delta * 60)))
+        else
+            local outer = host:GetParent()
+            outer:GetScript("OnMouseWheel")(outer, delta)
+        end
+    end)
+    side:SetScript("OnSizeChanged", function(self) W.SideHint(self, child) end)
+    return side, child
 end
 
 function W.Current() return current end

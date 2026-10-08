@@ -39,7 +39,7 @@ end
 
 local ROLE_NAMES = { DAMAGER = "Damage", HEALER = "Healer", TANK = "Tank" }
 
-local savesHost, saveRows, saveParent, guideHost, guideText
+local savesHost, saveRows, saveParent, saveSide, saveTable, guideHost, guideText
 
 local function CreateSaveRow(parent, index)
     local row = CreateFrame("Button", nil, parent)
@@ -126,6 +126,8 @@ local function RefreshSaves()
     end
     local rowsHeight = math.max(#items, 1) * ROW_HEIGHT
     saveParent:SetHeight(rowsHeight)
+    saveTable:SetHeight(HEADER_HEIGHT + 4 + rowsHeight)
+    saveSide:SetHeight(HEADER_HEIGHT + 4 + rowsHeight)
     savesHost:SetHeight(HEADER_HEIGHT + 4 + rowsHeight)
 
     local role = CastAheadMatch.SpecRole()
@@ -139,6 +141,7 @@ local function RefreshSaves()
         if #saves == 0 then line = "Nothing here calls a save for your role. " .. line end
     end
     CastAheadWindow.SetFooter(line)
+    CastAheadWindow.SideHint(saveSide, saveTable)
 end
 
 function CastAheadUI.RefreshSaves()
@@ -148,9 +151,11 @@ end
 
 local function BuildSaves(host)
     savesHost = host
-    local saveHeader = CreateFrame("Frame", nil, host)
+    saveSide, saveTable = CastAheadWindow.SideScroll(host, 0)
+    saveTable:SetWidth(SAVE_WIDTH)
+    local saveHeader = CreateFrame("Frame", nil, saveTable)
     saveHeader:SetSize(SAVE_WIDTH, HEADER_HEIGHT)
-    saveHeader:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+    saveHeader:SetPoint("TOPLEFT", saveTable, "TOPLEFT", 0, 0)
     for _, column in ipairs(SAVE_COLUMNS) do
         local label = saveHeader:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         label:SetSize(column.width, HEADER_HEIGHT)
@@ -162,7 +167,7 @@ local function BuildSaves(host)
     saveRule:SetPoint("TOPRIGHT", saveHeader, "BOTTOMRIGHT", 0, -1)
     saveRule:SetHeight(1)
     saveRule:SetColorTexture(1, 1, 1, 0.25)
-    saveParent = CreateFrame("Frame", nil, host)
+    saveParent = CreateFrame("Frame", nil, saveTable)
     saveParent:SetSize(SAVE_WIDTH, 1)
     saveParent:SetPoint("TOPLEFT", saveHeader, "BOTTOMLEFT", 0, -4)
     saveRows = {}

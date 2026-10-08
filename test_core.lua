@@ -3692,6 +3692,20 @@ do
     if relayout then relayout(panel) end
     check(c.point and c.point.y == -(6 + 108) and panel.height == 6 + 178 + 12,
         "a hidden group leaves no gap: the next one takes its slot")
+
+    local d, e = Group(100, true), Group(50, true)
+    local wide = { groups = { d, e }, w = 515 }
+    function wide:GetWidth() return self.w end
+    function wide:SetHeight(h) self.height = h end
+    if relayout then relayout(wide) end
+    check(e.point and e.point.x == 8 and e.point.y == -(6 + 108),
+        "a second column that would cross the page edge wraps under the first")
+    wide.w = 516
+    if relayout then relayout(wide) end
+    check(e.point and e.point.x == 8 + 258 and e.point.y == -6, "two columns once both fit inside the page margin")
+    wide.flowBottom = function() return 30 end
+    if relayout then relayout(wide) end
+    check(wide.height == 6 + 100 + 30 + 12, "a note under the groups adds its height to the panel")
 end
 
 do
@@ -3776,6 +3790,46 @@ do
     CreateFrame = savedCreate
     UIParent = nil
     CastAheadDB = nil
+end
+
+do
+    local savedData, savedInfo, savedCreate = CastAheadData, GetInstanceInfo, CreateFrame
+    local here
+    GetInstanceInfo = function() return "d", "party", 0, "", 0, 0, false, here end
+    CastAheadData = { [1] = { name = "Alpha" }, [2] = { name = "Beta" } }
+    local made = {}
+    CreateFrame = function(kind, name, ...)
+        local f = savedCreate(kind, name, ...)
+        local setScript = f.SetScript
+        f.SetScript = function(self, script, fn)
+            setScript(self, script, fn)
+            if script == "OnClick" then rawset(self, "onClick", fn) end
+        end
+        if name == "CastAheadMainWindow" then
+            f.GetWidth = function() return 900 end
+            f.GetHeight = function() return 560 end
+        end
+        made[#made + 1] = f
+        return f
+    end
+    UIParent = { GetWidth = function() return 1920 end, GetHeight = function() return 1080 end }
+    CastAheadDB = {}
+    dofile("Window.lua")
+    local W = CastAheadWindow
+    check(W.Dungeon() == 1, "outside a dungeon the selection is the first dungeon")
+    here = 2
+    check(W.Dungeon() == 2, "until a dungeon is picked the selection follows the current instance")
+    here = 99
+    check(W.Dungeon() == 1, "an instance with no data falls back to the first dungeon")
+    W.Register("TestA", "Dungeon", function() end, function() end)
+    W.Show("TestA")
+    for _, b in ipairs(made) do
+        if rawget(b, "instanceID") == 2 then b.onClick(b) end
+    end
+    here = 1
+    check(W.Dungeon() == 2, "a clicked dungeon stays selected wherever the player goes")
+    CastAheadData, GetInstanceInfo, CreateFrame = savedData, savedInfo, savedCreate
+    UIParent, CastAheadDB = nil, nil
 end
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
