@@ -780,8 +780,8 @@ function BuildDefensives(panel)
         end
     end)
     local status = boss:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    status:SetPoint("LEFT", boss.text, "RIGHT", 6, 0)
-    local small = BuildSwitch(panel, "smallCalls", { "TOPLEFT", boss, "BOTTOMLEFT", 0, -4 }, SaveRefresh)
+    status:SetPoint("TOPLEFT", boss.text, "BOTTOMLEFT", 0, -2)
+    local small = BuildSwitch(panel, "smallCalls", { "TOPLEFT", boss, "BOTTOMLEFT", 0, -18 }, SaveRefresh)
     local big = BuildSwitch(panel, "bigCalls", { "TOPLEFT", small, "BOTTOMLEFT", 0, -4 }, SaveRefresh)
     local heal = BuildSwitch(panel, "healCalls", { "TOPLEFT", big, "BOTTOMLEFT", 0, -4 })
     local early, earlyLabel = BuildSlider(panel, {
