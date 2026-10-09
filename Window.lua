@@ -353,11 +353,13 @@ function W.Show(name)
     for _, p in ipairs(order) do
         if p.host and p ~= page then p.host:Hide() end
     end
+    local hostWidth = math.max((content:GetWidth() or 0) - SCROLLBAR_W, 1)
     if not page.host then
         page.host = CreateFrame("Frame", nil, scroll)
-        page.host:SetSize(scroll:GetWidth() or 1, 1)
+        page.host:SetSize(hostWidth, 1)
         page.build(page.host)
     end
+    page.host:SetWidth(hostWidth)
     scroll:SetScrollChild(page.host)
     page.host:Show()
     PaintMenu()

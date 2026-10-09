@@ -2872,16 +2872,16 @@ do
     C_Spell.GetSpellTexture = function(id) return id == 806 and 4242 or textureSaved(id) end
     check(CastAheadSaves.GuideLines(9000)[2]:find("^%- |T4242:16|t Zap from Abe"), "a hit carries its spell icon in front of its name")
     C_Spell.GetSpellTexture = textureSaved
-    check(text:find("Bolt from Caster (cast): small save", 1, true) and text:find("first ~12s after the pull, then every ~20s", 1, true),
+    check(text:find("Bolt from Caster (cast): small save", 1, true) and text:find("Casts about 12s after the pull, then every 20s", 1, true),
         "a cast with one cooldown gives its first cast and its period")
-    check(text:find("~9s, ~16s, ~9s x2, repeating", 1, true), "a cooldown cycle is spelled out, repeats folded")
+    check(text:find("9s, 16s, 9s x2, repeating", 1, true), "a cooldown cycle is spelled out, repeats folded")
     check(not text:find("Burn from ground effect (debuff on you): big save[^\n]*every"), "a hit without cast data gets no cadence")
     CastAheadBossCadence = { [801] = { first = 9.6, cd = { 25.0, 40.2, 25.0 }, steady = false }, [806] = { first = 7.0, cd = { 40.0 }, steady = true } }
     text = table.concat(CastAheadSaves.GuideLines(9000), "\n")
-    check(text:find("Slam from Boss A %(boss timer%): small save[^\n]*Casts first ~10s after the pull, then ~25s, ~40s, ~25s\n")
-        and text:find("Zap from Abe[^\n]*first ~7s after the pull, then every ~40s"),
+    check(text:find("Slam from Boss A %(boss timer%): small save[^\n]*Casts about 10s after the pull, then 25s, 40s, 25s\n")
+        and text:find("Zap from Abe[^\n]*Casts about 7s after the pull, then every 40s"),
         "a boss hit takes its cadence from the boss table, a sequence without repeating")
-    check(text:find("Magma from Pool %(cast%): big save[^\n]*Casts with gaps of ~9s, ~16s, ~9s x2, repeating"),
+    check(text:find("Magma from Pool %(cast%): big save[^\n]*Casts with gaps of about 9s, 16s, 9s x2, repeating"),
         "a cycle without a first cast reads as gaps")
     CastAheadBossCadence = nil
     C_Spell.GetSpellName = nameSaved
@@ -2909,6 +2909,22 @@ do
     check(#list == 1 and list[1].id == 805 and list[1].size == "BIG", "a tank sees the tank list")
     role = nil
     check(CastAheadSaves.ViewRows and #CastAheadSaves.ViewRows(9000) == 0, "no role, no list")
+    role = "DAMAGER"
+    GetSpecializationInfoByID = function(id) return id, "Guard", "", 0, id == 66 and "TANK" or "DAMAGER" end
+    CastAheadSaveButtons[66] = { big = { 31850 } }
+    CastAheadSaves.SetViewSpec(66)
+    check(CastAheadSaves.ViewSpecID() == 66 and CastAheadSaves.ViewRole() == "TANK", "viewing another spec takes that spec's role")
+    list = CastAheadSaves.ViewRows(9000)
+    check(#list == 1 and list[1].id == 805 and #list[1].buttons == 1 and list[1].buttons[1].id == 31850
+        and list[1].buttons[1].available == true, "the viewed spec's list and role, its buttons drawn as available")
+    check(CastAheadSaves.List("big")[1] == 104773, "the real spec's list is untouched by the view")
+    CastAheadSaves.SetViewSpec(265)
+    check(CastAheadSaves.ViewSpecID() == 265 and CastAheadSaves.ViewRole() == "DAMAGER", "picking the own spec views the own spec")
+    CastAheadSaves.SetViewSpec(66)
+    fire("PLAYER_SPECIALIZATION_CHANGED", "player")
+    check(CastAheadSaves.ViewSpecID() == 265, "a real spec change drops the view")
+    CastAheadSaveButtons[66] = nil
+    GetSpecializationInfoByID = nil
     local saved = CastAheadDefensives
     CastAheadDefensives = nil
     check(CastAheadSaves.ViewRows and #CastAheadSaves.ViewRows(9000) == 0, "no defensive table, no list")

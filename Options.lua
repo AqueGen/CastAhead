@@ -1,7 +1,7 @@
 CastAheadOptions = {}
 
 CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Development" }
-local panels
+local panels = {}
 local T = CastAheadWindow.THEME
 local FLAT = { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 }
 local COL_W, COL_GAP, COL_X = 250, 8, 8
@@ -172,6 +172,7 @@ end
 
 local function BuildGroup(panel, title, height)
     local box = CreateFrame("Frame", nil, panel, "BackdropTemplate")
+    box:SetFrameLevel(panel:GetFrameLevel())
     box:SetSize(COL_W, height)
     table.insert(panel.groups, box)
     box:SetBackdrop(FLAT)
@@ -223,57 +224,36 @@ local function BuildReset(panel, point, keys, after)
     return reset
 end
 
--- Built once, the first time a settings tab is opened, as children of the
--- host frame the main window hands over.
-local function Build(host)
-    panels = {}
-    for _, name in ipairs(CastAheadOptions.TABS) do
-        local panel = CreateFrame("Frame", nil, host)
-        panel:SetPoint("TOPLEFT", host, "TOPLEFT")
-        panel:SetPoint("TOPRIGHT", host, "TOPRIGHT")
-        panel:Hide()
-        panel.groups = {}
-        panel.Relayout = function(self)
-            CastAheadOptions.RelayoutGroups(self)
-            if self:IsShown() then self:GetParent():SetHeight(self:GetHeight()) end
-        end
-        panels[name] = panel
-    end
+local BUILDERS
 
-    BuildGeneral(panels.General)
-    BuildSounds(panels.Sounds)
-    BuildDefensives(panels.Defensives)
-    BuildDevelopment(panels.Development)
+-- Each page is built once, inside the host the main window hands over for
+-- it, and stays there. Moving one panel between hosts on every show left it
+-- without a rect after its host had been hidden and shown again.
+local function Build(host, name)
+    local panel = CreateFrame("Frame", nil, host)
+    panel:SetPoint("TOPLEFT", host, "TOPLEFT")
+    panel:SetPoint("TOPRIGHT", host, "TOPRIGHT")
+    panel.groups = {}
+    panel.Relayout = function(self)
+        CastAheadOptions.RelayoutGroups(self)
+        if self:IsVisible() then self:GetParent():SetHeight(self:GetHeight()) end
+    end
+    -- Width comes from the anchors and reads 0 until the next layout, so
+    -- the flow has to run again once the panel has its real size.
+    panel:SetScript("OnSizeChanged", function(self, width)
+        if width > 0 then self:Relayout() end
+    end)
+    panels[name] = panel
+    BUILDERS[name](panel)
+    return panel
 end
 
-local hooked = {}
-
-local function RelayoutShown()
-    for _, panel in pairs(panels) do
-        if panel:IsShown() then panel:Relayout() end
-    end
-end
-
--- Show one settings page inside `host`, building them all on first use.
 -- Every stateful widget is repainted first: the slash commands write the same
 -- storage from outside, so what was drawn last time may be stale.
 function CastAheadOptions.ShowPanel(host, name)
-    if not panels then Build(host) end
-    if not hooked[host] then
-        hooked[host] = true
-        host:HookScript("OnSizeChanged", RelayoutShown)
-    end
+    local panel = panels[name] or Build(host, name)
     for _, refresh in ipairs(refreshers) do refresh() end
-    for tab, panel in pairs(panels) do
-        if tab == name then
-            panel:SetParent(host)
-            panel:ClearAllPoints()
-            panel:SetPoint("TOPLEFT", host, "TOPLEFT")
-            panel:SetPoint("TOPRIGHT", host, "TOPRIGHT")
-        end
-        panel:SetShown(tab == name)
-    end
-    panels[name]:Relayout()
+    panel:Relayout()
 end
 
 -- Groups in reading order: what is announced at all first, then the places
@@ -783,9 +763,15 @@ local function BuildSaveList(panel, size, hint)
     return group
 end
 
+local DEFENSIVES_H, DEFENSIVES_OFF_H = 366, 56
+
 function BuildDefensives(panel)
-    local group = BuildGroup(panel, "Defensive calls", 366)
-    local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, SaveRefresh)
+    local group = BuildGroup(panel, "Defensive calls", DEFENSIVES_H)
+    local Paint
+    local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, function()
+        SaveRefresh()
+        Paint()
+    end)
     local boss = BuildSwitch(panel, "bossAdapter", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, function(on)
         Redraw()
         if not on and CastAheadSaves then
@@ -793,10 +779,12 @@ function BuildDefensives(panel)
             CastAheadSaves.CancelPrefix("bw:")
         end
     end)
-    local small = BuildSwitch(panel, "smallCalls", { "TOPLEFT", boss, "BOTTOMLEFT", 0, -4 }, SaveRefresh)
+    local status = boss:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    status:SetPoint("TOPLEFT", boss.text, "BOTTOMLEFT", 0, -2)
+    local small = BuildSwitch(panel, "smallCalls", { "TOPLEFT", boss, "BOTTOMLEFT", 0, -18 }, SaveRefresh)
     local big = BuildSwitch(panel, "bigCalls", { "TOPLEFT", small, "BOTTOMLEFT", 0, -4 }, SaveRefresh)
     local heal = BuildSwitch(panel, "healCalls", { "TOPLEFT", big, "BOTTOMLEFT", 0, -4 })
-    local early = BuildSlider(panel, {
+    local early, earlyLabel = BuildSlider(panel, {
         key = "saveLeadSeconds",
         default = 0,
         min = 0, max = CastAheadConfig.SAVE_LEAD_MAX,
@@ -810,14 +798,6 @@ function BuildDefensives(panel)
         end,
     })
 
-    local status = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    status:SetPoint("TOPLEFT", early, "BOTTOMLEFT", -6, -18)
-    status:SetWidth(COL_W - 24)
-    status:SetJustifyH("LEFT")
-    table.insert(refreshers, function()
-        status:SetText("|cffaaaaaa" .. (CastAheadBossAdapter and CastAheadBossAdapter.Status() or "No boss mod") .. "|r")
-    end)
-
     local lists = {
         BuildSaveList(panel, "small"),
         BuildSaveList(panel, "big"),
@@ -825,7 +805,7 @@ function BuildDefensives(panel)
     }
 
     local reset = CastAheadWindow.Button(panel, "Reset to default", 110)
-    reset:SetPoint("TOPLEFT", status, "BOTTOMLEFT", -4, -14)
+    reset:SetPoint("TOPLEFT", early, "BOTTOMLEFT", -10, -24)
     reset:SetScript("OnClick", function()
         if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_SAVES") end
     end)
@@ -842,16 +822,20 @@ function BuildDefensives(panel)
     note:SetText("|cffaaaaaaNo shipped defensive lists for this specialization.|r")
     panel.flowBottom = function() return note:IsShown() and note:GetStringHeight() + 10 or 0 end
 
-    local function PaintSpec()
+    Paint = function()
+        local on = SwitchOn("saveCalls")
         local spec = CastAheadSaves and CastAheadSaves.SpecID()
         local shipped = spec and CastAheadSaveButtons and CastAheadSaveButtons[spec] and true or false
-        note:SetShown(not shipped)
-        for _, list in ipairs(lists) do list:SetShown(shipped) end
-        reset:SetShown(shipped)
+        status:SetText("|cffaaaaaa" .. (CastAheadBossAdapter and CastAheadBossAdapter.Status() or "No boss mod") .. "|r")
+        for _, w in ipairs({ boss, small, big, heal, early, earlyLabel }) do w:SetShown(on) end
+        group:SetHeight(on and DEFENSIVES_H or DEFENSIVES_OFF_H)
+        note:SetShown(on and not shipped)
+        for _, list in ipairs(lists) do list:SetShown(on and shipped) end
+        reset:SetShown(on and shipped)
         panel:Relayout()
     end
-    table.insert(refreshers, PaintSpec)
-    table.insert(listRefreshers, PaintSpec)
+    table.insert(refreshers, Paint)
+    table.insert(listRefreshers, Paint)
 end
 
 local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
@@ -970,6 +954,8 @@ function BuildSounds(panel)
         end)
     end
 end
+
+BUILDERS = { General = BuildGeneral, Sounds = BuildSounds, Defensives = BuildDefensives, Development = BuildDevelopment }
 
 for _, name in ipairs(CastAheadOptions.TABS) do
     local host
