@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.16.0](https://github.com/AqueGen/CastAhead/compare/v0.15.0...v0.16.0) (2026-10-09)
+
+
+### Features
+
+* **options:** Defensive calls off hides the rest of the tab; DBM / BigWigs status under its switch; group captions visible again ([9b13647](https://github.com/AqueGen/CastAhead/commit/9b136473d834858167efde3e1b55ff9501c3c961))
+* **saves:** spec buttons on Guide and Saves to read another spec without changing it; Guide cadence says about once ([9b13647](https://github.com/AqueGen/CastAhead/commit/9b136473d834858167efde3e1b55ff9501c3c961))
+* spec view on Guide and Saves, Defensive calls master switch, boss mod status ([#63](https://github.com/AqueGen/CastAhead/issues/63)) ([9b13647](https://github.com/AqueGen/CastAhead/commit/9b136473d834858167efde3e1b55ff9501c3c961))
+
+
+### Bug Fixes
+
+* **options:** settings pages build once in their own host (Sounds came up blank after Defensives); groups flow again once the panel has its width ([9b13647](https://github.com/AqueGen/CastAhead/commit/9b136473d834858167efde3e1b55ff9501c3c961))
+
 ## [0.15.0](https://github.com/AqueGen/CastAhead/compare/v0.14.0...v0.15.0) (2026-10-09)
 
 
