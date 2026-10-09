@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.15.0](https://github.com/AqueGen/CastAhead/compare/v0.14.0...v0.15.0) (2026-10-09)
+
+
+### Features
+
+* data sync from the 6-8 October logs ([#55](https://github.com/AqueGen/CastAhead/issues/55)) ([6e109a2](https://github.com/AqueGen/CastAhead/commit/6e109a213a8fb356014c1ea8bfec85393c1f7a93))
+* name a plate's first channel when it is the only channel its creatures have ([#57](https://github.com/AqueGen/CastAhead/issues/57)) ([19f68ad](https://github.com/AqueGen/CastAhead/commit/19f68ad1a3aef9301cb01141ec34909b2130b91c))
+* small and big defensive calls ([#54](https://github.com/AqueGen/CastAhead/issues/54)) ([2370bb5](https://github.com/AqueGen/CastAhead/commit/2370bb5095a2ec9b7792714737d369d4ddfa5374))
+* window redesign - side menu, modern look, free size ([#61](https://github.com/AqueGen/CastAhead/issues/61)) ([bc3137c](https://github.com/AqueGen/CastAhead/commit/bc3137c9f1e4d2020f68d19a713ab3c5722d7a2b))
+
+
+### Bug Fixes
+
+* key journal asks for a reload only when full ([#60](https://github.com/AqueGen/CastAhead/issues/60)) ([aa969b4](https://github.com/AqueGen/CastAhead/commit/aa969b4566b71b02545c1a91569c56b564301581))
+* the coverage audit leaves out casts inside boss encounters ([#56](https://github.com/AqueGen/CastAhead/issues/56)) ([d55b0b6](https://github.com/AqueGen/CastAhead/commit/d55b0b633782708d3eb6bbca58464369bc275ee9))
+
 ## [0.14.0](https://github.com/AqueGen/CastAhead/compare/v0.13.0...v0.14.0) (2026-10-06)
 
 
