@@ -172,6 +172,7 @@ end
 
 local function BuildGroup(panel, title, height)
     local box = CreateFrame("Frame", nil, panel, "BackdropTemplate")
+    box:SetFrameLevel(panel:GetFrameLevel())
     box:SetSize(COL_W, height)
     table.insert(panel.groups, box)
     box:SetBackdrop(FLAT)
@@ -783,9 +784,15 @@ local function BuildSaveList(panel, size, hint)
     return group
 end
 
+local DEFENSIVES_H, DEFENSIVES_OFF_H = 366, 56
+
 function BuildDefensives(panel)
-    local group = BuildGroup(panel, "Defensive calls", 366)
-    local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, SaveRefresh)
+    local group = BuildGroup(panel, "Defensive calls", DEFENSIVES_H)
+    local Paint
+    local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, function()
+        SaveRefresh()
+        Paint()
+    end)
     local boss = BuildSwitch(panel, "bossAdapter", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, function(on)
         Redraw()
         if not on and CastAheadSaves then
@@ -793,10 +800,12 @@ function BuildDefensives(panel)
             CastAheadSaves.CancelPrefix("bw:")
         end
     end)
+    local status = boss:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    status:SetPoint("LEFT", boss.text, "RIGHT", 6, 0)
     local small = BuildSwitch(panel, "smallCalls", { "TOPLEFT", boss, "BOTTOMLEFT", 0, -4 }, SaveRefresh)
     local big = BuildSwitch(panel, "bigCalls", { "TOPLEFT", small, "BOTTOMLEFT", 0, -4 }, SaveRefresh)
     local heal = BuildSwitch(panel, "healCalls", { "TOPLEFT", big, "BOTTOMLEFT", 0, -4 })
-    local early = BuildSlider(panel, {
+    local early, earlyLabel = BuildSlider(panel, {
         key = "saveLeadSeconds",
         default = 0,
         min = 0, max = CastAheadConfig.SAVE_LEAD_MAX,
@@ -810,14 +819,6 @@ function BuildDefensives(panel)
         end,
     })
 
-    local status = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    status:SetPoint("TOPLEFT", early, "BOTTOMLEFT", -6, -18)
-    status:SetWidth(COL_W - 24)
-    status:SetJustifyH("LEFT")
-    table.insert(refreshers, function()
-        status:SetText("|cffaaaaaa" .. (CastAheadBossAdapter and CastAheadBossAdapter.Status() or "No boss mod") .. "|r")
-    end)
-
     local lists = {
         BuildSaveList(panel, "small"),
         BuildSaveList(panel, "big"),
@@ -825,7 +826,7 @@ function BuildDefensives(panel)
     }
 
     local reset = CastAheadWindow.Button(panel, "Reset to default", 110)
-    reset:SetPoint("TOPLEFT", status, "BOTTOMLEFT", -4, -14)
+    reset:SetPoint("TOPLEFT", early, "BOTTOMLEFT", -10, -24)
     reset:SetScript("OnClick", function()
         if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_SAVES") end
     end)
@@ -842,16 +843,20 @@ function BuildDefensives(panel)
     note:SetText("|cffaaaaaaNo shipped defensive lists for this specialization.|r")
     panel.flowBottom = function() return note:IsShown() and note:GetStringHeight() + 10 or 0 end
 
-    local function PaintSpec()
+    Paint = function()
+        local on = SwitchOn("saveCalls")
         local spec = CastAheadSaves and CastAheadSaves.SpecID()
         local shipped = spec and CastAheadSaveButtons and CastAheadSaveButtons[spec] and true or false
-        note:SetShown(not shipped)
-        for _, list in ipairs(lists) do list:SetShown(shipped) end
-        reset:SetShown(shipped)
+        status:SetText("|cffaaaaaa" .. (CastAheadBossAdapter and CastAheadBossAdapter.Status() or "No boss mod") .. "|r")
+        for _, w in ipairs({ boss, small, big, heal, early, earlyLabel }) do w:SetShown(on) end
+        group:SetHeight(on and DEFENSIVES_H or DEFENSIVES_OFF_H)
+        note:SetShown(on and not shipped)
+        for _, list in ipairs(lists) do list:SetShown(on and shipped) end
+        reset:SetShown(on and shipped)
         panel:Relayout()
     end
-    table.insert(refreshers, PaintSpec)
-    table.insert(listRefreshers, PaintSpec)
+    table.insert(refreshers, Paint)
+    table.insert(listRefreshers, Paint)
 end
 
 local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
