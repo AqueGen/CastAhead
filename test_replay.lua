@@ -85,6 +85,9 @@ SlashCmdList = {}
 SearchBoxTemplate_OnTextChanged = function() end
 GameTooltip = setmetatable({}, { __index = function() return function() end end })
 GameTooltip_Hide = function() end
+dofile("Window.lua")
+dofile("CastsPage.lua")
+dofile("SavesPage.lua")
 dofile("UI.lua")
 dofile("Core.lua")
 dofile(replayPath)
