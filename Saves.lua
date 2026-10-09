@@ -316,20 +316,24 @@ local function Wins(row)
     return advice and advice.key or nil
 end
 
+-- Another spec's buttons have no cooldown to read, so they all count as
+-- available: the view is for reading, not for pressing.
 local function ViewButtons(size, spec)
+    local own = spec == S.SpecID()
     local ready = {}
-    if spec == S.SpecID() then
+    if own then
         for _, e in ipairs(S.Available(size)) do ready[e.kind .. e.id] = true end
     end
     local out = {}
     for _, e in ipairs(S.ListFor(spec, size)) do
         if type(e) == "number" then
-            out[#out + 1] = { kind = "spell", id = e, available = ready["spell" .. e] == true,
+            out[#out + 1] = { kind = "spell", id = e, available = not own or ready["spell" .. e] == true,
                 icon = SpellTexture(e) }
         elseif type(e) == "table" and e.use then
             local item = ItemFor(e.use)
             local icon = item and C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(item)
-            out[#out + 1] = { kind = "item", id = item, use = e.use, available = item ~= nil and ready["item" .. item] == true,
+            out[#out + 1] = { kind = "item", id = item, use = e.use,
+                available = not own or item ~= nil and ready["item" .. item] == true,
                 icon = icon or SpellTexture(e.use) }
         end
     end

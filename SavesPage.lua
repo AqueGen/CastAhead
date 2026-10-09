@@ -187,7 +187,7 @@ local function RefreshSaves()
     elseif not role then
         line = "No specialization role - pick a spec to see your saves."
     else
-        line = "Role: " .. (ROLE_NAMES[role] or role) .. (own and "." or " - another spec's list, its buttons are not learned now.")
+        line = "Role: " .. (ROLE_NAMES[role] or role) .. (own and "." or " - another spec's list, cooldowns not shown.")
         if #saves == 0 then line = "Nothing here calls a save for this role. " .. line end
     end
     CastAheadWindow.SetFooter(line)

@@ -2916,7 +2916,7 @@ do
     check(CastAheadSaves.ViewSpecID() == 66 and CastAheadSaves.ViewRole() == "TANK", "viewing another spec takes that spec's role")
     list = CastAheadSaves.ViewRows(9000)
     check(#list == 1 and list[1].id == 805 and #list[1].buttons == 1 and list[1].buttons[1].id == 31850
-        and list[1].buttons[1].available == false, "the viewed spec's list and role, its buttons never available")
+        and list[1].buttons[1].available == true, "the viewed spec's list and role, its buttons drawn as available")
     check(CastAheadSaves.List("big")[1] == 104773, "the real spec's list is untouched by the view")
     CastAheadSaves.SetViewSpec(265)
     check(CastAheadSaves.ViewSpecID() == 265 and CastAheadSaves.ViewRole() == "DAMAGER", "picking the own spec views the own spec")
