@@ -2160,6 +2160,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         -- dispels the character knows.
         if event == "SPELLS_CHANGED" or unit == "player" then
             InvalidateCapabilities()
+            if CastAheadSaves and event == "PLAYER_SPECIALIZATION_CHANGED" then CastAheadSaves.SetViewSpec(nil) end
             if CastAheadSaves then CastAheadSaves.Refresh() end
             if CastAheadOptions and CastAheadOptions.RefreshDefensives then CastAheadOptions.RefreshDefensives() end
             if CastAheadUI and CastAheadUI.RefreshSaves then CastAheadUI.RefreshSaves() end
