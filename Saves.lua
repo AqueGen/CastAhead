@@ -33,12 +33,32 @@ local function Shipped(spec, size)
     return s and s[size] or {}
 end
 
-function S.List(size)
-    local spec = S.SpecID()
+function S.ListFor(spec, size)
     if not spec then return {} end
     local o = CastAheadDB and CastAheadDB.saveButtons and CastAheadDB.saveButtons[spec]
     if o and type(o[size]) == "table" then return o[size] end
     return Shipped(spec, size)
+end
+
+function S.List(size) return S.ListFor(S.SpecID(), size) end
+
+-- The Guide and Saves pages can read another spec of the class without
+-- the player changing spec; calls and lists still follow the real one.
+local viewSpec
+
+function S.SetViewSpec(spec) viewSpec = spec end
+
+function S.ViewSpecID()
+    local own = S.SpecID()
+    if viewSpec and viewSpec ~= own then return viewSpec end
+    return own
+end
+
+function S.ViewRole()
+    local spec = S.ViewSpecID()
+    if spec == S.SpecID() then return M.SpecRole() end
+    if not CastAheadConfig.Enabled("saveCalls") then return nil end
+    return GetSpecializationInfoByID and select(5, GetSpecializationInfoByID(spec)) or nil
 end
 
 function S.ScanBags()
@@ -296,11 +316,13 @@ local function Wins(row)
     return advice and advice.key or nil
 end
 
-local function ViewButtons(size)
+local function ViewButtons(size, spec)
     local ready = {}
-    for _, e in ipairs(S.Available(size)) do ready[e.kind .. e.id] = true end
+    if spec == S.SpecID() then
+        for _, e in ipairs(S.Available(size)) do ready[e.kind .. e.id] = true end
+    end
     local out = {}
-    for _, e in ipairs(S.List(size)) do
+    for _, e in ipairs(S.ListFor(spec, size)) do
         if type(e) == "number" then
             out[#out + 1] = { kind = "spell", id = e, available = ready["spell" .. e] == true,
                 icon = SpellTexture(e) }
@@ -330,7 +352,7 @@ end
 function S.ViewRows(instanceID)
     local out = {}
     local spells = CastAheadDefensives and CastAheadDefensives.spells
-    local role = M.SpecRole()
+    local role, spec = S.ViewRole(), S.ViewSpecID()
     if not (spells and role) then return out end
     local cast, wins, buttons = {}, {}, {}
     for _, c in ipairs(CastAheadData and CastAheadData[instanceID] or {}) do
@@ -343,7 +365,7 @@ function S.ViewRows(instanceID)
     for id, row in pairs(spells) do
         local size = M.SaveKey(row, role, CastAheadPriority and CastAheadPriority[id])
         if size and (row.dungeon == instanceID or cast[id]) then
-            buttons[size] = buttons[size] or ViewButtons(SIZE[size])
+            buttons[size] = buttons[size] or ViewButtons(SIZE[size], spec)
             out[#out + 1] = {
                 id = id, name = row.name or "", boss = row.boss or "", size = size, lead = row.lead,
                 mob = row.mob == "Environment" and "ground effect" or row.mob,
@@ -377,15 +399,14 @@ local function Heard(t)
     return #how > 0 and table.concat(how, ", ") or "not heard"
 end
 
-local function Seconds(s) return string.format("~%ds", math.floor(s + 0.5)) end
+local function Seconds(s) return string.format("%ds", math.floor(s + 0.5)) end
 
 local function Cadence(r)
     local parts = {}
-    if r.first then parts[#parts + 1] = "first " .. Seconds(r.first) .. " after the pull" end
+    if r.first then parts[#parts + 1] = "about " .. Seconds(r.first) .. " after the pull" end
     local cd = r.cd or {}
-    local lead = r.first and "then " or ""
     if #cd == 1 then
-        parts[#parts + 1] = lead .. "every " .. Seconds(cd[1])
+        parts[#parts + 1] = (r.first and "then every " or "about every ") .. Seconds(cd[1])
     elseif #cd > 1 then
         local steps, i = {}, 1
         while i <= #cd do
@@ -394,7 +415,7 @@ local function Cadence(r)
             steps[#steps + 1] = n > 1 and (word .. " x" .. n) or word
             i = i + n
         end
-        parts[#parts + 1] = (r.first and "then " or "with gaps of ") .. table.concat(steps, ", ") .. (r.repeating and ", repeating" or "")
+        parts[#parts + 1] = (r.first and "then " or "with gaps of about ") .. table.concat(steps, ", ") .. (r.repeating and ", repeating" or "")
     end
     return #parts > 0 and table.concat(parts, ", ") or nil
 end
@@ -407,7 +428,7 @@ local function GuideLine(r)
     local press = #names > 0 and table.concat(names, ", then ") or "no button in your list"
     local line = string.format("- %s%s from %s (%s): %s save - %s", Icon(SpellTexture(r.id)), r.name, r.mob or "?", Heard(r.trigger),
         r.size == "BIG" and "big" or "small", press)
-    if r.size == "BIG" and #S.List("heal") > 0 then line = line .. "; heal up after the hit" end
+    if r.size == "BIG" and #S.ListFor(S.ViewSpecID(), "heal") > 0 then line = line .. "; heal up after the hit" end
     local wins = r.wins and M.ADVICE[r.wins]
     if wins then line = line .. string.format(" (%s comes first)", wins.say) end
     local cadence = Cadence(r)
