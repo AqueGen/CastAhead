@@ -238,7 +238,11 @@ local function Build(host, name)
         CastAheadOptions.RelayoutGroups(self)
         if self:IsVisible() then self:GetParent():SetHeight(self:GetHeight()) end
     end
-    host:HookScript("OnSizeChanged", function() panel:Relayout() end)
+    -- Width comes from the anchors and reads 0 until the next layout, so
+    -- the flow has to run again once the panel has its real size.
+    panel:SetScript("OnSizeChanged", function(self, width)
+        if width > 0 then self:Relayout() end
+    end)
     panels[name] = panel
     BUILDERS[name](panel)
     return panel
