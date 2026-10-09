@@ -353,8 +353,6 @@ function W.Show(name)
     for _, p in ipairs(order) do
         if p.host and p ~= page then p.host:Hide() end
     end
-    -- Not scroll:GetWidth(): just re-anchored above, it reads 0 until the
-    -- next layout, and a host built 0 wide stayed so (Sounds page blank).
     local hostWidth = math.max((content:GetWidth() or 0) - SCROLLBAR_W, 1)
     if not page.host then
         page.host = CreateFrame("Frame", nil, scroll)

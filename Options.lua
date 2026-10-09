@@ -1,7 +1,7 @@
 CastAheadOptions = {}
 
 CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Development" }
-local panels
+local panels = {}
 local T = CastAheadWindow.THEME
 local FLAT = { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 }
 local COL_W, COL_GAP, COL_X = 250, 8, 8
@@ -224,57 +224,32 @@ local function BuildReset(panel, point, keys, after)
     return reset
 end
 
--- Built once, the first time a settings tab is opened, as children of the
--- host frame the main window hands over.
-local function Build(host)
-    panels = {}
-    for _, name in ipairs(CastAheadOptions.TABS) do
-        local panel = CreateFrame("Frame", nil, host)
-        panel:SetPoint("TOPLEFT", host, "TOPLEFT")
-        panel:SetPoint("TOPRIGHT", host, "TOPRIGHT")
-        panel:Hide()
-        panel.groups = {}
-        panel.Relayout = function(self)
-            CastAheadOptions.RelayoutGroups(self)
-            if self:IsShown() then self:GetParent():SetHeight(self:GetHeight()) end
-        end
-        panels[name] = panel
-    end
+local BUILDERS
 
-    BuildGeneral(panels.General)
-    BuildSounds(panels.Sounds)
-    BuildDefensives(panels.Defensives)
-    BuildDevelopment(panels.Development)
+-- Each page is built once, inside the host the main window hands over for
+-- it, and stays there. Moving one panel between hosts on every show left it
+-- without a rect after its host had been hidden and shown again.
+local function Build(host, name)
+    local panel = CreateFrame("Frame", nil, host)
+    panel:SetPoint("TOPLEFT", host, "TOPLEFT")
+    panel:SetPoint("TOPRIGHT", host, "TOPRIGHT")
+    panel.groups = {}
+    panel.Relayout = function(self)
+        CastAheadOptions.RelayoutGroups(self)
+        if self:IsVisible() then self:GetParent():SetHeight(self:GetHeight()) end
+    end
+    host:HookScript("OnSizeChanged", function() panel:Relayout() end)
+    panels[name] = panel
+    BUILDERS[name](panel)
+    return panel
 end
 
-local hooked = {}
-
-local function RelayoutShown()
-    for _, panel in pairs(panels) do
-        if panel:IsShown() then panel:Relayout() end
-    end
-end
-
--- Show one settings page inside `host`, building them all on first use.
 -- Every stateful widget is repainted first: the slash commands write the same
 -- storage from outside, so what was drawn last time may be stale.
 function CastAheadOptions.ShowPanel(host, name)
-    if not panels then Build(host) end
-    if not hooked[host] then
-        hooked[host] = true
-        host:HookScript("OnSizeChanged", RelayoutShown)
-    end
+    local panel = panels[name] or Build(host, name)
     for _, refresh in ipairs(refreshers) do refresh() end
-    for tab, panel in pairs(panels) do
-        if tab == name then
-            panel:SetParent(host)
-            panel:ClearAllPoints()
-            panel:SetPoint("TOPLEFT", host, "TOPLEFT")
-            panel:SetPoint("TOPRIGHT", host, "TOPRIGHT")
-        end
-        panel:SetShown(tab == name)
-    end
-    panels[name]:Relayout()
+    panel:Relayout()
 end
 
 -- Groups in reading order: what is announced at all first, then the places
@@ -975,6 +950,8 @@ function BuildSounds(panel)
         end)
     end
 end
+
+BUILDERS = { General = BuildGeneral, Sounds = BuildSounds, Defensives = BuildDefensives, Development = BuildDevelopment }
 
 for _, name in ipairs(CastAheadOptions.TABS) do
     local host
