@@ -449,6 +449,23 @@ for enc, byDifficulty in pairs(CastAheadBurstWindows) do
         end
     end
 end
+do
+    local function Overlap(list)
+        local sorted = {}
+        for i, w in ipairs(list) do sorted[i] = w end
+        table.sort(sorted, function(a, b) return a.release < b.release end)
+        for i = 1, #sorted - 1 do
+            if sorted[i].release > sorted[i + 1].hold then return i end
+        end
+    end
+    check(Overlap({ { hold = 40, release = 60 }, { hold = 0, release = 50 } }) == 1, "the burst overlap audit catches overlapping windows")
+    check(Overlap({ { hold = 30, release = 60 }, { hold = 0, release = 30 } }) == nil, "the burst overlap audit lets back-to-back windows pass")
+    for enc, byDifficulty in pairs(CastAheadBurstWindows) do
+        for difficulty, list in pairs(byDifficulty) do
+            check(Overlap(list) == nil, string.format("burst windows %d/%d do not overlap", enc, difficulty))
+        end
+    end
+end
 local shippedTables = {}
 for spec, lists in pairs(CastAheadSaveButtons) do
     for _, size in ipairs({ "small", "big", "heal" }) do

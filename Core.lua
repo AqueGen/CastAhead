@@ -2605,9 +2605,9 @@ frame:SetScript("OnUpdate", function()
     local now = GetTime()
     if CastAheadSaves and CastAheadConfig.Enabled("saveCalls") then CastAheadSaves.Tick(now) end
     if CastAheadBurst then CastAheadBurst.Tick(now) end
-    if CastAheadBossAdapter then CastAheadBossAdapter.Tick(now) end
     UpdateCenter(now)
     if not dungeon then return end
+    if CastAheadBossAdapter then CastAheadBossAdapter.Tick(now) end
     if now >= pollAt then
         pollAt = now + COMBAT_POLL_INTERVAL
         PollCombat()

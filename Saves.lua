@@ -588,6 +588,7 @@ function S.Tick(now)
                 if c.fired and c.advice == M.ADVICE.BIG and S.HealReady()
                     and CastAheadCore and CastAheadCore.Announce then
                     CastAheadCore.Announce(M.ADVICE.HEAL)
+                    lastFiredAt = now
                     healed = true
                 end
                 scheduled[key] = nil

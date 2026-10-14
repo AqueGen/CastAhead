@@ -3921,9 +3921,9 @@ do
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
     run(10.5)
     S.Schedule("test:save1", 1, t1 + 29, t1 + 33, A.BIG)
-    run(21)
+    run(20)
     check(Heard() == "HOLD,BIG_soon", "burst: the save call is heard and the burst waits, heard " .. Heard())
-    run(1)
+    run(0.5)
     check(Heard() == "HOLD,BIG_soon,BURST", "burst: the burst follows 2 s after the save, heard " .. Heard())
     run(10)
 
@@ -3931,14 +3931,41 @@ do
     local t2 = now
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
     S.Schedule("test:save2", 1, t2 + 31, t2 + 35, A.BIG)
-    run(31.5)
+    run(32.5)
     check(Heard() == "HOLD,BIG_soon", "burst: a save due 1 s after the release goes first, heard " .. Heard())
     run(1)
-    check(Heard() == "HOLD,BIG_soon,BURST", "burst: and the burst still speaks after one wait, heard " .. Heard())
+    check(Heard() == "HOLD,BIG_soon,BURST", "burst: and the burst speaks 2 s after that save, heard " .. Heard())
+    run(10)
+
+    heard = {}
+    local savedHealReady = S.HealReady
+    S.HealReady = function() return true end
+    local t3 = now
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    S.Schedule("test:save3", 1, t3 + 25, t3 + 29.5, A.BIG)
+    run(31)
+    check(Heard() == "HOLD,BIG_soon,HEAL", "burst: a heal call at the end of a big save holds the burst, heard " .. Heard())
+    run(0.5)
+    check(Heard() == "HOLD,BIG_soon,HEAL,BURST", "burst: the burst follows 2 s after the heal call, heard " .. Heard())
+    S.HealReady = savedHealReady
+
+    heard = {}
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    IsEncounterInProgress = function() return false end
+    run(40)
+    check(#heard == 0 and #B.Pending(now) == 0, "burst: an encounter that ended unseen stays silent, heard " .. Heard())
+    IsEncounterInProgress = nil
 
     B.OnEncounter("ENCOUNTER_END", 3492, 15, now)
+    local specLookups = 0
+    GetSpecialization = function() specLookups = specLookups + 1 return 1 end
+    B.Tick(now)
+    B.Pending(now)
+    check(specLookups == 0, "burst: no windows, no spec lookups per frame")
+    GetSpecialization = function() return 1 end
     S.Cancel("test:save1")
     S.Cancel("test:save2")
+    S.Cancel("test:save3")
     PlaySoundFile, CastAheadBurstWindows = savedPlay, savedWindows
     GetSpecialization, GetSpecializationRole = nil, nil
     CastAheadDB = nil
@@ -3968,9 +3995,13 @@ do
     local line = Line("Hold burst")
     check(Heard() == "HOLD", "raid burst: hold burst through Core with no trash data, heard " .. Heard())
     check(line ~= nil and line.shown, "raid burst: the hold line is on screen")
+    for _ = 1, 40 do advance(0.5) end
+    local burstLine = Line("Burst now")
+    check(Heard() == "HOLD,BURST", "raid burst: burst now through Core at the release, heard " .. Heard())
+    check(burstLine ~= nil and burstLine.shown, "raid burst: the burst line is on screen")
     fire("ENCOUNTER_END", 3492, "Ula'tek", 15, 20, 0)
     advance(0.5)
-    check(line ~= nil and not line.shown, "raid burst: the line leaves the screen when the fight ends")
+    check(burstLine ~= nil and not burstLine.shown, "raid burst: the line leaves the screen when the fight ends")
 
     heard = {}
     fire("ENCOUNTER_START", 3492, "Ula'tek", 15, 20)
@@ -3991,6 +4022,19 @@ do
     for _ = 1, 16 do advance(0.5) end
     check(Heard() == "BIG_soon", "raid burst: a boss save call fires in a raid with no trash data, heard " .. Heard())
     fire("ENCOUNTER_END", 3470, "Nek'zali", 15, 20, 0)
+
+    local savedAdapter, savedPrint, lines = CastAheadBossAdapter, print, 0
+    dofile("BossAdapter.lua")
+    DBM = { RegisterCallback = function() end }
+    CastAheadBossAdapter.Connect()
+    DBM = nil
+    print = function() lines = lines + 1 end
+    fire("ENCOUNTER_START", 3470, "Nek'zali", 15, 20)
+    for _ = 1, 64 do advance(0.5) end
+    print = savedPrint
+    check(lines == 0, string.format("raid burst: no boss-timer warning where no trash data runs, got %d line(s)", lines))
+    fire("ENCOUNTER_END", 3470, "Nek'zali", 15, 20, 0)
+    CastAheadBossAdapter = savedAdapter
 
     CastAheadDefensives = { spells = {}, alias = {} }
     PlaySoundFile, CastAheadBurstWindows, GetInstanceInfo = savedPlay, savedWindows, savedInfo

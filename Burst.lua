@@ -15,11 +15,14 @@ local function On()
     return spec ~= nil and GetSpecializationRole(spec) == "DAMAGER"
 end
 
-local function SaveNear(now)
+local function DeferUntil(now)
     local S = CastAheadSaves
-    if not (S and S.LastFiredAt) then return false end
+    if not (S and S.LastFiredAt) then return nil end
     local last, nextAt = S.LastFiredAt(), S.NextFireAt(now)
-    return (last ~= nil and now - last < SAVE_GAP) or (nextAt ~= nil and nextAt - now < SAVE_GAP)
+    local at
+    if last ~= nil and now - last < SAVE_GAP then at = last + SAVE_GAP end
+    if nextAt ~= nil and nextAt - now < SAVE_GAP then at = math.max(at or 0, nextAt + SAVE_GAP) end
+    return at
 end
 
 function B.OnEncounter(event, encounterID, difficultyID, now)
@@ -36,11 +39,14 @@ function B.OnEncounter(event, encounterID, difficultyID, now)
 end
 
 function B.Tick(now)
+    if #entries == 0 then return end
+    if IsEncounterInProgress and not IsEncounterInProgress() then wipe(entries) return end
     if not On() then return end
     for _, e in ipairs(entries) do
         if not e.fired and now >= e.fireAt and now < e.endAt then
-            if not e.deferred and SaveNear(now) then
-                e.deferred, e.fireAt = true, now + SAVE_GAP
+            local at = not e.deferred and DeferUntil(now)
+            if at then
+                e.deferred, e.fireAt = true, at
             else
                 e.fired = true
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(e.advice) end
@@ -51,7 +57,7 @@ end
 
 function B.Pending(now)
     wipe(pending)
-    if not On() then return pending end
+    if #entries == 0 or not On() then return pending end
     for _, e in ipairs(entries) do
         if e.fired and e.endAt > now then
             pending[#pending + 1] = { endAt = e.endAt, advice = e.advice, row = {}, icons = { ICON } }
