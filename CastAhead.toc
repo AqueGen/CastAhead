@@ -30,6 +30,7 @@ Traits.lua
 Packs.lua
 Match.lua
 Saves.lua
+Burst.lua
 BossAdapter.lua
 Timeline.lua
 Core.lua

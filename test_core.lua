@@ -290,6 +290,7 @@ StaticPopupDialogs = {}
 dofile("Config.lua")
 dofile("Match.lua")
 dofile("Saves.lua")
+dofile("Burst.lua")
 dofile("BossAdapter.lua")
 dofile("Timeline.lua")
 -- UI.lua only needs the stubs above for its option helpers.
@@ -3846,6 +3847,101 @@ do
     check(W.Dungeon() == 2, "a clicked dungeon stays selected wherever the player goes")
     CastAheadData, GetInstanceInfo, CreateFrame = savedData, savedInfo, savedCreate
     UIParent, CastAheadDB = nil, nil
+end
+
+-- Burst windows: hold at hold start, burst at release, DAMAGER only, a save call goes first.
+do
+    local B, S, A = CastAheadBurst, CastAheadSaves, CastAheadMatch.ADVICE
+    local heard = {}
+    local savedPlay, savedWindows = PlaySoundFile, CastAheadBurstWindows
+    PlaySoundFile = function(path) heard[#heard + 1] = path:match("([%w_]+)%.ogg$") return true, 1 end
+    local role = "DAMAGER"
+    GetSpecialization = function() return 1 end
+    GetSpecializationRole = function() return role end
+    CastAheadBurstWindows = { [3492] = { [15] = { { hold = 10, release = 30 } } } }
+    CastAheadDB = { burstCalls = true }
+    local function run(seconds)
+        for _ = 1, seconds * 2 do
+            now = now + 0.5
+            S.Tick(now)
+            B.Tick(now)
+        end
+    end
+    local function Heard() return table.concat(heard, ",") end
+
+    local t0 = now
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(9)
+    check(#heard == 0, "burst: quiet before hold start, heard " .. Heard())
+    run(1.5)
+    check(Heard() == "HOLD", "burst: hold burst at hold start, heard " .. Heard())
+    local pend = B.Pending(now)
+    check(#pend == 1 and pend[1].advice == A.HOLD and pend[1].endAt == t0 + 30 and pend[1].icons[1] ~= nil,
+        "burst: the centre counts down to the release")
+    run(20)
+    check(Heard() == "HOLD,BURST", "burst: burst now at release, heard " .. Heard())
+    run(10)
+    check(#B.Pending(now) == 0 and Heard() == "HOLD,BURST", "burst: each call once, then off the screen")
+
+    heard = {}
+    role = "HEALER"
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(40)
+    check(#heard == 0 and #B.Pending(now) == 0, "burst: a healer hears and sees nothing")
+    role = "DAMAGER"
+
+    heard = {}
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(15)
+    role = "TANK"
+    run(20)
+    role = "DAMAGER"
+    check(Heard() == "HOLD", "burst: switching to a tank spec mid-hold stops the burst call, heard " .. Heard())
+
+    heard = {}
+    CastAheadDB = {}
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(40)
+    check(#heard == 0, "burst: burstCalls is off by default")
+    CastAheadDB = { burstCalls = true }
+
+    B.OnEncounter("ENCOUNTER_START", 3492, 16, now)
+    run(40)
+    check(#heard == 0, "burst: a difficulty without windows is silent")
+
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(15)
+    heard = {}
+    B.OnEncounter("ENCOUNTER_END", 3492, 15, now)
+    run(30)
+    check(#heard == 0 and #B.Pending(now) == 0, "burst: ENCOUNTER_END drops a pending burst")
+
+    heard = {}
+    local t1 = now
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(10.5)
+    S.Schedule("test:save1", 1, t1 + 29, t1 + 33, A.BIG)
+    run(21)
+    check(Heard() == "HOLD,BIG_soon", "burst: the save call is heard and the burst waits, heard " .. Heard())
+    run(1)
+    check(Heard() == "HOLD,BIG_soon,BURST", "burst: the burst follows 2 s after the save, heard " .. Heard())
+    run(10)
+
+    heard = {}
+    local t2 = now
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    S.Schedule("test:save2", 1, t2 + 31, t2 + 35, A.BIG)
+    run(31.5)
+    check(Heard() == "HOLD,BIG_soon", "burst: a save due 1 s after the release goes first, heard " .. Heard())
+    run(1)
+    check(Heard() == "HOLD,BIG_soon,BURST", "burst: and the burst still speaks after one wait, heard " .. Heard())
+
+    B.OnEncounter("ENCOUNTER_END", 3492, 15, now)
+    S.Cancel("test:save1")
+    S.Cancel("test:save2")
+    PlaySoundFile, CastAheadBurstWindows = savedPlay, savedWindows
+    GetSpecialization, GetSpecializationRole = nil, nil
+    CastAheadDB = nil
 end
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))

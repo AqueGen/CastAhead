@@ -3,6 +3,7 @@ local S = CastAheadSaves
 local M = CastAheadMatch
 
 local scheduled = {}
+local lastFiredAt
 
 function S.SpecID()
     if not (GetSpecialization and GetSpecializationInfo) then return nil end
@@ -520,6 +521,18 @@ function S.Cancel(key)
     scheduled[key] = nil
 end
 
+function S.LastFiredAt() return lastFiredAt end
+
+function S.NextFireAt(now)
+    local soonest
+    for _, c in pairs(scheduled) do
+        if not c.pausedAt and not c.fired and c.fireAt >= now and (not soonest or c.fireAt < soonest) then
+            soonest = c.fireAt
+        end
+    end
+    return soonest
+end
+
 function S.CancelPrefix(prefix)
     for key in pairs(scheduled) do
         if key:sub(1, #prefix) == prefix then scheduled[key] = nil end
@@ -568,6 +581,7 @@ function S.Tick(now)
         if not c.pausedAt then
             if not c.fired and now >= c.fireAt and now < c.endAt then
                 c.fired, c.firedAt = true, now
+                lastFiredAt = now
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice, true) end
             end
             if now >= c.endAt then
