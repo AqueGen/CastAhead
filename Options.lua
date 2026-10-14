@@ -153,9 +153,12 @@ local SWITCHES = {
         tip = "Say \"big defensive\" ahead of hits that need a big save." },
     healCalls = { label = "Heal up after a big hit", defaultOff = true,
         tip = "Right after a hit that called a big defensive, say \"heal up\" when your Healthstone or potion is ready." },
+    burstCalls = { label = "Burst windows", defaultOff = true,
+        tip = "On the few bosses where top players hold their burst for a later moment, say \"hold burst\" when your cooldown would normally come up and \"burst now\" when the moment arrives. Damage specs only. On every other boss it stays silent: press on cooldown." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
         tip = "A panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. Only while recording. The key bindings and /ca mark work without it." },
 }
+CastAheadOptions.Switches = SWITCHES
 
 local function SwitchOn(key)
     if SWITCHES[key].defaultOff then return CastAheadConfig.Get(key) == true end
@@ -764,6 +767,7 @@ local function BuildSaveList(panel, size, hint)
 end
 
 local DEFENSIVES_H, DEFENSIVES_OFF_H = 366, 56
+local BURST_H = 56
 
 function BuildDefensives(panel)
     local group = BuildGroup(panel, "Defensive calls", DEFENSIVES_H)
@@ -836,6 +840,8 @@ function BuildDefensives(panel)
     end
     table.insert(refreshers, Paint)
     table.insert(listRefreshers, Paint)
+    local burst = BuildGroup(panel, "Burst windows", BURST_H)
+    BuildSwitch(panel, "burstCalls", { "TOPLEFT", burst, "TOPLEFT", 10, -26 })
 end
 
 local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",

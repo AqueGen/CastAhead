@@ -3999,5 +3999,11 @@ do
     fire("PLAYER_ENTERING_WORLD")
 end
 
+do
+    local ok = pcall(dofile, "Options.lua")
+    check(ok and CastAheadOptions and CastAheadOptions.Switches and CastAheadOptions.Switches.burstCalls
+        and CastAheadOptions.Switches.burstCalls.defaultOff == true, "the burst switch exists and is off by default")
+end
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

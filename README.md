@@ -67,6 +67,10 @@ The Guide page next to it reads the same data as plain text, a cheat sheet for t
 
 Boss coverage is partial today. A boss threat gets a call only when DBM or BigWigs runs a timer for it, because bars that exist only in Blizzard's own timeline give addons no callback. Schedules counted from the pull are the planned next step.
 
+## Burst windows (alpha)
+
+On a few bosses top players hold their one-minute burst instead of pressing it the moment it comes off cooldown. With "Burst windows" switched on (Defensives page, off by default), Cast Ahead says "hold burst" when your burst would normally come up and "burst now" when the moment arrives, with a countdown in the centre block. Everywhere else it stays silent, which means press on cooldown. The windows are measured from the boss pull in top-player runs, kept only where at least three specs agree, so the list is short on purpose. Damage specs only. A defensive call always goes first; the burst call waits two seconds behind it.
+
 ## Reporting a wrong call
 
 Turn on Development mode in the settings, then the key journal on the Development tab. While you are in a dungeon a small panel lists the mobs Cast Ahead tracked in the last two minutes. Pick the one it got wrong (or none, to mark the whole moment) and press Mark, or Mark + note to type what really happened; Enter saves the note. The same two actions can be bound under Key Bindings > Cast Ahead. After the key, `/ca report` gives the text to paste into a [wrong call issue](https://github.com/AqueGen/CastAhead/issues/new?template=wrong-call.yml) or a CurseForge comment. The journal holds spell and creature ids and timings only, no names of people.
