@@ -1,6 +1,6 @@
 CastAheadOptions = {}
 
-CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Development" }
+CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Bursts", "Development" }
 local panels = {}
 local T = CastAheadWindow.THEME
 local FLAT = { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 }
@@ -44,7 +44,7 @@ end
 
 -- Forward declarations: Build calls these, and Lua resolves a local by
 -- what it holds at call time, so they must exist as upvalues before it runs.
-local BuildGeneral, BuildSounds, BuildDefensives, BuildDevelopment
+local BuildGeneral, BuildSounds, BuildDefensives, BuildBursts, BuildDevelopment
 -- Widgets are painted once, when a panel is first built, but storage can
 -- change behind their back: the /ca anchor|grow|offset|center slash commands
 -- and the Move button all write it. Every widget that displays stored state
@@ -840,8 +840,11 @@ function BuildDefensives(panel)
     end
     table.insert(refreshers, Paint)
     table.insert(listRefreshers, Paint)
-    local burst = BuildGroup(panel, "Burst windows", BURST_H)
-    BuildSwitch(panel, "burstCalls", { "TOPLEFT", burst, "TOPLEFT", 10, -26 })
+end
+
+function BuildBursts(panel)
+    local group = BuildGroup(panel, "Burst windows", BURST_H)
+    BuildSwitch(panel, "burstCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 })
 end
 
 local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
@@ -961,7 +964,8 @@ function BuildSounds(panel)
     end
 end
 
-BUILDERS = { General = BuildGeneral, Sounds = BuildSounds, Defensives = BuildDefensives, Development = BuildDevelopment }
+BUILDERS = { General = BuildGeneral, Sounds = BuildSounds, Defensives = BuildDefensives, Bursts = BuildBursts,
+             Development = BuildDevelopment }
 
 for _, name in ipairs(CastAheadOptions.TABS) do
     local host
