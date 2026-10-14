@@ -3944,5 +3944,60 @@ do
     CastAheadDB = nil
 end
 
+-- Burst windows through Core, in a raid instance that has no trash data.
+do
+    local heard = {}
+    local savedPlay, savedWindows, savedInfo = PlaySoundFile, CastAheadBurstWindows, GetInstanceInfo
+    PlaySoundFile = function(path) heard[#heard + 1] = path:match("([%w_]+)%.ogg$") return true, 1 end
+    local function Heard() return table.concat(heard, ",") end
+    local function Line(prefix)
+        for i = 1, #allFrames do
+            local f = allFrames[i]
+            if type(f.timeValue) == "string" and f.timeValue:sub(1, #prefix) == prefix then return f end
+        end
+    end
+    GetSpecialization = function() return 1 end
+    GetSpecializationRole = function() return "DAMAGER" end
+    CastAheadBurstWindows = { [3492] = { [15] = { { hold = 10, release = 30 } } } }
+    CastAheadDB = { burstCalls = true, centerText = true }
+    GetInstanceInfo = function() return "Abyss", "raid", 15, "", 0, 0, false, 9999 end
+    fire("PLAYER_ENTERING_WORLD")
+
+    fire("ENCOUNTER_START", 3492, "Ula'tek", 15, 20)
+    for _ = 1, 21 do advance(0.5) end
+    local line = Line("Hold burst")
+    check(Heard() == "HOLD", "raid burst: hold burst through Core with no trash data, heard " .. Heard())
+    check(line ~= nil and line.shown, "raid burst: the hold line is on screen")
+    fire("ENCOUNTER_END", 3492, "Ula'tek", 15, 20, 0)
+    advance(0.5)
+    check(line ~= nil and not line.shown, "raid burst: the line leaves the screen when the fight ends")
+
+    heard = {}
+    fire("ENCOUNTER_START", 3492, "Ula'tek", 15, 20)
+    for _ = 1, 21 do advance(0.5) end
+    check(Heard() == "HOLD", "raid burst: a re-pull lays the windows out again, heard " .. Heard())
+    fire("ENCOUNTER_END", 3492, "Ula'tek", 15, 20, 0)
+
+    heard = {}
+    fire("ENCOUNTER_START", 3492, "Ula'tek", 2, 5)
+    for _ = 1, 70 do advance(0.5) end
+    check(#heard == 0, "raid burst: another difficulty stays silent, heard " .. Heard())
+    fire("ENCOUNTER_END", 3492, "Ula'tek", 2, 5, 0)
+
+    heard = {}
+    CastAheadDefensives = { spells = { [1299684] = { DAMAGER = "BIG", lead = 3.0 } }, alias = {} }
+    fire("ENCOUNTER_START", 3470, "Nek'zali", 15, 20)
+    CastAheadBossAdapter.OnBar("dbm", "raidbar", 1299684, 10, now)
+    for _ = 1, 16 do advance(0.5) end
+    check(Heard() == "BIG_soon", "raid burst: a boss save call fires in a raid with no trash data, heard " .. Heard())
+    fire("ENCOUNTER_END", 3470, "Nek'zali", 15, 20, 0)
+
+    CastAheadDefensives = { spells = {}, alias = {} }
+    PlaySoundFile, CastAheadBurstWindows, GetInstanceInfo = savedPlay, savedWindows, savedInfo
+    GetSpecialization, GetSpecializationRole = nil, nil
+    CastAheadDB = nil
+    fire("PLAYER_ENTERING_WORLD")
+end
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

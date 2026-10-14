@@ -2253,6 +2253,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     if event == "ENCOUNTER_START" or event == "ENCOUNTER_END" then
         inEncounter = event == "ENCOUNTER_START"
         if CastAheadBossAdapter then CastAheadBossAdapter.OnEncounter(event) end
+        if CastAheadBurst then CastAheadBurst.OnEncounter(event, unit, arg3, GetTime()) end
         if inEncounter then
             -- Everything on screen belongs to the pull that just ended; the
             -- centre call clears itself once no plate is casting.
@@ -2538,6 +2539,9 @@ local function CenterPick(now)
     if CastAheadSaves and CastAheadConfig.Enabled("saveCalls") then
         for _, pick in ipairs(CastAheadSaves.Pending(now)) do centerPicks[#centerPicks + 1] = pick end
     end
+    if CastAheadBurst then
+        for _, pick in ipairs(CastAheadBurst.Pending(now)) do centerPicks[#centerPicks + 1] = pick end
+    end
     table.sort(centerPicks, function(a, b) return a.endAt < b.endAt end)
     return centerPicks
 end
@@ -2597,11 +2601,13 @@ local function UpdateCenter(now)
 end
 
 frame:SetScript("OnUpdate", function()
-    if not dungeon then return end
+    if not (dungeon or inEncounter or (center and center:IsShown())) then return end
     local now = GetTime()
     if CastAheadSaves and CastAheadConfig.Enabled("saveCalls") then CastAheadSaves.Tick(now) end
+    if CastAheadBurst then CastAheadBurst.Tick(now) end
     if CastAheadBossAdapter then CastAheadBossAdapter.Tick(now) end
     UpdateCenter(now)
+    if not dungeon then return end
     if now >= pollAt then
         pollAt = now + COMBAT_POLL_INTERVAL
         PollCombat()
