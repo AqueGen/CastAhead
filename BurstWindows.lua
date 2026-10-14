@@ -2,7 +2,7 @@
 CastAheadBurstWindows = {
     [3457] = { -- The Writhing Coil
         [8] = {
-            { hold = 21.0, release = 59.2 }, -- 5 specs, 18 fights: Druid-Balance, Hunter-Survival, Paladin-Retribution, Rogue-Assassination, Warlock-Demonology
+            { hold = 21.0, release = 59.5 }, -- 4 specs, 14 fights: Hunter-Survival, Paladin-Retribution, Rogue-Assassination, Warlock-Demonology
             { hold = 120.2, release = 149.2 }, -- 5 specs, 17 fights: Hunter-Survival, Mage-Fire, Paladin-Retribution, Rogue-Assassination, Warrior-Arms
         },
     },
