@@ -3891,6 +3891,13 @@ do
     role = "DAMAGER"
 
     heard = {}
+    UnitIsDeadOrGhost = function(unit) return unit == "player" end
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(40)
+    UnitIsDeadOrGhost = nil
+    check(#heard == 0 and #B.Pending(now) == 0, "burst: a dead player hears and sees nothing")
+
+    heard = {}
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
     run(15)
     role = "TANK"

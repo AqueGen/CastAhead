@@ -10,6 +10,7 @@ local pending = {}
 
 local function On()
     if CastAheadConfig.Get("burstCalls") ~= true then return false end
+    if UnitIsDeadOrGhost and UnitIsDeadOrGhost("player") then return false end
     if not (GetSpecialization and GetSpecializationRole) then return false end
     local spec = GetSpecialization()
     return spec ~= nil and GetSpecializationRole(spec) == "DAMAGER"
