@@ -435,6 +435,20 @@ for id, c in pairs(CastAheadBossCadence) do
     check(type(c.first) == "number" and type(c.cd) == "table" and type(c.steady) == "boolean", "boss cadence " .. id .. " has first, cd and steady")
     for _, gap in ipairs(c.cd) do check(type(gap) == "number" and gap > 0, "boss cadence " .. id .. " gaps are positive numbers") end
 end
+dofile("BurstWindows.lua")
+check(M.ADVICE.HOLD and M.ADVICE.HOLD.say == "hold burst", "HOLD advice says hold burst")
+check(M.ADVICE.BURST and M.ADVICE.BURST.say == "burst now", "BURST advice says burst now")
+for enc, byDifficulty in pairs(CastAheadBurstWindows) do
+    check(type(enc) == "number" and enc > 0, "burst windows key " .. tostring(enc) .. " is an encounter id")
+    for difficulty, list in pairs(byDifficulty) do
+        check(difficulty == 8 or difficulty == 15 or difficulty == 16,
+            string.format("burst windows %s use a game difficulty id, got %s", tostring(enc), tostring(difficulty)))
+        for i, w in ipairs(list) do
+            check(type(w.hold) == "number" and type(w.release) == "number" and w.hold >= 0 and w.hold <= w.release,
+                string.format("burst window %d/%d #%d has 0 <= hold <= release", enc, difficulty, i))
+        end
+    end
+end
 local shippedTables = {}
 for spec, lists in pairs(CastAheadSaveButtons) do
     for _, size in ipairs({ "small", "big", "heal" }) do

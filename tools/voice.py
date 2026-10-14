@@ -47,6 +47,8 @@ LINES = {
     "SMALL": "small defensive",
     "BIG": "big defensive",
     "HEAL": "heal up",
+    "HOLD": "hold burst",
+    "BURST": "burst now",
 }
 
 # Trim the neural voice's padding (about 0.2 s in front, 0.9 s behind): the
