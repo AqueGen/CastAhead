@@ -4266,7 +4266,7 @@ do
         "burst v2: Normal guide shows only Normal windows")
     check(#B.GuideLines(16, 1480) == 0, "burst v2: no windows, no lines")
     CastAheadBurstWindows[3492][16] = { name = "Ula'tek",
-        { hold = 120, release = 136, target = "Venomous Heart", specs = { [1480] = { full = -33, mini = -1 } } } }
+        { hold = 136, release = 136, target = "Venomous Heart", specs = { [1480] = { full = -33, mini = -1 } } } }
     lines = B.GuideLines(16, 1480)
     check(lines[2] == "  2:16 Venomous Heart - burst | full: Void Metamorphosis 1:43 | mini: Void Nova 2:15",
         "burst v3: a target window names the target and both tiers, got " .. tostring(lines[2]))
@@ -4364,6 +4364,39 @@ do
         check(lines[2] == "  0:10 hold - 0:40 burst | full: Avenging Wrath 0:38 | mini: Wake of Ashes 0:55",
             "burst v3: guide line with full and mini, got " .. tostring(lines[2]))
         IsPlayerSpell = nil
+    end
+
+    do
+        local shipped = CastAheadBurstButtons[70]
+        heard, spec = {}, 70
+        CastAheadBurstButtons[70] = { full = {}, mini = { 255937 } }
+        B.OnEncounter("ENCOUNTER_START", 3492, 17, now)
+        run(60)
+        check(Heard() == "MINI", "burst fix: an empty shipped full list makes no hold and no burst, heard " .. Heard())
+        B.OnEncounter("ENCOUNTER_END", 3492, 17, now)
+
+        heard = {}
+        CastAheadBurstButtons[70] = { full = { 31884 }, mini = {} }
+        B.OnEncounter("ENCOUNTER_START", 3492, 17, now)
+        run(60)
+        check(Heard() == "HOLD,BURST", "burst fix: an empty shipped mini list makes no mini burst, heard " .. Heard())
+        B.OnEncounter("ENCOUNTER_END", 3492, 17, now)
+        CastAheadBurstButtons[70] = shipped
+
+        heard, spec = {}, 73
+        B.OnEncounter("ENCOUNTER_START", 3492, 17, now)
+        run(39.5)
+        check(Heard() == "HOLD", "burst fix: a spec without burst lists still hears the hold, heard " .. Heard())
+        run(1)
+        check(Heard() == "HOLD,BURST", "burst fix: and the shared burst at the release, heard " .. Heard())
+        B.OnEncounter("ENCOUNTER_END", 3492, 17, now)
+
+        CastAheadBurstWindows[3492][19] = { name = "Ula'tek",
+            { hold = 128, release = 146, target = "Venomous Heart", specs = { [1480] = { full = -33 } } } }
+        local guide = B.GuideLines(19, 1480)
+        check(guide[2] == "  2:08 hold - 2:26 Venomous Heart burst | full: Void Metamorphosis 1:53",
+            "burst fix: a target window with an earlier hold shows the hold, got " .. tostring(guide[2]))
+        CastAheadBurstWindows[3492][19] = nil
     end
 
     C_Spell.GetSpellName, C_Spell.GetSpellTexture = savedName, savedTexture

@@ -75,7 +75,11 @@ function B.OnEncounter(event, encounterID, difficultyID, now)
     local windows = byDifficulty and byDifficulty[difficultyID]
     if not windows then return end
     local spec = CastAheadSaves and CastAheadSaves.SpecID()
-    local fullOn, miniOn = not B.Lists.Emptied(spec, "full"), not B.Lists.Emptied(spec, "mini")
+    local listed = CastAheadBurstButtons and spec and CastAheadBurstButtons[spec] ~= nil
+    local function TierOn(tier)
+        return #B.Lists.ListFor(spec, tier) > 0 or not listed and not B.Lists.Emptied(spec, tier)
+    end
+    local fullOn, miniOn = TierOn("full"), TierOn("mini")
     for _, w in ipairs(windows) do
         local full, mini = Offsets(w, spec)
         local burstAt = math.max(now + w.release + (full or 0), now)
@@ -159,8 +163,14 @@ function B.GuideLines(difficultyID, specID)
     for _, list in ipairs(bosses) do
         lines[#lines + 1] = list.name or "?"
         for _, w in ipairs(list) do
-            local line = w.target and string.format("  %s %s - burst", B.Clock(w.release), w.target)
-                or string.format("  %s hold - %s burst", B.Clock(w.hold), B.Clock(w.release))
+            local line
+            if w.target and w.hold < w.release then
+                line = string.format("  %s hold - %s %s burst", B.Clock(w.hold), B.Clock(w.release), w.target)
+            elseif w.target then
+                line = string.format("  %s %s - burst", B.Clock(w.release), w.target)
+            else
+                line = string.format("  %s hold - %s burst", B.Clock(w.hold), B.Clock(w.release))
+            end
             local full, mini = Offsets(w, specID)
             if #fullList == 0 and #miniList == 0 then
                 line = line .. " | no burst buttons known for this spec"
