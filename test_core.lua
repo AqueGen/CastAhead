@@ -4206,7 +4206,11 @@ do
     CastAheadBurstWindows = { [3492] = {
         [15] = { name = "Ula'tek", { hold = 10, release = 40, specs = { [1480] = -27 } } },
         [14] = { name = "Ula'tek", { hold = 50, release = 70 } } } }
-    CastAheadBurstButtons = { [1480] = 1217607 }
+    CastAheadBurstButtons = { [1480] = { full = { 1217607 }, mini = { 1217605 } } }
+    local names = { [1217607] = "Void Metamorphosis", [1217605] = "Void Nova", [190319] = "Combustion",
+        [12472] = "Icy Veins", [31884] = "Avenging Wrath", [343527] = "Execution Sentence", [255937] = "Wake of Ashes" }
+    local savedName, savedTexture = C_Spell.GetSpellName, C_Spell.GetSpellTexture
+    C_Spell.GetSpellName = function(id) return names[id] end
     CastAheadDB = { burstCalls = true }
     local function run(seconds)
         for _ = 1, seconds * 2 do now = now + 0.5 S.Tick(now) B.Tick(now) end
@@ -4243,24 +4247,94 @@ do
 
     check(B.Clock(197) == "3:17" and B.Clock(59.6) == "1:00", "burst v2: clock formats m:ss")
     local lines = B.GuideLines(15, 1480)
-    check(lines[1] == "Ula'tek" and lines[2] == "  0:10 hold - 0:40 burst | your burst: 0:13",
-        "burst v2: guide line with the spec's own time, got " .. tostring(lines[2]))
+    check(lines[1] == "Ula'tek" and lines[2] == "  0:10 hold - 0:40 burst | full: Void Metamorphosis 0:13",
+        "burst v2: guide line with the spec's own time and no mini part without a mini offset, got " .. tostring(lines[2]))
     lines = B.GuideLines(15, 63)
-    check(lines[2] == "  0:10 hold - 0:40 burst | no burst button known for this spec",
+    check(lines[2] == "  0:10 hold - 0:40 burst | no burst buttons known for this spec",
         "burst v2: guide line for a spec without a button, got " .. tostring(lines[2]))
-    CastAheadBurstButtons[63] = 190319
+    CastAheadBurstButtons[63] = { full = { 190319 } }
     lines = B.GuideLines(15, 63)
-    check(lines[2] == "  0:10 hold - 0:40 burst | your burst: 0:40 (shared timing)",
+    check(lines[2] == "  0:10 hold - 0:40 burst | full: Combustion 0:40 (shared timing)",
         "burst v2: guide line for a spec without an offset, got " .. tostring(lines[2]))
+    CastAheadDB.burstButtons = { [63] = { full = { 12472 } } }
+    lines = B.GuideLines(15, 63)
+    check(lines[2] == "  0:10 hold - 0:40 burst | full: Icy Veins 0:40 (shared timing)",
+        "burst v3: the guide names the viewed spec's own edited list, got " .. tostring(lines[2]))
+    CastAheadDB.burstButtons = nil
     lines = B.GuideLines(14, 1480)
-    check(#lines == 2 and lines[2] == "  0:50 hold - 1:10 burst | your burst: 1:10 (shared timing)",
+    check(#lines == 2 and lines[2] == "  0:50 hold - 1:10 burst | full: Void Metamorphosis 1:10 (shared timing)",
         "burst v2: Normal guide shows only Normal windows")
     check(#B.GuideLines(16, 1480) == 0, "burst v2: no windows, no lines")
-    CastAheadBurstWindows[3492][16] = { name = "Ula'tek", { hold = 120, release = 146, target = "Venomous Heart", specs = { [1480] = -30 } } }
+    CastAheadBurstWindows[3492][16] = { name = "Ula'tek",
+        { hold = 120, release = 136, target = "Venomous Heart", specs = { [1480] = { full = -33, mini = -1 } } } }
     lines = B.GuideLines(16, 1480)
-    check(lines[2] == "  2:26 Venomous Heart - burst | your burst: 1:56",
-        "burst v2: a target window names the target, got " .. tostring(lines[2]))
+    check(lines[2] == "  2:16 Venomous Heart - burst | full: Void Metamorphosis 1:43 | mini: Void Nova 2:15",
+        "burst v3: a target window names the target and both tiers, got " .. tostring(lines[2]))
 
+    do
+        CastAheadBurstWindows[3492][17] = { name = "Ula'tek", { hold = 10, release = 40, specs = {
+            [70] = { full = -2, mini = 15 }, [71] = { full = 0, mini = -1 }, [72] = { full = 0, mini = 1 } } } }
+        CastAheadBurstButtons[70] = { full = { 31884 }, mini = { 255937, 343527 } }
+        local tex = { [31884] = 5001, [255937] = 5002, [343527] = 5003 }
+        C_Spell.GetSpellTexture = function(id) return tex[id] end
+        IsPlayerSpell = function(id) return id == 343527 end
+
+        heard, spec = {}, 70
+        B.OnEncounter("ENCOUNTER_START", 3492, 17, now)
+        run(37.5)
+        check(Heard() == "HOLD", "burst v3: hold at hold start, nothing else yet, heard " .. Heard())
+        run(0.5)
+        check(Heard() == "HOLD,BURST", "burst v3: full burst at release + full offset, heard " .. Heard())
+        local pend = B.Pending(now)
+        check(#pend == 1 and pend[1].icons[1] == 5001,
+            "burst v3: an unknown full button still shows its own texture, got " .. tostring(pend[1] and pend[1].icons[1]))
+        run(16.5)
+        check(Heard() == "HOLD,BURST", "burst v3: quiet until the mini time, heard " .. Heard())
+        run(0.5)
+        check(Heard() == "HOLD,BURST,MINI", "burst v3: mini burst at release + mini offset, heard " .. Heard())
+        pend = B.Pending(now)
+        check(#pend == 1 and pend[1].advice == CastAheadMatch.ADVICE.MINI and pend[1].icons[1] == 5003,
+            "burst v3: the mini icon is the first known and ready mini button")
+        IsPlayerSpell = function() return false end
+        C_Spell.GetSpellTexture = function() return nil end
+        pend = B.Pending(now)
+        check(pend[1].icons[1] == "Interface\\Icons\\Spell_Nature_Bloodlust",
+            "burst v3: no texture anywhere falls back to the Bloodlust icon")
+        C_Spell.GetSpellTexture = function(id) return tex[id] end
+        run(10)
+
+        heard, spec = {}, 1480
+        B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+        run(60)
+        check(Heard() == "BURST", "burst v3: a full-only spec never hears mini burst, heard " .. Heard())
+
+        heard, spec = {}, 71
+        B.OnEncounter("ENCOUNTER_START", 3492, 17, now)
+        run(39.5)
+        check(Heard() == "HOLD", "burst v3: a mini due 1 s before the full burst waits, heard " .. Heard())
+        run(0.5)
+        check(Heard() == "HOLD,BURST", "burst v3: the full burst is heard first, heard " .. Heard())
+        run(1.5)
+        check(Heard() == "HOLD,BURST", "burst v3: the mini still waits, heard " .. Heard())
+        run(0.5)
+        check(Heard() == "HOLD,BURST,MINI", "burst v3: the mini follows 2 s after the full burst, heard " .. Heard())
+        run(10)
+
+        heard, spec = {}, 72
+        B.OnEncounter("ENCOUNTER_START", 3492, 17, now)
+        run(41)
+        check(Heard() == "HOLD,BURST", "burst v3: a mini 1 s after the full burst waits, heard " .. Heard())
+        run(1)
+        check(Heard() == "HOLD,BURST,MINI", "burst v3: and speaks 2 s after the full burst, heard " .. Heard())
+        B.OnEncounter("ENCOUNTER_END", 3492, 17, now)
+
+        lines = B.GuideLines(17, 70)
+        check(lines[2] == "  0:10 hold - 0:40 burst | full: Avenging Wrath 0:38 | mini: Wake of Ashes 0:55",
+            "burst v3: guide line with full and mini, got " .. tostring(lines[2]))
+        IsPlayerSpell = nil
+    end
+
+    C_Spell.GetSpellName, C_Spell.GetSpellTexture = savedName, savedTexture
     PlaySoundFile, CastAheadBurstWindows, CastAheadBurstButtons = savedPlay, savedWindows, savedButtons
     GetSpecialization, GetSpecializationRole, GetSpecializationInfo = nil, nil, nil
     CastAheadDB = nil

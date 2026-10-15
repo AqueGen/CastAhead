@@ -245,6 +245,7 @@ local ADVICE_SOUND = {           -- keyed by CastAheadMatch.ADVICE key
     HEAL = "ALARM_CLOCK_WARNING_1",
     HOLD = "ALARM_CLOCK_WARNING_1",
     BURST = "RAID_WARNING",
+    MINI = "ALARM_CLOCK_WARNING_2",
 }
 
 -- Default on: only casts in the curated priority set matter enough for icons,

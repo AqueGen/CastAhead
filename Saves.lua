@@ -31,6 +31,7 @@ local function SpellReady(id)
     if not ok2 then return true end
     return zero == true
 end
+S.SpellReady = SpellReady
 
 local useToItem = {}
 local bagsPending = false
