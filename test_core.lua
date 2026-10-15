@@ -3777,8 +3777,21 @@ do
     local savedCreate, savedDB, savedBurst, savedSpec = CreateFrame, CastAheadDB, CastAheadBurstButtons, CastAheadSaves.SpecID
     local savedSlider = MinimalSliderWithSteppersMixin
     MinimalSliderWithSteppersMixin = savedSlider or { Label = { Min = 1, Max = 2 }, Event = { OnValueChanged = 1 } }
+    local made, texts = {}, {}
     CreateFrame = function(kind, name, parent, ...)
         local f = savedCreate(kind, name, parent, ...)
+        made[#made + 1] = f
+        local createText = f.CreateFontString
+        f.CreateFontString = function(...)
+            local fs = createText(...)
+            local setText = fs.SetText
+            fs.SetText = function(self, t) setText(self, t) rawset(self, "value", t) end
+            fs.SetShown = function(self, on) self.shown = on and true or false end
+            texts[#texts + 1] = fs
+            return fs
+        end
+        f.SetShown = function(self, on) self.shown = on and true or false end
+        f.SetText = function(self, t) rawset(self, "buttonText", t) end
         f.h, f.flowTop, f.MinText, f.MaxText, f.Slider = 0, 6, StubRegion(), StubRegion(), StubRegion()
         f.SetSize = function(self, w, h) self.w, self.h = w, h end
         f.SetHeight = function(self, h) self.h = h end
@@ -3799,6 +3812,38 @@ do
     check(ok, "the Bursts page builds headless " .. tostring(err))
     ok, err = pcall(CastAheadOptions.ShowPanel, host, "Defensives")
     check(ok, "the Defensives page builds headless " .. tostring(err))
+
+    local reset, full, mini, note
+    for _, f in ipairs(made) do
+        if not reset and rawget(f, "buttonText") == "Reset to default" then reset = f end
+        local title = rawget(f, "title") and rawget(f.title, "value")
+        if title == "Full burst" then full = f elseif title == "Mini burst" then mini = f end
+    end
+    for _, fs in ipairs(texts) do
+        if tostring(rawget(fs, "value")):find("Lists edit your current specialization", 1, true) then note = fs end
+    end
+    local function Shown() return full.shown, mini.shown, reset.shown, note.shown end
+    check(reset and full and mini and note, "the Bursts page has its lists, Reset and note")
+    if reset and full and mini and note then
+        local a, b, c, d = Shown()
+        check(not a and not b and not c and not d, "burstCalls off hides the burst lists and Reset")
+        CastAheadConfig.Set("burstCalls", true)
+        CastAheadOptions.ShowPanel(host, "Bursts")
+        a, b, c, d = Shown()
+        check(a and b and c and not d, "burstCalls on shows the lists and Reset for the own spec")
+        CastAheadSaves.SetViewSpec(66)
+        CastAheadOptions.ShowPanel(host, "Bursts")
+        a, b, c, d = Shown()
+        check(not a and not b and not c and d, "viewing another spec hides the lists and Reset and shows the note")
+        CastAheadSaves.SetViewSpec(nil)
+    end
+
+    IsPlayerSpell = function() return false end
+    CastAheadBurstButtons = { [265] = { full = { 1217607 } }, [266] = { full = { 222 } } }
+    lists.SetList("full", {})
+    local offered = lists.Addable("full")
+    check(#offered == 1 and offered[1] == 1217607, "Addable offers an own-spec shipped id the player does not know, not a class mate's")
+    IsPlayerSpell = nil
 
     local saves = { [265] = { big = { 104773 } } }
     CastAheadDB = { saveButtons = saves }

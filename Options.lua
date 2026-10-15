@@ -763,7 +763,7 @@ local function BuildButtonList(panel, store, key, titles, hint, emptyText)
 end
 
 local DEFENSIVES_H, DEFENSIVES_OFF_H = 366, 56
-local BURST_H = 86
+local BURST_H, BURST_OFF_H = 86, 56
 
 function BuildDefensives(panel)
     local group = BuildGroup(panel, "Defensive calls", DEFENSIVES_H)
@@ -847,18 +847,30 @@ local burstDifficulty = 15
 
 function BuildBursts(panel)
     local group = BuildGroup(panel, "Burst windows", BURST_H)
-    BuildSwitch(panel, "burstCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 })
+    local Paint
+    BuildSwitch(panel, "burstCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, function()
+        Redraw()
+        Paint()
+    end)
     local reset = CastAheadWindow.Button(group, "Reset to default", 110)
     reset:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -54)
     reset:SetScript("OnClick", function()
         if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_BURSTS") end
     end)
+    local other = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    other:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -54)
+    other:SetWidth(COL_W - 20)
+    other:SetJustifyH("LEFT")
+    other:SetWordWrap(true)
+    other:SetText("|cffaaaaaaLists edit your current specialization - pick it in the bar above.|r")
     local titles = { full = "Full burst", mini = "Mini burst" }
     local empty = "Empty - no call for this tier"
-    BuildButtonList(panel, CastAheadBurst.Lists, "full", titles, nil, empty)
-    BuildButtonList(panel, CastAheadBurst.Lists, "mini", titles, nil, empty)
+    local lists = {
+        BuildButtonList(panel, CastAheadBurst.Lists, "full", titles, nil, empty),
+        BuildButtonList(panel, CastAheadBurst.Lists, "mini", titles, nil, empty),
+    }
     local guide = BuildGroup(panel, "Guide", 120)
-    local buttons, Paint = {}, nil
+    local buttons = {}
     for i, d in ipairs(BURST_DIFFICULTIES) do
         local b = CastAheadWindow.Button(guide, d[2], 56)
         b:SetPoint("TOPLEFT", guide, "TOPLEFT", 8 + (i - 1) * 59, -24)
@@ -880,6 +892,12 @@ function BuildBursts(panel)
         if #lines == 0 then lines = { "No burst windows on this difficulty." } end
         text:SetText(table.concat(lines, "\n"))
         guide:SetHeight(64 + text:GetStringHeight())
+        local on = SwitchOn("burstCalls")
+        local own = spec == CastAheadSaves.SpecID()
+        for _, list in ipairs(lists) do list:SetShown(on and own) end
+        reset:SetShown(on and own)
+        other:SetShown(on and not own)
+        group:SetHeight(not on and BURST_OFF_H or own and BURST_H or 64 + other:GetStringHeight())
         CastAheadWindow.PaintSpecBars()
         panel:Relayout()
     end

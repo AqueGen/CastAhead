@@ -6,6 +6,7 @@ B.Lists = CastAheadLists.New({
     dbKey = "burstButtons",
     shipped = function() return CastAheadBurstButtons end,
     keys = { "full", "mini" },
+    offerOwnShipped = true,
     specID = function() return CastAheadSaves and CastAheadSaves.SpecID() end,
     onChange = function() end,
 })
