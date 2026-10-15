@@ -14,6 +14,7 @@ Vorbis output and WoW plays no Opus, so the WAV is converted here.
     python tools/voice.py --force    # re-render all
 """
 import os
+import re
 import subprocess
 import sys
 import time
@@ -55,6 +56,10 @@ TRIM = ("silenceremove=start_periods=1:start_silence=0.02:start_threshold=-45dB:
         "areverse,"
         "silenceremove=start_periods=1:start_silence=0.10:start_threshold=-45dB:detection=peak,"
         "areverse")
+
+# The DBM voice packs players compare us with sit near -13 LUFS; the raw Azure voice comes out near -22.
+TARGET_LUFS = -13.0
+LIMIT = 10 ** (-1.5 / 20)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "Sounds", LANG)
@@ -111,10 +116,27 @@ def synth(text, dest_wav, key, region):
     return False
 
 
+def loudness(path):
+    out = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-af", "ebur128",
+                          "-f", "null", "-"], capture_output=True, text=True).stderr
+    found = re.findall(r"I:\s+(-?[\d.]+) LUFS", out)
+    return float(found[-1]) if found else None
+
+
 def to_ogg(wav, ogg):
-    r = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", wav, "-af", TRIM,
-                        "-c:a", "libvorbis", "-q:a", "4", "-ar", "44100", ogg])
-    return r.returncode == 0
+    # The limiter and the encoder each take back part of the gain, so it is tuned on the finished file.
+    gain = 0.0
+    for _ in range(4):
+        af = "%s,volume=%.2fdB,alimiter=limit=%.4f:level=0:latency=1" % (TRIM, gain, LIMIT)
+        r = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", wav, "-af", af,
+                            "-c:a", "libvorbis", "-q:a", "4", "-ar", "44100", ogg])
+        level = loudness(ogg) if r.returncode == 0 else None
+        if level is None:
+            return False
+        if abs(TARGET_LUFS - level) < 0.2:
+            break
+        gain += TARGET_LUFS - level
+    return True
 
 
 def main(force=False):
