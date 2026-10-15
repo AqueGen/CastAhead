@@ -117,16 +117,18 @@ def synth(text, dest_wav, key, region):
 
 
 def loudness(path):
-    out = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-af", "ebur128",
-                          "-f", "null", "-"], capture_output=True, text=True).stderr
+    # Looped, because R128 measures in 400 ms blocks and misreads a one-word clip.
+    out = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-stream_loop", "3", "-i", path,
+                          "-af", "ebur128", "-f", "null", "-"], capture_output=True, text=True).stderr
     found = re.findall(r"I:\s+(-?[\d.]+) LUFS", out)
-    return float(found[-1]) if found else None
+    level = float(found[-1]) if found else None
+    return level if level is not None and level > -60 else None
 
 
 def to_ogg(wav, ogg):
     # The limiter and the encoder each take back part of the gain, so it is tuned on the finished file.
     gain = 0.0
-    for _ in range(4):
+    for _ in range(6):
         af = "%s,volume=%.2fdB,alimiter=limit=%.4f:level=0:latency=1" % (TRIM, gain, LIMIT)
         r = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", wav, "-af", af,
                             "-c:a", "libvorbis", "-q:a", "4", "-ar", "44100", ogg])
