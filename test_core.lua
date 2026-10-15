@@ -4277,7 +4277,10 @@ do
         CastAheadBurstButtons[70] = { full = { 31884 }, mini = { 255937, 343527 } }
         local tex = { [31884] = 5001, [255937] = 5002, [343527] = 5003 }
         C_Spell.GetSpellTexture = function(id) return tex[id] end
-        IsPlayerSpell = function(id) return id == 343527 end
+        IsPlayerSpell = function(id) return id == 343527 or id == 255937 end
+        C_Spell.GetSpellCooldownDuration = function(id)
+            return { HasSecretValues = function() return false end, IsZero = function() return id ~= 255937 end }
+        end
 
         heard, spec = {}, 70
         B.OnEncounter("ENCOUNTER_START", 3492, 17, now)
@@ -4294,14 +4297,43 @@ do
         check(Heard() == "HOLD,BURST,MINI", "burst v3: mini burst at release + mini offset, heard " .. Heard())
         pend = B.Pending(now)
         check(#pend == 1 and pend[1].advice == CastAheadMatch.ADVICE.MINI and pend[1].icons[1] == 5003,
-            "burst v3: the mini icon is the first known and ready mini button")
+            "burst v3: the first known mini button is on cooldown, the second ready one is shown")
+        C_Spell.GetSpellCooldownDuration = nil
         IsPlayerSpell = function() return false end
         C_Spell.GetSpellTexture = function() return nil end
+        run(0.5)
         pend = B.Pending(now)
         check(pend[1].icons[1] == "Interface\\Icons\\Spell_Nature_Bloodlust",
             "burst v3: no texture anywhere falls back to the Bloodlust icon")
         C_Spell.GetSpellTexture = function(id) return tex[id] end
         run(10)
+
+        heard = {}
+        CastAheadDB.burstButtons = { [70] = { mini = {} } }
+        B.OnEncounter("ENCOUNTER_START", 3492, 17, now)
+        run(60)
+        check(Heard() == "HOLD,BURST", "burst v3: an emptied own mini list switches mini off, heard " .. Heard())
+        lines = B.GuideLines(17, 70)
+        check(lines[2] == "  0:10 hold - 0:40 burst | full: Avenging Wrath 0:38",
+            "burst v3: the guide omits an emptied mini tier, got " .. tostring(lines[2]))
+        heard = {}
+        CastAheadDB.burstButtons = { [70] = { full = {} } }
+        B.OnEncounter("ENCOUNTER_START", 3492, 17, now)
+        run(60)
+        check(Heard() == "MINI", "burst v3: an emptied own full list switches hold and burst off, heard " .. Heard())
+        CastAheadDB.burstButtons = nil
+
+        heard = {}
+        local t4 = now
+        CastAheadBurstWindows[3492][18] = { name = "Ula'tek", { hold = 10, release = 40, specs = { [70] = { full = 1, mini = 0 } } } }
+        B.OnEncounter("ENCOUNTER_START", 3492, 18, now)
+        S.Schedule("test:save4", 1, t4 + 40.5, t4 + 44, CastAheadMatch.ADVICE.BIG)
+        run(44)
+        check(Heard() == "HOLD,BIG_soon,BURST", "burst v3: a save moves the burst to 42.5 and the mini waits, heard " .. Heard())
+        run(0.5)
+        check(Heard() == "HOLD,BIG_soon,BURST,MINI", "burst v3: the mini follows 2 s after the moved burst, heard " .. Heard())
+        S.Cancel("test:save4")
+        B.OnEncounter("ENCOUNTER_END", 3492, 18, now)
 
         heard, spec = {}, 1480
         B.OnEncounter("ENCOUNTER_START", 3492, 15, now)

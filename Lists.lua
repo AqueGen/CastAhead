@@ -82,11 +82,19 @@ function L.New(opts)
         return type(s) == "table" and s[key] or {}
     end
 
+    local function Own(spec, key)
+        local o = spec and CastAheadDB and CastAheadDB[opts.dbKey] and CastAheadDB[opts.dbKey][spec]
+        return o and type(o[key]) == "table" and o[key] or nil
+    end
+
     function store.ListFor(spec, key)
         if not spec then return {} end
-        local o = CastAheadDB and CastAheadDB[opts.dbKey] and CastAheadDB[opts.dbKey][spec]
-        if o and type(o[key]) == "table" then return o[key] end
-        return store.Shipped(spec, key)
+        return Own(spec, key) or store.Shipped(spec, key)
+    end
+
+    function store.Emptied(spec, key)
+        local own = Own(spec, key)
+        return own ~= nil and #own == 0
     end
 
     function store.List(key) return store.ListFor(opts.specID(), key) end

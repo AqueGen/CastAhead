@@ -49,15 +49,18 @@ local function Offsets(w, spec)
     return nil, nil
 end
 
-local function DeferUntil(now, entry)
+local function DeferUntil(now)
     local S = CastAheadSaves
+    if not (S and S.LastFiredAt) then return nil end
+    local last, nextAt = S.LastFiredAt(), S.NextFireAt(now)
     local at
-    if S and S.LastFiredAt then
-        local last, nextAt = S.LastFiredAt(), S.NextFireAt(now)
-        if last ~= nil and now - last < SAVE_GAP then at = last + SAVE_GAP end
-        if nextAt ~= nil and nextAt - now < SAVE_GAP then at = math.max(at or 0, nextAt + SAVE_GAP) end
-    end
-    if entry.advice ~= M.ADVICE.MINI then return at end
+    if last ~= nil and now - last < SAVE_GAP then at = last + SAVE_GAP end
+    if nextAt ~= nil and nextAt - now < SAVE_GAP then at = math.max(at or 0, nextAt + SAVE_GAP) end
+    return at
+end
+
+local function AfterBurst(now)
+    local at
     for _, e in ipairs(entries) do
         local t = e.advice == M.ADVICE.BURST and (e.firedAt or e.fireAt)
         if t and math.abs(t - now) < SAVE_GAP then at = math.max(at or 0, t + SAVE_GAP) end
@@ -72,14 +75,17 @@ function B.OnEncounter(event, encounterID, difficultyID, now)
     local windows = byDifficulty and byDifficulty[difficultyID]
     if not windows then return end
     local spec = CastAheadSaves and CastAheadSaves.SpecID()
+    local fullOn, miniOn = not B.Lists.Emptied(spec, "full"), not B.Lists.Emptied(spec, "mini")
     for _, w in ipairs(windows) do
         local full, mini = Offsets(w, spec)
         local burstAt = math.max(now + w.release + (full or 0), now)
-        if now + w.hold < burstAt - HOLD_MIN then
+        if fullOn and now + w.hold < burstAt - HOLD_MIN then
             entries[#entries + 1] = { fireAt = now + w.hold, endAt = burstAt, advice = M.ADVICE.HOLD, tier = "full" }
         end
-        entries[#entries + 1] = { fireAt = burstAt, endAt = burstAt + BURST_SHOWN, advice = M.ADVICE.BURST, tier = "full" }
-        if mini then
+        if fullOn then
+            entries[#entries + 1] = { fireAt = burstAt, endAt = burstAt + BURST_SHOWN, advice = M.ADVICE.BURST, tier = "full" }
+        end
+        if miniOn and mini then
             local miniAt = math.max(now + w.release + mini, now)
             entries[#entries + 1] = { fireAt = miniAt, endAt = miniAt + BURST_SHOWN, advice = M.ADVICE.MINI, tier = "mini" }
         end
@@ -92,9 +98,12 @@ function B.Tick(now)
     if not On() then return end
     for _, e in ipairs(entries) do
         if not e.fired and now >= e.fireAt and now < e.endAt then
-            local at = not e.deferred and DeferUntil(now, e)
+            local at = not e.deferred and DeferUntil(now)
+            local after = not at and e.advice == M.ADVICE.MINI and AfterBurst(now)
             if at then
                 e.deferred, e.fireAt = true, at
+            elseif after then
+                e.endAt, e.fireAt = e.endAt + after - e.fireAt, after
             else
                 e.fired, e.firedAt = true, now
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(e.advice) end
@@ -113,10 +122,8 @@ end
 
 local function TierIcon(tier)
     local list = B.Lists.List(tier)
-    for _, e in ipairs(list) do
-        if CastAheadLists.Known(e) and CastAheadSaves.SpellReady(e) then return Texture(e) or ICON end
-    end
-    return list[1] ~= nil and Texture(list[1]) or ICON
+    local first = CastAheadSaves.FirstAvailable(list)
+    return first and first.icon or list[1] ~= nil and Texture(list[1]) or ICON
 end
 
 function B.Pending(now)

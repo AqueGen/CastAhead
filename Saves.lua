@@ -31,7 +31,6 @@ local function SpellReady(id)
     if not ok2 then return true end
     return zero == true
 end
-S.SpellReady = SpellReady
 
 local useToItem = {}
 local bagsPending = false
@@ -139,6 +138,17 @@ function S.Available(size)
         if shipped ~= list then Collect(shipped, out) end
     end
     return out
+end
+
+local firstMemo = setmetatable({}, { __mode = "k" })
+function S.FirstAvailable(list)
+    local stamp = GetTime()
+    local hit = firstMemo[list]
+    if hit and hit.stamp == stamp then return hit.first end
+    local out = {}
+    Collect(list, out)
+    firstMemo[list] = { stamp = stamp, first = out[1] }
+    return out[1]
 end
 
 S.ItemFor = ItemFor
