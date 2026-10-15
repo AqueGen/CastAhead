@@ -441,11 +441,27 @@ check(M.ADVICE.BURST and M.ADVICE.BURST.say == "burst now", "BURST advice says b
 for enc, byDifficulty in pairs(CastAheadBurstWindows) do
     check(type(enc) == "number" and enc > 0, "burst windows key " .. tostring(enc) .. " is an encounter id")
     for difficulty, list in pairs(byDifficulty) do
-        check(difficulty == 8 or difficulty == 15 or difficulty == 16,
+        check(difficulty == 8 or difficulty == 14 or difficulty == 15 or difficulty == 16,
             string.format("burst windows %s use a game difficulty id, got %s", tostring(enc), tostring(difficulty)))
+        check(type(list.name) == "string" and list.name ~= "",
+            string.format("burst windows %d/%s carry a non-empty name", enc, tostring(difficulty)))
         for i, w in ipairs(list) do
             check(type(w.hold) == "number" and type(w.release) == "number" and w.hold >= 0 and w.hold <= w.release,
                 string.format("burst window %d/%d #%d has 0 <= hold <= release", enc, difficulty, i))
+            check(w.target == nil or type(w.target) == "string",
+                string.format("burst window %d/%d #%d target is nil or a string", enc, difficulty, i))
+            check(type(w.specs) == "table", string.format("burst window %d/%d #%d carries a specs table", enc, difficulty, i))
+            for id, tiers in pairs(w.specs or {}) do
+                check(type(tiers) == "table", string.format("burst window %d/%d #%d spec %s is a table", enc, difficulty, i, tostring(id)))
+                for _, tier in ipairs({ "full", "mini" }) do
+                    local s = type(tiers) == "table" and tiers[tier]
+                    check(s == nil or type(s) == "number" and s >= -60 and s <= 30,
+                        string.format("burst window %d/%d #%d spec %s %s start is a number in -60..30", enc, difficulty, i, tostring(id), tier))
+                end
+                local buttons = (CastAheadBurstButtons or {})[id]
+                check(type(buttons) == "table" and type(buttons.full) == "table" and type(buttons.mini) == "table",
+                    string.format("burst spec %s has full and mini button lists", tostring(id)))
+            end
         end
     end
 end
