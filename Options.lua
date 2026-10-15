@@ -871,10 +871,11 @@ function BuildBursts(panel)
         if #lines == 0 then lines = { "No burst windows on this difficulty." } end
         text:SetText(table.concat(lines, "\n"))
         guide:SetHeight(64 + text:GetStringHeight())
+        CastAheadWindow.PaintSpecBars()
         panel:Relayout()
     end
     local barTop = CastAheadWindow.SpecBar(panel, COL_X, 6, Paint)
-    panel.flowTop = function() return barTop + 12 end
+    panel.flowTop = function() return barTop > 0 and barTop + 12 or 6 end
     table.insert(refreshers, Paint)
 end
 
