@@ -2,6 +2,30 @@ CastAheadBurst = {}
 local B = CastAheadBurst
 local M = CastAheadMatch
 
+B.Lists = CastAheadLists.New({
+    dbKey = "burstButtons",
+    shipped = function() return CastAheadBurstButtons end,
+    keys = { "full", "mini" },
+    specID = function() return CastAheadSaves and CastAheadSaves.SpecID() end,
+    onChange = function() end,
+})
+
+if StaticPopupDialogs then
+    StaticPopupDialogs.CASTAHEAD_RESET_BURSTS = {
+        text = "Reset Full and Mini burst lists for this specialization to the defaults?",
+        button1 = YES or "Yes",
+        button2 = NO or "No",
+        OnAccept = function()
+            B.Lists.ResetSpec()
+            if CastAheadOptions and CastAheadOptions.RefreshDefensives then CastAheadOptions.RefreshDefensives() end
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+        preferredIndex = 3,
+    }
+end
+
 local SAVE_GAP = 2
 local HOLD_MIN = 5
 local BURST_SHOWN = 5

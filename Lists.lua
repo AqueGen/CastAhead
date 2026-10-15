@@ -79,7 +79,7 @@ function L.New(opts)
     function store.Shipped(spec, key)
         local all = opts.shipped()
         local s = all and all[spec]
-        return s and s[key] or {}
+        return type(s) == "table" and s[key] or {}
     end
 
     function store.ListFor(spec, key)

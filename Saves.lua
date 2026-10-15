@@ -17,9 +17,10 @@ local store = CastAheadLists.New({
     dbKey = "saveButtons",
     shipped = function() return CastAheadSaveButtons end,
     keys = { "small", "big", "heal" },
-    specID = S.SpecID,
+    specID = function() return S.SpecID() end,
     onChange = function() S.Refresh() end,
 })
+S.Store = store
 
 local function SpellReady(id)
     local get = C_Spell and C_Spell.GetSpellCooldownDuration

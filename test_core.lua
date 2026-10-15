@@ -3774,6 +3774,49 @@ do
 end
 
 do
+    local savedCreate, savedDB, savedBurst, savedSpec = CreateFrame, CastAheadDB, CastAheadBurstButtons, CastAheadSaves.SpecID
+    local savedSlider = MinimalSliderWithSteppersMixin
+    MinimalSliderWithSteppersMixin = savedSlider or { Label = { Min = 1, Max = 2 }, Event = { OnValueChanged = 1 } }
+    CreateFrame = function(kind, name, parent, ...)
+        local f = savedCreate(kind, name, parent, ...)
+        f.h, f.flowTop, f.MinText, f.MaxText, f.Slider = 0, 6, StubRegion(), StubRegion(), StubRegion()
+        f.SetSize = function(self, w, h) self.w, self.h = w, h end
+        f.SetHeight = function(self, h) self.h = h end
+        f.GetHeight = function(self) return self.h end
+        f.GetWidth = function(self) return rawget(self, "w") or 600 end
+        f.GetFrameLevel = function() return 1 end
+        f.SetValue = function() end
+        return f
+    end
+    CastAheadSaves.SpecID = function() return 265 end
+    CastAheadBurstButtons = { [265] = 12345 }
+    CastAheadDB = {}
+    local lists = CastAheadBurst.Lists
+    local ok, err = pcall(function() return #lists.List("full") + #lists.Addable("mini") end)
+    check(ok and err == 0, "a flat shipped burst value reads as empty lists " .. tostring(err))
+    local host = CreateFrame("Frame")
+    ok, err = pcall(CastAheadOptions.ShowPanel, host, "Bursts")
+    check(ok, "the Bursts page builds headless " .. tostring(err))
+    ok, err = pcall(CastAheadOptions.ShowPanel, host, "Defensives")
+    check(ok, "the Defensives page builds headless " .. tostring(err))
+
+    local saves = { [265] = { big = { 104773 } } }
+    CastAheadDB = { saveButtons = saves }
+    lists.SetList("full", { 111 })
+    check(CastAheadDB.burstButtons[265].full[1] == 111 and CastAheadDB.saveButtons == saves and saves[265].full == nil
+        and #saves[265].big == 1, "a burst SetList writes burstButtons and leaves saveButtons alone")
+    CastAheadSaves.Store.SetList("small", { 108416 })
+    check(saves[265].small[1] == 108416 and CastAheadDB.burstButtons[265].small == nil,
+        "the Defensives store writes saveButtons only")
+    StaticPopupDialogs.CASTAHEAD_RESET_BURSTS.OnAccept()
+    check(CastAheadDB.burstButtons[265] == nil and saves[265].small[1] == 108416,
+        "accepting the burst reset clears the burst lists only")
+
+    CreateFrame, CastAheadDB, CastAheadBurstButtons, CastAheadSaves.SpecID = savedCreate, savedDB, savedBurst, savedSpec
+    MinimalSliderWithSteppersMixin = savedSlider
+end
+
+do
     local sized = 0
     local made, scripts, panelsShown = {}, {}, {}
     local savedCreate, savedShowPanel = CreateFrame, CastAheadOptions.ShowPanel
