@@ -4058,5 +4058,77 @@ do
         "bursts have their own settings page right after Defensives")
 end
 
+do
+    local B, S = CastAheadBurst, CastAheadSaves
+    local heard = {}
+    local savedPlay, savedWindows, savedButtons = PlaySoundFile, CastAheadBurstWindows, CastAheadBurstButtons
+    PlaySoundFile = function(path) heard[#heard + 1] = path:match("([%w_]+)%.ogg$") return true, 1 end
+    local spec = 1480
+    GetSpecialization = function() return 1 end
+    GetSpecializationRole = function() return "DAMAGER" end
+    GetSpecializationInfo = function() return spec end
+    CastAheadBurstWindows = { [3492] = {
+        [15] = { name = "Ula'tek", { hold = 10, release = 40, specs = { [1480] = -27 } } },
+        [14] = { name = "Ula'tek", { hold = 50, release = 70 } } } }
+    CastAheadBurstButtons = { [1480] = 1217607 }
+    CastAheadDB = { burstCalls = true }
+    local function run(seconds)
+        for _ = 1, seconds * 2 do now = now + 0.5 S.Tick(now) B.Tick(now) end
+    end
+    local function Heard() return table.concat(heard, ",") end
+
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(12.5)
+    check(#heard == 0, "burst v2: quiet before the spec's own burst time, heard " .. Heard())
+    run(1)
+    check(Heard() == "BURST", "burst v2: burst at release + offset with no hold call, heard " .. Heard())
+    run(40)
+    check(Heard() == "BURST", "burst v2: nothing more for that window, heard " .. Heard())
+
+    heard, spec = {}, 63
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(41)
+    check(Heard() == "HOLD,BURST", "burst v2: a spec without an offset keeps the shared timing, heard " .. Heard())
+
+    heard = {}
+    B.OnEncounter("ENCOUNTER_START", 3492, 14, now)
+    run(45)
+    check(#heard == 0, "burst v2: Normal windows start later, heard " .. Heard())
+    run(30)
+    check(Heard() == "HOLD,BURST", "burst v2: Normal uses its own windows, heard " .. Heard())
+
+    heard, spec = {}, 1480
+    CastAheadBurstWindows[3492][15][1].specs[1480] = -60
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(1)
+    check(Heard() == "BURST", "burst v2: an offset larger than the release fires once at the pull, heard " .. Heard())
+    CastAheadBurstWindows[3492][15][1].specs[1480] = -27
+    B.OnEncounter("ENCOUNTER_END", 3492, 15, now)
+
+    check(B.Clock(197) == "3:17" and B.Clock(59.6) == "1:00", "burst v2: clock formats m:ss")
+    local lines = B.GuideLines(15, 1480)
+    check(lines[1] == "Ula'tek" and lines[2] == "  0:10 hold - 0:40 burst | your burst: 0:13",
+        "burst v2: guide line with the spec's own time, got " .. tostring(lines[2]))
+    lines = B.GuideLines(15, 63)
+    check(lines[2] == "  0:10 hold - 0:40 burst | no burst button known for this spec",
+        "burst v2: guide line for a spec without a button, got " .. tostring(lines[2]))
+    CastAheadBurstButtons[63] = 190319
+    lines = B.GuideLines(15, 63)
+    check(lines[2] == "  0:10 hold - 0:40 burst | your burst: 0:40 (shared timing)",
+        "burst v2: guide line for a spec without an offset, got " .. tostring(lines[2]))
+    lines = B.GuideLines(14, 1480)
+    check(#lines == 2 and lines[2] == "  0:50 hold - 1:10 burst | your burst: 1:10 (shared timing)",
+        "burst v2: Normal guide shows only Normal windows")
+    check(#B.GuideLines(16, 1480) == 0, "burst v2: no windows, no lines")
+    CastAheadBurstWindows[3492][16] = { name = "Ula'tek", { hold = 120, release = 146, target = "Venomous Heart", specs = { [1480] = -30 } } }
+    lines = B.GuideLines(16, 1480)
+    check(lines[2] == "  2:26 Venomous Heart - burst | your burst: 1:56",
+        "burst v2: a target window names the target, got " .. tostring(lines[2]))
+
+    PlaySoundFile, CastAheadBurstWindows, CastAheadBurstButtons = savedPlay, savedWindows, savedButtons
+    GetSpecialization, GetSpecializationRole, GetSpecializationInfo = nil, nil, nil
+    CastAheadDB = nil
+end
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

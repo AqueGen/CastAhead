@@ -3,6 +3,7 @@ local B = CastAheadBurst
 local M = CastAheadMatch
 
 local SAVE_GAP = 2
+local HOLD_MIN = 5
 local BURST_SHOWN = 5
 local ICON = "Interface\\Icons\\Spell_Nature_Bloodlust"
 local entries = {}
@@ -32,10 +33,14 @@ function B.OnEncounter(event, encounterID, difficultyID, now)
     local byDifficulty = CastAheadBurstWindows and CastAheadBurstWindows[encounterID]
     local windows = byDifficulty and byDifficulty[difficultyID]
     if not windows then return end
+    local spec = CastAheadSaves and CastAheadSaves.SpecID()
     for _, w in ipairs(windows) do
-        entries[#entries + 1] = { fireAt = now + w.hold, endAt = now + w.release, advice = M.ADVICE.HOLD }
-        entries[#entries + 1] = { fireAt = now + w.release, endAt = now + w.release + BURST_SHOWN,
-                                  advice = M.ADVICE.BURST }
+        local offset = w.specs and spec and w.specs[spec] or 0
+        local burstAt = math.max(now + w.release + offset, now)
+        if now + w.hold < burstAt - HOLD_MIN then
+            entries[#entries + 1] = { fireAt = now + w.hold, endAt = burstAt, advice = M.ADVICE.HOLD }
+        end
+        entries[#entries + 1] = { fireAt = burstAt, endAt = burstAt + BURST_SHOWN, advice = M.ADVICE.BURST }
     end
 end
 
@@ -65,4 +70,43 @@ function B.Pending(now)
         end
     end
     return pending
+end
+
+function B.Clock(seconds)
+    local total = math.floor(seconds + 0.5)
+    return string.format("%d:%02d", math.floor(total / 60), total % 60)
+end
+
+local function ButtonName(spell)
+    local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spell)
+    return type(name) == "string" and name or "burst"
+end
+
+function B.GuideLines(difficultyID, specID)
+    local bosses = {}
+    for _, byDifficulty in pairs(CastAheadBurstWindows or {}) do
+        local list = byDifficulty[difficultyID]
+        if list then bosses[#bosses + 1] = list end
+    end
+    table.sort(bosses, function(a, b) return (a.name or "") < (b.name or "") end)
+    local lines = {}
+    local button = specID and CastAheadBurstButtons and CastAheadBurstButtons[specID]
+    for _, list in ipairs(bosses) do
+        lines[#lines + 1] = list.name or "?"
+        for _, w in ipairs(list) do
+            local head = w.target and string.format("  %s %s - burst", B.Clock(w.release), w.target)
+                or string.format("  %s hold - %s burst", B.Clock(w.hold), B.Clock(w.release))
+            local offset = w.specs and specID and w.specs[specID]
+            if not button then
+                lines[#lines + 1] = head .. " | no burst button known for this spec"
+            elseif offset then
+                lines[#lines + 1] = string.format("%s | your %s: %s", head, ButtonName(button),
+                    B.Clock(math.max(w.release + offset, 0)))
+            else
+                lines[#lines + 1] = string.format("%s | your %s: %s (shared timing)", head, ButtonName(button),
+                    B.Clock(w.release))
+            end
+        end
+    end
+    return lines
 end
