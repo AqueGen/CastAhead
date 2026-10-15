@@ -289,6 +289,7 @@ StaticPopupDialogs = {}
 
 dofile("Config.lua")
 dofile("Match.lua")
+dofile("Lists.lua")
 dofile("Saves.lua")
 dofile("Burst.lua")
 dofile("BossAdapter.lua")
@@ -3673,6 +3674,53 @@ do
     GetSpecialization, GetSpecializationInfo, IsPlayerSpell = nil, nil, nil
     CastAheadSaveButtons, CastAheadDB = savedButtons, savedDB
     S.Refresh()
+end
+
+do
+    local savedButtons, savedDB = CastAheadSaveButtons, CastAheadDB
+    local shipped = {
+        [265] = { full = { 111 } },
+        [266] = { full = { 222 }, mini = { 333 } },
+        [267] = { full = { 444, { use = 452930 } } },
+        [66] = { full = { 555 } },
+    }
+    local changes = 0
+    local burst = CastAheadLists.New({
+        dbKey = "burstButtons",
+        shipped = function() return shipped end,
+        keys = { "full", "mini" },
+        specID = function() return 265 end,
+        onChange = function() changes = changes + 1 end,
+    })
+    CastAheadSaveButtons = { [265] = { small = { 108416 } } }
+    IsPlayerSpell = function(id) return id ~= 999 end
+    local saves = { [265] = { big = { 104773 } } }
+    CastAheadDB = { saveButtons = saves }
+
+    check(burst.Keys()[1] == "full" and burst.Keys()[2] == "mini", "a burst store keeps its keys")
+    check(burst.List("full") == shipped[265].full and #burst.List("mini") == 0, "a burst store reads its shipped lists")
+    burst.SetList("full", { 111, 222 })
+    check(CastAheadDB.burstButtons[265].full[2] == 222 and changes == 1, "SetList writes the burst lists and calls onChange")
+    burst.Shift("full", 1, 1)
+    check(CastAheadDB.burstButtons[265].full[1] == 222 and changes == 2, "Shift writes the burst lists")
+    burst.MoveEntry("full", 1, "mini")
+    check(CastAheadDB.burstButtons[265].mini[1] == 222 and #CastAheadDB.burstButtons[265].full == 1 and changes == 3,
+        "MoveEntry writes the burst lists")
+    check(CastAheadDB.saveButtons == saves and #saves[265].big == 1 and saves[265].big[1] == 104773 and saves[265].small == nil,
+        "editing burst lists leaves the save lists alone")
+
+    local seen = {}
+    for _, e in ipairs(burst.Addable("full")) do seen[type(e) == "table" and "use" .. e.use or e] = true end
+    check(seen[222] and seen[333] and seen[444] and seen.use452930, "Addable offers the class mates' shipped burst entries")
+    check(not seen[111] and not seen[555] and not seen[108416] and not seen[104773],
+        "Addable skips the list's own entries, other classes and save buttons")
+
+    burst.ResetSpec()
+    check(CastAheadDB.burstButtons[265] == nil and changes == 4, "ResetSpec clears the spec's burst lists")
+    check(CastAheadDB.saveButtons[265] == saves[265] and saves[265].big[1] == 104773, "ResetSpec on burst leaves the save lists")
+
+    IsPlayerSpell = nil
+    CastAheadSaveButtons, CastAheadDB = savedButtons, savedDB
 end
 
 do

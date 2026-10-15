@@ -11,9 +11,15 @@ function S.SpecID()
     return index and GetSpecializationInfo(index) or nil
 end
 
-local function Known(id)
-    return type(id) == "number" and IsPlayerSpell and IsPlayerSpell(id)
-end
+local Known = CastAheadLists.Known
+
+local store = CastAheadLists.New({
+    dbKey = "saveButtons",
+    shipped = function() return CastAheadSaveButtons end,
+    keys = { "small", "big", "heal" },
+    specID = S.SpecID,
+    onChange = function() S.Refresh() end,
+})
 
 local function SpellReady(id)
     local get = C_Spell and C_Spell.GetSpellCooldownDuration
@@ -29,19 +35,8 @@ local useToItem = {}
 local bagsPending = false
 local memo = {}
 
-local function Shipped(spec, size)
-    local s = CastAheadSaveButtons and CastAheadSaveButtons[spec]
-    return s and s[size] or {}
-end
-
-function S.ListFor(spec, size)
-    if not spec then return {} end
-    local o = CastAheadDB and CastAheadDB.saveButtons and CastAheadDB.saveButtons[spec]
-    if o and type(o[size]) == "table" then return o[size] end
-    return Shipped(spec, size)
-end
-
-function S.List(size) return S.ListFor(S.SpecID(), size) end
+function S.ListFor(spec, size) return store.ListFor(spec, size) end
+function S.List(size) return store.List(size) end
 
 -- The Guide and Saves pages can read another spec of the class without
 -- the player changing spec; calls and lists still follow the real one.
@@ -138,7 +133,7 @@ function S.Available(size)
     memo[size] = { stamp = stamp, list = out }
     local list = S.List(size)
     if not Collect(list, out) and #list > 0 then
-        local shipped = Shipped(S.SpecID(), size)
+        local shipped = store.Shipped(S.SpecID(), size)
         if shipped ~= list then Collect(shipped, out) end
     end
     return out
@@ -146,142 +141,13 @@ end
 
 S.ItemFor = ItemFor
 
-local NOT_FOUND = "Not a spell you know or an item with a use effect"
-
-local function ItemEntry(item)
-    if not (C_Item and C_Item.GetItemSpell) then return nil, NOT_FOUND end
-    local _, use = C_Item.GetItemSpell(item)
-    if use then return { use = use } end
-    if C_Item.GetItemInfoInstant and not C_Item.GetItemInfoInstant(item) then return nil, NOT_FOUND end
-    if C_Item.IsItemDataCachedByID and C_Item.IsItemDataCachedByID(item) then return nil, NOT_FOUND end
-    if not C_Item.RequestLoadItemDataByID then return nil, NOT_FOUND end
-    C_Item.RequestLoadItemDataByID(item)
-    return nil, "Loading item data, try again"
-end
-
-local function SameEntry(a, b)
-    if type(a) == "table" and type(b) == "table" then return a.use == b.use end
-    return a == b
-end
-
-function S.ParseEntry(text, list)
-    text = tostring(text or ""):match("^%s*(.-)%s*$")
-    local itemLink = tonumber(text:match("|Hitem:(%d+)"))
-    local spellLink = tonumber(text:match("|Hspell:(%d+)"))
-    local number = tonumber(text)
-    local entry, why
-    if itemLink then
-        entry, why = ItemEntry(itemLink)
-    elseif spellLink then
-        entry = Known(spellLink) and spellLink or nil
-    elseif number then
-        if Known(number) then entry = number else entry, why = ItemEntry(number) end
-    elseif text ~= "" and C_Spell and C_Spell.GetSpellInfo then
-        local info = C_Spell.GetSpellInfo(text)
-        if info and Known(info.spellID) then entry = info.spellID end
-    end
-    if not entry then return nil, why or NOT_FOUND end
-    for _, e in ipairs(list or {}) do
-        if SameEntry(e, entry) then return nil, "Already in the list" end
-    end
-    return entry
-end
-
-local function Write(spec, size, list)
-    CastAheadDB = CastAheadDB or {}
-    CastAheadDB.saveButtons = CastAheadDB.saveButtons or {}
-    CastAheadDB.saveButtons[spec] = CastAheadDB.saveButtons[spec] or {}
-    CastAheadDB.saveButtons[spec][size] = list
-end
-
-function S.SetList(size, list)
-    local spec = S.SpecID()
-    if not spec then return end
-    Write(spec, size, list)
-    S.Refresh()
-end
-
-local function Has(list, entry)
-    for _, e in ipairs(list) do
-        if SameEntry(e, entry) then return true end
-    end
-    return false
-end
-
-function S.MoveEntry(from, index, to)
-    local spec = S.SpecID()
-    local source = S.List(from)
-    local entry = source[index]
-    if not (spec and entry) or from == to then return end
-    local kept = {}
-    for i, e in ipairs(source) do
-        if i ~= index then kept[#kept + 1] = e end
-    end
-    local target = { unpack(S.List(to)) }
-    if not Has(target, entry) then target[#target + 1] = entry end
-    Write(spec, from, kept)
-    Write(spec, to, target)
-    S.Refresh()
-end
-
-function S.Shift(size, index, step)
-    local spec = S.SpecID()
-    local list = { unpack(S.List(size)) }
-    local other = index + step
-    if not (spec and list[index] and list[other]) then return end
-    list[index], list[other] = list[other], list[index]
-    Write(spec, size, list)
-    S.Refresh()
-end
-
-local CLASS_SPECS = {
-    { 265, 266, 267 },
-    { 65, 66, 70 },
-    { 577, 581, 1480 },
-    { 250, 251, 252 },
-    { 102, 103, 104, 105 },
-    { 1467, 1468, 1473 },
-    { 253, 254, 255 },
-    { 62, 63, 64 },
-    { 268, 269, 270 },
-    { 256, 257, 258 },
-    { 259, 260, 261 },
-    { 262, 263, 264 },
-    { 71, 72, 73 },
-}
-
-function S.Catalogue(spec)
-    local out = {}
-    for _, specs in ipairs(CLASS_SPECS) do
-        for _, s in ipairs(specs) do
-            if s == spec then
-                for _, member in ipairs(specs) do
-                    for _, size in ipairs({ "small", "big", "heal" }) do
-                        for _, e in ipairs(Shipped(member, size)) do
-                            if not Has(out, e) then out[#out + 1] = e end
-                        end
-                    end
-                end
-                return out
-            end
-        end
-    end
-    return out
-end
-
-function S.Addable(size)
-    local list, out = S.List(size), {}
-    for _, e in ipairs(S.Catalogue(S.SpecID())) do
-        if (type(e) ~= "number" or Known(e)) and not Has(list, e) then out[#out + 1] = e end
-    end
-    return out
-end
-
-function S.ResetSpec()
-    local spec = S.SpecID()
-    if spec and CastAheadDB and CastAheadDB.saveButtons then CastAheadDB.saveButtons[spec] = nil end
-    S.Refresh()
-end
+function S.ParseEntry(text, list) return store.ParseEntry(text, list) end
+function S.SetList(size, list) return store.SetList(size, list) end
+function S.MoveEntry(from, index, to) return store.MoveEntry(from, index, to) end
+function S.Shift(size, index, step) return store.Shift(size, index, step) end
+function S.Catalogue(spec) return store.Catalogue(spec) end
+function S.Addable(size) return store.Addable(size) end
+function S.ResetSpec() return store.ResetSpec() end
 
 if StaticPopupDialogs then
     StaticPopupDialogs.CASTAHEAD_RESET_SAVES = {
