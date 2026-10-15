@@ -4130,5 +4130,19 @@ do
     CastAheadDB = nil
 end
 
+do
+    GetNumSpecializations = function() return 2 end
+    GetSpecializationInfo = function(i) return i == 1 and 1480 or 577, i == 1 and "Devourer" or "Havoc", "", 1 end
+    local host = CreateFrame("Frame")
+    local h = CastAheadWindow.SpecBar and CastAheadWindow.SpecBar(host, 0, 0, function() end)
+    check(h and h > 0, "spec bar: a two-spec class gets a bar")
+    GetNumSpecializations = function() return 1 end
+    check(CastAheadWindow.SpecBar and CastAheadWindow.SpecBar(host, 0, 0, function() end) == 0,
+        "spec bar: a one-spec class gets none")
+    local ok = pcall(CastAheadWindow.PaintSpecBars)
+    check(ok, "spec bar: repainting every bar works")
+    GetNumSpecializations, GetSpecializationInfo = nil, nil
+end
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

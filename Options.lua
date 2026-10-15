@@ -842,9 +842,40 @@ function BuildDefensives(panel)
     table.insert(listRefreshers, Paint)
 end
 
+local BURST_DIFFICULTIES = { { 14, "Normal" }, { 15, "Heroic" }, { 16, "Mythic" }, { 8, "Keys" } }
+local burstDifficulty = 15
+
 function BuildBursts(panel)
     local group = BuildGroup(panel, "Burst windows", BURST_H)
     BuildSwitch(panel, "burstCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 })
+    local guide = BuildGroup(panel, "Guide", 120)
+    local buttons, Paint = {}, nil
+    for i, d in ipairs(BURST_DIFFICULTIES) do
+        local b = CastAheadWindow.Button(guide, d[2], 56)
+        b:SetPoint("TOPLEFT", guide, "TOPLEFT", 8 + (i - 1) * 59, -24)
+        b:SetScript("OnClick", function() burstDifficulty = d[1] Paint() end)
+        buttons[i] = b
+    end
+    local text = guide:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    text:SetPoint("TOPLEFT", guide, "TOPLEFT", 10, -54)
+    text:SetWidth(COL_W - 20)
+    text:SetJustifyH("LEFT")
+    text:SetWordWrap(true)
+    text:SetSpacing(3)
+    Paint = function()
+        for i, d in ipairs(BURST_DIFFICULTIES) do
+            buttons[i]:SetBackdropColor(unpack(d[1] == burstDifficulty and T.selected or T.panel))
+        end
+        local spec = CastAheadSaves and CastAheadSaves.ViewSpecID()
+        local lines = CastAheadBurst and CastAheadBurst.GuideLines(burstDifficulty, spec) or {}
+        if #lines == 0 then lines = { "No burst windows on this difficulty." } end
+        text:SetText(table.concat(lines, "\n"))
+        guide:SetHeight(64 + text:GetStringHeight())
+        panel:Relayout()
+    end
+    local barTop = CastAheadWindow.SpecBar(panel, COL_X, 6, Paint)
+    panel.flowTop = function() return barTop + 12 end
+    table.insert(refreshers, Paint)
 end
 
 local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",

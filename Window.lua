@@ -61,6 +61,49 @@ function W.Button(parent, text, width, primary)
     return b
 end
 
+local SPEC_W, SPEC_GAP, SPEC_BAR_H = 150, 4, 28
+local specBars = {}
+
+local function Specs()
+    local out = {}
+    if not (GetNumSpecializations and GetSpecializationInfo) then return out end
+    for i = 1, GetNumSpecializations() or 0 do
+        local id, name, _, icon = GetSpecializationInfo(i)
+        if id then out[#out + 1] = { id = id, name = name, icon = icon } end
+    end
+    return out
+end
+
+function W.PaintSpecBars()
+    local viewing = CastAheadSaves and CastAheadSaves.ViewSpecID()
+    for _, bar in ipairs(specBars) do
+        for _, b in ipairs(bar) do
+            local on = b.specID == viewing
+            b:SetBackdropColor(unpack(on and T.selected or T.panel))
+            b.label:SetTextColor(unpack(on and T.gold or T.text))
+        end
+    end
+end
+
+function W.SpecBar(parent, x, y, onPick)
+    local specs = Specs()
+    if #specs < 2 then return 0 end
+    local bar = {}
+    for i, spec in ipairs(specs) do
+        local b = W.Button(parent, string.format("|T%s:14|t %s", spec.icon or "", spec.name or ""), SPEC_W)
+        b.specID = spec.id
+        b:SetPoint("TOPLEFT", parent, "TOPLEFT", x + (i - 1) * (SPEC_W + SPEC_GAP), -y)
+        b:SetScript("OnClick", function()
+            CastAheadSaves.SetViewSpec(spec.id)
+            if onPick then onPick() end
+            W.PaintSpecBars()
+        end)
+        bar[i] = b
+    end
+    specBars[#specBars + 1] = bar
+    return SPEC_BAR_H
+end
+
 function W.ApplyScale(target)
     target = target or frame
     if not target then return end
