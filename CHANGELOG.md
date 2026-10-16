@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.1](https://github.com/AqueGen/CastAhead/compare/v0.16.0...v0.16.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* voice calls as loud as boss mod voice packs ([#67](https://github.com/AqueGen/CastAhead/issues/67)) ([902729c](https://github.com/AqueGen/CastAhead/commit/902729c146ade528271b7863a091a4ca3d913710))
+
 ## [0.16.0](https://github.com/AqueGen/CastAhead/compare/v0.15.0...v0.16.0) (2026-10-09)
 
 
