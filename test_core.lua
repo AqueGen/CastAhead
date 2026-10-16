@@ -1620,6 +1620,20 @@ sounds, spoken, clips = 0, 0, 0
 CastAheadCore.PreviewAdvice(CastAheadMatch.ADVICE.TANK)
 check(clips == 1 and sounds == 0, string.format("voiceTTS with a mute game voice falls back to the clip, got clips=%d beeps=%d", clips, sounds))
 C_CombatAudioAlert.SpeakText = realSpeak
+-- The clip plays on the channel the player picked; anything unknown is Master.
+do
+    local channelHeard
+    local countClip = PlaySoundFile
+    PlaySoundFile = function(path, channel) channelHeard = channel return countClip(path, channel) end
+    for _, case in ipairs({ { nil, "Master" }, { "Dialog", "Dialog" }, { "SFX", "SFX" }, { "Ambience", "Master" } }) do
+        CastAheadDB = { soundChannel = case[1] }
+        channelHeard = nil
+        CastAheadCore.PreviewAdvice(CastAheadMatch.ADVICE.TANK)
+        check(channelHeard == case[2], string.format("soundChannel=%s plays on %s, got %s",
+            tostring(case[1]), case[2], tostring(channelHeard)))
+    end
+    PlaySoundFile = countClip
+end
 CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
 -- A sound the player picked for a category (LibSharedMedia name) replaces
