@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.0](https://github.com/AqueGen/CastAhead/compare/v0.16.1...v0.17.0) (2026-10-16)
+
+
+### Features
+
+* sound channel setting for voice calls and sounds ([#69](https://github.com/AqueGen/CastAhead/issues/69)) ([f4254c2](https://github.com/AqueGen/CastAhead/commit/f4254c23f7a69198744e96480fbb2c4c53eb9ddf))
+
 ## [0.16.1](https://github.com/AqueGen/CastAhead/compare/v0.16.0...v0.16.1) (2026-10-15)
 
 
