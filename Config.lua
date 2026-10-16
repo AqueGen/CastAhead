@@ -74,6 +74,20 @@ function C.Strata()
     return C.STRATA_DEFAULT
 end
 
+-- The game gives a played file no volume of its own, only a channel, so the
+-- channel is how a player sets our level apart from Master: each one has its
+-- own slider in the game's Sound options.
+C.CHANNELS = { "Master", "Dialog", "SFX" }
+C.CHANNEL_DEFAULT = "Master"
+
+function C.SoundChannel()
+    local value = C.Get("soundChannel")
+    for _, name in ipairs(C.CHANNELS) do
+        if name == value then return value end
+    end
+    return C.CHANNEL_DEFAULT
+end
+
 function C.NudgeX()
     return C.Number("nudgeX", 0, -C.NUDGE_MAX, C.NUDGE_MAX)
 end

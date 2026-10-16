@@ -492,7 +492,7 @@ local function RegisterAuraSounds()
         local file = advice and (PickedFile(advice) or voice and SOUND_ROOT .. advice.file .. ".ogg")
         if file then
             local ok, id = pcall(C_UnitAuras.AddAuraSound, Enum.UnitAuraSoundTrigger.Added, {
-                unitToken = "player", spellID = spellID, soundFileName = file, outputChannel = "Master" })
+                unitToken = "player", spellID = spellID, soundFileName = file, outputChannel = CastAheadConfig.SoundChannel() })
             if ok and id then auraIDs[#auraIDs + 1] = id end
         end
     end
