@@ -34,12 +34,21 @@ local ICON = "Interface\\Icons\\Spell_Nature_Bloodlust"
 local entries = {}
 local pending = {}
 
+local function Role()
+    if not (GetSpecialization and GetSpecializationRole) then return nil end
+    local spec = GetSpecialization()
+    return spec and GetSpecializationRole(spec) or nil
+end
+
 local function On()
     if CastAheadConfig.Get("burstCalls") ~= true then return false end
     if UnitIsDeadOrGhost and UnitIsDeadOrGhost("player") then return false end
-    if not (GetSpecialization and GetSpecializationRole) then return false end
-    local spec = GetSpecialization()
-    return spec ~= nil and GetSpecializationRole(spec) == "DAMAGER"
+    return Role() ~= nil
+end
+
+-- Healers get their own windows (heavy group damage); a boss-event window is for everyone.
+local function ForRole(w, role)
+    return w.event ~= nil or (w.role == "HEALER") == (role == "HEALER")
 end
 
 local function Offsets(w, spec)
@@ -177,9 +186,33 @@ local function ProbeStart(encounterID, difficultyID)
     for _, e in ipairs(PROBE_EVENTS) do pcall(probeFrame.RegisterEvent, probeFrame, e) end
 end
 
+local EVENT_SHOWN = Enum and Enum.EncounterEventSoundTrigger
+    and Enum.EncounterEventSoundTrigger.OnTextWarningShown or 0
+-- Boss mods set their own sound on the same event as the fight starts; ours goes on after theirs.
+local ARM_DELAY = 2
+local armed, armToken = {}, 0
+
+local function Disarm()
+    for id in pairs(armed) do pcall(C_EncounterEvents.SetEventSound, id, EVENT_SHOWN, nil) end
+    wipe(armed)
+end
+
+local function Arm(events)
+    local file = CastAheadCore and CastAheadCore.AdviceFile and CastAheadCore.AdviceFile(M.ADVICE.BURST)
+    if not (file and On()) then return end
+    for _, id in ipairs(events) do
+        if pcall(C_EncounterEvents.SetEventSound, id, EVENT_SHOWN,
+                { file = file, channel = CastAheadConfig.SoundChannel(), volume = 1 }) then
+            armed[id] = true
+        end
+    end
+end
+
 function B.OnEncounter(event, encounterID, difficultyID, now)
     if event == "ENCOUNTER_START" then ProbeStart(encounterID, difficultyID) end
     wipe(entries)
+    Disarm()
+    armToken = armToken + 1
     if event ~= "ENCOUNTER_START" then return end
     local byDifficulty = CastAheadBurstWindows and CastAheadBurstWindows[encounterID]
     local windows = byDifficulty and byDifficulty[difficultyID]
@@ -190,19 +223,31 @@ function B.OnEncounter(event, encounterID, difficultyID, now)
         return #B.Lists.ListFor(spec, tier) > 0 or not listed and not B.Lists.Emptied(spec, tier)
     end
     local fullOn, miniOn = TierOn("full"), TierOn("mini")
+    local role, events = Role(), {}
     for _, w in ipairs(windows) do
-        local full, mini = Offsets(w, spec)
-        local burstAt = math.max(now + w.release + (full or 0), now)
-        if fullOn and now + w.hold < burstAt - HOLD_MIN then
-            entries[#entries + 1] = { fireAt = now + w.hold, endAt = burstAt, advice = M.ADVICE.HOLD, tier = "full" }
+        local mine = ForRole(w, role)
+        if mine and w.event then
+            if fullOn then events[#events + 1] = w.event end
+        elseif mine then
+            local full, mini = Offsets(w, spec)
+            local burstAt = math.max(now + w.release + (full or 0), now)
+            if fullOn and now + w.hold < burstAt - HOLD_MIN then
+                entries[#entries + 1] = { fireAt = now + w.hold, endAt = burstAt, advice = M.ADVICE.HOLD, tier = "full" }
+            end
+            if fullOn then
+                entries[#entries + 1] = { fireAt = burstAt, endAt = burstAt + BURST_SHOWN, advice = M.ADVICE.BURST, tier = "full" }
+            end
+            if miniOn and mini then
+                local miniAt = math.max(now + w.release + mini, now)
+                entries[#entries + 1] = { fireAt = miniAt, endAt = miniAt + BURST_SHOWN, advice = M.ADVICE.MINI, tier = "mini" }
+            end
         end
-        if fullOn then
-            entries[#entries + 1] = { fireAt = burstAt, endAt = burstAt + BURST_SHOWN, advice = M.ADVICE.BURST, tier = "full" }
-        end
-        if miniOn and mini then
-            local miniAt = math.max(now + w.release + mini, now)
-            entries[#entries + 1] = { fireAt = miniAt, endAt = miniAt + BURST_SHOWN, advice = M.ADVICE.MINI, tier = "mini" }
-        end
+    end
+    if #events > 0 and C_EncounterEvents and C_EncounterEvents.SetEventSound and C_Timer then
+        local token = armToken
+        C_Timer.After(ARM_DELAY, function()
+            if token == armToken then Arm(events) end
+        end)
     end
 end
 
@@ -261,6 +306,35 @@ local function ButtonName(entry)
     return type(name) == "string" and name or "burst"
 end
 
+local function WindowLine(w, specID, fullList, miniList)
+    local line
+    if w.event then
+        line = string.format("  %s - burst when the boss warning shows", w.target or "boss event")
+    elseif w.target and w.hold < w.release then
+        line = string.format("  %s hold - %s %s burst", B.Clock(w.hold), B.Clock(w.release), w.target)
+    elseif w.target then
+        line = string.format("  %s %s - burst", B.Clock(w.release), w.target)
+    else
+        line = string.format("  %s hold - %s burst", B.Clock(w.hold), B.Clock(w.release))
+    end
+    if #fullList == 0 and #miniList == 0 then
+        return line .. " | no burst buttons known for this spec"
+    end
+    if w.event then
+        return #fullList > 0 and string.format("%s | full: %s", line, ButtonName(fullList[1])) or line
+    end
+    local full, mini = Offsets(w, specID)
+    if #fullList > 0 then
+        line = string.format("%s | full: %s %s", line, ButtonName(fullList[1]),
+            full and B.Clock(math.max(w.release + full, 0)) or B.Clock(w.release) .. " (shared timing)")
+    end
+    if #miniList > 0 and mini then
+        line = string.format("%s | mini: %s %s", line, ButtonName(miniList[1]),
+            B.Clock(math.max(w.release + mini, 0)))
+    end
+    return line
+end
+
 function B.GuideLines(difficultyID, specID)
     local bosses = {}
     for _, byDifficulty in pairs(CastAheadBurstWindows or {}) do
@@ -270,30 +344,15 @@ function B.GuideLines(difficultyID, specID)
     table.sort(bosses, function(a, b) return (a.name or "") < (b.name or "") end)
     local lines = {}
     local fullList, miniList = B.Lists.ListFor(specID, "full"), B.Lists.ListFor(specID, "mini")
+    local role = GetSpecializationRoleByID and specID and GetSpecializationRoleByID(specID)
     for _, list in ipairs(bosses) do
-        lines[#lines + 1] = list.name or "?"
+        local own = {}
         for _, w in ipairs(list) do
-            local line
-            if w.target and w.hold < w.release then
-                line = string.format("  %s hold - %s %s burst", B.Clock(w.hold), B.Clock(w.release), w.target)
-            elseif w.target then
-                line = string.format("  %s %s - burst", B.Clock(w.release), w.target)
-            else
-                line = string.format("  %s hold - %s burst", B.Clock(w.hold), B.Clock(w.release))
-            end
-            local full, mini = Offsets(w, specID)
-            if #fullList == 0 and #miniList == 0 then
-                line = line .. " | no burst buttons known for this spec"
-            end
-            if #fullList > 0 then
-                line = string.format("%s | full: %s %s", line, ButtonName(fullList[1]),
-                    full and B.Clock(math.max(w.release + full, 0)) or B.Clock(w.release) .. " (shared timing)")
-            end
-            if #miniList > 0 and mini then
-                line = string.format("%s | mini: %s %s", line, ButtonName(miniList[1]),
-                    B.Clock(math.max(w.release + mini, 0)))
-            end
-            lines[#lines + 1] = line
+            if ForRole(w, role) then own[#own + 1] = WindowLine(w, specID, fullList, miniList) end
+        end
+        if #own > 0 then
+            lines[#lines + 1] = list.name or "?"
+            for _, line in ipairs(own) do lines[#lines + 1] = line end
         end
     end
     return lines

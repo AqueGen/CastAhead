@@ -154,7 +154,7 @@ local SWITCHES = {
     healCalls = { label = "Heal up after a big hit", defaultOff = true,
         tip = "Right after a hit that called a big defensive, say \"heal up\" when your Healthstone or potion is ready." },
     burstCalls = { label = "Burst windows", defaultOff = true,
-        tip = "On the few bosses where top players hold their burst for a later moment, say \"hold burst\" when your cooldown would normally come up and \"burst now\" when the moment arrives, and \"mini burst\" for the short cooldowns. Each call comes when top players of your spec press the first button of its list. The Full and Mini lists below are edited like the Defensives lists; emptying a list switches its call off. Damage specs only. On every other boss it stays silent: press on cooldown." },
+        tip = "On the few bosses where top players hold their burst for a later moment, say \"hold burst\" when your cooldown would normally come up and \"burst now\" when the moment arrives, and \"mini burst\" for the short cooldowns. Each call comes when top players of your spec press the first button of its list. The Full and Mini lists below are edited like the Defensives lists; emptying a list switches its call off. Healers get their own windows for their big group-healing cooldown. On every other boss it stays silent: press on cooldown." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
         tip = "A panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. Only while recording. The key bindings and /ca mark work without it." },
 }

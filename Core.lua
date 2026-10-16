@@ -470,6 +470,17 @@ local function CustomSound(advice, candidates)
     return lsm and lsm:Fetch("sound", name, true) or nil
 end
 
+-- A file the game can play on its own for a boss event, where the addon is
+-- never told the event happened: the player's pick when it is a file, else our clip.
+local function AdviceFile(advice)
+    if not CastAheadConfig.Enabled("sound") then return nil end
+    local custom = CustomSound(advice)
+    if type(custom) == "string" then return custom end
+    if not (advice.file and CastAheadConfig.Enabled("voice")) then return nil end
+    local lang = CastAheadDB and CastAheadDB.voiceLang or "en"
+    return SOUND_ROOT .. lang .. "\\" .. advice.file .. ".ogg"
+end
+
 local function PlayMedia(sound)
     local channel = CastAheadConfig.SoundChannel()
     if type(sound) == "number" then PlaySound(sound, channel) else PlaySoundFile(sound, channel) end
@@ -2732,6 +2743,7 @@ end
 -- how far identification got on each one.
 CastAheadCore = {}
 CastAheadCore.Announce = PlayAdviceSound
+CastAheadCore.AdviceFile = AdviceFile
 CastAheadCore.ReapplyData = function() extrasMerged = false; MergeCuration() end
 CastAheadCore.LastCandidates = LastCandidates   -- replay harness only
 CastAheadCore.Tracks = function(unit) return plates[unit] and plates[unit].tracks end

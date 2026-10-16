@@ -446,11 +446,15 @@ for enc, byDifficulty in pairs(CastAheadBurstWindows) do
         check(type(list.name) == "string" and list.name ~= "",
             string.format("burst windows %d/%s carry a non-empty name", enc, tostring(difficulty)))
         for i, w in ipairs(list) do
-            check(type(w.hold) == "number" and type(w.release) == "number" and w.hold >= 0 and w.hold <= w.release,
+            check(w.event == nil or type(w.event) == "number" and w.event > 0 and w.event % 1 == 0,
+                string.format("burst window %d/%d #%d event is nil or an encounter event id", enc, difficulty, i))
+            check(w.event ~= nil or type(w.hold) == "number" and type(w.release) == "number" and w.hold >= 0 and w.hold <= w.release,
                 string.format("burst window %d/%d #%d has 0 <= hold <= release", enc, difficulty, i))
+            check(w.role == nil or w.role == "HEALER",
+                string.format("burst window %d/%d #%d role is nil or HEALER", enc, difficulty, i))
             check(w.target == nil or type(w.target) == "string",
                 string.format("burst window %d/%d #%d target is nil or a string", enc, difficulty, i))
-            check(type(w.specs) == "table", string.format("burst window %d/%d #%d carries a specs table", enc, difficulty, i))
+            check(w.event ~= nil or type(w.specs) == "table", string.format("burst window %d/%d #%d carries a specs table", enc, difficulty, i))
             for id, tiers in pairs(w.specs or {}) do
                 check(type(tiers) == "table", string.format("burst window %d/%d #%d spec %s is a table", enc, difficulty, i, tostring(id)))
                 for _, tier in ipairs({ "full", "mini" }) do
@@ -478,7 +482,13 @@ do
     check(Overlap({ { hold = 30, release = 60 }, { hold = 0, release = 30 } }) == nil, "the burst overlap audit lets back-to-back windows pass")
     for enc, byDifficulty in pairs(CastAheadBurstWindows) do
         for difficulty, list in pairs(byDifficulty) do
-            check(Overlap(list) == nil, string.format("burst windows %d/%d do not overlap", enc, difficulty))
+            for _, role in ipairs({ "damage", "HEALER" }) do
+                local timed = {}
+                for _, w in ipairs(list) do
+                    if not w.event and (w.role or "damage") == role then timed[#timed + 1] = w end
+                end
+                check(Overlap(timed) == nil, string.format("burst %s windows %d/%d do not overlap", role, enc, difficulty))
+            end
         end
     end
 end

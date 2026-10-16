@@ -3999,7 +3999,7 @@ do
     UIParent, CastAheadDB = nil, nil
 end
 
--- Burst windows: hold at hold start, burst at release, DAMAGER only, a save call goes first.
+-- Burst windows: hold at hold start, burst at release, damage windows skip healers, a save call goes first.
 do
     local B, S, A = CastAheadBurst, CastAheadSaves, CastAheadMatch.ADVICE
     local heard = {}
@@ -4048,12 +4048,11 @@ do
     check(#heard == 0 and #B.Pending(now) == 0, "burst: a dead player hears and sees nothing")
 
     heard = {}
-    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
-    run(15)
     role = "TANK"
-    run(20)
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(35)
     role = "DAMAGER"
-    check(Heard() == "HOLD", "burst: switching to a tank spec mid-hold stops the burst call, heard " .. Heard())
+    check(Heard() == "HOLD,BURST", "burst: a tank hears the damage windows too, heard " .. Heard())
 
     heard = {}
     CastAheadDB = {}
@@ -4416,6 +4415,106 @@ do
     C_Spell.GetSpellName, C_Spell.GetSpellTexture = savedName, savedTexture
     PlaySoundFile, CastAheadBurstWindows, CastAheadBurstButtons = savedPlay, savedWindows, savedButtons
     GetSpecialization, GetSpecializationRole, GetSpecializationInfo = nil, nil, nil
+    CastAheadDB = nil
+end
+
+-- Healer windows go to healers only; a boss-event window puts our clip on the game's own warning.
+do
+    local B, S = CastAheadBurst, CastAheadSaves
+    local heard, sounds, timers = {}, {}, {}
+    local savedPlay, savedWindows, savedButtons = PlaySoundFile, CastAheadBurstWindows, CastAheadBurstButtons
+    local savedName = C_Spell.GetSpellName
+    PlaySoundFile = function(path) heard[#heard + 1] = path:match("([%w_]+)%.ogg$") return true, 1 end
+    C_Spell.GetSpellName = function(id) return id == 31884 and "Avenging Wrath" or nil end
+    C_Timer = { After = function(delay, fn) timers[#timers + 1] = { at = now + delay, fn = fn } end }
+    C_EncounterEvents = { SetEventSound = function(id, trigger, sound)
+        sounds[#sounds + 1] = { id = id, trigger = trigger, sound = sound }
+    end }
+    local role = "HEALER"
+    GetSpecialization = function() return 1 end
+    GetSpecializationRole = function() return role end
+    GetSpecializationRoleByID = function(id) return id == 65 and "HEALER" or "DAMAGER" end
+    CastAheadBurstWindows = {
+        [3492] = { [15] = { name = "Ula'tek", { hold = 10, release = 30, specs = {} },
+            { hold = 50, release = 70, role = "HEALER", specs = {} } } },
+        [3101] = { [8] = { name = "Kystia Manaheart", { event = 610, target = "Light Infusion" } } } }
+    CastAheadBurstButtons = { [65] = { full = { 31884 }, mini = {} } }
+    CastAheadDB = { burstCalls = true }
+    local function run(seconds)
+        for _ = 1, seconds * 2 do
+            now = now + 0.5
+            for i = #timers, 1, -1 do
+                if now >= timers[i].at then table.remove(timers, i).fn() end
+            end
+            S.Tick(now)
+            B.Tick(now)
+        end
+    end
+    local function Heard() return table.concat(heard, ",") end
+
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(35)
+    check(#heard == 0, "burst roles: a healer skips the damage window, heard " .. Heard())
+    run(40)
+    check(Heard() == "HOLD,BURST", "burst roles: a healer hears the healer window, heard " .. Heard())
+    B.OnEncounter("ENCOUNTER_END", 3492, 15, now)
+    heard, role = {}, "DAMAGER"
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(35)
+    check(Heard() == "HOLD,BURST", "burst roles: a damage dealer hears the damage window, heard " .. Heard())
+    run(40)
+    check(Heard() == "HOLD,BURST", "burst roles: and skips the healer window, heard " .. Heard())
+    B.OnEncounter("ENCOUNTER_END", 3492, 15, now)
+
+    heard, sounds = {}, {}
+    B.OnEncounter("ENCOUNTER_START", 3101, 8, now)
+    run(1.5)
+    check(#sounds == 0, "burst event: nothing is armed before boss mods have set theirs")
+    run(1)
+    local armed = sounds[1]
+    check(#sounds == 1 and armed.id == 610 and armed.trigger == 0 and armed.sound
+        and armed.sound.file:match("\\BURST%.ogg$") and armed.sound.channel == "Master" and armed.sound.volume == 1,
+        "burst event: the burst clip goes on the boss event's warning")
+    check(#heard == 0, "burst event: the addon says nothing itself, heard " .. Heard())
+    B.OnEncounter("ENCOUNTER_END", 3101, 8, now)
+    check(#sounds == 2 and sounds[2].id == 610 and sounds[2].trigger == 0 and sounds[2].sound == nil,
+        "burst event: the fight's end takes the sound off")
+
+    sounds = {}
+    B.OnEncounter("ENCOUNTER_START", 3101, 8, now)
+    B.OnEncounter("ENCOUNTER_END", 3101, 8, now)
+    run(3)
+    check(#sounds == 0, "burst event: a fight over before the delay arms nothing")
+
+    role = "HEALER"
+    B.OnEncounter("ENCOUNTER_START", 3101, 8, now)
+    run(3)
+    check(#sounds == 1, "burst event: a healer gets the boss-event call too")
+    B.OnEncounter("ENCOUNTER_END", 3101, 8, now)
+
+    for _, db in ipairs({ {}, { burstCalls = true, voice = false }, { burstCalls = true, sound = false } }) do
+        sounds, CastAheadDB = {}, db
+        B.OnEncounter("ENCOUNTER_START", 3101, 8, now)
+        run(3)
+        B.OnEncounter("ENCOUNTER_END", 3101, 8, now)
+        check(#sounds == 0, "burst event: switched off, voice off or sound off arms nothing")
+    end
+    CastAheadDB = { burstCalls = true }
+
+    local lines = B.GuideLines(8, 65)
+    check(lines[1] == "Kystia Manaheart"
+        and lines[2] == "  Light Infusion - burst when the boss warning shows | full: Avenging Wrath",
+        "burst event: the guide names the warning, got " .. tostring(lines[2]))
+    lines = B.GuideLines(15, 65)
+    check(#lines == 2 and lines[2] == "  0:50 hold - 1:10 burst | full: Avenging Wrath 1:10 (shared timing)",
+        "burst roles: a healer's guide lists only healer windows, got " .. tostring(lines[2]))
+    lines = B.GuideLines(15, 70)
+    check(#lines == 2 and lines[2]:sub(1, 24) == "  0:10 hold - 0:30 burst",
+        "burst roles: a damage spec's guide lists only damage windows, got " .. tostring(lines[2]))
+
+    C_Spell.GetSpellName, C_Timer, C_EncounterEvents = savedName, nil, nil
+    PlaySoundFile, CastAheadBurstWindows, CastAheadBurstButtons = savedPlay, savedWindows, savedButtons
+    GetSpecialization, GetSpecializationRole, GetSpecializationRoleByID = nil, nil, nil
     CastAheadDB = nil
 end
 
