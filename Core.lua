@@ -386,7 +386,7 @@ local function PlayClip(advice, lead)
     if not (PlaySoundFile and advice.file) then return false end
     local lang = CastAheadDB and CastAheadDB.voiceLang or "en"
     local path = SOUND_ROOT .. lang .. "\\" .. advice.file .. (lead and "_soon" or "") .. ".ogg"
-    local ok, willPlay = pcall(PlaySoundFile, path, "Master")
+    local ok, willPlay = pcall(PlaySoundFile, path, CastAheadConfig.SoundChannel())
     return ok and willPlay == true
 end
 
@@ -470,15 +470,15 @@ local function CustomSound(advice, candidates)
     return lsm and lsm:Fetch("sound", name, true) or nil
 end
 
--- Master, not SFX: the point is to be heard over a busy pull.
 local function PlayMedia(sound)
-    if type(sound) == "number" then PlaySound(sound, "Master") else PlaySoundFile(sound, "Master") end
+    local channel = CastAheadConfig.SoundChannel()
+    if type(sound) == "number" then PlaySound(sound, channel) else PlaySoundFile(sound, channel) end
 end
 
 local function Beep(advice)
     if not SOUNDKIT then return end
     local kit = SOUNDKIT[ADVICE_SOUND[advice.key] or ""]
-    if kit then PlaySound(kit, "Master") end
+    if kit then PlaySound(kit, CastAheadConfig.SoundChannel()) end
 end
 
 -- One alert per call, either the voice or a sound. A sound picked for the
@@ -3441,7 +3441,7 @@ function CastAheadCore.Debug()
         say("game TTS: API missing")
     end
     if PlaySoundFile then
-        local okP, willPlay = pcall(PlaySoundFile, SOUND_ROOT .. "en\\TANK.ogg", "Master")
+        local okP, willPlay = pcall(PlaySoundFile, SOUND_ROOT .. "en\\TANK.ogg", CastAheadConfig.SoundChannel())
         say("clip TANK.ogg: willPlay=%s (voiceTTS=%s, voice=%s, sound=%s)",
             okP and tostring(willPlay) or "error", tostring(db.voiceTTS), tostring(db.voice), tostring(db.sound))
     else

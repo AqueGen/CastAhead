@@ -982,11 +982,37 @@ function BuildSounds(panel)
         PaintTTS()
     end)
 
+    local channelLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    channelLabel:SetPoint("TOPLEFT", tts, "BOTTOMLEFT", 4, -12)
+    channelLabel:SetText("Sound channel")
+    local channel = CreateFrame("DropdownButton", nil, panel, "WowStyle1DropdownTemplate")
+    channel:SetSize(140, 22)
+    channel:SetPoint("TOPLEFT", tts, "BOTTOMLEFT", 100, -6)
+    channel:SetupMenu(function(_, root)
+        for _, name in ipairs(CastAheadConfig.CHANNELS) do
+            root:CreateRadio(name,
+                function() return CastAheadConfig.SoundChannel() == name end,
+                function()
+                    CastAheadConfig.Set("soundChannel", name ~= CastAheadConfig.CHANNEL_DEFAULT and name or nil)
+                    SaveRefresh()
+                end)
+        end
+    end)
+    table.insert(refreshers, function() channel:GenerateMenu() end)
+    channel:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Sound channel", 1, 1, 1)
+        GameTooltip:AddLine("Which of the game's volume sliders (Options > Sound) controls the calls. Master follows the master volume only; pick Dialog to set the calls apart and turn the game's effects down without losing them.", nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    channel:SetScript("OnLeave", GameTooltip_Hide)
+
     local body = CreateFrame("Frame", nil, panel)
-    body:SetPoint("TOPLEFT", tts, "BOTTOMLEFT", 4, -8)
+    body:SetPoint("TOPLEFT", channel, "BOTTOMLEFT", -100, -10)
     body:SetSize(400, #SOUND_ROWS * SOUND_ROW_H)
     panel.flowTop = function()
-        return 4 + hint:GetStringHeight() + 4 + tts:GetHeight() + 8 + #SOUND_ROWS * SOUND_ROW_H
+        return 4 + hint:GetStringHeight() + 4 + tts:GetHeight() + 6 + channel:GetHeight() + 10
+            + #SOUND_ROWS * SOUND_ROW_H
     end
 
     for i, key in ipairs(SOUND_ROWS) do
