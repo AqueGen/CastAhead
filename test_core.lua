@@ -4433,5 +4433,59 @@ do
     GetNumSpecializations, GetSpecializationInfo = nil, nil
 end
 
+do
+    local B = CastAheadBurst
+    local savedCreate, savedDB, savedAuras = CreateFrame, CastAheadDB, C_UnitAuras
+    local frame
+    CreateFrame = function(kind, ...)
+        local f = savedCreate(kind, ...)
+        f.events = {}
+        f.RegisterEvent = function(self, e) self.events[e] = true end
+        f.UnregisterAllEvents = function(self) wipe(self.events) end
+        f.SetScript = function(self, script, fn) self[script] = fn end
+        frame = f
+        return f
+    end
+    C_Secrets = { ShouldSpellAuraBeSecret = function(id) return id == 1265412 end }
+    local aura
+    C_UnitAuras = { GetUnitAuraBySpellID = function(unit, id) return id == 1230304 and aura or nil end }
+
+    CastAheadDB = { devMode = true, recordAll = false }
+    B.OnEncounter("ENCOUNTER_START", 3101, 8, now)
+    check(frame == nil and CastAheadDB.phaseProbe == nil, "phase probe: recording off registers and stores nothing")
+
+    CastAheadDB.recordAll = nil
+    B.OnEncounter("ENCOUNTER_START", 3101, 8, now)
+    local s = CastAheadDB.phaseProbe and CastAheadDB.phaseProbe[1]
+    check(s and s.enc == 3101 and s.rows[1].kind == "secrecy", "phase probe: encounter start opens a session with a secrecy row")
+    check(s and s.rows[1].spells[1265412].should == "true" and s.rows[1].spells[1265412].secrecy == "-",
+        "phase probe: secrecy facts are read, a missing function is '-'")
+    check(frame and frame.events.UNIT_AURA and frame.events.ENCOUNTER_END, "phase probe: session events are registered")
+
+    aura = { spellId = 1230304 }
+    now = now + 12.34
+    frame.OnEvent(frame, "UNIT_AURA", "boss1", {})
+    frame.OnEvent(frame, "UNIT_AURA", "boss1", {})
+    frame.OnEvent(frame, "UNIT_AURA", "nameplate1", {})
+    local auraRows = 0
+    for _, row in ipairs(s.rows) do if row.kind == "aura" then auraRows = auraRows + 1 end end
+    check(auraRows == 1 and s.rows[2].found == "+" and s.rows[2].t == 12.3 and s.rows[2].unit == "boss1",
+        "phase probe: an aura logs once until it changes, got " .. auraRows)
+    check(s.auraEvents.boss1 == 2 and s.auraEvents.nameplate1 == nil, "phase probe: boss aura events are counted")
+
+    local secret = {}
+    issecretvalue = function(v) return v == secret end
+    frame.OnEvent(frame, "ENCOUNTER_WARNING", { duration = 5, severity = 2, shouldPlaySound = secret })
+    issecretvalue = nil
+    local w = s.rows[#s.rows]
+    check(w.kind == "warning" and w.duration == "5" and w.severity == "2" and w.sound == "S",
+        "phase probe: a warning logs duration and severity, a secret as 'S'")
+
+    frame.OnEvent(frame, "ENCOUNTER_END", 3101, "Kystia", 8, 5, 1)
+    check(next(frame.events) == nil and s.result == "kill", "phase probe: encounter end unregisters and closes the session")
+
+    CreateFrame, CastAheadDB, C_UnitAuras, C_Secrets = savedCreate, savedDB, savedAuras, nil
+end
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

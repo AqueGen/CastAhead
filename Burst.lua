@@ -68,7 +68,117 @@ local function AfterBurst(now)
     return at
 end
 
+local PROBE_ENCOUNTERS = { [3101] = true, [3429] = true }
+local PROBE_SPELLS = { 1265412, 1230304, 1304028, 1304032 }
+local PROBE_EVENTS = { "UNIT_AURA", "ENCOUNTER_WARNING", "UNIT_TARGETABLE_CHANGED",
+    "CHAT_MSG_MONSTER_YELL", "ENCOUNTER_TIMELINE_EVENT_ADDED", "ENCOUNTER_END" }
+local PROBE_SESSIONS, PROBE_ROWS = 12, 600
+local probeFrame, probe
+
+local function IsSecret(value)
+    return issecretvalue and issecretvalue(value)
+end
+
+local function Fact(ok, ...)
+    if not ok then return "E" end
+    local value = ...
+    if IsSecret(value) then return "S" end
+    if value == nil then return "-" end
+    if type(value) == "table" then return "+" end
+    return tostring(value)
+end
+
+local function Call(fn, ...)
+    if type(fn) ~= "function" then return "-" end
+    return Fact(pcall(fn, ...))
+end
+
+local function Field(info, key)
+    return Fact(pcall(function() return info[key] end))
+end
+
+local function ProbeRow(row)
+    row.t = math.floor((GetTime() - probe.startedAt) * 10 + 0.5) / 10
+    if #probe.session.rows < PROBE_ROWS then probe.session.rows[#probe.session.rows + 1] = row end
+end
+
+local function ProbeStop(success)
+    if probeFrame then probeFrame:UnregisterAllEvents() end
+    if probe and not IsSecret(success) and (success == 0 or success == 1) then
+        probe.session.result = success == 1 and "kill" or "wipe"
+    end
+    probe = nil
+end
+
+local function ProbeAura(unit, updateInfo)
+    if IsSecret(unit) or type(unit) ~= "string" or not unit:match("^boss%d") then return end
+    local s = probe.session
+    s.auraEvents[unit] = (s.auraEvents[unit] or 0) + 1
+    if s.infoSecret[unit] == nil then
+        s.infoSecret[unit] = IsSecret(updateInfo) and "S" or type(updateInfo)
+    end
+    local auras = C_UnitAuras or {}
+    for _, id in ipairs(PROBE_SPELLS) do
+        local found = Call(auras.GetUnitAuraBySpellID, unit, id)
+        local name = probe.names[id]
+        local byName = name and Call(auras.GetAuraDataBySpellName, unit, name) or "-"
+        local key, seen = unit .. ":" .. id, found .. "|" .. byName
+        if (probe.last[key] or "-|-") ~= seen then
+            probe.last[key] = seen
+            ProbeRow({ kind = "aura", unit = unit, id = id, found = found, byName = byName })
+        end
+    end
+end
+
+local function ProbeEvent(_, event, ...)
+    if not probe then return end
+    if not CastAheadConfig.Recording() then return ProbeStop() end
+    if event == "UNIT_AURA" then
+        ProbeAura(...)
+    elseif event == "ENCOUNTER_WARNING" then
+        local info = ...
+        ProbeRow({ kind = "warning", duration = Field(info, "duration"), severity = Field(info, "severity"),
+            sound = Field(info, "shouldPlaySound"), show = Field(info, "shouldShowWarning") })
+    elseif event == "UNIT_TARGETABLE_CHANGED" then
+        local unit = ...
+        ProbeRow({ kind = "targetable", unit = IsSecret(unit) and "S" or unit })
+    elseif event == "CHAT_MSG_MONSTER_YELL" then
+        ProbeRow({ kind = "yell" })
+    elseif event == "ENCOUNTER_TIMELINE_EVENT_ADDED" then
+        local info = ...
+        ProbeRow({ kind = "timeline", duration = Field(info, "duration"), id = Field(info, "id") })
+    elseif event == "ENCOUNTER_END" then
+        ProbeStop((select(5, ...)))
+    end
+end
+
+local function ProbeStart(encounterID, difficultyID)
+    ProbeStop()
+    if not (CastAheadConfig.Recording() and PROBE_ENCOUNTERS[encounterID]) then return end
+    CastAheadDB = CastAheadDB or {}
+    CastAheadDB.phaseProbe = CastAheadDB.phaseProbe or {}
+    local list = CastAheadDB.phaseProbe
+    local session = { enc = encounterID, diff = difficultyID, started = date("%Y-%m-%d %H:%M:%S"),
+        rows = {}, auraEvents = {}, infoSecret = {} }
+    list[#list + 1] = session
+    while #list > PROBE_SESSIONS do table.remove(list, 1) end
+    probe = { session = session, startedAt = GetTime(), last = {}, names = {} }
+    local secrets, spells = C_Secrets or {}, {}
+    for _, id in ipairs(PROBE_SPELLS) do
+        spells[id] = { should = Call(secrets.ShouldSpellAuraBeSecret, id), secrecy = Call(secrets.GetSpellAuraSecrecy, id) }
+        local ok, name = pcall(C_Spell.GetSpellName, id)
+        if ok and not IsSecret(name) and type(name) == "string" then probe.names[id] = name end
+    end
+    ProbeRow({ kind = "secrecy", spells = spells })
+    if not probeFrame then
+        probeFrame = CreateFrame("Frame")
+        probeFrame:SetScript("OnEvent", ProbeEvent)
+    end
+    for _, e in ipairs(PROBE_EVENTS) do pcall(probeFrame.RegisterEvent, probeFrame, e) end
+end
+
 function B.OnEncounter(event, encounterID, difficultyID, now)
+    if event == "ENCOUNTER_START" then ProbeStart(encounterID, difficultyID) end
     wipe(entries)
     if event ~= "ENCOUNTER_START" then return end
     local byDifficulty = CastAheadBurstWindows and CastAheadBurstWindows[encounterID]
