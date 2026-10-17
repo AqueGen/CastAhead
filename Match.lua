@@ -54,6 +54,9 @@ M.ADVICE = {
     SMALL = { label = "SMALL SAVE", short = "SMALL", say = "small defensive", r = 0.55, g = 0.85, b = 1.00 },
     BIG   = { label = "BIG SAVE", short = "BIG", say = "big defensive", r = 1.00, g = 0.35, b = 0.85 },
     HEAL  = { label = "HEAL UP", short = "HEAL", say = "heal up", r = 0.40, g = 0.95, b = 0.45 },
+    HOLD  = { label = "HOLD BURST", short = "HOLD", say = "hold burst", r = 1.00, g = 0.65, b = 0.20 },
+    BURST = { label = "BURST", say = "burst now", r = 1.00, g = 0.30, b = 0.10 },
+    MINI  = { label = "MINI BURST", short = "MINI", say = "mini burst", r = 1.00, g = 0.55, b = 0.25 },
     -- Categories assigned by the curated priority set (row.prio).
     DODGE   = { label = "DODGE", say = "dodge", r = 0.30, g = 0.90, b = 0.40 },
     FRONTAL = { label = "FRONT", say = "frontal", r = 0.95, g = 0.90, b = 0.30 },

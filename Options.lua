@@ -1,6 +1,6 @@
 CastAheadOptions = {}
 
-CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Development" }
+CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Bursts", "Development" }
 local panels = {}
 local T = CastAheadWindow.THEME
 local FLAT = { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 }
@@ -39,12 +39,12 @@ function CastAheadOptions.RelayoutGroups(panel)
         g:ClearAllPoints()
         g:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X + pos[i].x, -(top + pos[i].y))
     end
-    panel:SetHeight(top + total + (panel.flowBottom and panel.flowBottom() or 0) + 12)
+    panel:SetHeight(top + total + (panel.flowBottom and panel.flowBottom(top + total) or 0) + 12)
 end
 
 -- Forward declarations: Build calls these, and Lua resolves a local by
 -- what it holds at call time, so they must exist as upvalues before it runs.
-local BuildGeneral, BuildSounds, BuildDefensives, BuildDevelopment
+local BuildGeneral, BuildSounds, BuildDefensives, BuildBursts, BuildDevelopment
 -- Widgets are painted once, when a panel is first built, but storage can
 -- change behind their back: the /ca anchor|grow|offset|center slash commands
 -- and the Move button all write it. Every widget that displays stored state
@@ -153,9 +153,12 @@ local SWITCHES = {
         tip = "Say \"big defensive\" ahead of hits that need a big save." },
     healCalls = { label = "Heal up after a big hit", defaultOff = true,
         tip = "Right after a hit that called a big defensive, say \"heal up\" when your Healthstone or potion is ready." },
+    burstCalls = { label = "Burst windows", defaultOff = true,
+        tip = "On the few bosses where top players hold their burst for a later moment, say \"hold burst\" when your cooldown would normally come up and \"burst now\" when the moment arrives, and \"mini burst\" for the short cooldowns. Each call comes when top players of your spec press the first button of its list. The Full and Mini lists below are edited like the Defensives lists; emptying a list switches its call off. Healers get their own windows for their big group-healing cooldown. On every other boss it stays silent: press on cooldown." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
         tip = "A panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. Only while recording. The key bindings and /ca mark work without it." },
 }
+CastAheadOptions.Switches = SWITCHES
 
 local function SwitchOn(key)
     if SWITCHES[key].defaultOff then return CastAheadConfig.Get(key) == true end
@@ -170,11 +173,12 @@ local function SetSwitch(key, on)
     end
 end
 
-local function BuildGroup(panel, title, height)
+-- `free` keeps the group out of the column flow, for one the caller places itself.
+local function BuildGroup(panel, title, height, free)
     local box = CreateFrame("Frame", nil, panel, "BackdropTemplate")
     box:SetFrameLevel(panel:GetFrameLevel())
     box:SetSize(COL_W, height)
-    table.insert(panel.groups, box)
+    if not free then table.insert(panel.groups, box) end
     box:SetBackdrop(FLAT)
     box:SetBackdropColor(unpack(T.panel))
     box:SetBackdropBorderColor(unpack(T.border))
@@ -562,16 +566,14 @@ end
 local LIST_MIN_ROWS, LIST_ROW_H = 4, 20
 local LIST_TOP = -48
 local LIST_FOOT = 92
-local LIST_ORDER = { "small", "big", "heal" }
 
-local function ListRows()
+local function ListRows(store)
     local n = LIST_MIN_ROWS
-    for _, size in ipairs(LIST_ORDER) do n = math.max(n, #CastAheadSaves.List(size)) end
+    for _, key in ipairs(store.Keys()) do n = math.max(n, #store.List(key)) end
     return n
 end
 
 local function ListHeight(rows) return -LIST_TOP + rows * LIST_ROW_H + LIST_FOOT end
-local LIST_TITLES = { small = "Small defensive", big = "Big defensive", heal = "Heal after the hit" }
 
 local function RefreshAll()
     for _, refresh in ipairs(refreshers) do refresh() end
@@ -594,9 +596,8 @@ elseif ChatEdit_InsertLink then
     hooksecurefunc("ChatEdit_InsertLink", InsertLink)
 end
 
-local function BuildSaveList(panel, size, hint)
-    local S = CastAheadSaves
-    local title = LIST_TITLES[size]
+local function BuildButtonList(panel, store, key, titles, hint, emptyText)
+    local title = titles[key]
     local group = BuildGroup(panel, title, ListHeight(LIST_MIN_ROWS))
     if hint then
         local line = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -608,20 +609,20 @@ local function BuildSaveList(panel, size, hint)
 
     local function Remove(i)
         local list = {}
-        for j, e in ipairs(S.List(size)) do
+        for j, e in ipairs(store.List(key)) do
             if j ~= i then list[#list + 1] = e end
         end
-        S.SetList(size, list)
+        store.SetList(key, list)
         RefreshAll()
     end
 
     local function RowMenu(owner, i)
-        if not (MenuUtil and MenuUtil.CreateContextMenu) or not S.List(size)[i] then return end
+        if not (MenuUtil and MenuUtil.CreateContextMenu) or not store.List(key)[i] then return end
         MenuUtil.CreateContextMenu(owner, function(_, root)
-            for _, target in ipairs(LIST_ORDER) do
-                if target ~= size then
-                    root:CreateButton("Move to " .. LIST_TITLES[target], function()
-                        S.MoveEntry(size, i, target)
+            for _, target in ipairs(store.Keys()) do
+                if target ~= key then
+                    root:CreateButton("Move to " .. titles[target], function()
+                        store.MoveEntry(key, i, target)
                         RefreshAll()
                     end)
                 end
@@ -663,7 +664,7 @@ local function BuildSaveList(panel, size, hint)
                 end
             end
             b:SetScript("OnClick", function()
-                S.Shift(size, i, step)
+                store.Shift(key, i, step)
                 RefreshAll()
             end)
             b:SetScript("OnEnter", function(self)
@@ -691,16 +692,16 @@ local function BuildSaveList(panel, size, hint)
     pick:SetPoint("TOPLEFT", box, "BOTTOMLEFT", -6, -6)
     if pick.SetDefaultText then pick:SetDefaultText("Add from list") end
     pick:SetupMenu(function(_, root)
-        local entries = S.Addable(size)
+        local entries = store.Addable(key)
         if #entries == 0 then
             root:CreateTitle("Nothing left to add")
             return
         end
         for _, e in ipairs(entries) do
             root:CreateButton(EntryLabel(e), function()
-                local copy = { unpack(S.List(size)) }
+                local copy = { unpack(store.List(key)) }
                 copy[#copy + 1] = type(e) == "table" and { use = e.use } or e
-                S.SetList(size, copy)
+                store.SetList(key, copy)
                 RefreshAll()
             end)
         end
@@ -711,15 +712,15 @@ local function BuildSaveList(panel, size, hint)
     reason:SetJustifyH("LEFT")
 
     local function Submit()
-        local list = S.List(size)
-        local entry, why = S.ParseEntry(box:GetText(), list)
+        local list = store.List(key)
+        local entry, why = store.ParseEntry(box:GetText(), list)
         if not entry then
             reason:SetText(why)
             return
         end
         local copy = { unpack(list) }
         copy[#copy + 1] = entry
-        S.SetList(size, copy)
+        store.SetList(key, copy)
         box:SetText("")
         box:ClearFocus()
         RefreshAll()
@@ -736,8 +737,8 @@ local function BuildSaveList(panel, size, hint)
     box:SetScript("OnLeave", GameTooltip_Hide)
 
     local function Paint()
-        local list = S.List(size)
-        local n = ListRows()
+        local list = store.List(key)
+        local n = ListRows(store)
         for i = 1, math.max(#list, #rows, 1) do
             local row = Row(i)
             row.text:SetText(list[i] and EntryLabel(list[i]) or "")
@@ -749,8 +750,7 @@ local function BuildSaveList(panel, size, hint)
             row.down:SetEnabled(list[i + 1] ~= nil)
         end
         if #list == 0 then
-            rows[1].text:SetText(size == "heal" and "|cffaaaaaaEmpty - no heal up call|r"
-                or "|cffaaaaaaEmpty - this call shows no button|r")
+            rows[1].text:SetText("|cffaaaaaa" .. emptyText .. "|r")
         end
         box:ClearAllPoints()
         box:SetPoint("TOPLEFT", group, "TOPLEFT", 18, LIST_TOP - n * LIST_ROW_H - 6)
@@ -764,6 +764,7 @@ local function BuildSaveList(panel, size, hint)
 end
 
 local DEFENSIVES_H, DEFENSIVES_OFF_H = 366, 56
+local BURST_H, BURST_OFF_H = 86, 56
 
 function BuildDefensives(panel)
     local group = BuildGroup(panel, "Defensive calls", DEFENSIVES_H)
@@ -798,10 +799,14 @@ function BuildDefensives(panel)
         end,
     })
 
+    local store = CastAheadSaves.Store
+    local titles = { small = "Small defensive", big = "Big defensive", heal = "Heal after the hit" }
+    local noButton = "Empty - this call shows no button"
     local lists = {
-        BuildSaveList(panel, "small"),
-        BuildSaveList(panel, "big"),
-        BuildSaveList(panel, "heal", "Pressed right after a big hit lands: stone, potion, self-heal."),
+        BuildButtonList(panel, store, "small", titles, nil, noButton),
+        BuildButtonList(panel, store, "big", titles, nil, noButton),
+        BuildButtonList(panel, store, "heal", titles, "Pressed right after a big hit lands: stone, potion, self-heal.",
+            "Empty - no heal up call"),
     }
 
     local reset = CastAheadWindow.Button(panel, "Reset to default", 110)
@@ -838,9 +843,121 @@ function BuildDefensives(panel)
     table.insert(listRefreshers, Paint)
 end
 
+local BURST_DIFFICULTIES = { { 14, "Normal" }, { 15, "Heroic" }, { 16, "Mythic" }, { 8, "Keys" } }
+local GUIDE_COL_W, GUIDE_COL_GAP = 300, 24
+local burstDifficulty = 15
+
+function BuildBursts(panel)
+    local group = BuildGroup(panel, "Burst windows", BURST_H)
+    local Paint
+    BuildSwitch(panel, "burstCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, function()
+        Redraw()
+        Paint()
+    end)
+    local reset = CastAheadWindow.Button(group, "Reset to default", 110)
+    reset:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -54)
+    reset:SetScript("OnClick", function()
+        if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_BURSTS") end
+    end)
+    local other = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    other:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -54)
+    other:SetWidth(COL_W - 20)
+    other:SetJustifyH("LEFT")
+    other:SetWordWrap(true)
+    other:SetText("|cffaaaaaaLists edit your current specialization - pick it in the bar above.|r")
+    local titles = { full = "Full burst", mini = "Mini burst" }
+    local empty = "Empty - no call for this tier"
+    local lists = {
+        BuildButtonList(panel, CastAheadBurst.Lists, "mini", titles, nil, empty),
+        BuildButtonList(panel, CastAheadBurst.Lists, "full", titles, nil, empty),
+    }
+    -- The guide spans the page under the cards, one column of text per boss group.
+    local guide = BuildGroup(panel, "Guide", 120, true)
+    local buttons = {}
+    for i, d in ipairs(BURST_DIFFICULTIES) do
+        local b = CastAheadWindow.Button(guide, d[2], 56)
+        b:SetPoint("TOPLEFT", guide, "TOPLEFT", 8 + (i - 1) * 59, -24)
+        b:SetScript("OnClick", function() burstDifficulty = d[1] Paint() end)
+        buttons[i] = b
+    end
+    local columns, blocks = {}, {}
+    local function Column(i)
+        if columns[i] then return columns[i] end
+        local text = guide:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        text:SetWidth(GUIDE_COL_W)
+        text:SetJustifyH("LEFT")
+        text:SetJustifyV("TOP")
+        text:SetWordWrap(true)
+        text:SetSpacing(3)
+        columns[i] = text
+        return text
+    end
+    local function LayoutGuide(width)
+        local count = math.max(1, math.floor((width - 20 + GUIDE_COL_GAP) / (GUIDE_COL_W + GUIDE_COL_GAP)))
+        local lines, used = {}, {}
+        for c = 1, count do lines[c], used[c] = {}, 0 end
+        for _, block in ipairs(blocks) do
+            local c = 1
+            for k = 2, count do if used[k] < used[c] then c = k end end
+            if #lines[c] > 0 then lines[c][#lines[c] + 1] = "" end
+            for _, line in ipairs(block) do lines[c][#lines[c] + 1] = line end
+            used[c] = used[c] + #block + 1
+        end
+        local tallest = 0
+        for c = 1, math.max(count, #columns) do
+            local text = Column(c)
+            text:SetWidth(math.min(GUIDE_COL_W, width - 20))
+            text:SetShown(c <= count)
+            text:ClearAllPoints()
+            text:SetPoint("TOPLEFT", guide, "TOPLEFT", 10 + (c - 1) * (GUIDE_COL_W + GUIDE_COL_GAP), -54)
+            text:SetText(c <= count and table.concat(lines[c], "\n") or "")
+            if c <= count then tallest = math.max(tallest, text:GetStringHeight()) end
+        end
+        guide:SetHeight(64 + tallest)
+    end
+    panel.flowBottom = function(y)
+        local width = math.max(panel:GetWidth() - 2 * COL_X, COL_W)
+        guide:ClearAllPoints()
+        guide:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -((y or 0) + COL_GAP))
+        guide:SetWidth(width)
+        LayoutGuide(width)
+        return guide:GetHeight() + COL_GAP
+    end
+    Paint = function()
+        for i, d in ipairs(BURST_DIFFICULTIES) do
+            buttons[i]:SetBackdropColor(unpack(d[1] == burstDifficulty and T.selected or T.panel))
+        end
+        local spec = CastAheadSaves and CastAheadSaves.ViewSpecID()
+        local lines = CastAheadBurst and CastAheadBurst.GuideLines(burstDifficulty, spec) or {}
+        if #lines == 0 then lines = { "|cffaaaaaaNo burst windows on this difficulty.|r" } end
+        wipe(blocks)
+        local block = {}
+        for _, line in ipairs(lines) do
+            if line == "" then
+                blocks[#blocks + 1], block = block, {}
+            else
+                block[#block + 1] = line
+            end
+        end
+        blocks[#blocks + 1] = block
+        local on = SwitchOn("burstCalls")
+        local own = spec == CastAheadSaves.SpecID()
+        for _, list in ipairs(lists) do list:SetShown(on and own) end
+        reset:SetShown(on and own)
+        other:SetShown(on and not own)
+        group:SetHeight(not on and BURST_OFF_H or own and BURST_H or 64 + other:GetStringHeight())
+        CastAheadWindow.PaintSpecBars()
+        panel:Relayout()
+    end
+    local barTop = CastAheadWindow.SpecBar(panel, COL_X, 6, Paint)
+    panel.flowTop = function() return barTop > 0 and barTop + 12 or 6 end
+    table.insert(refreshers, Paint)
+    table.insert(listRefreshers, Paint)
+end
+
 local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
     "POISON", "CURSE", "MAGIC", "DISEASE", "BLEED", "SOOTHE", "PURGE", "SWITCH", "ALERT",
-    "SMALL", "BIG", "HEAL" }
+    "SMALL", "BIG", "HEAL", "HOLD", "BURST", "MINI" }
 local SOUND_ROW_H = 26
 
 -- Default plus every sound LibSharedMedia knows. Shared with the casts
@@ -981,7 +1098,8 @@ function BuildSounds(panel)
     end
 end
 
-BUILDERS = { General = BuildGeneral, Sounds = BuildSounds, Defensives = BuildDefensives, Development = BuildDevelopment }
+BUILDERS = { General = BuildGeneral, Sounds = BuildSounds, Defensives = BuildDefensives, Bursts = BuildBursts,
+             Development = BuildDevelopment }
 
 for _, name in ipairs(CastAheadOptions.TABS) do
     local host

@@ -42,53 +42,6 @@ local ROLE_NAMES = { DAMAGER = "Damage", HEALER = "Healer", TANK = "Tank" }
 local savesHost, saveRows, saveParent, saveSide, saveTable, guideHost, guideText
 local savesTop, guideTop = 0, 0
 
-local SPEC_W, SPEC_GAP, SPEC_BAR_H = 150, 4, 28
-local specBars = {}
-
-local function Specs()
-    local out = {}
-    if not (GetNumSpecializations and GetSpecializationInfo) then return out end
-    for i = 1, GetNumSpecializations() or 0 do
-        local id, name, _, icon = GetSpecializationInfo(i)
-        if id then out[#out + 1] = { id = id, name = name, icon = icon } end
-    end
-    return out
-end
-
-local function PaintSpecBars()
-    local S = CastAheadSaves
-    local viewing = S and S.ViewSpecID()
-    local T = CastAheadWindow.THEME
-    for _, bar in ipairs(specBars) do
-        for _, b in ipairs(bar.buttons) do
-            local on = b.specID == viewing
-            b:SetBackdropColor(unpack(on and T.selected or T.panel))
-            b.label:SetTextColor(unpack(on and T.gold or T.text))
-        end
-    end
-end
-
--- One row of the class's specs on top of a Dungeon page; picking one shows
--- that spec's buttons and role without changing spec. Returns the height
--- the page content has to leave above itself: 0 for a class with one spec.
-local function BuildSpecBar(host)
-    local specs = Specs()
-    if #specs < 2 then return 0 end
-    local bar = { buttons = {} }
-    for i, spec in ipairs(specs) do
-        local b = CastAheadWindow.Button(host, string.format("|T%s:14|t %s", spec.icon or "", spec.name or ""), SPEC_W)
-        b.specID = spec.id
-        b:SetPoint("TOPLEFT", host, "TOPLEFT", (i - 1) * (SPEC_W + SPEC_GAP), 0)
-        b:SetScript("OnClick", function()
-            CastAheadSaves.SetViewSpec(spec.id)
-            CastAheadUI.RefreshSaves()
-        end)
-        bar.buttons[i] = b
-    end
-    specBars[#specBars + 1] = bar
-    return SPEC_BAR_H
-end
-
 local function CreateSaveRow(parent, index)
     local row = CreateFrame("Button", nil, parent)
     row:SetSize(SAVE_WIDTH, ROW_HEIGHT)
@@ -133,7 +86,7 @@ local function RefreshGuide()
     end
     guideText:SetText(table.concat(lines, "\n"))
     guideHost:SetHeight(guideTop + guideText:GetStringHeight() + 8)
-    PaintSpecBars()
+    CastAheadWindow.PaintSpecBars()
 end
 
 local function RefreshSaves()
@@ -192,7 +145,7 @@ local function RefreshSaves()
     end
     CastAheadWindow.SetFooter(line)
     CastAheadWindow.SideHint(saveSide, saveTable)
-    PaintSpecBars()
+    CastAheadWindow.PaintSpecBars()
 end
 
 function CastAheadUI.RefreshSaves()
@@ -202,7 +155,7 @@ end
 
 local function BuildSaves(host)
     savesHost = host
-    savesTop = BuildSpecBar(host)
+    savesTop = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end)
     saveSide, saveTable = CastAheadWindow.SideScroll(host, savesTop)
     saveTable:SetWidth(SAVE_WIDTH)
     local saveHeader = CreateFrame("Frame", nil, saveTable)
@@ -227,7 +180,7 @@ end
 
 local function BuildGuide(host)
     guideHost = host
-    guideTop = BuildSpecBar(host)
+    guideTop = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end)
     guideText = host:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     guideText:SetPoint("TOPLEFT", host, "TOPLEFT", 4, -(guideTop + 4))
     guideText:SetWidth(math.max((host:GetWidth() or 0) - 8, 1))
