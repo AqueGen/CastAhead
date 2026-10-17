@@ -306,33 +306,45 @@ local function ButtonName(entry)
     return type(name) == "string" and name or "burst"
 end
 
-local function WindowLine(w, specID, fullList, miniList)
-    local line
+local GREY, GOLD = "|cffaaaaaa", "|cffffd100"
+
+local function ButtonLine(tier, entry, at, note)
+    local icon = Texture(entry)
+    return string.format("      %s%s:|r %s%s%s%s", GREY, tier, icon and ("|T" .. icon .. ":14|t ") or "",
+        ButtonName(entry), at and ("  " .. at) or "", note and (" " .. GREY .. note .. "|r") or "")
+end
+
+-- One heading line per window, then one line per button in the order they are pressed.
+local function WindowLines(w, specID, fullList, miniList, out)
     if w.event then
-        line = string.format("  %s - burst when the boss warning shows", w.target or "boss event")
+        out[#out + 1] = string.format("  %s %s- burst when the boss warning shows|r", w.target or "Boss event", GREY)
     elseif w.target and w.hold < w.release then
-        line = string.format("  %s hold - %s %s burst", B.Clock(w.hold), B.Clock(w.release), w.target)
+        out[#out + 1] = string.format("  %s hold %s- burst at|r %s %s", B.Clock(w.hold), GREY, B.Clock(w.release), w.target)
     elseif w.target then
-        line = string.format("  %s %s - burst", B.Clock(w.release), w.target)
+        out[#out + 1] = string.format("  %s %s %s- burst|r", B.Clock(w.release), w.target, GREY)
     else
-        line = string.format("  %s hold - %s burst", B.Clock(w.hold), B.Clock(w.release))
+        out[#out + 1] = string.format("  %s hold %s- burst at|r %s", B.Clock(w.hold), GREY, B.Clock(w.release))
     end
     if #fullList == 0 and #miniList == 0 then
-        return line .. " | no burst buttons known for this spec"
+        out[#out + 1] = "      " .. GREY .. "No burst buttons known for this spec.|r"
+        return
     end
     if w.event then
-        return #fullList > 0 and string.format("%s | full: %s", line, ButtonName(fullList[1])) or line
+        if #fullList > 0 then out[#out + 1] = ButtonLine("Full", fullList[1]) end
+        return
     end
     local full, mini = Offsets(w, specID)
+    local rows = {}
     if #fullList > 0 then
-        line = string.format("%s | full: %s %s", line, ButtonName(fullList[1]),
-            full and B.Clock(math.max(w.release + full, 0)) or B.Clock(w.release) .. " (shared timing)")
+        local at = full and math.max(w.release + full, 0) or w.release
+        rows[#rows + 1] = { at = at, text = ButtonLine("Full", fullList[1], B.Clock(at), not full and "(shared time)" or nil) }
     end
     if #miniList > 0 and mini then
-        line = string.format("%s | mini: %s %s", line, ButtonName(miniList[1]),
-            B.Clock(math.max(w.release + mini, 0)))
+        local at = math.max(w.release + mini, 0)
+        rows[#rows + 1] = { at = at, text = ButtonLine("Mini", miniList[1], B.Clock(at)) }
     end
-    return line
+    if rows[2] and rows[2].at < rows[1].at then rows[1], rows[2] = rows[2], rows[1] end
+    for _, r in ipairs(rows) do out[#out + 1] = r.text end
 end
 
 function B.GuideLines(difficultyID, specID)
@@ -348,10 +360,11 @@ function B.GuideLines(difficultyID, specID)
     for _, list in ipairs(bosses) do
         local own = {}
         for _, w in ipairs(list) do
-            if ForRole(w, role) then own[#own + 1] = WindowLine(w, specID, fullList, miniList) end
+            if ForRole(w, role) then WindowLines(w, specID, fullList, miniList, own) end
         end
         if #own > 0 then
-            lines[#lines + 1] = list.name or "?"
+            if #lines > 0 then lines[#lines + 1] = "" end
+            lines[#lines + 1] = GOLD .. (list.name or "?") .. "|r"
             for _, line in ipairs(own) do lines[#lines + 1] = line end
         end
     end

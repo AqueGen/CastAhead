@@ -866,8 +866,8 @@ function BuildBursts(panel)
     local titles = { full = "Full burst", mini = "Mini burst" }
     local empty = "Empty - no call for this tier"
     local lists = {
-        BuildButtonList(panel, CastAheadBurst.Lists, "full", titles, nil, empty),
         BuildButtonList(panel, CastAheadBurst.Lists, "mini", titles, nil, empty),
+        BuildButtonList(panel, CastAheadBurst.Lists, "full", titles, nil, empty),
     }
     local guide = BuildGroup(panel, "Guide", 120)
     local buttons = {}

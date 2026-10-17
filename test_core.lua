@@ -4229,6 +4229,10 @@ do
         for _ = 1, seconds * 2 do now = now + 0.5 S.Tick(now) B.Tick(now) end
     end
     local function Heard() return table.concat(heard, ",") end
+    local function Guide(difficulty, id)
+        local text = table.concat(B.GuideLines(difficulty, id), "\n")
+        return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T[^|]*|t ", ""))
+    end
 
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
     run(12.5)
@@ -4259,30 +4263,36 @@ do
     B.OnEncounter("ENCOUNTER_END", 3492, 15, now)
 
     check(B.Clock(197) == "3:17" and B.Clock(59.6) == "1:00", "burst v2: clock formats m:ss")
-    local lines = B.GuideLines(15, 1480)
-    check(lines[1] == "Ula'tek" and lines[2] == "  0:10 hold - 0:40 burst | full: Void Metamorphosis 0:13",
-        "burst v2: guide line with the spec's own time and no mini part without a mini offset, got " .. tostring(lines[2]))
-    lines = B.GuideLines(15, 63)
-    check(lines[2] == "  0:10 hold - 0:40 burst | no burst buttons known for this spec",
-        "burst v2: guide line for a spec without a button, got " .. tostring(lines[2]))
+    local lines = Guide(15, 1480)
+    check(lines == "Ula'tek\n  0:10 hold - burst at 0:40\n      Full: Void Metamorphosis  0:13",
+        "burst v2: guide with the spec's own time and no mini line without a mini offset, got " .. lines)
+    check(B.GuideLines(15, 1480)[1] == "|cffffd100Ula'tek|r", "burst guide: the boss name is a gold heading")
+    lines = Guide(15, 63)
+    check(lines == "Ula'tek\n  0:10 hold - burst at 0:40\n      No burst buttons known for this spec.",
+        "burst v2: guide for a spec without a button, got " .. lines)
     CastAheadBurstButtons[63] = { full = { 190319 } }
-    lines = B.GuideLines(15, 63)
-    check(lines[2] == "  0:10 hold - 0:40 burst | full: Combustion 0:40 (shared timing)",
-        "burst v2: guide line for a spec without an offset, got " .. tostring(lines[2]))
+    lines = Guide(15, 63)
+    check(lines:find("\n      Full: Combustion  0:40 %(shared time%)$"),
+        "burst v2: guide for a spec without an offset, got " .. lines)
     CastAheadDB.burstButtons = { [63] = { full = { 12472 } } }
-    lines = B.GuideLines(15, 63)
-    check(lines[2] == "  0:10 hold - 0:40 burst | full: Icy Veins 0:40 (shared timing)",
-        "burst v3: the guide names the viewed spec's own edited list, got " .. tostring(lines[2]))
+    lines = Guide(15, 63)
+    check(lines:find("\n      Full: Icy Veins  0:40 %(shared time%)$"),
+        "burst v3: the guide names the viewed spec's own edited list, got " .. lines)
     CastAheadDB.burstButtons = nil
-    lines = B.GuideLines(14, 1480)
-    check(#lines == 2 and lines[2] == "  0:50 hold - 1:10 burst | full: Void Metamorphosis 1:10 (shared timing)",
-        "burst v2: Normal guide shows only Normal windows")
+    lines = Guide(14, 1480)
+    check(lines == "Ula'tek\n  0:50 hold - burst at 1:10\n      Full: Void Metamorphosis  1:10 (shared time)",
+        "burst v2: Normal guide shows only Normal windows, got " .. lines)
     check(#B.GuideLines(16, 1480) == 0, "burst v2: no windows, no lines")
     CastAheadBurstWindows[3492][16] = { name = "Ula'tek",
         { hold = 136, release = 136, target = "Venomous Heart", specs = { [1480] = { full = -33, mini = -1 } } } }
-    lines = B.GuideLines(16, 1480)
-    check(lines[2] == "  2:16 Venomous Heart - burst | full: Void Metamorphosis 1:43 | mini: Void Nova 2:15",
-        "burst v3: a target window names the target and both tiers, got " .. tostring(lines[2]))
+    lines = Guide(16, 1480)
+    check(lines == "Ula'tek\n  2:16 Venomous Heart - burst\n      Full: Void Metamorphosis  1:43\n      Mini: Void Nova  2:15",
+        "burst v3: a target window names the target and both tiers, got " .. lines)
+    CastAheadBurstWindows[2000] = { [16] = { name = "Zeta", { hold = 5, release = 20, specs = { [1480] = { full = 0, mini = -10 } } } } }
+    lines = Guide(16, 1480)
+    check(lines:find("\n\nZeta\n  0:05 hold %- burst at 0:20\n      Mini: Void Nova  0:10\n      Full: Void Metamorphosis  0:20$"),
+        "burst guide: bosses are split by a blank line and buttons follow press order, got " .. lines)
+    CastAheadBurstWindows[2000] = nil
 
     do
         CastAheadBurstWindows[3492][17] = { name = "Ula'tek", { hold = 10, release = 40, specs = {
@@ -4326,9 +4336,9 @@ do
         B.OnEncounter("ENCOUNTER_START", 3492, 17, now)
         run(60)
         check(Heard() == "HOLD,BURST", "burst v3: an emptied own mini list switches mini off, heard " .. Heard())
-        lines = B.GuideLines(17, 70)
-        check(lines[2] == "  0:10 hold - 0:40 burst | full: Avenging Wrath 0:38",
-            "burst v3: the guide omits an emptied mini tier, got " .. tostring(lines[2]))
+        lines = Guide(17, 70)
+        check(lines == "Ula'tek\n  0:10 hold - burst at 0:40\n      Full: Avenging Wrath  0:38",
+            "burst v3: the guide omits an emptied mini tier, got " .. lines)
         heard = {}
         CastAheadDB.burstButtons = { [70] = { full = {} } }
         B.OnEncounter("ENCOUNTER_START", 3492, 17, now)
@@ -4373,9 +4383,10 @@ do
         check(Heard() == "HOLD,BURST,MINI", "burst v3: and speaks 2 s after the full burst, heard " .. Heard())
         B.OnEncounter("ENCOUNTER_END", 3492, 17, now)
 
-        lines = B.GuideLines(17, 70)
-        check(lines[2] == "  0:10 hold - 0:40 burst | full: Avenging Wrath 0:38 | mini: Wake of Ashes 0:55",
-            "burst v3: guide line with full and mini, got " .. tostring(lines[2]))
+        lines = Guide(17, 70)
+        check(lines == "Ula'tek\n  0:10 hold - burst at 0:40\n      Full: Avenging Wrath  0:38\n      Mini: Wake of Ashes  0:55",
+            "burst v3: guide with full and mini, got " .. lines)
+        check(B.GuideLines(17, 70)[3]:find("|T5001:14|t Avenging Wrath", 1, true), "burst guide: a button carries its icon")
         IsPlayerSpell = nil
     end
 
@@ -4406,9 +4417,9 @@ do
 
         CastAheadBurstWindows[3492][19] = { name = "Ula'tek",
             { hold = 128, release = 146, target = "Venomous Heart", specs = { [1480] = { full = -33 } } } }
-        local guide = B.GuideLines(19, 1480)
-        check(guide[2] == "  2:08 hold - 2:26 Venomous Heart burst | full: Void Metamorphosis 1:53",
-            "burst fix: a target window with an earlier hold shows the hold, got " .. tostring(guide[2]))
+        local guide = Guide(19, 1480)
+        check(guide == "Ula'tek\n  2:08 hold - burst at 2:26 Venomous Heart\n      Full: Void Metamorphosis  1:53",
+            "burst fix: a target window with an earlier hold shows the hold, got " .. guide)
         CastAheadBurstWindows[3492][19] = nil
     end
 
@@ -4501,16 +4512,19 @@ do
     end
     CastAheadDB = { burstCalls = true }
 
-    local lines = B.GuideLines(8, 65)
-    check(lines[1] == "Kystia Manaheart"
-        and lines[2] == "  Light Infusion - burst when the boss warning shows | full: Avenging Wrath",
-        "burst event: the guide names the warning, got " .. tostring(lines[2]))
-    lines = B.GuideLines(15, 65)
-    check(#lines == 2 and lines[2] == "  0:50 hold - 1:10 burst | full: Avenging Wrath 1:10 (shared timing)",
-        "burst roles: a healer's guide lists only healer windows, got " .. tostring(lines[2]))
-    lines = B.GuideLines(15, 70)
-    check(#lines == 2 and lines[2]:sub(1, 24) == "  0:10 hold - 0:30 burst",
-        "burst roles: a damage spec's guide lists only damage windows, got " .. tostring(lines[2]))
+    local function Guide(difficulty, id)
+        local text = table.concat(B.GuideLines(difficulty, id), "\n")
+        return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T[^|]*|t ", ""))
+    end
+    local lines = Guide(8, 65)
+    check(lines == "Kystia Manaheart\n  Light Infusion - burst when the boss warning shows\n      Full: Avenging Wrath",
+        "burst event: the guide names the warning, got " .. lines)
+    lines = Guide(15, 65)
+    check(lines == "Ula'tek\n  0:50 hold - burst at 1:10\n      Full: Avenging Wrath  1:10 (shared time)",
+        "burst roles: a healer's guide lists only healer windows, got " .. lines)
+    lines = Guide(15, 70)
+    check(lines == "Ula'tek\n  0:10 hold - burst at 0:30\n      No burst buttons known for this spec.",
+        "burst roles: a damage spec's guide lists only damage windows, got " .. lines)
 
     C_Spell.GetSpellName, C_Timer, C_EncounterEvents = savedName, nil, nil
     PlaySoundFile, CastAheadBurstWindows, CastAheadBurstButtons = savedPlay, savedWindows, savedButtons
