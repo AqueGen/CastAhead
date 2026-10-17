@@ -3788,7 +3788,7 @@ do
 end
 
 do
-    local savedCreate, savedDB, savedBurst, savedSpec = CreateFrame, CastAheadDB, CastAheadBurstButtons, CastAheadSaves.SpecID
+    local savedCreate, savedDB, savedWindows = CreateFrame, CastAheadDB, CastAheadBurstWindows
     local savedSlider = MinimalSliderWithSteppersMixin
     MinimalSliderWithSteppersMixin = savedSlider or { Label = { Min = 1, Max = 2 }, Event = { OnValueChanged = 1 } }
     local made, texts = {}, {}
@@ -3815,63 +3815,26 @@ do
         f.SetValue = function() end
         return f
     end
-    CastAheadSaves.SpecID = function() return 265 end
-    CastAheadBurstButtons = { [265] = 12345 }
     CastAheadDB = {}
-    local lists = CastAheadBurst.Lists
-    local ok, err = pcall(function() return #lists.List("full") + #lists.Addable("mini") end)
-    check(ok and err == 0, "a flat shipped burst value reads as empty lists " .. tostring(err))
+    CastAheadBurstWindows = { [3492] = { [15] = { name = "Ula'tek", { release = 145.5, target = "Venomous Heart" } } } }
     local host = CreateFrame("Frame")
-    ok, err = pcall(CastAheadOptions.ShowPanel, host, "Bursts")
+    local ok, err = pcall(CastAheadOptions.ShowPanel, host, "Bursts")
     check(ok, "the Bursts page builds headless " .. tostring(err))
     ok, err = pcall(CastAheadOptions.ShowPanel, host, "Defensives")
     check(ok, "the Defensives page builds headless " .. tostring(err))
-
-    local reset, full, mini, note
-    for _, f in ipairs(made) do
-        if not reset and rawget(f, "buttonText") == "Reset to default" then reset = f end
-        local title = rawget(f, "title") and rawget(f.title, "value")
-        if title == "Full burst" then full = f elseif title == "Mini burst" then mini = f end
-    end
+    local guide, lists
     for _, fs in ipairs(texts) do
-        if tostring(rawget(fs, "value")):find("Lists edit your current specialization", 1, true) then note = fs end
+        local v = tostring(rawget(fs, "value"))
+        if v:find("Venomous Heart", 1, true) then guide = v end
     end
-    local function Shown() return full.shown, mini.shown, reset.shown, note.shown end
-    check(reset and full and mini and note, "the Bursts page has its lists, Reset and note")
-    if reset and full and mini and note then
-        local a, b, c, d = Shown()
-        check(not a and not b and not c and not d, "burstCalls off hides the burst lists and Reset")
-        CastAheadConfig.Set("burstCalls", true)
-        CastAheadOptions.ShowPanel(host, "Bursts")
-        a, b, c, d = Shown()
-        check(a and b and c and not d, "burstCalls on shows the lists and Reset for the own spec")
-        CastAheadSaves.SetViewSpec(66)
-        CastAheadOptions.ShowPanel(host, "Bursts")
-        a, b, c, d = Shown()
-        check(not a and not b and not c and d, "viewing another spec hides the lists and Reset and shows the note")
-        CastAheadSaves.SetViewSpec(nil)
+    for _, f in ipairs(made) do
+        local title = rawget(f, "title") and rawget(f.title, "value")
+        if title == "Full burst" or title == "Mini burst" then lists = true end
     end
+    check(guide and guide:find("Ula'tek", 1, true), "the Bursts page shows the guide for Heroic, got " .. tostring(guide))
+    check(not lists, "the Bursts page has no button lists")
 
-    IsPlayerSpell = function() return false end
-    CastAheadBurstButtons = { [265] = { full = { 1217607 } }, [266] = { full = { 222 } } }
-    lists.SetList("full", {})
-    local offered = lists.Addable("full")
-    check(#offered == 1 and offered[1] == 1217607, "Addable offers an own-spec shipped id the player does not know, not a class mate's")
-    IsPlayerSpell = nil
-
-    local saves = { [265] = { big = { 104773 } } }
-    CastAheadDB = { saveButtons = saves }
-    lists.SetList("full", { 111 })
-    check(CastAheadDB.burstButtons[265].full[1] == 111 and CastAheadDB.saveButtons == saves and saves[265].full == nil
-        and #saves[265].big == 1, "a burst SetList writes burstButtons and leaves saveButtons alone")
-    CastAheadSaves.Store.SetList("small", { 108416 })
-    check(saves[265].small[1] == 108416 and CastAheadDB.burstButtons[265].small == nil,
-        "the Defensives store writes saveButtons only")
-    StaticPopupDialogs.CASTAHEAD_RESET_BURSTS.OnAccept()
-    check(CastAheadDB.burstButtons[265] == nil and saves[265].small[1] == 108416,
-        "accepting the burst reset clears the burst lists only")
-
-    CreateFrame, CastAheadDB, CastAheadBurstButtons, CastAheadSaves.SpecID = savedCreate, savedDB, savedBurst, savedSpec
+    CreateFrame, CastAheadDB, CastAheadBurstWindows = savedCreate, savedDB, savedWindows
     MinimalSliderWithSteppersMixin = savedSlider
 end
 
@@ -3999,7 +3962,7 @@ do
     UIParent, CastAheadDB = nil, nil
 end
 
--- Burst windows: hold at hold start, burst at release, damage windows skip healers, a save call goes first.
+-- Burst windows: "burst soon" five seconds before the phase, "burst now" as it starts, a save call goes first.
 do
     local B, S, A = CastAheadBurst, CastAheadSaves, CastAheadMatch.ADVICE
     local heard = {}
@@ -4008,7 +3971,7 @@ do
     local role = "DAMAGER"
     GetSpecialization = function() return 1 end
     GetSpecializationRole = function() return role end
-    CastAheadBurstWindows = { [3492] = { [15] = { { hold = 10, release = 30 } } } }
+    CastAheadBurstWindows = { [3492] = { [15] = { { release = 30 } }, [14] = { { release = 3 } } } }
     CastAheadDB = { burstCalls = true }
     local function run(seconds)
         for _ = 1, seconds * 2 do
@@ -4021,23 +3984,28 @@ do
 
     local t0 = now
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
-    run(9)
-    check(#heard == 0, "burst: quiet before hold start, heard " .. Heard())
-    run(1.5)
-    check(Heard() == "HOLD", "burst: hold burst at hold start, heard " .. Heard())
+    run(24.5)
+    check(#heard == 0, "burst: quiet before the heads-up, heard " .. Heard())
+    run(0.5)
+    check(Heard() == "SOON", "burst: burst soon five seconds before the phase, heard " .. Heard())
     local pend = B.Pending(now)
-    check(#pend == 1 and pend[1].advice == A.HOLD and pend[1].endAt == t0 + 30 and pend[1].icons[1] ~= nil,
-        "burst: the centre counts down to the release")
-    run(20)
-    check(Heard() == "HOLD,BURST", "burst: burst now at release, heard " .. Heard())
+    check(#pend == 1 and pend[1].advice == A.SOON and pend[1].endAt == t0 + 30 and pend[1].icons[1] ~= nil,
+        "burst: the centre counts down to the phase")
+    run(5)
+    check(Heard() == "SOON,BURST", "burst: burst now as the phase starts, heard " .. Heard())
     run(10)
-    check(#B.Pending(now) == 0 and Heard() == "HOLD,BURST", "burst: each call once, then off the screen")
+    check(#B.Pending(now) == 0 and Heard() == "SOON,BURST", "burst: each call once, then off the screen")
+
+    heard = {}
+    B.OnEncounter("ENCOUNTER_START", 3492, 14, now)
+    run(5)
+    check(Heard() == "BURST", "burst: a phase under five seconds in gets no heads-up, heard " .. Heard())
 
     heard = {}
     role = "HEALER"
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
     run(40)
-    check(#heard == 0 and #B.Pending(now) == 0, "burst: a healer hears and sees nothing")
+    check(#heard == 0 and #B.Pending(now) == 0, "burst: a healer skips the damage window")
     role = "DAMAGER"
 
     heard = {}
@@ -4052,7 +4020,7 @@ do
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
     run(35)
     role = "DAMAGER"
-    check(Heard() == "HOLD,BURST", "burst: a tank hears the damage windows too, heard " .. Heard())
+    check(Heard() == "SOON,BURST", "burst: a tank hears the damage windows too, heard " .. Heard())
 
     heard = {}
     CastAheadDB = {}
@@ -4078,9 +4046,9 @@ do
     run(10.5)
     S.Schedule("test:save1", 1, t1 + 29, t1 + 33, A.BIG)
     run(20)
-    check(Heard() == "HOLD,BIG_soon", "burst: the save call is heard and the burst waits, heard " .. Heard())
+    check(Heard() == "SOON,BIG_soon", "burst: the save call is heard and the burst waits, heard " .. Heard())
     run(0.5)
-    check(Heard() == "HOLD,BIG_soon,BURST", "burst: the burst follows 2 s after the save, heard " .. Heard())
+    check(Heard() == "SOON,BIG_soon,BURST", "burst: the burst follows 2 s after the save, heard " .. Heard())
     run(10)
 
     heard = {}
@@ -4088,22 +4056,20 @@ do
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
     S.Schedule("test:save2", 1, t2 + 31, t2 + 35, A.BIG)
     run(32.5)
-    check(Heard() == "HOLD,BIG_soon", "burst: a save due 1 s after the release goes first, heard " .. Heard())
+    check(Heard() == "SOON,BIG_soon", "burst: a save due 1 s after the phase goes first, heard " .. Heard())
     run(1)
-    check(Heard() == "HOLD,BIG_soon,BURST", "burst: and the burst speaks 2 s after that save, heard " .. Heard())
+    check(Heard() == "SOON,BIG_soon,BURST", "burst: and the burst speaks 2 s after that save, heard " .. Heard())
     run(10)
 
     heard = {}
-    local savedHealReady = S.HealReady
-    S.HealReady = function() return true end
     local t3 = now
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
-    S.Schedule("test:save3", 1, t3 + 25, t3 + 29.5, A.BIG)
-    run(31)
-    check(Heard() == "HOLD,BIG_soon,HEAL", "burst: a heal call at the end of a big save holds the burst, heard " .. Heard())
+    S.Schedule("test:save3", 1, t3 + 25, t3 + 29, A.BIG)
+    run(26.5)
+    check(Heard() == "BIG_soon", "burst: a heads-up landing on a save waits, heard " .. Heard())
     run(0.5)
-    check(Heard() == "HOLD,BIG_soon,HEAL,BURST", "burst: the burst follows 2 s after the heal call, heard " .. Heard())
-    S.HealReady = savedHealReady
+    check(Heard() == "BIG_soon,SOON", "burst: and comes 2 s after it, heard " .. Heard())
+    run(10)
 
     heard = {}
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
@@ -4118,7 +4084,6 @@ do
     B.Tick(now)
     B.Pending(now)
     check(specLookups == 0, "burst: no windows, no spec lookups per frame")
-    GetSpecialization = function() return 1 end
     S.Cancel("test:save1")
     S.Cancel("test:save2")
     S.Cancel("test:save3")
@@ -4141,19 +4106,19 @@ do
     end
     GetSpecialization = function() return 1 end
     GetSpecializationRole = function() return "DAMAGER" end
-    CastAheadBurstWindows = { [3492] = { [15] = { { hold = 10, release = 30 } } } }
+    CastAheadBurstWindows = { [3492] = { [15] = { { release = 30 } } } }
     CastAheadDB = { burstCalls = true, centerText = true }
     GetInstanceInfo = function() return "Abyss", "raid", 15, "", 0, 0, false, 9999 end
     fire("PLAYER_ENTERING_WORLD")
 
     fire("ENCOUNTER_START", 3492, "Ula'tek", 15, 20)
-    for _ = 1, 21 do advance(0.5) end
-    local line = Line("Hold burst")
-    check(Heard() == "HOLD", "raid burst: hold burst through Core with no trash data, heard " .. Heard())
-    check(line ~= nil and line.shown, "raid burst: the hold line is on screen")
-    for _ = 1, 40 do advance(0.5) end
+    for _ = 1, 51 do advance(0.5) end
+    local line = Line("Burst soon")
+    check(Heard() == "SOON", "raid burst: burst soon through Core with no trash data, heard " .. Heard())
+    check(line ~= nil and line.shown, "raid burst: the countdown line is on screen")
+    for _ = 1, 10 do advance(0.5) end
     local burstLine = Line("Burst now")
-    check(Heard() == "HOLD,BURST", "raid burst: burst now through Core at the release, heard " .. Heard())
+    check(Heard() == "SOON,BURST", "raid burst: burst now through Core as the phase starts, heard " .. Heard())
     check(burstLine ~= nil and burstLine.shown, "raid burst: the burst line is on screen")
     fire("ENCOUNTER_END", 3492, "Ula'tek", 15, 20, 0)
     advance(0.5)
@@ -4161,8 +4126,8 @@ do
 
     heard = {}
     fire("ENCOUNTER_START", 3492, "Ula'tek", 15, 20)
-    for _ = 1, 21 do advance(0.5) end
-    check(Heard() == "HOLD", "raid burst: a re-pull lays the windows out again, heard " .. Heard())
+    for _ = 1, 51 do advance(0.5) end
+    check(Heard() == "SOON", "raid burst: a re-pull lays the windows out again, heard " .. Heard())
     fire("ENCOUNTER_END", 3492, "Ula'tek", 15, 20, 0)
 
     heard = {}
@@ -4207,236 +4172,36 @@ do
         "bursts have their own settings page right after Defensives")
 end
 
+-- The guide lists every window of a difficulty by boss, the same for every spec.
 do
-    local B, S = CastAheadBurst, CastAheadSaves
-    local heard = {}
-    local savedPlay, savedWindows, savedButtons = PlaySoundFile, CastAheadBurstWindows, CastAheadBurstButtons
-    PlaySoundFile = function(path) heard[#heard + 1] = path:match("([%w_]+)%.ogg$") return true, 1 end
-    local spec = 1480
-    GetSpecialization = function() return 1 end
-    GetSpecializationRole = function() return "DAMAGER" end
-    GetSpecializationInfo = function() return spec end
-    CastAheadBurstWindows = { [3492] = {
-        [15] = { name = "Ula'tek", { hold = 10, release = 40, specs = { [1480] = -27 } } },
-        [14] = { name = "Ula'tek", { hold = 50, release = 70 } } } }
-    CastAheadBurstButtons = { [1480] = { full = { 1217607 }, mini = { 1217605 } } }
-    local names = { [1217607] = "Void Metamorphosis", [1217605] = "Void Nova", [190319] = "Combustion",
-        [12472] = "Icy Veins", [31884] = "Avenging Wrath", [343527] = "Execution Sentence", [255937] = "Wake of Ashes" }
-    local savedName, savedTexture = C_Spell.GetSpellName, C_Spell.GetSpellTexture
-    C_Spell.GetSpellName = function(id) return names[id] end
-    CastAheadDB = { burstCalls = true }
-    local function run(seconds)
-        for _ = 1, seconds * 2 do now = now + 0.5 S.Tick(now) B.Tick(now) end
+    local B = CastAheadBurst
+    local saved = CastAheadBurstWindows
+    local function Guide(difficulty)
+        local text = table.concat(B.GuideLines(difficulty), "\n")
+        return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
     end
-    local function Heard() return table.concat(heard, ",") end
-    local function Guide(difficulty, id)
-        local text = table.concat(B.GuideLines(difficulty, id), "\n")
-        return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T[^|]*|t ", ""))
-    end
-
-    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
-    run(12.5)
-    check(#heard == 0, "burst v2: quiet before the spec's own burst time, heard " .. Heard())
-    run(1)
-    check(Heard() == "BURST", "burst v2: burst at release + offset with no hold call, heard " .. Heard())
-    run(40)
-    check(Heard() == "BURST", "burst v2: nothing more for that window, heard " .. Heard())
-
-    heard, spec = {}, 63
-    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
-    run(41)
-    check(Heard() == "HOLD,BURST", "burst v2: a spec without an offset keeps the shared timing, heard " .. Heard())
-
-    heard = {}
-    B.OnEncounter("ENCOUNTER_START", 3492, 14, now)
-    run(45)
-    check(#heard == 0, "burst v2: Normal windows start later, heard " .. Heard())
-    run(30)
-    check(Heard() == "HOLD,BURST", "burst v2: Normal uses its own windows, heard " .. Heard())
-
-    heard, spec = {}, 1480
-    CastAheadBurstWindows[3492][15][1].specs[1480] = -60
-    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
-    run(1)
-    check(Heard() == "BURST", "burst v2: an offset larger than the release fires once at the pull, heard " .. Heard())
-    CastAheadBurstWindows[3492][15][1].specs[1480] = -27
-    B.OnEncounter("ENCOUNTER_END", 3492, 15, now)
-
-    check(B.Clock(197) == "3:17" and B.Clock(59.6) == "1:00", "burst v2: clock formats m:ss")
-    local lines = Guide(15, 1480)
-    check(lines == "Ula'tek\n  0:10 hold - burst at 0:40\n      Full: Void Metamorphosis  0:13",
-        "burst v2: guide with the spec's own time and no mini line without a mini offset, got " .. lines)
-    check(B.GuideLines(15, 1480)[1] == "|cffffd100Ula'tek|r", "burst guide: the boss name is a gold heading")
-    lines = Guide(15, 63)
-    check(lines == "Ula'tek\n  0:10 hold - burst at 0:40\n      No burst buttons known for this spec.",
-        "burst v2: guide for a spec without a button, got " .. lines)
-    CastAheadBurstButtons[63] = { full = { 190319 } }
-    lines = Guide(15, 63)
-    check(lines:find("\n      Full: Combustion  0:40 %(shared time%)$"),
-        "burst v2: guide for a spec without an offset, got " .. lines)
-    CastAheadDB.burstButtons = { [63] = { full = { 12472 } } }
-    lines = Guide(15, 63)
-    check(lines:find("\n      Full: Icy Veins  0:40 %(shared time%)$"),
-        "burst v3: the guide names the viewed spec's own edited list, got " .. lines)
-    CastAheadDB.burstButtons = nil
-    lines = Guide(14, 1480)
-    check(lines == "Ula'tek\n  0:50 hold - burst at 1:10\n      Full: Void Metamorphosis  1:10 (shared time)",
-        "burst v2: Normal guide shows only Normal windows, got " .. lines)
-    check(#B.GuideLines(16, 1480) == 0, "burst v2: no windows, no lines")
-    CastAheadBurstWindows[3492][16] = { name = "Ula'tek",
-        { hold = 136, release = 136, target = "Venomous Heart", specs = { [1480] = { full = -33, mini = -1 } } } }
-    lines = Guide(16, 1480)
-    check(lines == "Ula'tek\n  2:16 Venomous Heart - burst\n      Full: Void Metamorphosis  1:43\n      Mini: Void Nova  2:15",
-        "burst v3: a target window names the target and both tiers, got " .. lines)
-    CastAheadBurstWindows[2000] = { [16] = { name = "Zeta", { hold = 5, release = 20, specs = { [1480] = { full = 0, mini = -10 } } } } }
-    lines = Guide(16, 1480)
-    check(lines:find("\n\nZeta\n  0:05 hold %- burst at 0:20\n      Mini: Void Nova  0:10\n      Full: Void Metamorphosis  0:20$"),
-        "burst guide: bosses are split by a blank line and buttons follow press order, got " .. lines)
-    CastAheadBurstWindows[2000] = nil
-
-    do
-        CastAheadBurstWindows[3492][17] = { name = "Ula'tek", { hold = 10, release = 40, specs = {
-            [70] = { full = -2, mini = 15 }, [71] = { full = 0, mini = -1 }, [72] = { full = 0, mini = 1 } } } }
-        CastAheadBurstButtons[70] = { full = { 31884 }, mini = { 255937, 343527 } }
-        local tex = { [31884] = 5001, [255937] = 5002, [343527] = 5003 }
-        C_Spell.GetSpellTexture = function(id) return tex[id] end
-        IsPlayerSpell = function(id) return id == 343527 or id == 255937 end
-        C_Spell.GetSpellCooldownDuration = function(id)
-            return { HasSecretValues = function() return false end, IsZero = function() return id ~= 255937 end }
-        end
-
-        heard, spec = {}, 70
-        B.OnEncounter("ENCOUNTER_START", 3492, 17, now)
-        run(37.5)
-        check(Heard() == "HOLD", "burst v3: hold at hold start, nothing else yet, heard " .. Heard())
-        run(0.5)
-        check(Heard() == "HOLD,BURST", "burst v3: full burst at release + full offset, heard " .. Heard())
-        local pend = B.Pending(now)
-        check(#pend == 1 and pend[1].icons[1] == 5001,
-            "burst v3: an unknown full button still shows its own texture, got " .. tostring(pend[1] and pend[1].icons[1]))
-        run(16.5)
-        check(Heard() == "HOLD,BURST", "burst v3: quiet until the mini time, heard " .. Heard())
-        run(0.5)
-        check(Heard() == "HOLD,BURST,MINI", "burst v3: mini burst at release + mini offset, heard " .. Heard())
-        pend = B.Pending(now)
-        check(#pend == 1 and pend[1].advice == CastAheadMatch.ADVICE.MINI and pend[1].icons[1] == 5003,
-            "burst v3: the first known mini button is on cooldown, the second ready one is shown")
-        C_Spell.GetSpellCooldownDuration = nil
-        IsPlayerSpell = function() return false end
-        C_Spell.GetSpellTexture = function() return nil end
-        run(0.5)
-        pend = B.Pending(now)
-        check(pend[1].icons[1] == "Interface\\Icons\\Spell_Nature_Bloodlust",
-            "burst v3: no texture anywhere falls back to the Bloodlust icon")
-        C_Spell.GetSpellTexture = function(id) return tex[id] end
-        run(10)
-
-        heard = {}
-        CastAheadDB.burstButtons = { [70] = { mini = {} } }
-        B.OnEncounter("ENCOUNTER_START", 3492, 17, now)
-        run(60)
-        check(Heard() == "HOLD,BURST", "burst v3: an emptied own mini list switches mini off, heard " .. Heard())
-        lines = Guide(17, 70)
-        check(lines == "Ula'tek\n  0:10 hold - burst at 0:40\n      Full: Avenging Wrath  0:38",
-            "burst v3: the guide omits an emptied mini tier, got " .. lines)
-        heard = {}
-        CastAheadDB.burstButtons = { [70] = { full = {} } }
-        B.OnEncounter("ENCOUNTER_START", 3492, 17, now)
-        run(60)
-        check(Heard() == "MINI", "burst v3: an emptied own full list switches hold and burst off, heard " .. Heard())
-        CastAheadDB.burstButtons = nil
-
-        heard = {}
-        local t4 = now
-        CastAheadBurstWindows[3492][18] = { name = "Ula'tek", { hold = 10, release = 40, specs = { [70] = { full = 1, mini = 0 } } } }
-        B.OnEncounter("ENCOUNTER_START", 3492, 18, now)
-        S.Schedule("test:save4", 1, t4 + 40.5, t4 + 44, CastAheadMatch.ADVICE.BIG)
-        run(44)
-        check(Heard() == "HOLD,BIG_soon,BURST", "burst v3: a save moves the burst to 42.5 and the mini waits, heard " .. Heard())
-        run(0.5)
-        check(Heard() == "HOLD,BIG_soon,BURST,MINI", "burst v3: the mini follows 2 s after the moved burst, heard " .. Heard())
-        S.Cancel("test:save4")
-        B.OnEncounter("ENCOUNTER_END", 3492, 18, now)
-
-        heard, spec = {}, 1480
-        B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
-        run(60)
-        check(Heard() == "BURST", "burst v3: a full-only spec never hears mini burst, heard " .. Heard())
-
-        heard, spec = {}, 71
-        B.OnEncounter("ENCOUNTER_START", 3492, 17, now)
-        run(39.5)
-        check(Heard() == "HOLD", "burst v3: a mini due 1 s before the full burst waits, heard " .. Heard())
-        run(0.5)
-        check(Heard() == "HOLD,BURST", "burst v3: the full burst is heard first, heard " .. Heard())
-        run(1.5)
-        check(Heard() == "HOLD,BURST", "burst v3: the mini still waits, heard " .. Heard())
-        run(0.5)
-        check(Heard() == "HOLD,BURST,MINI", "burst v3: the mini follows 2 s after the full burst, heard " .. Heard())
-        run(10)
-
-        heard, spec = {}, 72
-        B.OnEncounter("ENCOUNTER_START", 3492, 17, now)
-        run(41)
-        check(Heard() == "HOLD,BURST", "burst v3: a mini 1 s after the full burst waits, heard " .. Heard())
-        run(1)
-        check(Heard() == "HOLD,BURST,MINI", "burst v3: and speaks 2 s after the full burst, heard " .. Heard())
-        B.OnEncounter("ENCOUNTER_END", 3492, 17, now)
-
-        lines = Guide(17, 70)
-        check(lines == "Ula'tek\n  0:10 hold - burst at 0:40\n      Full: Avenging Wrath  0:38\n      Mini: Wake of Ashes  0:55",
-            "burst v3: guide with full and mini, got " .. lines)
-        check(B.GuideLines(17, 70)[3]:find("|T5001:14|t Avenging Wrath", 1, true), "burst guide: a button carries its icon")
-        IsPlayerSpell = nil
-    end
-
-    do
-        local shipped = CastAheadBurstButtons[70]
-        heard, spec = {}, 70
-        CastAheadBurstButtons[70] = { full = {}, mini = { 255937 } }
-        B.OnEncounter("ENCOUNTER_START", 3492, 17, now)
-        run(60)
-        check(Heard() == "MINI", "burst fix: an empty shipped full list makes no hold and no burst, heard " .. Heard())
-        B.OnEncounter("ENCOUNTER_END", 3492, 17, now)
-
-        heard = {}
-        CastAheadBurstButtons[70] = { full = { 31884 }, mini = {} }
-        B.OnEncounter("ENCOUNTER_START", 3492, 17, now)
-        run(60)
-        check(Heard() == "HOLD,BURST", "burst fix: an empty shipped mini list makes no mini burst, heard " .. Heard())
-        B.OnEncounter("ENCOUNTER_END", 3492, 17, now)
-        CastAheadBurstButtons[70] = shipped
-
-        heard, spec = {}, 73
-        B.OnEncounter("ENCOUNTER_START", 3492, 17, now)
-        run(39.5)
-        check(Heard() == "HOLD", "burst fix: a spec without burst lists still hears the hold, heard " .. Heard())
-        run(1)
-        check(Heard() == "HOLD,BURST", "burst fix: and the shared burst at the release, heard " .. Heard())
-        B.OnEncounter("ENCOUNTER_END", 3492, 17, now)
-
-        CastAheadBurstWindows[3492][19] = { name = "Ula'tek",
-            { hold = 128, release = 146, target = "Venomous Heart", specs = { [1480] = { full = -33 } } } }
-        local guide = Guide(19, 1480)
-        check(guide == "Ula'tek\n  2:08 hold - burst at 2:26 Venomous Heart\n      Full: Void Metamorphosis  1:53",
-            "burst fix: a target window with an earlier hold shows the hold, got " .. guide)
-        CastAheadBurstWindows[3492][19] = nil
-    end
-
-    C_Spell.GetSpellName, C_Spell.GetSpellTexture = savedName, savedTexture
-    PlaySoundFile, CastAheadBurstWindows, CastAheadBurstButtons = savedPlay, savedWindows, savedButtons
-    GetSpecialization, GetSpecializationRole, GetSpecializationInfo = nil, nil, nil
-    CastAheadDB = nil
+    CastAheadBurstWindows = {
+        [3492] = { [16] = { name = "Ula'tek", { release = 294.5, target = "Venomous Heart" },
+            { release = 145.5, target = "Venomous Heart" }, { release = 108.1, role = "HEALER" } } },
+        [3455] = { [16] = { name = "Vashnik", { release = 108.4 } } },
+        [3101] = { [8] = { name = "Kystia Manaheart", { event = 610, target = "Light Infusion" } } } }
+    check(B.Clock(197) == "3:17" and B.Clock(59.6) == "1:00", "burst guide: clock formats m:ss")
+    local text = Guide(16)
+    check(text == "Ula'tek\n  1:48 burst (healers)\n  2:26 Venomous Heart\n  4:55 Venomous Heart\n\nVashnik\n  1:48 burst",
+        "burst guide: bosses by name, windows by time, healer windows marked, got " .. text)
+    check(B.GuideLines(16)[1] == "|cffffd100Ula'tek|r", "burst guide: the boss name is a gold heading")
+    text = Guide(8)
+    check(text == "Kystia Manaheart\n  Light Infusion - on the boss warning", "burst guide: a boss-event window names the warning, got " .. text)
+    check(#B.GuideLines(15) == 0, "burst guide: no windows, no lines")
+    CastAheadBurstWindows = saved
 end
 
 -- Healer windows go to healers only; a boss-event window puts our clip on the game's own warning.
 do
     local B, S = CastAheadBurst, CastAheadSaves
     local heard, sounds, timers = {}, {}, {}
-    local savedPlay, savedWindows, savedButtons = PlaySoundFile, CastAheadBurstWindows, CastAheadBurstButtons
-    local savedName = C_Spell.GetSpellName
+    local savedPlay, savedWindows = PlaySoundFile, CastAheadBurstWindows
     PlaySoundFile = function(path) heard[#heard + 1] = path:match("([%w_]+)%.ogg$") return true, 1 end
-    C_Spell.GetSpellName = function(id) return id == 31884 and "Avenging Wrath" or nil end
     C_Timer = { After = function(delay, fn) timers[#timers + 1] = { at = now + delay, fn = fn } end }
     C_EncounterEvents = { SetEventSound = function(id, trigger, sound)
         sounds[#sounds + 1] = { id = id, trigger = trigger, sound = sound }
@@ -4444,12 +4209,9 @@ do
     local role = "HEALER"
     GetSpecialization = function() return 1 end
     GetSpecializationRole = function() return role end
-    GetSpecializationRoleByID = function(id) return id == 65 and "HEALER" or "DAMAGER" end
     CastAheadBurstWindows = {
-        [3492] = { [15] = { name = "Ula'tek", { hold = 10, release = 30, specs = {} },
-            { hold = 50, release = 70, role = "HEALER", specs = {} } } },
+        [3492] = { [15] = { name = "Ula'tek", { release = 30 }, { release = 70, role = "HEALER" } } },
         [3101] = { [8] = { name = "Kystia Manaheart", { event = 610, target = "Light Infusion" } } } }
-    CastAheadBurstButtons = { [65] = { full = { 31884 }, mini = {} } }
     CastAheadDB = { burstCalls = true }
     local function run(seconds)
         for _ = 1, seconds * 2 do
@@ -4467,14 +4229,14 @@ do
     run(35)
     check(#heard == 0, "burst roles: a healer skips the damage window, heard " .. Heard())
     run(40)
-    check(Heard() == "HOLD,BURST", "burst roles: a healer hears the healer window, heard " .. Heard())
+    check(Heard() == "SOON,BURST", "burst roles: a healer hears the healer window, heard " .. Heard())
     B.OnEncounter("ENCOUNTER_END", 3492, 15, now)
     heard, role = {}, "DAMAGER"
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
     run(35)
-    check(Heard() == "HOLD,BURST", "burst roles: a damage dealer hears the damage window, heard " .. Heard())
+    check(Heard() == "SOON,BURST", "burst roles: a damage dealer hears the damage window, heard " .. Heard())
     run(40)
-    check(Heard() == "HOLD,BURST", "burst roles: and skips the healer window, heard " .. Heard())
+    check(Heard() == "SOON,BURST", "burst roles: and skips the healer window, heard " .. Heard())
     B.OnEncounter("ENCOUNTER_END", 3492, 15, now)
 
     heard, sounds = {}, {}
@@ -4510,25 +4272,10 @@ do
         B.OnEncounter("ENCOUNTER_END", 3101, 8, now)
         check(#sounds == 0, "burst event: switched off, voice off or sound off arms nothing")
     end
-    CastAheadDB = { burstCalls = true }
 
-    local function Guide(difficulty, id)
-        local text = table.concat(B.GuideLines(difficulty, id), "\n")
-        return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T[^|]*|t ", ""))
-    end
-    local lines = Guide(8, 65)
-    check(lines == "Kystia Manaheart\n  Light Infusion - burst when the boss warning shows\n      Full: Avenging Wrath",
-        "burst event: the guide names the warning, got " .. lines)
-    lines = Guide(15, 65)
-    check(lines == "Ula'tek\n  0:50 hold - burst at 1:10\n      Full: Avenging Wrath  1:10 (shared time)",
-        "burst roles: a healer's guide lists only healer windows, got " .. lines)
-    lines = Guide(15, 70)
-    check(lines == "Ula'tek\n  0:10 hold - burst at 0:30\n      No burst buttons known for this spec.",
-        "burst roles: a damage spec's guide lists only damage windows, got " .. lines)
-
-    C_Spell.GetSpellName, C_Timer, C_EncounterEvents = savedName, nil, nil
-    PlaySoundFile, CastAheadBurstWindows, CastAheadBurstButtons = savedPlay, savedWindows, savedButtons
-    GetSpecialization, GetSpecializationRole, GetSpecializationRoleByID = nil, nil, nil
+    C_Timer, C_EncounterEvents = nil, nil
+    PlaySoundFile, CastAheadBurstWindows = savedPlay, savedWindows
+    GetSpecialization, GetSpecializationRole = nil, nil
     CastAheadDB = nil
 end
 

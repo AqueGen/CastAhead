@@ -160,12 +160,9 @@ function L.New(opts)
 
     function store.Addable(key)
         local spec = opts.specID()
-        local list, own, out = store.List(key), {}, {}
-        for _, k in ipairs(opts.offerOwnShipped and opts.keys or {}) do
-            for _, e in ipairs(store.Shipped(spec, k)) do own[#own + 1] = e end
-        end
+        local list, out = store.List(key), {}
         for _, e in ipairs(store.Catalogue(spec)) do
-            if (type(e) ~= "number" or Known(e) or Has(own, e)) and not Has(list, e) then out[#out + 1] = e end
+            if (type(e) ~= "number" or Known(e)) and not Has(list, e) then out[#out + 1] = e end
         end
         return out
     end

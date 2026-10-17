@@ -436,7 +436,7 @@ for id, c in pairs(CastAheadBossCadence) do
     for _, gap in ipairs(c.cd) do check(type(gap) == "number" and gap > 0, "boss cadence " .. id .. " gaps are positive numbers") end
 end
 dofile("BurstWindows.lua")
-check(M.ADVICE.HOLD and M.ADVICE.HOLD.say == "hold burst", "HOLD advice says hold burst")
+check(M.ADVICE.SOON and M.ADVICE.SOON.say == "burst soon", "SOON advice says burst soon")
 check(M.ADVICE.BURST and M.ADVICE.BURST.say == "burst now", "BURST advice says burst now")
 for enc, byDifficulty in pairs(CastAheadBurstWindows) do
     check(type(enc) == "number" and enc > 0, "burst windows key " .. tostring(enc) .. " is an encounter id")
@@ -445,49 +445,24 @@ for enc, byDifficulty in pairs(CastAheadBurstWindows) do
             string.format("burst windows %s use a game difficulty id, got %s", tostring(enc), tostring(difficulty)))
         check(type(list.name) == "string" and list.name ~= "",
             string.format("burst windows %d/%s carry a non-empty name", enc, tostring(difficulty)))
-        for i, w in ipairs(list) do
+        local last = {}
+        local sorted = {}
+        for i, w in ipairs(list) do sorted[i] = w end
+        table.sort(sorted, function(a, b) return (a.release or -1) < (b.release or -1) end)
+        for i, w in ipairs(sorted) do
             check(w.event == nil or type(w.event) == "number" and w.event > 0 and w.event % 1 == 0,
                 string.format("burst window %d/%d #%d event is nil or an encounter event id", enc, difficulty, i))
-            check(w.event ~= nil or type(w.hold) == "number" and type(w.release) == "number" and w.hold >= 0 and w.hold <= w.release,
-                string.format("burst window %d/%d #%d has 0 <= hold <= release", enc, difficulty, i))
+            check(w.event ~= nil or type(w.release) == "number" and w.release >= 0,
+                string.format("burst window %d/%d #%d has a release time from the pull", enc, difficulty, i))
             check(w.role == nil or w.role == "HEALER",
                 string.format("burst window %d/%d #%d role is nil or HEALER", enc, difficulty, i))
             check(w.target == nil or type(w.target) == "string",
                 string.format("burst window %d/%d #%d target is nil or a string", enc, difficulty, i))
-            check(w.event ~= nil or type(w.specs) == "table", string.format("burst window %d/%d #%d carries a specs table", enc, difficulty, i))
-            for id, tiers in pairs(w.specs or {}) do
-                check(type(tiers) == "table", string.format("burst window %d/%d #%d spec %s is a table", enc, difficulty, i, tostring(id)))
-                for _, tier in ipairs({ "full", "mini" }) do
-                    local s = type(tiers) == "table" and tiers[tier]
-                    check(s == nil or type(s) == "number" and s >= -60 and s <= 30,
-                        string.format("burst window %d/%d #%d spec %s %s start is a number in -60..30", enc, difficulty, i, tostring(id), tier))
-                end
-                local buttons = (CastAheadBurstButtons or {})[id]
-                check(type(buttons) == "table" and type(buttons.full) == "table" and type(buttons.mini) == "table",
-                    string.format("burst spec %s has full and mini button lists", tostring(id)))
-            end
-        end
-    end
-end
-do
-    local function Overlap(list)
-        local sorted = {}
-        for i, w in ipairs(list) do sorted[i] = w end
-        table.sort(sorted, function(a, b) return a.release < b.release end)
-        for i = 1, #sorted - 1 do
-            if sorted[i].release > sorted[i + 1].hold then return i end
-        end
-    end
-    check(Overlap({ { hold = 40, release = 60 }, { hold = 0, release = 50 } }) == 1, "the burst overlap audit catches overlapping windows")
-    check(Overlap({ { hold = 30, release = 60 }, { hold = 0, release = 30 } }) == nil, "the burst overlap audit lets back-to-back windows pass")
-    for enc, byDifficulty in pairs(CastAheadBurstWindows) do
-        for difficulty, list in pairs(byDifficulty) do
-            for _, role in ipairs({ "damage", "HEALER" }) do
-                local timed = {}
-                for _, w in ipairs(list) do
-                    if not w.event and (w.role or "damage") == role then timed[#timed + 1] = w end
-                end
-                check(Overlap(timed) == nil, string.format("burst %s windows %d/%d do not overlap", role, enc, difficulty))
+            if w.release then
+                local role = w.role or "damage"
+                check(last[role] == nil or w.release - last[role] >= 10,
+                    string.format("burst %s windows %d/%d are at least 10 s apart", role, enc, difficulty))
+                last[role] = w.release
             end
         end
     end

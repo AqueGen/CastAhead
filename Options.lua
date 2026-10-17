@@ -154,7 +154,7 @@ local SWITCHES = {
     healCalls = { label = "Heal up after a big hit", defaultOff = true,
         tip = "Right after a hit that called a big defensive, say \"heal up\" when your Healthstone or potion is ready." },
     burstCalls = { label = "Burst windows", defaultOff = true,
-        tip = "On the few bosses where top players hold their burst for a later moment, say \"hold burst\" when your cooldown would normally come up and \"burst now\" when the moment arrives, and \"mini burst\" for the short cooldowns. Each call comes when top players of your spec press the first button of its list. The Full and Mini lists below are edited like the Defensives lists; emptying a list switches its call off. Healers get their own windows for their big group-healing cooldown. On every other boss it stays silent: press on cooldown." },
+        tip = "On bosses with a phase worth bursting into, say \"burst soon\" five seconds before it and \"burst now\" when it starts, with a countdown in the centre block. Healers get their own phases for group-healing cooldowns. On every other boss it stays silent: press on cooldown." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
         tip = "A panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. Only while recording. The key bindings and /ca mark work without it." },
 }
@@ -764,7 +764,7 @@ local function BuildButtonList(panel, store, key, titles, hint, emptyText)
 end
 
 local DEFENSIVES_H, DEFENSIVES_OFF_H = 366, 56
-local BURST_H, BURST_OFF_H = 86, 56
+local BURST_H = 56
 
 function BuildDefensives(panel)
     local group = BuildGroup(panel, "Defensive calls", DEFENSIVES_H)
@@ -848,29 +848,12 @@ local GUIDE_COL_W, GUIDE_COL_GAP = 300, 24
 local burstDifficulty = 15
 
 function BuildBursts(panel)
-    local group = BuildGroup(panel, "Burst windows", BURST_H)
+    BuildGroup(panel, "Burst windows", BURST_H)
     local Paint
-    BuildSwitch(panel, "burstCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, function()
+    BuildSwitch(panel, "burstCalls", { "TOPLEFT", panel.groups[#panel.groups], "TOPLEFT", 10, -26 }, function()
         Redraw()
         Paint()
     end)
-    local reset = CastAheadWindow.Button(group, "Reset to default", 110)
-    reset:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -54)
-    reset:SetScript("OnClick", function()
-        if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_BURSTS") end
-    end)
-    local other = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    other:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -54)
-    other:SetWidth(COL_W - 20)
-    other:SetJustifyH("LEFT")
-    other:SetWordWrap(true)
-    other:SetText("|cffaaaaaaLists edit your current specialization - pick it in the bar above.|r")
-    local titles = { full = "Full burst", mini = "Mini burst" }
-    local empty = "Empty - no call for this tier"
-    local lists = {
-        BuildButtonList(panel, CastAheadBurst.Lists, "mini", titles, nil, empty),
-        BuildButtonList(panel, CastAheadBurst.Lists, "full", titles, nil, empty),
-    }
     -- The guide spans the page under the cards, one column of text per boss group.
     local guide = BuildGroup(panel, "Guide", 120, true)
     local buttons = {}
@@ -927,8 +910,7 @@ function BuildBursts(panel)
         for i, d in ipairs(BURST_DIFFICULTIES) do
             buttons[i]:SetBackdropColor(unpack(d[1] == burstDifficulty and T.selected or T.panel))
         end
-        local spec = CastAheadSaves and CastAheadSaves.ViewSpecID()
-        local lines = CastAheadBurst and CastAheadBurst.GuideLines(burstDifficulty, spec) or {}
+        local lines = CastAheadBurst and CastAheadBurst.GuideLines(burstDifficulty) or {}
         if #lines == 0 then lines = { "|cffaaaaaaNo burst windows on this difficulty.|r" } end
         wipe(blocks)
         local block = {}
@@ -940,24 +922,14 @@ function BuildBursts(panel)
             end
         end
         blocks[#blocks + 1] = block
-        local on = SwitchOn("burstCalls")
-        local own = spec == CastAheadSaves.SpecID()
-        for _, list in ipairs(lists) do list:SetShown(on and own) end
-        reset:SetShown(on and own)
-        other:SetShown(on and not own)
-        group:SetHeight(not on and BURST_OFF_H or own and BURST_H or 64 + other:GetStringHeight())
-        CastAheadWindow.PaintSpecBars()
         panel:Relayout()
     end
-    local barTop = CastAheadWindow.SpecBar(panel, COL_X, 6, Paint)
-    panel.flowTop = function() return barTop > 0 and barTop + 12 or 6 end
     table.insert(refreshers, Paint)
-    table.insert(listRefreshers, Paint)
 end
 
 local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
     "POISON", "CURSE", "MAGIC", "DISEASE", "BLEED", "SOOTHE", "PURGE", "SWITCH", "ALERT",
-    "SMALL", "BIG", "HEAL", "HOLD", "BURST", "MINI" }
+    "SMALL", "BIG", "HEAL", "SOON", "BURST" }
 local SOUND_ROW_H = 26
 
 -- Default plus every sound LibSharedMedia knows. Shared with the casts

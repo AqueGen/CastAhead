@@ -2,33 +2,8 @@ CastAheadBurst = {}
 local B = CastAheadBurst
 local M = CastAheadMatch
 
-B.Lists = CastAheadLists.New({
-    dbKey = "burstButtons",
-    shipped = function() return CastAheadBurstButtons end,
-    keys = { "full", "mini" },
-    offerOwnShipped = true,
-    specID = function() return CastAheadSaves and CastAheadSaves.SpecID() end,
-    onChange = function() end,
-})
-
-if StaticPopupDialogs then
-    StaticPopupDialogs.CASTAHEAD_RESET_BURSTS = {
-        text = "Reset Full and Mini burst lists for this specialization to the defaults?",
-        button1 = YES or "Yes",
-        button2 = NO or "No",
-        OnAccept = function()
-            B.Lists.ResetSpec()
-            if CastAheadOptions and CastAheadOptions.RefreshDefensives then CastAheadOptions.RefreshDefensives() end
-        end,
-        timeout = 0,
-        whileDead = true,
-        hideOnEscape = true,
-        preferredIndex = 3,
-    }
-end
-
 local SAVE_GAP = 2
-local HOLD_MIN = 5
+local SOON = 5
 local BURST_SHOWN = 5
 local ICON = "Interface\\Icons\\Spell_Nature_Bloodlust"
 local entries = {}
@@ -51,13 +26,6 @@ local function ForRole(w, role)
     return w.event ~= nil or (w.role == "HEALER") == (role == "HEALER")
 end
 
-local function Offsets(w, spec)
-    local off = w.specs and spec and w.specs[spec]
-    if type(off) == "number" then return off, nil end
-    if type(off) == "table" then return off.full, off.mini end
-    return nil, nil
-end
-
 local function DeferUntil(now)
     local S = CastAheadSaves
     if not (S and S.LastFiredAt) then return nil end
@@ -65,15 +33,6 @@ local function DeferUntil(now)
     local at
     if last ~= nil and now - last < SAVE_GAP then at = last + SAVE_GAP end
     if nextAt ~= nil and nextAt - now < SAVE_GAP then at = math.max(at or 0, nextAt + SAVE_GAP) end
-    return at
-end
-
-local function AfterBurst(now)
-    local at
-    for _, e in ipairs(entries) do
-        local t = e.advice == M.ADVICE.BURST and (e.firedAt or e.fireAt)
-        if t and math.abs(t - now) < SAVE_GAP then at = math.max(at or 0, t + SAVE_GAP) end
-    end
     return at
 end
 
@@ -217,30 +176,17 @@ function B.OnEncounter(event, encounterID, difficultyID, now)
     local byDifficulty = CastAheadBurstWindows and CastAheadBurstWindows[encounterID]
     local windows = byDifficulty and byDifficulty[difficultyID]
     if not windows then return end
-    local spec = CastAheadSaves and CastAheadSaves.SpecID()
-    local listed = CastAheadBurstButtons and spec and CastAheadBurstButtons[spec] ~= nil
-    local function TierOn(tier)
-        return #B.Lists.ListFor(spec, tier) > 0 or not listed and not B.Lists.Emptied(spec, tier)
-    end
-    local fullOn, miniOn = TierOn("full"), TierOn("mini")
     local role, events = Role(), {}
     for _, w in ipairs(windows) do
         local mine = ForRole(w, role)
         if mine and w.event then
-            if fullOn then events[#events + 1] = w.event end
+            events[#events + 1] = w.event
         elseif mine then
-            local full, mini = Offsets(w, spec)
-            local burstAt = math.max(now + w.release + (full or 0), now)
-            if fullOn and now + w.hold < burstAt - HOLD_MIN then
-                entries[#entries + 1] = { fireAt = now + w.hold, endAt = burstAt, advice = M.ADVICE.HOLD, tier = "full" }
+            local at = now + w.release
+            if w.release >= SOON then
+                entries[#entries + 1] = { fireAt = at - SOON, endAt = at, advice = M.ADVICE.SOON }
             end
-            if fullOn then
-                entries[#entries + 1] = { fireAt = burstAt, endAt = burstAt + BURST_SHOWN, advice = M.ADVICE.BURST, tier = "full" }
-            end
-            if miniOn and mini then
-                local miniAt = math.max(now + w.release + mini, now)
-                entries[#entries + 1] = { fireAt = miniAt, endAt = miniAt + BURST_SHOWN, advice = M.ADVICE.MINI, tier = "mini" }
-            end
+            entries[#entries + 1] = { fireAt = at, endAt = at + BURST_SHOWN, advice = M.ADVICE.BURST }
         end
     end
     if #events > 0 and C_EncounterEvents and C_EncounterEvents.SetEventSound and C_Timer then
@@ -258,31 +204,14 @@ function B.Tick(now)
     for _, e in ipairs(entries) do
         if not e.fired and now >= e.fireAt and now < e.endAt then
             local at = not e.deferred and DeferUntil(now)
-            local after = not at and e.advice == M.ADVICE.MINI and AfterBurst(now)
             if at then
                 e.deferred, e.fireAt = true, at
-            elseif after then
-                e.endAt, e.fireAt = e.endAt + after - e.fireAt, after
             else
-                e.fired, e.firedAt = true, now
+                e.fired = true
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(e.advice) end
             end
         end
     end
-end
-
-local function SpellOf(entry)
-    return type(entry) == "table" and entry.use or entry
-end
-
-local function Texture(entry)
-    return C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(SpellOf(entry)) or nil
-end
-
-local function TierIcon(tier)
-    local list = B.Lists.List(tier)
-    local first = CastAheadSaves.FirstAvailable(list)
-    return first and first.icon or list[1] ~= nil and Texture(list[1]) or ICON
 end
 
 function B.Pending(now)
@@ -290,7 +219,7 @@ function B.Pending(now)
     if #entries == 0 or not On() then return pending end
     for _, e in ipairs(entries) do
         if e.fired and e.endAt > now then
-            pending[#pending + 1] = { endAt = e.endAt, advice = e.advice, row = {}, icons = { TierIcon(e.tier) } }
+            pending[#pending + 1] = { endAt = e.endAt, advice = e.advice, row = {}, icons = { ICON } }
         end
     end
     return pending
@@ -301,72 +230,32 @@ function B.Clock(seconds)
     return string.format("%d:%02d", math.floor(total / 60), total % 60)
 end
 
-local function ButtonName(entry)
-    local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(SpellOf(entry))
-    return type(name) == "string" and name or "burst"
-end
-
 local GREY, GOLD = "|cffaaaaaa", "|cffffd100"
 
-local function ButtonLine(tier, entry, at, note)
-    local icon = Texture(entry)
-    return string.format("      %s%s:|r %s%s%s%s", GREY, tier, icon and ("|T" .. icon .. ":14|t ") or "",
-        ButtonName(entry), at and ("  " .. at) or "", note and (" " .. GREY .. note .. "|r") or "")
+local function WindowLine(w)
+    if w.event then
+        return string.format("  %s %s- on the boss warning|r", w.target or "Boss event", GREY)
+    end
+    local line = string.format("  %s %s", B.Clock(w.release), w.target or "burst")
+    return w.role == "HEALER" and (line .. " " .. GREY .. "(healers)|r") or line
 end
 
--- One heading line per window, then one line per button in the order they are pressed.
-local function WindowLines(w, specID, fullList, miniList, out)
-    if w.event then
-        out[#out + 1] = string.format("  %s %s- burst when the boss warning shows|r", w.target or "Boss event", GREY)
-    elseif w.target and w.hold < w.release then
-        out[#out + 1] = string.format("  %s hold %s- burst at|r %s %s", B.Clock(w.hold), GREY, B.Clock(w.release), w.target)
-    elseif w.target then
-        out[#out + 1] = string.format("  %s %s %s- burst|r", B.Clock(w.release), w.target, GREY)
-    else
-        out[#out + 1] = string.format("  %s hold %s- burst at|r %s", B.Clock(w.hold), GREY, B.Clock(w.release))
-    end
-    if #fullList == 0 and #miniList == 0 then
-        out[#out + 1] = "      " .. GREY .. "No burst buttons known for this spec.|r"
-        return
-    end
-    if w.event then
-        if #fullList > 0 then out[#out + 1] = ButtonLine("Full", fullList[1]) end
-        return
-    end
-    local full, mini = Offsets(w, specID)
-    local rows = {}
-    if #fullList > 0 then
-        local at = full and math.max(w.release + full, 0) or w.release
-        rows[#rows + 1] = { at = at, text = ButtonLine("Full", fullList[1], B.Clock(at), not full and "(shared time)" or nil) }
-    end
-    if #miniList > 0 and mini then
-        local at = math.max(w.release + mini, 0)
-        rows[#rows + 1] = { at = at, text = ButtonLine("Mini", miniList[1], B.Clock(at)) }
-    end
-    if rows[2] and rows[2].at < rows[1].at then rows[1], rows[2] = rows[2], rows[1] end
-    for _, r in ipairs(rows) do out[#out + 1] = r.text end
-end
-
-function B.GuideLines(difficultyID, specID)
+-- Every window on the difficulty, the healers' own marked: the guide is the same for every spec.
+function B.GuideLines(difficultyID)
     local bosses = {}
     for _, byDifficulty in pairs(CastAheadBurstWindows or {}) do
         local list = byDifficulty[difficultyID]
-        if list then bosses[#bosses + 1] = list end
+        if list and #list > 0 then bosses[#bosses + 1] = list end
     end
     table.sort(bosses, function(a, b) return (a.name or "") < (b.name or "") end)
     local lines = {}
-    local fullList, miniList = B.Lists.ListFor(specID, "full"), B.Lists.ListFor(specID, "mini")
-    local role = GetSpecializationRoleByID and specID and GetSpecializationRoleByID(specID)
     for _, list in ipairs(bosses) do
-        local own = {}
-        for _, w in ipairs(list) do
-            if ForRole(w, role) then WindowLines(w, specID, fullList, miniList, own) end
-        end
-        if #own > 0 then
-            if #lines > 0 then lines[#lines + 1] = "" end
-            lines[#lines + 1] = GOLD .. (list.name or "?") .. "|r"
-            for _, line in ipairs(own) do lines[#lines + 1] = line end
-        end
+        local sorted = {}
+        for i, w in ipairs(list) do sorted[i] = w end
+        table.sort(sorted, function(a, b) return (a.release or -1) < (b.release or -1) end)
+        if #lines > 0 then lines[#lines + 1] = "" end
+        lines[#lines + 1] = GOLD .. (list.name or "?") .. "|r"
+        for _, w in ipairs(sorted) do lines[#lines + 1] = WindowLine(w) end
     end
     return lines
 end
