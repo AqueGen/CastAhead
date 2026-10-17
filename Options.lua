@@ -39,7 +39,7 @@ function CastAheadOptions.RelayoutGroups(panel)
         g:ClearAllPoints()
         g:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X + pos[i].x, -(top + pos[i].y))
     end
-    panel:SetHeight(top + total + (panel.flowBottom and panel.flowBottom() or 0) + 12)
+    panel:SetHeight(top + total + (panel.flowBottom and panel.flowBottom(top + total) or 0) + 12)
 end
 
 -- Forward declarations: Build calls these, and Lua resolves a local by
@@ -173,11 +173,12 @@ local function SetSwitch(key, on)
     end
 end
 
-local function BuildGroup(panel, title, height)
+-- `free` keeps the group out of the column flow, for one the caller places itself.
+local function BuildGroup(panel, title, height, free)
     local box = CreateFrame("Frame", nil, panel, "BackdropTemplate")
     box:SetFrameLevel(panel:GetFrameLevel())
     box:SetSize(COL_W, height)
-    table.insert(panel.groups, box)
+    if not free then table.insert(panel.groups, box) end
     box:SetBackdrop(FLAT)
     box:SetBackdropColor(unpack(T.panel))
     box:SetBackdropBorderColor(unpack(T.border))
@@ -843,6 +844,7 @@ function BuildDefensives(panel)
 end
 
 local BURST_DIFFICULTIES = { { 14, "Normal" }, { 15, "Heroic" }, { 16, "Mythic" }, { 8, "Keys" } }
+local GUIDE_COL_W, GUIDE_COL_GAP = 300, 24
 local burstDifficulty = 15
 
 function BuildBursts(panel)
@@ -869,7 +871,8 @@ function BuildBursts(panel)
         BuildButtonList(panel, CastAheadBurst.Lists, "mini", titles, nil, empty),
         BuildButtonList(panel, CastAheadBurst.Lists, "full", titles, nil, empty),
     }
-    local guide = BuildGroup(panel, "Guide", 120)
+    -- The guide spans the page under the cards, one column of text per boss group.
+    local guide = BuildGroup(panel, "Guide", 120, true)
     local buttons = {}
     for i, d in ipairs(BURST_DIFFICULTIES) do
         local b = CastAheadWindow.Button(guide, d[2], 56)
@@ -877,21 +880,66 @@ function BuildBursts(panel)
         b:SetScript("OnClick", function() burstDifficulty = d[1] Paint() end)
         buttons[i] = b
     end
-    local text = guide:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    text:SetPoint("TOPLEFT", guide, "TOPLEFT", 10, -54)
-    text:SetWidth(COL_W - 20)
-    text:SetJustifyH("LEFT")
-    text:SetWordWrap(true)
-    text:SetSpacing(3)
+    local columns, blocks = {}, {}
+    local function Column(i)
+        if columns[i] then return columns[i] end
+        local text = guide:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        text:SetWidth(GUIDE_COL_W)
+        text:SetJustifyH("LEFT")
+        text:SetJustifyV("TOP")
+        text:SetWordWrap(true)
+        text:SetSpacing(3)
+        columns[i] = text
+        return text
+    end
+    local function LayoutGuide(width)
+        local count = math.max(1, math.floor((width - 20 + GUIDE_COL_GAP) / (GUIDE_COL_W + GUIDE_COL_GAP)))
+        local lines, used = {}, {}
+        for c = 1, count do lines[c], used[c] = {}, 0 end
+        for _, block in ipairs(blocks) do
+            local c = 1
+            for k = 2, count do if used[k] < used[c] then c = k end end
+            if #lines[c] > 0 then lines[c][#lines[c] + 1] = "" end
+            for _, line in ipairs(block) do lines[c][#lines[c] + 1] = line end
+            used[c] = used[c] + #block + 1
+        end
+        local tallest = 0
+        for c = 1, math.max(count, #columns) do
+            local text = Column(c)
+            text:SetWidth(math.min(GUIDE_COL_W, width - 20))
+            text:SetShown(c <= count)
+            text:ClearAllPoints()
+            text:SetPoint("TOPLEFT", guide, "TOPLEFT", 10 + (c - 1) * (GUIDE_COL_W + GUIDE_COL_GAP), -54)
+            text:SetText(c <= count and table.concat(lines[c], "\n") or "")
+            if c <= count then tallest = math.max(tallest, text:GetStringHeight()) end
+        end
+        guide:SetHeight(64 + tallest)
+    end
+    panel.flowBottom = function(y)
+        local width = math.max(panel:GetWidth() - 2 * COL_X, COL_W)
+        guide:ClearAllPoints()
+        guide:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -((y or 0) + COL_GAP))
+        guide:SetWidth(width)
+        LayoutGuide(width)
+        return guide:GetHeight() + COL_GAP
+    end
     Paint = function()
         for i, d in ipairs(BURST_DIFFICULTIES) do
             buttons[i]:SetBackdropColor(unpack(d[1] == burstDifficulty and T.selected or T.panel))
         end
         local spec = CastAheadSaves and CastAheadSaves.ViewSpecID()
         local lines = CastAheadBurst and CastAheadBurst.GuideLines(burstDifficulty, spec) or {}
-        if #lines == 0 then lines = { "No burst windows on this difficulty." } end
-        text:SetText(table.concat(lines, "\n"))
-        guide:SetHeight(64 + text:GetStringHeight())
+        if #lines == 0 then lines = { "|cffaaaaaaNo burst windows on this difficulty.|r" } end
+        wipe(blocks)
+        local block = {}
+        for _, line in ipairs(lines) do
+            if line == "" then
+                blocks[#blocks + 1], block = block, {}
+            else
+                block[#block + 1] = line
+            end
+        end
+        blocks[#blocks + 1] = block
         local on = SwitchOn("burstCalls")
         local own = spec == CastAheadSaves.SpecID()
         for _, list in ipairs(lists) do list:SetShown(on and own) end
