@@ -2517,7 +2517,7 @@ local function CenterPick(now)
             local advice = CastAheadMatch.ConsensusAdvice(c.candidates, state.interruptible)
             if advice then
                 centerPicks[#centerPicks + 1] = { endAt = c.endAt, advice = advice, row = c.row,
-                                                  icons = CastAheadSaves and CastAheadSaves.Icons(advice, c.row and c.row.spell) or nil }
+                                                  icons = CastAheadSaves and CastAheadSaves.Icons(advice, c.candidates) or nil }
                 local save = advice == CastAheadMatch.ADVICE.TARGET and CastAheadSaves and c.candidates[1]
                     and CastAheadMatch.SaveAdvice(c.candidates[1])
                 if save then

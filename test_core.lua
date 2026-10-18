@@ -2609,6 +2609,18 @@ do
     check(CastAheadSaves.Icons(small, 201)[1] == 3001 and #CastAheadSaves.Icons(small, 201) == 2,
         "a fire hit keeps the magic-only button first")
     check(CastAheadSaves.Icons(small)[1] == 3001, "a call with no hit keeps the whole list")
+    check(CastAheadSaves.Icons(small, { { spell = 200 }, { spell = 201 } })[1] == 3001,
+        "a button that fits any candidate cast stays")
+    check(CastAheadSaves.Icons(small, { { spell = 202 } })[1] == 3002, "a single physical candidate drops it")
+    CastAheadSaves.Schedule("test:physical", 200, now - 0.1, now + 5, small)
+    CastAheadSaves.Tick(now)
+    local scheduled
+    for _, p in ipairs(CastAheadSaves.Pending(now)) do
+        if p.row.spell == 200 then scheduled = p end
+    end
+    check(scheduled and scheduled.icons[1] == 3002 and #scheduled.icons == 1,
+        "a scheduled call on a physical hit shows the next button, not the magic-only one")
+    CastAheadSaves.Cancel("test:physical")
     CastAheadDefensives.spells[200].dungeon, CastAheadDefensives.spells[201].dungeon = 9100, 9100
     local view = {}
     for _, r in ipairs(CastAheadSaves.ViewRows(9100)) do view[r.id] = r end
@@ -3473,6 +3485,27 @@ do
     advance(2.0)
     fire("UNIT_SPELLCAST_STOP", unit)
     reset()
+
+    local savedLimits = CastAheadButtonLimits
+    CastAheadButtonLimits = { [108416] = "magic" }
+    CastAheadDefensives.spells[100].school = 1
+    CastAheadSaves.Refresh()
+    enter()
+    castFor(3.0)
+    advance(15.0)
+    advance(1.5)
+    advance(3.0)
+    fire("UNIT_SPELLCAST_START", unit)
+    advance(1.0)
+    line = CenterLine()
+    check(line and line.icon.textureValue == 9512 and not line.extra[1].shown,
+        "a live cast of a physical hit skips a magic-only button in the centre")
+    advance(2.0)
+    fire("UNIT_SPELLCAST_STOP", unit)
+    reset()
+    CastAheadButtonLimits = savedLimits
+    CastAheadDefensives.spells[100].school = nil
+    CastAheadSaves.Refresh()
 
     local heard = {}
     local realPlay = PlaySoundFile

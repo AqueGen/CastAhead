@@ -206,13 +206,26 @@ end
 
 local SIZE = { SMALL = "small", BIG = "big", HEAL = "heal" }
 local NO_ICONS = {}
-function S.Icons(advice, spellID)
+local function FitsAny(e, rows)
+    if #rows == 0 then return true end
+    for _, row in ipairs(rows) do
+        if S.Fits(e, row) then return true end
+    end
+    return false
+end
+
+function S.Icons(advice, spellOrCandidates)
     local size = advice and SIZE[advice.key]
     if not size then return NO_ICONS end
-    local row = spellID and M.SaveRow(spellID)
+    local rows = {}
+    local hits = spellOrCandidates
+    for _, h in ipairs(type(hits) == "table" and hits or { hits }) do
+        local row = M.SaveRow(type(h) == "table" and h.spell or h)
+        if row then rows[#rows + 1] = row end
+    end
     local out = {}
     for _, e in ipairs(S.Available(size)) do
-        if e.icon and S.Fits(e, row) then out[#out + 1] = e.icon end
+        if e.icon and FitsAny(e, rows) then out[#out + 1] = e.icon end
         if #out == 3 then break end
     end
     return out
