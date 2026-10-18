@@ -61,7 +61,7 @@ function W.Button(parent, text, width, primary)
     return b
 end
 
-local SPEC_W, SPEC_GAP, SPEC_BAR_H, CLASS_W, MAX_SPECS = 150, 4, 28, 150, 4
+local SPEC_W, SPEC_MIN_W, SPEC_GAP, SPEC_BAR_H, CLASS_W, MAX_SPECS = 150, 60, 4, 28, 150, 4
 local specBars = {}
 
 local function Specs()
@@ -87,10 +87,16 @@ function W.PaintSpecBars()
     local specs = Specs()
     for _, bar in ipairs(specBars) do
         if bar.pick and bar.pick.GenerateMenu then bar.pick:GenerateMenu() end
+        local room = (bar.width() or 0) - bar.left - (#specs - 1) * SPEC_GAP
+        local w = room > 0 and #specs > 0 and math.max(SPEC_MIN_W, math.min(SPEC_W, math.floor(room / #specs))) or SPEC_W
         for i, b in ipairs(bar) do
             local spec = specs[i]
             b:SetShown(spec ~= nil)
             if spec then
+                b:SetWidth(w)
+                b.label:SetWidth(w - 8)
+                b:ClearAllPoints()
+                b:SetPoint("TOPLEFT", bar.parent, "TOPLEFT", bar.left + (i - 1) * (w + SPEC_GAP), -bar.y)
                 b.specID = spec.id
                 b:SetText(string.format("|T%s:14|t %s", spec.icon or "", spec.name or ""))
                 local on = spec.id == viewing
@@ -123,13 +129,13 @@ local function ClassPick(parent, x, y, onPick)
     return pick
 end
 
-function W.SpecBar(parent, x, y, onPick)
-    local bar = {}
+function W.SpecBar(parent, x, y, onPick, roomFromParentLeft)
+    local bar = { parent = parent, y = y, width = roomFromParentLeft or function() return parent:GetWidth() end }
     bar.pick = ClassPick(parent, x, y, onPick)
-    local left = x + (bar.pick and CLASS_W + SPEC_GAP or 0)
+    bar.left = x + (bar.pick and CLASS_W + SPEC_GAP or 0)
     for i = 1, MAX_SPECS do
         local b = W.Button(parent, "", SPEC_W)
-        b:SetPoint("TOPLEFT", parent, "TOPLEFT", left + (i - 1) * (SPEC_W + SPEC_GAP), -y)
+        b.label:SetWordWrap(false)
         b:SetScript("OnClick", function(self)
             CastAheadSaves.SetViewSpec(self.specID)
             if onPick then onPick() end

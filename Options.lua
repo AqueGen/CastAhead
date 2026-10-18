@@ -823,7 +823,7 @@ local function Caveat(parent, text, kind)
         c.text:SetPoint("TOPLEFT", parent, "TOPLEFT", x, -y)
         c.text:SetWidth(width - 80)
         c.button:ClearAllPoints()
-        c.button:SetPoint("LEFT", c.text, "RIGHT", 10, 0)
+        c.button:SetPoint("TOPLEFT", c.text, "TOPLEFT", c.text:GetStringWidth() + 10, 4)
         return math.max(c.text:GetStringHeight(), 20)
     end
     function c.SetShown(on)
@@ -875,7 +875,10 @@ function BuildDefensives(panel)
         BuildButtonList(panel, store, "heal", titles, "Pressed right after a big hit lands: stone, potion, self-heal.",
             "Empty - no heal up call"),
     }
-    CastAheadWindow.SpecBar(lists[1], 0, -SPEC_BAR_PAD, RefreshAll)
+    CastAheadWindow.SpecBar(lists[1], 0, -SPEC_BAR_PAD, RefreshAll, function()
+        return (panel:GetRight() or 0) - (lists[1]:GetLeft() or 0)
+    end)
+    panel:HookScript("OnSizeChanged", CastAheadWindow.PaintSpecBars)
     for _, list in ipairs(lists) do list.flowPad = SPEC_BAR_PAD end
     table.insert(refreshers, CastAheadWindow.PaintSpecBars)
 
