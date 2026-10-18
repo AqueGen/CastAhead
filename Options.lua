@@ -153,7 +153,7 @@ local SWITCHES = {
         tip = "Say \"big defensive\" ahead of hits that need a big save." },
     healCalls = { label = "Heal up after a big hit", defaultOff = true,
         tip = "Right after a hit that called a big defensive, say \"heal up\" when your Healthstone or potion is ready." },
-    burstCalls = { label = "Burst windows", defaultOff = true,
+    burstCalls = { label = "Burst windows (experimental)", defaultOff = true,
         tip = "On bosses with a phase worth bursting into, say \"burst soon\" five seconds before it and \"burst now\" when it starts, with a countdown in the centre block. Healers get their own phases for group-healing cooldowns. On every other boss it stays silent: press on cooldown." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
         tip = "A panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. Only while recording. The key bindings and /ca mark work without it." },
@@ -291,13 +291,11 @@ function BuildGeneral(panel)
     BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 }, RedrawAndSaves)
 
     -- Development mode ----------------------------------------------------
-    local extra = BuildGroup(panel, "Advanced", 70)
-    BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
+    local extra = BuildGroup(panel, "Advanced", 100)
+    local dev = BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
         if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
     end)
-
-    local experimental = BuildGroup(panel, "Experimental", 70)
-    BuildSwitch(panel, "burstCalls", { "TOPLEFT", experimental, "TOPLEFT", 10, -26 }, function()
+    BuildSwitch(panel, "burstCalls", { "TOPLEFT", dev, "BOTTOMLEFT", 0, -4 }, function()
         Redraw()
         if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
     end)
