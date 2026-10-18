@@ -1,6 +1,6 @@
 CastAheadOptions = {}
 
-CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Development" }
+CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Bursts", "Development", "Report" }
 local panels = {}
 local T = CastAheadWindow.THEME
 local FLAT = { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 }
@@ -29,7 +29,7 @@ function CastAheadOptions.RelayoutGroups(panel)
     for _, g in ipairs(panel.groups) do
         if g:IsShown() then
             shown[#shown + 1] = g
-            heights[#heights + 1] = g:GetHeight()
+            heights[#heights + 1] = g:GetHeight() + (g.flowPad or 0)
         end
     end
     local pos, total = CastAheadOptions.Flow(panel:GetWidth() - COL_X, COL_W, COL_GAP, heights)
@@ -37,14 +37,14 @@ function CastAheadOptions.RelayoutGroups(panel)
     if type(top) == "function" then top = top() end
     for i, g in ipairs(shown) do
         g:ClearAllPoints()
-        g:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X + pos[i].x, -(top + pos[i].y))
+        g:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X + pos[i].x, -(top + pos[i].y + (g.flowPad or 0)))
     end
-    panel:SetHeight(top + total + (panel.flowBottom and panel.flowBottom() or 0) + 12)
+    panel:SetHeight(top + total + (panel.flowBottom and panel.flowBottom(top + total) or 0) + 12)
 end
 
 -- Forward declarations: Build calls these, and Lua resolves a local by
 -- what it holds at call time, so they must exist as upvalues before it runs.
-local BuildGeneral, BuildSounds, BuildDefensives, BuildDevelopment
+local BuildGeneral, BuildSounds, BuildDefensives, BuildBursts, BuildDevelopment, BuildReport
 -- Widgets are painted once, when a panel is first built, but storage can
 -- change behind their back: the /ca anchor|grow|offset|center slash commands
 -- and the Move button all write it. Every widget that displays stored state
@@ -143,7 +143,7 @@ local SWITCHES = {
         tip = "Adds the Development tab and starts recording everything for improving the addon's data (the Record everything switch there, on by default). Nothing here changes what the addon calls out." },
     recordAll = { label = "Record everything",
         tip = "The game's combat log with advanced logging in every dungeon (off again when you leave, unless you had started it yourself), a journal of each key, and what the game lets an addon read off each enemy cast. Holds 12 keys: when the journal fills up it asks you to reload so it reaches the disk, then you copy it off and clear it on this tab. No names of people are recorded." },
-    saveCalls = { label = "Defensive calls",
+    saveCalls = { label = "Defensive calls", defaultOff = true,
         tip = "Call a small or big defensive ahead of damage that needs one, and show your button for it in the centre." },
     bossAdapter = { label = "Boss calls from DBM / BigWigs",
         tip = "Also call defensives for boss abilities announced by DBM or BigWigs." },
@@ -153,9 +153,12 @@ local SWITCHES = {
         tip = "Say \"big defensive\" ahead of hits that need a big save." },
     healCalls = { label = "Heal up after a big hit", defaultOff = true,
         tip = "Right after a hit that called a big defensive, say \"heal up\" when your Healthstone or potion is ready." },
+    burstCalls = { label = "Burst windows (experimental)", defaultOff = true,
+        tip = "On bosses with a phase worth bursting into, say \"burst soon\" five seconds before it and \"burst now\" when it starts, with a countdown in the centre block. Healers get their own phases for group-healing cooldowns. On every other boss it stays silent: press on cooldown." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
         tip = "A panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. Only while recording. The key bindings and /ca mark work without it." },
 }
+CastAheadOptions.Switches = SWITCHES
 
 local function SwitchOn(key)
     if SWITCHES[key].defaultOff then return CastAheadConfig.Get(key) == true end
@@ -170,11 +173,12 @@ local function SetSwitch(key, on)
     end
 end
 
-local function BuildGroup(panel, title, height)
+-- `free` keeps the group out of the column flow, for one the caller places itself.
+local function BuildGroup(panel, title, height, free)
     local box = CreateFrame("Frame", nil, panel, "BackdropTemplate")
     box:SetFrameLevel(panel:GetFrameLevel())
     box:SetSize(COL_W, height)
-    table.insert(panel.groups, box)
+    if not free then table.insert(panel.groups, box) end
     box:SetBackdrop(FLAT)
     box:SetBackdropColor(unpack(T.panel))
     box:SetBackdropBorderColor(unpack(T.border))
@@ -256,6 +260,22 @@ function CastAheadOptions.ShowPanel(host, name)
     panel:Relayout()
 end
 
+if StaticPopupDialogs then
+    StaticPopupDialogs.CASTAHEAD_RESET_ALL = {
+        text = "Reset every Cast Ahead setting, list and window position to a new install, then reload the UI? Recorded data stays.",
+        button1 = YES or "Yes",
+        button2 = NO or "No",
+        OnAccept = function()
+            CastAheadConfig.ResetAll()
+            ReloadUI()
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+        preferredIndex = 3,
+    }
+end
+
 -- Groups in reading order: what is announced at all first, then the places
 -- it is drawn. Each group carries its own on/off switch, so nothing has to be
 -- traced across the page.
@@ -285,12 +305,6 @@ function BuildGeneral(panel)
     local audio = BuildGroup(panel, "Sound", 100)
     local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 }, RedrawAndSaves)
     BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 }, RedrawAndSaves)
-
-    -- Development mode ----------------------------------------------------
-    local extra = BuildGroup(panel, "Advanced", 70)
-    BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
-        if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
-    end)
 
     -- Where the icons go --------------------------------------------------
     local plates = BuildGroup(panel, "Nameplate icons", 417)
@@ -486,6 +500,21 @@ function BuildGeneral(panel)
 
     BuildReset(panel, { "LEFT", move, "RIGHT", 6, 0 },
         { "centerScale", "centerTextScale", "centerX", "centerY" }, centerScale)
+
+    -- Development mode ----------------------------------------------------
+    local extra = BuildGroup(panel, "Advanced", 136)
+    local dev = BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
+        if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
+    end)
+    local burst = BuildSwitch(panel, "burstCalls", { "TOPLEFT", dev, "BOTTOMLEFT", 0, -4 }, function()
+        Redraw()
+        if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
+    end)
+    local resetAll = CastAheadWindow.Button(panel, "Reset all settings", 130)
+    resetAll:SetPoint("TOPLEFT", burst, "BOTTOMLEFT", 0, -10)
+    resetAll:SetScript("OnClick", function()
+        if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_ALL") end
+    end)
 end
 
 local function DevButton(panel, label, width, point, command, tip)
@@ -562,16 +591,14 @@ end
 local LIST_MIN_ROWS, LIST_ROW_H = 4, 20
 local LIST_TOP = -48
 local LIST_FOOT = 92
-local LIST_ORDER = { "small", "big", "heal" }
 
-local function ListRows()
+local function ListRows(store)
     local n = LIST_MIN_ROWS
-    for _, size in ipairs(LIST_ORDER) do n = math.max(n, #CastAheadSaves.List(size)) end
+    for _, key in ipairs(store.Keys()) do n = math.max(n, #store.EditList(key)) end
     return n
 end
 
 local function ListHeight(rows) return -LIST_TOP + rows * LIST_ROW_H + LIST_FOOT end
-local LIST_TITLES = { small = "Small defensive", big = "Big defensive", heal = "Heal after the hit" }
 
 local function RefreshAll()
     for _, refresh in ipairs(refreshers) do refresh() end
@@ -594,9 +621,8 @@ elseif ChatEdit_InsertLink then
     hooksecurefunc("ChatEdit_InsertLink", InsertLink)
 end
 
-local function BuildSaveList(panel, size, hint)
-    local S = CastAheadSaves
-    local title = LIST_TITLES[size]
+local function BuildButtonList(panel, store, key, titles, hint, emptyText)
+    local title = titles[key]
     local group = BuildGroup(panel, title, ListHeight(LIST_MIN_ROWS))
     if hint then
         local line = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -608,20 +634,20 @@ local function BuildSaveList(panel, size, hint)
 
     local function Remove(i)
         local list = {}
-        for j, e in ipairs(S.List(size)) do
+        for j, e in ipairs(store.EditList(key)) do
             if j ~= i then list[#list + 1] = e end
         end
-        S.SetList(size, list)
+        store.SetList(key, list)
         RefreshAll()
     end
 
     local function RowMenu(owner, i)
-        if not (MenuUtil and MenuUtil.CreateContextMenu) or not S.List(size)[i] then return end
+        if not (MenuUtil and MenuUtil.CreateContextMenu) or not store.EditList(key)[i] then return end
         MenuUtil.CreateContextMenu(owner, function(_, root)
-            for _, target in ipairs(LIST_ORDER) do
-                if target ~= size then
-                    root:CreateButton("Move to " .. LIST_TITLES[target], function()
-                        S.MoveEntry(size, i, target)
+            for _, target in ipairs(store.Keys()) do
+                if target ~= key then
+                    root:CreateButton("Move to " .. titles[target], function()
+                        store.MoveEntry(key, i, target)
                         RefreshAll()
                     end)
                 end
@@ -663,7 +689,7 @@ local function BuildSaveList(panel, size, hint)
                 end
             end
             b:SetScript("OnClick", function()
-                S.Shift(size, i, step)
+                store.Shift(key, i, step)
                 RefreshAll()
             end)
             b:SetScript("OnEnter", function(self)
@@ -691,16 +717,16 @@ local function BuildSaveList(panel, size, hint)
     pick:SetPoint("TOPLEFT", box, "BOTTOMLEFT", -6, -6)
     if pick.SetDefaultText then pick:SetDefaultText("Add from list") end
     pick:SetupMenu(function(_, root)
-        local entries = S.Addable(size)
+        local entries = store.Addable(key)
         if #entries == 0 then
             root:CreateTitle("Nothing left to add")
             return
         end
         for _, e in ipairs(entries) do
             root:CreateButton(EntryLabel(e), function()
-                local copy = { unpack(S.List(size)) }
+                local copy = { unpack(store.EditList(key)) }
                 copy[#copy + 1] = type(e) == "table" and { use = e.use } or e
-                S.SetList(size, copy)
+                store.SetList(key, copy)
                 RefreshAll()
             end)
         end
@@ -711,15 +737,15 @@ local function BuildSaveList(panel, size, hint)
     reason:SetJustifyH("LEFT")
 
     local function Submit()
-        local list = S.List(size)
-        local entry, why = S.ParseEntry(box:GetText(), list)
+        local list = store.EditList(key)
+        local entry, why = store.ParseEntry(box:GetText(), list)
         if not entry then
             reason:SetText(why)
             return
         end
         local copy = { unpack(list) }
         copy[#copy + 1] = entry
-        S.SetList(size, copy)
+        store.SetList(key, copy)
         box:SetText("")
         box:ClearFocus()
         RefreshAll()
@@ -736,8 +762,8 @@ local function BuildSaveList(panel, size, hint)
     box:SetScript("OnLeave", GameTooltip_Hide)
 
     local function Paint()
-        local list = S.List(size)
-        local n = ListRows()
+        local list = store.EditList(key)
+        local n = ListRows(store)
         for i = 1, math.max(#list, #rows, 1) do
             local row = Row(i)
             row.text:SetText(list[i] and EntryLabel(list[i]) or "")
@@ -749,8 +775,7 @@ local function BuildSaveList(panel, size, hint)
             row.down:SetEnabled(list[i + 1] ~= nil)
         end
         if #list == 0 then
-            rows[1].text:SetText(size == "heal" and "|cffaaaaaaEmpty - no heal up call|r"
-                or "|cffaaaaaaEmpty - this call shows no button|r")
+            rows[1].text:SetText("|cffaaaaaa" .. emptyText .. "|r")
         end
         box:ClearAllPoints()
         box:SetPoint("TOPLEFT", group, "TOPLEFT", 18, LIST_TOP - n * LIST_ROW_H - 6)
@@ -763,7 +788,50 @@ local function BuildSaveList(panel, size, hint)
     return group
 end
 
-local DEFENSIVES_H, DEFENSIVES_OFF_H = 366, 56
+local DEFENSIVES_H, DEFENSIVES_OFF_H, SPEC_BAR_PAD = 366, 56, 34
+local REPORT_URL = "https://github.com/AqueGen/CastAhead/issues/new?template=report.yml"
+
+local function CopyBox(parent, text, width)
+    local box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    box:SetSize(width, 20)
+    box:SetAutoFocus(false)
+    box:SetText(text)
+    box:SetCursorPosition(0)
+    box:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+    box:SetScript("OnTextChanged", function(self, typed)
+        if typed then
+            self:SetText(text)
+            self:HighlightText()
+        end
+    end)
+    box:SetScript("OnEscapePressed", box.ClearFocus)
+    box:SetScript("OnEnterPressed", box.ClearFocus)
+    return box
+end
+
+local function Caveat(parent, text, kind)
+    local c = {}
+    c.text = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    c.text:SetJustifyH("LEFT")
+    c.text:SetJustifyV("TOP")
+    c.text:SetWordWrap(true)
+    c.text:SetText("|cffd9a54aExperimental:|r |cffaaaaaa" .. text .. " Tell the author if anything is off.|r")
+    c.button = CastAheadWindow.Button(parent, "Report", 70)
+    c.button:SetScript("OnClick", function() CastAheadOptions.ShowReport(kind) end)
+    function c.Place(x, y, width)
+        c.text:ClearAllPoints()
+        c.text:SetPoint("TOPLEFT", parent, "TOPLEFT", x, -y)
+        c.text:SetWidth(width - 80)
+        c.button:ClearAllPoints()
+        c.button:SetPoint("TOPLEFT", c.text, "TOPLEFT", c.text:GetStringWidth() + 10, 4)
+        return math.max(c.text:GetStringHeight(), 20)
+    end
+    function c.SetShown(on)
+        c.text:SetShown(on)
+        c.button:SetShown(on)
+    end
+    return c
+end
 
 function BuildDefensives(panel)
     local group = BuildGroup(panel, "Defensive calls", DEFENSIVES_H)
@@ -798,36 +866,53 @@ function BuildDefensives(panel)
         end,
     })
 
+    local store = CastAheadSaves.Store
+    local titles = { small = "Small defensive", big = "Big defensive", heal = "Heal after the hit" }
+    local noButton = "Empty - this call shows no button"
     local lists = {
-        BuildSaveList(panel, "small"),
-        BuildSaveList(panel, "big"),
-        BuildSaveList(panel, "heal", "Pressed right after a big hit lands: stone, potion, self-heal."),
+        BuildButtonList(panel, store, "small", titles, nil, noButton),
+        BuildButtonList(panel, store, "big", titles, nil, noButton),
+        BuildButtonList(panel, store, "heal", titles, "Pressed right after a big hit lands: stone, potion, self-heal.",
+            "Empty - no heal up call"),
     }
+    CastAheadWindow.SpecBar(lists[1], 0, -SPEC_BAR_PAD, RefreshAll, function()
+        return (panel:GetRight() or 0) - (lists[1]:GetLeft() or 0)
+    end)
+    panel:HookScript("OnSizeChanged", CastAheadWindow.PaintSpecBars)
+    for _, list in ipairs(lists) do list.flowPad = SPEC_BAR_PAD end
+    table.insert(refreshers, CastAheadWindow.PaintSpecBars)
 
     local reset = CastAheadWindow.Button(panel, "Reset to default", 110)
     reset:SetPoint("TOPLEFT", early, "BOTTOMLEFT", -10, -24)
+    local caveat = Caveat(panel, "the hits, their timings and the shipped button lists come from logs and may be wrong or missing.", "save")
     reset:SetScript("OnClick", function()
         if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_SAVES") end
     end)
 
     local note = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    note:SetPoint("TOPLEFT", group, "BOTTOMLEFT", 0, -10)
     note:SetJustifyH("LEFT")
     note:SetJustifyV("TOP")
     note:SetWordWrap(true)
-    panel:HookScript("OnSizeChanged", function(self, width)
-        note:SetWidth(math.max(width - 2 * COL_X, 1))
-        if self:IsShown() then self:Relayout() end
-    end)
     note:SetText("|cffaaaaaaNo shipped defensive lists for this specialization.|r")
-    panel.flowBottom = function() return note:IsShown() and note:GetStringHeight() + 10 or 0 end
+    panel.flowBottom = function(y)
+        local width, h = math.max(panel:GetWidth() - 2 * COL_X, 1), 0
+        if note:IsShown() then
+            note:ClearAllPoints()
+            note:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -(y + 10))
+            note:SetWidth(width)
+            h = note:GetStringHeight() + 10
+        end
+        if caveat.text:IsShown() then h = h + 10 + caveat.Place(COL_X, y + h + 10, width) end
+        return h
+    end
 
     Paint = function()
         local on = SwitchOn("saveCalls")
-        local spec = CastAheadSaves and CastAheadSaves.SpecID()
+        local spec = CastAheadSaves and CastAheadSaves.ViewSpecID()
         local shipped = spec and CastAheadSaveButtons and CastAheadSaveButtons[spec] and true or false
         status:SetText("|cffaaaaaa" .. (CastAheadBossAdapter and CastAheadBossAdapter.Status() or "No boss mod") .. "|r")
         for _, w in ipairs({ boss, small, big, heal, early, earlyLabel }) do w:SetShown(on) end
+        caveat.SetShown(on)
         group:SetHeight(on and DEFENSIVES_H or DEFENSIVES_OFF_H)
         note:SetShown(on and not shipped)
         for _, list in ipairs(lists) do list:SetShown(on and shipped) end
@@ -838,9 +923,355 @@ function BuildDefensives(panel)
     table.insert(listRefreshers, Paint)
 end
 
+local BURST_DIFFICULTIES = { { 14, "Normal" }, { 15, "Heroic" }, { 16, "Mythic" }, { 8, "Keys" } }
+local GUIDE_COL_W, GUIDE_COL_GAP = 300, 24
+local burstDifficulty = 15
+
+function BuildBursts(panel)
+    local Paint
+    local caveat = Caveat(panel, "the phases and group moments come from top-player logs and may not match your group.", "burst")
+    panel.flowTop = function() return 6 + caveat.Place(COL_X, 6, math.max(panel:GetWidth() - 2 * COL_X, 1)) end
+    local guide = BuildGroup(panel, "Guide", 120, true)
+    local buttons = {}
+    for i, d in ipairs(BURST_DIFFICULTIES) do
+        local b = CastAheadWindow.Button(guide, d[2], 56)
+        b:SetPoint("TOPLEFT", guide, "TOPLEFT", 8 + (i - 1) * 59, -24)
+        b:SetScript("OnClick", function() burstDifficulty = d[1] Paint() end)
+        buttons[i] = b
+    end
+    local columns, blocks = {}, {}
+    local function Column(i)
+        if columns[i] then return columns[i] end
+        local text = guide:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        text:SetWidth(GUIDE_COL_W)
+        text:SetJustifyH("LEFT")
+        text:SetJustifyV("TOP")
+        text:SetWordWrap(true)
+        text:SetSpacing(3)
+        columns[i] = text
+        return text
+    end
+    local function LayoutGuide(width)
+        local count = math.max(1, math.floor((width - 20 + GUIDE_COL_GAP) / (GUIDE_COL_W + GUIDE_COL_GAP)))
+        local lines, used = {}, {}
+        for c = 1, count do lines[c], used[c] = {}, 0 end
+        for _, block in ipairs(blocks) do
+            local c = 1
+            for k = 2, count do if used[k] < used[c] then c = k end end
+            if #lines[c] > 0 then lines[c][#lines[c] + 1] = "" end
+            for _, line in ipairs(block) do lines[c][#lines[c] + 1] = line end
+            used[c] = used[c] + #block + 1
+        end
+        local tallest = 0
+        for c = 1, math.max(count, #columns) do
+            local text = Column(c)
+            text:SetWidth(math.min(GUIDE_COL_W, width - 20))
+            text:SetShown(c <= count)
+            text:ClearAllPoints()
+            text:SetPoint("TOPLEFT", guide, "TOPLEFT", 10 + (c - 1) * (GUIDE_COL_W + GUIDE_COL_GAP), -54)
+            text:SetText(c <= count and table.concat(lines[c], "\n") or "")
+            if c <= count then tallest = math.max(tallest, text:GetStringHeight()) end
+        end
+        guide:SetHeight(64 + tallest)
+    end
+    panel.flowBottom = function(y)
+        local width = math.max(panel:GetWidth() - 2 * COL_X, COL_W)
+        guide:ClearAllPoints()
+        guide:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -((y or 0) + COL_GAP))
+        guide:SetWidth(width)
+        LayoutGuide(width)
+        return guide:GetHeight() + COL_GAP
+    end
+    Paint = function()
+        for i, d in ipairs(BURST_DIFFICULTIES) do
+            buttons[i]:SetBackdropColor(unpack(d[1] == burstDifficulty and T.selected or T.panel))
+        end
+        local lines = CastAheadBurst and CastAheadBurst.GuideLines(burstDifficulty) or {}
+        if #lines == 0 then lines = { "|cffaaaaaaNo burst windows on this difficulty.|r" } end
+        wipe(blocks)
+        local block = {}
+        for _, line in ipairs(lines) do
+            if line == "" then
+                blocks[#blocks + 1], block = block, {}
+            else
+                block[#block + 1] = line
+            end
+        end
+        blocks[#blocks + 1] = block
+        panel:Relayout()
+    end
+    table.insert(refreshers, Paint)
+end
+
+local REPORT_KINDS = {
+    { key = "cast", label = "Wrong trash call", ask = "Anything else about what happened:",
+      what = { "Called, but the mob never cast it", "Cast, but Cast Ahead said nothing", "Named the wrong spell",
+               "Called too early", "Called too late", "Wrong call type (kick, dodge, AoE...)" } },
+    { key = "save", label = "Wrong defensive call", ask = "Anything else about what happened:",
+      what = { "Needed a big defensive", "A small one was enough", "No defensive was needed", "No call at all",
+               "Called too early", "Called too late" } },
+    { key = "burst", label = "Burst timing off", ask = "The time it called and what fit your group better:",
+      what = { "Called too early", "Called too late", "Not a phase worth bursting", "A burst phase it missed" } },
+    { key = "bug", label = "Bug or error", ask = "What you did and what went wrong (paste any Lua error):",
+      what = { "Lua error", "Something on screen looks wrong", "A setting does not work" } },
+    { key = "idea", label = "Idea", ask = "What would help you:" },
+}
+local REPORT_LEVELS = { "+2 to +9", "+10 to +15", "+16 to +19", "+20 and up", "Not a key" }
+local REPORT_OFTEN = { "Every time", "Sometimes", "Once" }
+local reportKind, pick = "cast", {}
+
+local function OnOff(on) return on and "on" or "off" end
+
+local function KindOf(key)
+    for _, k in ipairs(REPORT_KINDS) do if k.key == key then return k end end
+    return REPORT_KINDS[1]
+end
+
+local function InPlay(key) return key == "cast" or key == "save" end
+
+function CastAheadOptions.SetReportPicks(picks) pick = picks or {} end
+
+function CastAheadOptions.ReportText(key)
+    local kind = KindOf(key)
+    local meta = C_AddOns and C_AddOns.GetAddOnMetadata
+    local game, build
+    if GetBuildInfo then game, build = GetBuildInfo() end
+    local lines = {
+        "Cast Ahead report: " .. kind.label,
+        string.format("Addon %s, game %s (%s), %s", meta and meta("CastAhead", "Version") or "?", game or "?", build or "?",
+            GetLocale and GetLocale() or "?"),
+    }
+    local spec = CastAheadSaves and CastAheadSaves.SpecID()
+    local info = spec and GetSpecializationInfoByID and { GetSpecializationInfoByID(spec) }
+    lines[#lines + 1] = "Spec: " .. (info and string.format("%s %s", info[2] or "?", info[7] or "?") or "none")
+    local dungeon = pick.dungeon or CastAheadWindow.Dungeon and CastAheadWindow.Dungeon()
+    if kind.key == "burst" then
+        for _, d in ipairs(BURST_DIFFICULTIES) do
+            if d[1] == (pick.boss and pick.boss.diff or burstDifficulty) then
+                lines[#lines + 1] = pick.boss and string.format("Boss: %s (%s, encounter %d)", pick.boss.name, d[2], pick.boss.id)
+                    or "Burst guide: " .. d[2]
+            end
+        end
+        lines[#lines + 1] = "Burst windows: " .. OnOff(SwitchOn("burstCalls"))
+    elseif kind.key ~= "idea" then
+        lines[#lines + 1] = "Dungeon picked: " .. (dungeon and CastAheadData[dungeon] and CastAheadData[dungeon].name or "?")
+        lines[#lines + 1] = string.format("Defensive calls: %s, boss mod: %s", OnOff(SwitchOn("saveCalls")),
+            CastAheadBossAdapter and CastAheadBossAdapter.Status() or "none")
+    end
+    if InPlay(kind.key) and pick.spell then
+        lines[#lines + 1] = string.format("Spell: %s (%d) from %s", pick.spell.name, pick.spell.id, pick.spell.mob or "?")
+    end
+    if kind.what and pick.what then lines[#lines + 1] = "Problem: " .. pick.what end
+    if InPlay(kind.key) and pick.level then lines[#lines + 1] = "Key level: " .. pick.level end
+    if kind.key ~= "idea" and pick.often then lines[#lines + 1] = "How often: " .. pick.often end
+    if kind.key == "cast" and CastAheadConfig.Dev() then
+        lines[#lines + 1] = "Key journal: paste the /ca report text below for exact timings."
+    end
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = kind.ask
+    lines[#lines + 1] = ""
+    return table.concat(lines, "\n")
+end
+
+function CastAheadOptions.ShowReport(key)
+    if key and key ~= reportKind then reportKind, pick.spell, pick.what = key, nil, nil end
+    if CastAheadUI and CastAheadUI.ShowTab then CastAheadUI.ShowTab("Report") end
+end
+
+local function SortedBy(list, field)
+    table.sort(list, function(a, b) return a[field] < b[field] end)
+    return list
+end
+
+local function Radios(root, values, field, after)
+    for _, v in ipairs(values) do
+        root:CreateRadio(v, function() return pick[field] == v end, function() pick[field] = v after() end)
+    end
+end
+
+function BuildReport(panel)
+    local intro = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    intro:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -6)
+    intro:SetJustifyH("LEFT")
+    intro:SetText("|cffaaaaaaPick what it is about, finish the text in the box, copy all of it and paste it into a new GitHub issue or a CurseForge comment. No names of people are included.|r")
+    panel.flowTop = 30
+    local kinds = BuildGroup(panel, "What to report", 36 + #REPORT_KINDS * 24)
+    local details = BuildGroup(panel, "Details", 60)
+    local box, shownKind, Rebuild
+    local buttons, rows = {}, {}
+
+    local function Row(label, menu)
+        local row = {}
+        row.label = details:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.drop = CreateFrame("DropdownButton", nil, details, "WowStyle1DropdownTemplate")
+        row.drop:SetSize(COL_W - 104, 24)
+        row.drop:SetupMenu(function(_, root) menu(root) end)
+        row.title = label
+        rows[#rows + 1] = row
+        return row
+    end
+
+    local place = Row(function() return reportKind == "burst" and "Boss" or "Dungeon" end, function(root)
+        if reportKind == "burst" then
+            for _, d in ipairs(BURST_DIFFICULTIES) do
+                local bosses = {}
+                for id, byDifficulty in pairs(CastAheadBurstWindows or {}) do
+                    local w = byDifficulty[d[1]]
+                    if w then bosses[#bosses + 1] = { id = id, diff = d[1], name = w.name or tostring(id) } end
+                end
+                local sub = root:CreateButton(d[2])
+                for _, boss in ipairs(SortedBy(bosses, "name")) do
+                    sub:CreateRadio(boss.name,
+                        function() return pick.boss and pick.boss.id == boss.id and pick.boss.diff == boss.diff end,
+                        function() pick.boss = boss Rebuild() end)
+                end
+            end
+            return
+        end
+        local dungeons = {}
+        for id, data in pairs(CastAheadData) do dungeons[#dungeons + 1] = { id = id, name = data.name or tostring(id) } end
+        for _, d in ipairs(SortedBy(dungeons, "name")) do
+            root:CreateRadio(d.name,
+                function() return (pick.dungeon or CastAheadWindow.Dungeon()) == d.id end,
+                function() pick.dungeon, pick.spell = d.id, nil Rebuild() end)
+        end
+    end)
+    place.kinds = { cast = true, save = true, burst = true, bug = true }
+
+    local spell = Row(function() return "Spell" end, function(root)
+        local dungeon = pick.dungeon or CastAheadWindow.Dungeon()
+        local function Choose(s) return function() pick.spell = s Rebuild() end end
+        local function Chosen(s) return function() return pick.spell and pick.spell.id == s.id end end
+        if reportKind == "save" then
+            local hits = {}
+            for _, r in ipairs(CastAheadSaves and CastAheadSaves.ViewRows(dungeon) or {}) do
+                hits[#hits + 1] = { id = r.id, name = r.name, mob = r.mob }
+            end
+            for _, s in ipairs(SortedBy(hits, "name")) do
+                root:CreateRadio(string.format("%s (%s)", s.name, s.mob or "?"), Chosen(s), Choose(s))
+            end
+            return
+        end
+        local byMob, mobs = {}, {}
+        for _, c in ipairs(CastAheadData[dungeon] or {}) do
+            local mob = c.mob or "?"
+            if not byMob[mob] then byMob[mob] = {} mobs[#mobs + 1] = { name = mob } end
+            byMob[mob][#byMob[mob] + 1] = { id = c.spell, name = c.name or tostring(c.spell), mob = mob }
+        end
+        for _, m in ipairs(SortedBy(mobs, "name")) do
+            local sub = root:CreateButton(m.name)
+            for _, s in ipairs(SortedBy(byMob[m.name], "name")) do sub:CreateRadio(s.name, Chosen(s), Choose(s)) end
+        end
+    end)
+    spell.kinds = { cast = true, save = true }
+
+    local what = Row(function() return "Problem" end, function(root)
+        Radios(root, KindOf(reportKind).what or {}, "what", function() Rebuild() end)
+    end)
+    what.kinds = { cast = true, save = true, burst = true, bug = true }
+
+    local level = Row(function() return "Key level" end, function(root)
+        Radios(root, REPORT_LEVELS, "level", function() Rebuild() end)
+    end)
+    level.kinds = { cast = true, save = true }
+
+    local often = Row(function() return "How often" end, function(root)
+        Radios(root, REPORT_OFTEN, "often", function() Rebuild() end)
+    end)
+    often.kinds = { cast = true, save = true, burst = true, bug = true }
+
+    local function Paint()
+        if shownKind ~= reportKind then
+            shownKind = reportKind
+            box:SetText(CastAheadOptions.ReportText(reportKind))
+        end
+        for i, k in ipairs(REPORT_KINDS) do
+            local on = k.key == reportKind
+            buttons[i]:SetBackdropColor(unpack(on and T.selected or T.panel))
+            buttons[i].label:SetTextColor(unpack(on and T.gold or T.text))
+        end
+        local y = -28
+        for _, row in ipairs(rows) do
+            local on = row.kinds[reportKind] == true
+            row.label:SetShown(on)
+            row.drop:SetShown(on)
+            if on then
+                row.label:SetText(row.title())
+                row.label:SetPoint("TOPLEFT", details, "TOPLEFT", 10, y - 6)
+                row.drop:SetPoint("TOPLEFT", details, "TOPLEFT", 90, y)
+                if row.drop.SetDefaultText then row.drop:SetDefaultText("Pick one") end
+                if row.drop.GenerateMenu then row.drop:GenerateMenu() end
+                y = y - 30
+            end
+        end
+        details:SetShown(y < -28)
+        details:SetHeight(-y + 6)
+        panel:Relayout()
+    end
+    Rebuild = function()
+        local ask = KindOf(reportKind).ask .. "\n"
+        local old = box:GetText()
+        local _, stop = old:find(ask, 1, true)
+        box:SetText(CastAheadOptions.ReportText(reportKind) .. (stop and old:sub(stop + 1) or ""))
+        Paint()
+    end
+    for i, k in ipairs(REPORT_KINDS) do
+        local b = CastAheadWindow.Button(kinds, k.label, COL_W - 20)
+        b:SetPoint("TOPLEFT", kinds, "TOPLEFT", 10, -26 - (i - 1) * 24)
+        b:SetScript("OnClick", function()
+            if reportKind ~= k.key then pick.spell, pick.what = nil, nil end
+            reportKind, shownKind = k.key, nil
+            Paint()
+        end)
+        buttons[i] = b
+    end
+
+    local area = BuildGroup(panel, "Report text", 300, true)
+    local scroll = CreateFrame("ScrollFrame", nil, area, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", area, "TOPLEFT", 10, -26)
+    scroll:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -30, 74)
+    box = CreateFrame("EditBox", nil, scroll)
+    box:SetMultiLine(true)
+    box:SetFontObject(ChatFontNormal)
+    box:SetAutoFocus(false)
+    box:SetScript("OnEscapePressed", box.ClearFocus)
+    scroll:SetScrollChild(box)
+    local all = CastAheadWindow.Button(area, "Select all", 90)
+    all:SetPoint("BOTTOMLEFT", area, "BOTTOMLEFT", 10, 44)
+    all:SetScript("OnClick", function()
+        box:SetFocus()
+        box:HighlightText()
+    end)
+    local fresh = CastAheadWindow.Button(area, "Start over", 90)
+    fresh:SetPoint("LEFT", all, "RIGHT", 6, 0)
+    fresh:SetScript("OnClick", function()
+        pick, shownKind = {}, nil
+        Paint()
+    end)
+    local copyHint = area:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    copyHint:SetPoint("LEFT", fresh, "RIGHT", 10, 0)
+    copyHint:SetText("|cffaaaaaaCtrl+C copies the selection.|r")
+    local where = area:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    where:SetPoint("BOTTOMLEFT", area, "BOTTOMLEFT", 10, 16)
+    where:SetText("New GitHub issue:")
+    local link = CopyBox(area, REPORT_URL, 420)
+    link:SetPoint("LEFT", where, "RIGHT", 12, 0)
+
+    panel.flowBottom = function(y)
+        local width = math.max(panel:GetWidth() - 2 * COL_X, COL_W)
+        intro:SetWidth(width)
+        area:ClearAllPoints()
+        area:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -(y + COL_GAP))
+        area:SetWidth(width)
+        box:SetWidth(width - 50)
+        return area:GetHeight() + COL_GAP
+    end
+    table.insert(refreshers, Paint)
+end
+
 local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
     "POISON", "CURSE", "MAGIC", "DISEASE", "BLEED", "SOOTHE", "PURGE", "SWITCH", "ALERT",
-    "SMALL", "BIG", "HEAL" }
+    "SMALL", "BIG", "HEAL", "SOON", "BURST" }
 local SOUND_ROW_H = 26
 
 -- Default plus every sound LibSharedMedia knows. Shared with the casts
@@ -888,13 +1319,26 @@ function BuildSounds(panel)
     tts:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", -4, -4)
     tts.text = tts:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     tts.text:SetPoint("LEFT", tts, "RIGHT", 2, 0)
+    local openGame = CastAheadWindow.Button(panel, "Open game options", 130)
+    openGame:SetPoint("LEFT", tts.text, "RIGHT", 10, 0)
+    openGame:SetScript("OnClick", function()
+        if not (Settings and Settings.OpenToCategory) then return end
+        local id
+        for _, c in ipairs(SettingsPanel and SettingsPanel:GetAllCategories() or {}) do
+            if c:GetName() == ACCESSIBILITY_AUDIO_LABEL then id = c:GetID() break end
+        end
+        Settings.OpenToCategory(id, CAA_ENABLE_COMBAT_AUDIO_ALERTS)
+    end)
     local function PaintTTS()
         local api = C_CombatAudioAlert
         local gameOn = api and api.IsEnabled and api.IsEnabled()
         tts:SetEnabled(gameOn and true or false)
         tts.text:SetText(gameOn and "Game TTS voice"
-            or "Game TTS voice |cffff6060(off in game Sound options)|r")
+            or "Game TTS voice |cffff6060(Combat Audio Alerts are off in the game's Accessibility options)|r")
+        openGame:SetShown(not gameOn)
     end
+    tts:RegisterEvent("CVAR_UPDATE")
+    tts:SetScript("OnEvent", PaintTTS)
     tts:SetChecked(CastAheadDB and CastAheadDB.voiceTTS == true)
     PaintTTS()
     tts:SetScript("OnClick", function(self)
@@ -904,7 +1348,7 @@ function BuildSounds(panel)
     tts:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText("Game TTS voice", 1, 1, 1)
-        GameTooltip:AddLine("Use the game's built-in combat text-to-speech instead of the addon's recorded clips. Needs Combat Audio Alerts enabled in the game's Sound options; when it cannot speak, the clips play instead.", nil, nil, nil, true)
+        GameTooltip:AddLine("Use the game's built-in combat text-to-speech instead of the addon's recorded clips. Needs Combat Audio Alerts enabled in the game's Accessibility options; when it cannot speak, the clips play instead.", nil, nil, nil, true)
         GameTooltip:Show()
     end)
     tts:SetScript("OnLeave", GameTooltip_Hide)
@@ -981,11 +1425,13 @@ function BuildSounds(panel)
     end
 end
 
-BUILDERS = { General = BuildGeneral, Sounds = BuildSounds, Defensives = BuildDefensives, Development = BuildDevelopment }
+BUILDERS = { General = BuildGeneral, Sounds = BuildSounds, Defensives = BuildDefensives, Bursts = BuildBursts,
+             Development = BuildDevelopment, Report = BuildReport }
+local MENU_GROUPS = { Bursts = "Experimental", Report = "Feedback" }
 
 for _, name in ipairs(CastAheadOptions.TABS) do
     local host
-    CastAheadWindow.Register(name, "Settings",
+    CastAheadWindow.Register(name, MENU_GROUPS[name] or "Settings",
         function(h) host = h end,
         function() CastAheadOptions.ShowPanel(host, name) end)
 end

@@ -49,6 +49,7 @@ end
 
 function CastAheadUI.RefreshTabs()
     CastAheadWindow.SetMenuShown("Development", CastAheadConfig.Dev())
+    CastAheadWindow.SetMenuShown("Bursts", CastAheadConfig.Get("burstCalls") == true)
 end
 
 -- Opens the window if it is closed, then selects a page. Used by the slash

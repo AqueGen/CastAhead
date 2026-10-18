@@ -3,6 +3,7 @@ local S = CastAheadSaves
 local M = CastAheadMatch
 
 local scheduled = {}
+local lastFiredAt
 
 function S.SpecID()
     if not (GetSpecialization and GetSpecializationInfo) then return nil end
@@ -10,9 +11,17 @@ function S.SpecID()
     return index and GetSpecializationInfo(index) or nil
 end
 
-local function Known(id)
-    return type(id) == "number" and IsPlayerSpell and IsPlayerSpell(id)
-end
+local Known = CastAheadLists.Known
+
+local store = CastAheadLists.New({
+    dbKey = "saveButtons",
+    shipped = function() return CastAheadSaveButtons end,
+    keys = { "small", "big", "heal" },
+    specID = function() return S.SpecID() end,
+    editSpecID = function() return S.ViewSpecID() end,
+    onChange = function() S.Refresh() end,
+})
+S.Store = store
 
 local function SpellReady(id)
     local get = C_Spell and C_Spell.GetSpellCooldownDuration
@@ -28,25 +37,28 @@ local useToItem = {}
 local bagsPending = false
 local memo = {}
 
-local function Shipped(spec, size)
-    local s = CastAheadSaveButtons and CastAheadSaveButtons[spec]
-    return s and s[size] or {}
+function S.ListFor(spec, size) return store.ListFor(spec, size) end
+function S.List(size) return store.List(size) end
+
+-- The Guide and Saves pages can read any spec of any class without the
+-- player changing spec; calls and lists still follow the real one.
+local viewSpec, viewClass
+
+function S.SetViewSpec(spec)
+    viewSpec = spec
+    if spec == nil then viewClass = nil end
 end
 
-function S.ListFor(spec, size)
-    if not spec then return {} end
-    local o = CastAheadDB and CastAheadDB.saveButtons and CastAheadDB.saveButtons[spec]
-    if o and type(o[size]) == "table" then return o[size] end
-    return Shipped(spec, size)
+function S.OwnClassID()
+    return UnitClass and select(3, UnitClass("player")) or nil
 end
 
-function S.List(size) return S.ListFor(S.SpecID(), size) end
+function S.SetViewClass(classID)
+    viewClass = classID ~= S.OwnClassID() and classID or nil
+    viewSpec = viewClass and GetSpecializationInfoForClassID and GetSpecializationInfoForClassID(viewClass, 1) or nil
+end
 
--- The Guide and Saves pages can read another spec of the class without
--- the player changing spec; calls and lists still follow the real one.
-local viewSpec
-
-function S.SetViewSpec(spec) viewSpec = spec end
+function S.ViewClassID() return viewClass or S.OwnClassID() end
 
 function S.ViewSpecID()
     local own = S.SpecID()
@@ -56,9 +68,11 @@ end
 
 function S.ViewRole()
     local spec = S.ViewSpecID()
-    if spec == S.SpecID() then return M.SpecRole() end
-    if not CastAheadConfig.Enabled("saveCalls") then return nil end
-    return GetSpecializationInfoByID and select(5, GetSpecializationInfoByID(spec)) or nil
+    if spec and spec == S.SpecID() then
+        local index = GetSpecialization and GetSpecialization()
+        return index and GetSpecializationRole and GetSpecializationRole(index) or nil
+    end
+    return spec and GetSpecializationInfoByID and select(5, GetSpecializationInfoByID(spec)) or nil
 end
 
 function S.ScanBags()
@@ -137,150 +151,32 @@ function S.Available(size)
     memo[size] = { stamp = stamp, list = out }
     local list = S.List(size)
     if not Collect(list, out) and #list > 0 then
-        local shipped = Shipped(S.SpecID(), size)
+        local shipped = store.Shipped(S.SpecID(), size)
         if shipped ~= list then Collect(shipped, out) end
     end
     return out
 end
 
+local firstMemo = setmetatable({}, { __mode = "k" })
+function S.FirstAvailable(list)
+    local stamp = GetTime()
+    local hit = firstMemo[list]
+    if hit and hit.stamp == stamp then return hit.first end
+    local out = {}
+    Collect(list, out)
+    firstMemo[list] = { stamp = stamp, first = out[1] }
+    return out[1]
+end
+
 S.ItemFor = ItemFor
 
-local NOT_FOUND = "Not a spell you know or an item with a use effect"
-
-local function ItemEntry(item)
-    if not (C_Item and C_Item.GetItemSpell) then return nil, NOT_FOUND end
-    local _, use = C_Item.GetItemSpell(item)
-    if use then return { use = use } end
-    if C_Item.GetItemInfoInstant and not C_Item.GetItemInfoInstant(item) then return nil, NOT_FOUND end
-    if C_Item.IsItemDataCachedByID and C_Item.IsItemDataCachedByID(item) then return nil, NOT_FOUND end
-    if not C_Item.RequestLoadItemDataByID then return nil, NOT_FOUND end
-    C_Item.RequestLoadItemDataByID(item)
-    return nil, "Loading item data, try again"
-end
-
-local function SameEntry(a, b)
-    if type(a) == "table" and type(b) == "table" then return a.use == b.use end
-    return a == b
-end
-
-function S.ParseEntry(text, list)
-    text = tostring(text or ""):match("^%s*(.-)%s*$")
-    local itemLink = tonumber(text:match("|Hitem:(%d+)"))
-    local spellLink = tonumber(text:match("|Hspell:(%d+)"))
-    local number = tonumber(text)
-    local entry, why
-    if itemLink then
-        entry, why = ItemEntry(itemLink)
-    elseif spellLink then
-        entry = Known(spellLink) and spellLink or nil
-    elseif number then
-        if Known(number) then entry = number else entry, why = ItemEntry(number) end
-    elseif text ~= "" and C_Spell and C_Spell.GetSpellInfo then
-        local info = C_Spell.GetSpellInfo(text)
-        if info and Known(info.spellID) then entry = info.spellID end
-    end
-    if not entry then return nil, why or NOT_FOUND end
-    for _, e in ipairs(list or {}) do
-        if SameEntry(e, entry) then return nil, "Already in the list" end
-    end
-    return entry
-end
-
-local function Write(spec, size, list)
-    CastAheadDB = CastAheadDB or {}
-    CastAheadDB.saveButtons = CastAheadDB.saveButtons or {}
-    CastAheadDB.saveButtons[spec] = CastAheadDB.saveButtons[spec] or {}
-    CastAheadDB.saveButtons[spec][size] = list
-end
-
-function S.SetList(size, list)
-    local spec = S.SpecID()
-    if not spec then return end
-    Write(spec, size, list)
-    S.Refresh()
-end
-
-local function Has(list, entry)
-    for _, e in ipairs(list) do
-        if SameEntry(e, entry) then return true end
-    end
-    return false
-end
-
-function S.MoveEntry(from, index, to)
-    local spec = S.SpecID()
-    local source = S.List(from)
-    local entry = source[index]
-    if not (spec and entry) or from == to then return end
-    local kept = {}
-    for i, e in ipairs(source) do
-        if i ~= index then kept[#kept + 1] = e end
-    end
-    local target = { unpack(S.List(to)) }
-    if not Has(target, entry) then target[#target + 1] = entry end
-    Write(spec, from, kept)
-    Write(spec, to, target)
-    S.Refresh()
-end
-
-function S.Shift(size, index, step)
-    local spec = S.SpecID()
-    local list = { unpack(S.List(size)) }
-    local other = index + step
-    if not (spec and list[index] and list[other]) then return end
-    list[index], list[other] = list[other], list[index]
-    Write(spec, size, list)
-    S.Refresh()
-end
-
-local CLASS_SPECS = {
-    { 265, 266, 267 },
-    { 65, 66, 70 },
-    { 577, 581, 1480 },
-    { 250, 251, 252 },
-    { 102, 103, 104, 105 },
-    { 1467, 1468, 1473 },
-    { 253, 254, 255 },
-    { 62, 63, 64 },
-    { 268, 269, 270 },
-    { 256, 257, 258 },
-    { 259, 260, 261 },
-    { 262, 263, 264 },
-    { 71, 72, 73 },
-}
-
-function S.Catalogue(spec)
-    local out = {}
-    for _, specs in ipairs(CLASS_SPECS) do
-        for _, s in ipairs(specs) do
-            if s == spec then
-                for _, member in ipairs(specs) do
-                    for _, size in ipairs({ "small", "big", "heal" }) do
-                        for _, e in ipairs(Shipped(member, size)) do
-                            if not Has(out, e) then out[#out + 1] = e end
-                        end
-                    end
-                end
-                return out
-            end
-        end
-    end
-    return out
-end
-
-function S.Addable(size)
-    local list, out = S.List(size), {}
-    for _, e in ipairs(S.Catalogue(S.SpecID())) do
-        if (type(e) ~= "number" or Known(e)) and not Has(list, e) then out[#out + 1] = e end
-    end
-    return out
-end
-
-function S.ResetSpec()
-    local spec = S.SpecID()
-    if spec and CastAheadDB and CastAheadDB.saveButtons then CastAheadDB.saveButtons[spec] = nil end
-    S.Refresh()
-end
+function S.ParseEntry(text, list) return store.ParseEntry(text, list) end
+function S.SetList(size, list) return store.SetList(size, list) end
+function S.MoveEntry(from, index, to) return store.MoveEntry(from, index, to) end
+function S.Shift(size, index, step) return store.Shift(size, index, step) end
+function S.Catalogue(spec) return store.Catalogue(spec) end
+function S.Addable(size) return store.Addable(size) end
+function S.ResetSpec() return store.ResetSpec() end
 
 if StaticPopupDialogs then
     StaticPopupDialogs.CASTAHEAD_RESET_SAVES = {
@@ -426,12 +322,20 @@ end
 
 local function Icon(texture) return texture and ("|T" .. texture .. ":16|t ") or "" end
 
+local function Link(kind, id, text) return string.format("|H%s:%d|h%s|h", kind, id, text) end
+
+local function ButtonLink(b)
+    local text = Icon(b.icon) .. ButtonName(b)
+    if b.kind == "item" and b.id then return Link("item", b.id, text) end
+    return Link("spell", b.kind == "item" and b.use or b.id, text)
+end
+
 local function GuideLine(r)
     local names = {}
-    for _, b in ipairs(r.buttons) do names[#names + 1] = Icon(b.icon) .. ButtonName(b) end
+    for _, b in ipairs(r.buttons) do names[#names + 1] = ButtonLink(b) end
     local press = #names > 0 and table.concat(names, ", then ") or "no button in your list"
-    local line = string.format("- %s%s from %s (%s): %s save - %s", Icon(SpellTexture(r.id)), r.name, r.mob or "?", Heard(r.trigger),
-        r.size == "BIG" and "big" or "small", press)
+    local line = string.format("- %s from %s (%s): %s save - %s", Link("spell", r.id, Icon(SpellTexture(r.id)) .. r.name),
+        r.mob or "?", Heard(r.trigger), r.size == "BIG" and "big" or "small", press)
     if r.size == "BIG" and #S.ListFor(S.ViewSpecID(), "heal") > 0 then line = line .. "; heal up after the hit" end
     local wins = r.wins and M.ADVICE[r.wins]
     if wins then line = line .. string.format(" (%s comes first)", wins.say) end
@@ -454,7 +358,7 @@ function S.GuideLines(instanceID)
 end
 
 function S.HealReady()
-    return CastAheadConfig.Enabled("saveCalls") and CastAheadConfig.Get("healCalls") == true and #S.Available("heal") > 0
+    return CastAheadConfig.SaveCalls() and CastAheadConfig.Get("healCalls") == true and #S.Available("heal") > 0
 end
 
 local SOUND_ROOT = "Interface\\AddOns\\CastAhead\\Sounds\\en\\"
@@ -485,7 +389,7 @@ local function RegisterAuraSounds()
     if Blocked() then auraPending = true return end
     auraPending = false
     ClearAuraSounds()
-    if not (CastAheadConfig.Enabled("saveCalls") and CastAheadConfig.Enabled("sound")) then return end
+    if not (CastAheadConfig.SaveCalls() and CastAheadConfig.Enabled("sound")) then return end
     local voice = CastAheadConfig.Enabled("voice")
     for spellID, row in pairs(CastAheadDefensives and CastAheadDefensives.spells or {}) do
         local advice = row.aura and M.SaveAdvice({ save = row, prio = CastAheadPriority and CastAheadPriority[spellID] })
@@ -518,6 +422,18 @@ end
 
 function S.Cancel(key)
     scheduled[key] = nil
+end
+
+function S.LastFiredAt() return lastFiredAt end
+
+function S.NextFireAt(now)
+    local soonest
+    for _, c in pairs(scheduled) do
+        if not c.pausedAt and not c.fired and c.fireAt >= now and (not soonest or c.fireAt < soonest) then
+            soonest = c.fireAt
+        end
+    end
+    return soonest
 end
 
 function S.CancelPrefix(prefix)
@@ -568,12 +484,14 @@ function S.Tick(now)
         if not c.pausedAt then
             if not c.fired and now >= c.fireAt and now < c.endAt then
                 c.fired, c.firedAt = true, now
+                lastFiredAt = now
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice, true) end
             end
             if now >= c.endAt then
                 if c.fired and c.advice == M.ADVICE.BIG and S.HealReady()
                     and CastAheadCore and CastAheadCore.Announce then
                     CastAheadCore.Announce(M.ADVICE.HEAL)
+                    lastFiredAt = now
                     healed = true
                 end
                 scheduled[key] = nil

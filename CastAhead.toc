@@ -25,10 +25,13 @@ Priority.lua
 SaveButtons.lua
 Defensives.lua
 BossCadence.lua
+BurstWindows.lua
 Traits.lua
 Packs.lua
 Match.lua
+Lists.lua
 Saves.lua
+Burst.lua
 BossAdapter.lua
 Timeline.lua
 Core.lua

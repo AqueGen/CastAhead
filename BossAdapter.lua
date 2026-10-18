@@ -156,7 +156,7 @@ end
 
 function A.Tick(now)
     if encounterAt and connected and not barsSeen and not healthWarned and now - encounterAt > HEALTH_WAIT
-        and CastAheadConfig.Enabled("saveCalls") and CastAheadConfig.Enabled("bossAdapter") then
+        and CastAheadConfig.SaveCalls() and CastAheadConfig.Enabled("bossAdapter") then
         encounterAt, healthWarned = nil, true
         print("|cff33ff99Cast Ahead|r " .. connected .. " sent no boss timers this fight - boss save calls are off until it does.")
     end

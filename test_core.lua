@@ -219,6 +219,7 @@ CreateFrame = function(kind)
         if barOnly[key] and kind ~= "StatusBar" then
             return nil
         end
+        if type(key) == "string" and key:match("^%l") then return nil end
         return function() end
     end })
     return f
@@ -289,7 +290,9 @@ StaticPopupDialogs = {}
 
 dofile("Config.lua")
 dofile("Match.lua")
+dofile("Lists.lua")
 dofile("Saves.lua")
+dofile("Burst.lua")
 dofile("BossAdapter.lua")
 dofile("Timeline.lua")
 -- UI.lua only needs the stubs above for its option helpers.
@@ -387,6 +390,24 @@ CastAheadDB = { anchor = "left" }
 fire("ADDON_LOADED", "SomeOtherAddon")
 fire("PLAYER_ENTERING_WORLD")
 check(CastAheadDB.schema == nil, "another addon loading, or a zone-in, does not migrate")
+CastAheadDB = { schema = 2 }
+fire("ADDON_LOADED", "CastAhead")
+check(CastAheadConfig.SaveCalls(), "a profile from before the default changed keeps its defensive calls on")
+CastAheadDB = { schema = 2, saveCalls = false }
+fire("ADDON_LOADED", "CastAhead")
+check(not CastAheadConfig.SaveCalls(), "and one that had them off keeps them off")
+CastAheadDB = nil
+fire("ADDON_LOADED", "CastAhead")
+check(not CastAheadConfig.SaveCalls(), "a new install starts with defensive calls off")
+CastAheadDB = { schema = 3 }
+fire("ADDON_LOADED", "CastAhead")
+check(not CastAheadConfig.SaveCalls(), "a profile that switched them off after the change keeps them off")
+CastAheadDB = { schema = 3, saveCalls = true, voice = false, window = { width = 900 }, journal = { 1 }, probe = { 2 } }
+CastAheadConfig.ResetAll()
+fire("ADDON_LOADED", "CastAhead")
+check(CastAheadDB.voice == nil and CastAheadDB.window == nil and not CastAheadConfig.SaveCalls()
+    and CastAheadDB.journal[1] == 1 and CastAheadDB.probe[1] == 2,
+    "a full reset reads as a new install after the reload and keeps the recorded data")
 
 -- The UI helpers write where the accessor reads.
 CastAheadDB = nil
@@ -2546,7 +2567,7 @@ textures[108416] = 2002
 CastAheadSaveButtons = { [265] = { small = { 108416 }, big = { 104773 } } }
 CastAheadDefensives = { spells = { [100] = { DAMAGER = "BIG", lead = 4.0 } }, alias = {} }
 CastAheadSaves.Refresh()
-CastAheadDB = { centerText = true }
+CastAheadDB = { saveCalls = true, centerText = true }
 check(CastAheadSaves.Icons(CastAheadMatch.ADVICE.BIG)[1] == 2001, "the shipped big button for the spec")
 CastAheadDB.saveButtons = { [265] = { big = { 108416 } } }
 CastAheadSaves.Refresh()
@@ -2562,7 +2583,7 @@ GetSpecializationInfo = function() return 265 end
 CastAheadSaves.Refresh()
 
 reset()
-CastAheadDB = { centerText = true, leadSeconds = 0 }
+CastAheadDB = { saveCalls = true, centerText = true, leadSeconds = 0 }
 CastAheadCore.ReapplyData()
 enter()
 castFor(3.0)
@@ -2574,7 +2595,7 @@ check(Alerts() == 0, string.format("the save heads-up is off by default, got %d"
 reset()
 
 reset()
-CastAheadDB = { centerText = true, leadSeconds = 0, saveLeadSeconds = 4 }
+CastAheadDB = { saveCalls = true, centerText = true, leadSeconds = 0, saveLeadSeconds = 4 }
 CastAheadCore.ReapplyData()
 enter()
 castFor(3.0)                  -- spell 100 identified, next one in 20 s
@@ -2586,7 +2607,7 @@ check(Alerts() == 1, string.format("one save heads-up inside its own lead, got %
 reset()
 
 reset()
-CastAheadDB = { centerText = true, leadSeconds = 5, saveLeadSeconds = 0 }
+CastAheadDB = { saveCalls = true, centerText = true, leadSeconds = 5, saveLeadSeconds = 0 }
 CastAheadCore.ReapplyData()
 enter()
 castFor(3.0)
@@ -2599,7 +2620,7 @@ reset()
 
 -- A cast id known only through the alias table gets the damage spell's save call.
 CastAheadDefensives = { spells = { [999] = { DAMAGER = "BIG", lead = 4.0 } }, alias = { [100] = 999 } }
-CastAheadDB = { centerText = true, leadSeconds = 0, saveLeadSeconds = 4 }
+CastAheadDB = { saveCalls = true, centerText = true, leadSeconds = 0, saveLeadSeconds = 4 }
 CastAheadCore.ReapplyData()
 enter()
 castFor(3.0)
@@ -2621,9 +2642,9 @@ do
         end
     end
     local row100 = CastAheadData[1877][1]
-    CastAheadDB = { centerText = true, leadSeconds = 0 }
+    CastAheadDB = { saveCalls = true, centerText = true, leadSeconds = 0 }
     check(CastAheadMatch.Advice(row100) == CastAheadMatch.ADVICE.BIG, "save calls on: the dps verdict")
-    CastAheadConfig.SetEnabled("saveCalls", false)
+    CastAheadDB.saveCalls = nil
     check(CastAheadMatch.SpecRole() == nil and CastAheadMatch.Advice(row100) == CastAheadMatch.ADVICE.AOE,
         "save calls off: the old AOE call")
     reset()
@@ -2642,7 +2663,7 @@ do
     advance(2.0)
     fire("UNIT_SPELLCAST_STOP", unit)
     reset()
-    CastAheadConfig.SetEnabled("saveCalls", true)
+    CastAheadDB.saveCalls = true
 
     row100.targeted = true
     CastAheadCore.ReapplyData()
@@ -2680,7 +2701,7 @@ do
 end
 
 -- A save call with the voice off still beeps once.
-CastAheadDB = { voice = false }
+CastAheadDB = { saveCalls = true, voice = false }
 sounds, spoken, clips = 0, 0, 0
 CastAheadCore.Announce(CastAheadMatch.ADVICE.BIG, true)
 CastAheadCore.Announce(CastAheadMatch.ADVICE.SMALL, nil)
@@ -2688,7 +2709,7 @@ check(sounds == 2 and Alerts() == 2, string.format("each save call beeps once wi
 
 -- A scheduled save call fires once at its time and shows in the centre until it ends.
 reset()
-CastAheadDB = { centerText = true }
+CastAheadDB = { saveCalls = true, centerText = true }
 enter()
 CastAheadSaves.Schedule("test:1", 100, now + 2, now + 5, CastAheadMatch.ADVICE.BIG)
 sounds, spoken, clips = 0, 0, 0
@@ -2709,15 +2730,15 @@ check(Alerts() == 0, "a cancelled call never fires")
 reset()
 
 -- Save calls off: a scheduled call stays quiet, and one whose hit passed meanwhile never fires later.
-CastAheadDB = { centerText = true }
+CastAheadDB = { saveCalls = true, centerText = true }
 enter()
 CastAheadSaves.Schedule("test:3", 100, now + 2, now + 5, CastAheadMatch.ADVICE.BIG)
-CastAheadConfig.SetEnabled("saveCalls", false)
+CastAheadDB.saveCalls = nil
 sounds, spoken, clips = 0, 0, 0
 advance(3.0)
 check(Alerts() == 0, "no scheduled call fires with save calls off")
 advance(3.0)
-CastAheadConfig.SetEnabled("saveCalls", true)
+CastAheadDB.saveCalls = true
 advance(0.1)
 check(Alerts() == 0, "a call whose hit passed while off never fires after switching back on")
 reset()
@@ -2725,7 +2746,7 @@ reset()
 -- After an update and /reload a new TOC file is missing until a client restart.
 local savedSaves = CastAheadSaves
 CastAheadSaves = nil
-CastAheadDB = { centerText = true, leadSeconds = 5 }
+CastAheadDB = { saveCalls = true, centerText = true, leadSeconds = 5 }
 local ok, err = pcall(function()
     fire("SPELLS_CHANGED")
     sounds, spoken, clips = 0, 0, 0
@@ -2753,7 +2774,7 @@ do
     GetSpecializationInfo = function() return 265 end
     CastAheadDefensives = { spells = { [373693] = { DAMAGER = "BIG", aura = true }, [5] = { TANK = "BIG", aura = true },
                                        [6] = { DAMAGER = "SMALL" } }, alias = {} }
-    CastAheadDB = {}
+    CastAheadDB = { saveCalls = true }
     inCombat = true
     CastAheadSaves.Refresh()
     check(#added == 0, "nothing is registered in combat")
@@ -2800,10 +2821,10 @@ do
     CastAheadSaves.Refresh()
     check(files[#files]:match("Sounds\\en\\BIG%.ogg$"), "a picked sound kit id keeps the clip")
     LibStub, CastAheadDB.sounds = nil, nil
-    CastAheadConfig.SetEnabled("saveCalls", false)
+    CastAheadDB.saveCalls = nil
     CastAheadSaves.Refresh()
     check(CastAheadSaves.AuraSoundCount() == 0, "switching save calls off removes them")
-    CastAheadConfig.SetEnabled("saveCalls", true)
+    CastAheadDB.saveCalls = true
     C_UnitAuras.AddAuraSound = function() error("restricted") end
     check(pcall(CastAheadSaves.Refresh) and CastAheadSaves.AuraSoundCount() == 0, "a failing AddAuraSound is skipped")
     C_UnitAuras.AddAuraSound, C_UnitAuras.RemoveAuraSound = nil, nil
@@ -2828,7 +2849,7 @@ do
                GetItemIconByID = function(id) return 9000 + (id % 1000) end }
     textures[777] = 3777
     CastAheadSaveButtons = { [265] = { small = {}, big = { 104773, { use = 452930 }, { use = 777 } } } }
-    CastAheadDB = {}
+    CastAheadDB = { saveCalls = true }
     CastAheadSaves.ScanBags()
     CastAheadSaves.Refresh()
     CastAheadDefensives = { spells = {
@@ -2878,35 +2899,36 @@ do
     local text = table.concat(guide, "\n")
     check(guide[1] == "Boss: Abe" and text:find("\nBoss: Boss A\n", 1, true) and text:find("\nTrash\n", 1, true),
         "the guide groups bosses by name, then trash")
-    check(guide[2]:find("Zap from Abe (boss timer): big save - |T2001:16|t Unending Resolve", 1, true) and guide[2]:find("(interrupt comes first)", 1, true),
+    check(guide[2]:find("Zap|h from Abe (boss timer): big save - |Hspell:104773|h|T2001:16|t Unending Resolve|h", 1, true) and guide[2]:find("(interrupt comes first)", 1, true),
         "a guide line names the hit, the mob, how it is heard, the size, the first button and what wins")
-    check(text:find("Burn from ground effect (debuff on you): big save", 1, true), "a debuff-only hit says it lands on you")
-    check(guide[2]:find("big save - |T2001:16|t Unending Resolve", 1, true), "a button carries its icon")
+    check(text:find("Burn|h from ground effect (debuff on you): big save", 1, true), "a debuff-only hit says it lands on you")
+    check(guide[2]:find("big save - |Hspell:104773|h|T2001:16|t Unending Resolve|h", 1, true), "a button carries its icon inside a link")
+    check(text:find("|Hitem:5512|h|T9512:16|t", 1, true), "an item in the bags links to the item")
     local textureSaved = C_Spell.GetSpellTexture
     C_Spell.GetSpellTexture = function(id) return id == 806 and 4242 or textureSaved(id) end
-    check(CastAheadSaves.GuideLines(9000)[2]:find("^%- |T4242:16|t Zap from Abe"), "a hit carries its spell icon in front of its name")
+    check(CastAheadSaves.GuideLines(9000)[2]:find("^%- |Hspell:806|h|T4242:16|t Zap|h from Abe"), "a hit carries its spell icon in front of its name, both inside its link")
     C_Spell.GetSpellTexture = textureSaved
-    check(text:find("Bolt from Caster (cast): small save", 1, true) and text:find("Casts about 12s after the pull, then every 20s", 1, true),
+    check(text:find("Bolt|h from Caster (cast): small save", 1, true) and text:find("Casts about 12s after the pull, then every 20s", 1, true),
         "a cast with one cooldown gives its first cast and its period")
     check(text:find("9s, 16s, 9s x2, repeating", 1, true), "a cooldown cycle is spelled out, repeats folded")
-    check(not text:find("Burn from ground effect (debuff on you): big save[^\n]*every"), "a hit without cast data gets no cadence")
+    check(not text:find("Burn|h from ground effect %(debuff on you%): big save[^\n]*every"), "a hit without cast data gets no cadence")
     CastAheadBossCadence = { [801] = { first = 9.6, cd = { 25.0, 40.2, 25.0 }, steady = false }, [806] = { first = 7.0, cd = { 40.0 }, steady = true } }
     text = table.concat(CastAheadSaves.GuideLines(9000), "\n")
-    check(text:find("Slam from Boss A %(boss timer%): small save[^\n]*Casts about 10s after the pull, then 25s, 40s, 25s\n")
-        and text:find("Zap from Abe[^\n]*Casts about 7s after the pull, then every 40s"),
+    check(text:find("Slam|h from Boss A %(boss timer%): small save[^\n]*Casts about 10s after the pull, then 25s, 40s, 25s\n")
+        and text:find("Zap|h from Abe[^\n]*Casts about 7s after the pull, then every 40s"),
         "a boss hit takes its cadence from the boss table, a sequence without repeating")
-    check(text:find("Magma from Pool %(cast%): big save[^\n]*Casts with gaps of about 9s, 16s, 9s x2, repeating"),
+    check(text:find("Magma|h from Pool %(cast%): big save[^\n]*Casts with gaps of about 9s, 16s, 9s x2, repeating"),
         "a cycle without a first cast reads as gaps")
     CastAheadBossCadence = nil
     C_Spell.GetSpellName = nameSaved
-    local savedSpecRole = CastAheadMatch.SpecRole
-    CastAheadMatch.SpecRole = function() return "TANK" end
+    local savedSpecRole = GetSpecializationRole
+    GetSpecializationRole = function() return "TANK" end
     CastAheadDefensives.spells[810] = { DAMAGER = "BIG", TANK = "SMALL", lead = 2.0, aura = false, name = "Quake", mob = "Brute", boss = "", dungeon = 9000, bar = false }
     local tankIds = {}
     for _, r in ipairs(CastAheadSaves.ViewRows(9000)) do tankIds[#tankIds + 1] = r.id end
     check(table.concat(tankIds, ",") == "805", "a tank sees only tank busters in the Saves view, got " .. table.concat(tankIds, ","))
     CastAheadDefensives.spells[810] = nil
-    CastAheadMatch.SpecRole = savedSpecRole
+    GetSpecializationRole = savedSpecRole
     local hex = by[809]
     check(hex and hex.wins == "KICK", "a kickable cast with no curated category beats the save, as in the game")
     check(bolt and bolt.trigger.cast and not bolt.trigger.bar and bolt.wins == "DODGE" and bolt.name == "Bolt",
@@ -2937,6 +2959,24 @@ do
     CastAheadSaves.SetViewSpec(66)
     fire("PLAYER_SPECIALIZATION_CHANGED", "player")
     check(CastAheadSaves.ViewSpecID() == 265, "a real spec change drops the view")
+    local savedUnitClass, savedForClass = UnitClass, GetSpecializationInfoForClassID
+    UnitClass = function() return "Warlock", "WARLOCK", 9 end
+    GetSpecializationInfoForClassID = function(class, i) if class == 2 then return ({ 65, 66, 70 })[i] end end
+    GetSpecializationInfoByID = function(id) return id, "X", "", 0, id == 66 and "TANK" or id == 65 and "HEALER" or "DAMAGER" end
+    CastAheadSaves.SetViewClass(2)
+    check(CastAheadSaves.ViewClassID() == 2 and CastAheadSaves.ViewSpecID() == 65 and CastAheadSaves.ViewRole() == "HEALER",
+        "another class opens on its first spec and takes its role")
+    CastAheadDB.saveCalls = nil
+    check(CastAheadSaves.ViewRole() == "HEALER", "the viewed role does not need the defensive calls switch")
+    CastAheadDB.saveCalls = true
+    CastAheadSaves.SetViewSpec(66)
+    check(CastAheadSaves.ViewClassID() == 2 and CastAheadSaves.ViewSpecID() == 66, "a spec of the viewed class keeps the class")
+    CastAheadSaves.SetViewClass(9)
+    check(CastAheadSaves.ViewClassID() == 9 and CastAheadSaves.ViewSpecID() == 265, "the own class goes back to the real spec")
+    CastAheadSaves.SetViewClass(2)
+    fire("PLAYER_SPECIALIZATION_CHANGED", "player")
+    check(CastAheadSaves.ViewClassID() == 9 and CastAheadSaves.ViewSpecID() == 265, "a real spec change drops the class view")
+    UnitClass, GetSpecializationInfoForClassID = savedUnitClass, savedForClass
     CastAheadSaveButtons[66] = nil
     GetSpecializationInfoByID = nil
     local saved = CastAheadDefensives
@@ -2954,12 +2994,13 @@ end
 GetSpecialization, GetSpecializationRole, GetSpecializationInfo, IsPlayerSpell = nil, nil, nil, nil
 CastAheadDefensives = { spells = {}, alias = {} }
 CastAheadDB = {}
-check(CastAheadConfig.Enabled("saveCalls") and CastAheadConfig.Enabled("bossAdapter"), "save and boss calls are on by default")
+check(not CastAheadConfig.SaveCalls() and CastAheadConfig.Enabled("bossAdapter"), "save calls are off and boss calls on by default")
+CastAheadDB.saveCalls = true
 CastAheadConfig.SetEnabled("bossAdapter", false)
-check(CastAheadDB.bossAdapter == false and CastAheadConfig.Enabled("saveCalls"), "the boss switch is separate")
+check(CastAheadDB.bossAdapter == false and CastAheadConfig.SaveCalls(), "the boss switch is separate")
 CastAheadDB = nil
 CastAheadCore.ReapplyData()
-CastAheadDB = nil
+CastAheadDB = { saveCalls = true }
 
 -- Boss bars: a DBM timer for a spell with a verdict schedules a call at bar end minus lead.
 GetSpecialization = function() return 1 end
@@ -3223,7 +3264,7 @@ do
     IsPlayerSpell = function(id) return id == 108416 or id == 104773 end
     InCombatLockdown = function() return false end
     CastAheadSaveButtons = { [265] = { small = { 108416, { use = 452930 } }, big = { 104773 }, heal = { { use = 452930 } } } }
-    CastAheadDB = {}
+    CastAheadDB = { saveCalls = true }
     CastAheadSaves.ScanBags()
     local small = CastAheadSaves.Available("small")
     check(#small == 2 and small[1].kind == "spell" and small[2].kind == "item" and small[2].id == 5512, "spell then healthstone item")
@@ -3253,7 +3294,7 @@ do
     check(CastAheadSaves.Available("big")[1].id == 104773, "an override skips an unknown spell to the next entry")
     check(#CastAheadSaves.Available("small") == 2, "a size missing from the override keeps the shipped list")
     advance(1)
-    CastAheadDB = { saveButtons = { [265] = { small = 108416 } } }
+    CastAheadDB = { saveCalls = true, saveButtons = { [265] = { small = 108416 } } }
     CastAheadConfig.Migrate()
     check(type(CastAheadDB.saveButtons[265].small) == "table" and CastAheadDB.saveButtons[265].small[1] == 108416, "old single-number override migrates to a list")
     InCombatLockdown = function() return true end
@@ -3263,7 +3304,7 @@ do
     InCombatLockdown = function() return false end
     fire("PLAYER_REGEN_ENABLED")
     check(not CastAheadSaves.BagsPending(), "the pending scan runs after combat")
-    CastAheadDB = {}
+    CastAheadDB = { saveCalls = true }
     check(#CastAheadSaves.Icons(CastAheadMatch.ADVICE.SMALL) == 2, "icons follow the available list")
 
     local same = CastAheadSaves.Available("small")
@@ -3273,7 +3314,7 @@ do
     check(#CastAheadSaves.Available("small") == 1, "the next frame reflects a changed item count")
     counts[5512] = 3
 
-    CastAheadDB = { saveButtons = { [265] = { big = { 999 } } } }
+    CastAheadDB = { saveCalls = true, saveButtons = { [265] = { big = { 999 } } } }
     CastAheadSaves.Refresh()
     local big = CastAheadSaves.Available("big")
     check(#big == 1 and big[1].id == 104773, "an override with nothing available falls back to the shipped list")
@@ -3333,7 +3374,7 @@ do
     local refreshes = 0
     local realRefresh = CastAheadSaves.Refresh
     CastAheadSaves.Refresh = function() refreshes = refreshes + 1 return realRefresh() end
-    CastAheadDB = {}
+    CastAheadDB = { saveCalls = true }
     CastAheadSaves.SetList("heal", { 104773, { use = 452930 } })
     local heal = CastAheadDB.saveButtons[265].heal
     check(heal[1] == 104773 and heal[2].use == 452930 and refreshes == 1, "SetList writes the spec's list and refreshes")
@@ -3342,10 +3383,10 @@ do
     check(CastAheadDB.saveButtons[265] == nil and refreshes == 2, "ResetSpec clears the spec's lists and refreshes")
     check(CastAheadSaves.List("heal") == CastAheadSaveButtons[265].heal, "after a reset the shipped list is back")
     CastAheadSaves.Refresh = realRefresh
-    CastAheadDB = {}
+    CastAheadDB = { saveCalls = true }
     CastAheadSaves.Refresh()
 
-    CastAheadDB = { centerText = true }
+    CastAheadDB = { saveCalls = true, centerText = true }
     CastAheadSaves.Refresh()
     reset()
     enter()
@@ -3378,7 +3419,7 @@ do
     CastAheadSaves.Refresh()
     reset()
 
-    CastAheadDB = { centerText = true, leadSeconds = 0 }
+    CastAheadDB = { saveCalls = true, centerText = true, leadSeconds = 0 }
     CastAheadDefensives = { spells = { [100] = { DAMAGER = "SMALL", lead = 4.0 } }, alias = {} }
     CastAheadCore.ReapplyData()
     enter()
@@ -3409,7 +3450,7 @@ do
         return at
     end
     CastAheadDefensives = { spells = { [100] = { DAMAGER = "BIG", lead = 4.0 } }, alias = {} }
-    CastAheadDB = { centerText = true, leadSeconds = 0 }
+    CastAheadDB = { saveCalls = true, centerText = true, leadSeconds = 0 }
     CastAheadCore.ReapplyData()
     local function HealLine()
         local l = CenterLine()
@@ -3487,10 +3528,10 @@ do
     CastAheadPriority[100] = "AOE"
     CastAheadCore.ReapplyData()
     CastAheadConfig.Set("healCalls", true)
-    CastAheadConfig.SetEnabled("saveCalls", false)
+    CastAheadDB.saveCalls = nil
     BigCast(false)
     check(Heals() == 0 and LastBig() == 0, "saveCalls off silences big and heal")
-    CastAheadConfig.SetEnabled("saveCalls", true)
+    CastAheadDB.saveCalls = true
     reset()
 
     enter()
@@ -3522,7 +3563,7 @@ do
     C_Item.GetItemSpell, C_Item.GetItemCooldown, C_Item.GetItemIconByID = nil, nil, nil
     GetSpecialization, GetSpecializationRole, GetSpecializationInfo, IsPlayerSpell, InCombatLockdown = nil, nil, nil, nil, nil
     CastAheadSaveButtons = {}
-    CastAheadDB = {}
+    CastAheadDB = { saveCalls = true }
 end
 
 do
@@ -3545,7 +3586,7 @@ do
     local savedButtons, savedDB = CastAheadSaveButtons, CastAheadDB
     CastAheadSaveButtons = {}
     assert(loadfile("SaveButtons.lua"))()
-    CastAheadDB = {}
+    CastAheadDB = { saveCalls = true }
     CastAheadSaves.ScanBags()
 
     local cd, secret = true, false
@@ -3634,7 +3675,7 @@ do
     local realRefresh = S.Refresh
     S.Refresh = function() refreshes = refreshes + 1 return realRefresh() end
 
-    CastAheadDB = { saveButtons = { [265] = { small = { 108416, { use = 452930 }, 6789 }, big = { 104773 } } } }
+    CastAheadDB = { saveCalls = true, saveButtons = { [265] = { small = { 108416, { use = 452930 }, 6789 }, big = { 104773 } } } }
     S.MoveEntry("small", 2, "big")
     local o = CastAheadDB.saveButtons[265]
     check(#o.small == 2 and o.small[1] == 108416 and o.small[2] == 6789, "a moved entry leaves its list")
@@ -3643,13 +3684,13 @@ do
     S.MoveEntry("small", 1, "big")
     check(#o.small == 1 and o.small[1] == 108416 and #o.big == 2, "moving an entry the target already has only removes it")
 
-    CastAheadDB = {}
+    CastAheadDB = { saveCalls = true }
     local shippedSmall = #CastAheadSaveButtons[265].small
     S.MoveEntry("small", 1, "heal")
     check(#CastAheadSaveButtons[265].small == shippedSmall and CastAheadDB.saveButtons[265].heal[#CastAheadDB.saveButtons[265].heal] == 108416,
         "moving out of a shipped list copies it, the shipped table stays")
 
-    CastAheadDB = { saveButtons = { [265] = { small = { 108416, 6789, 104773 } } } }
+    CastAheadDB = { saveCalls = true, saveButtons = { [265] = { small = { 108416, 6789, 104773 } } } }
     refreshes = 0
     S.Shift("small", 2, -1)
     local small = CastAheadDB.saveButtons[265].small
@@ -3657,13 +3698,13 @@ do
     S.Shift("small", 1, -1)
     S.Shift("small", 3, 1)
     check(small[1] == 6789 and small[3] == 104773 and refreshes == 1, "Shift past either end does nothing")
-    CastAheadDB = {}
+    CastAheadDB = { saveCalls = true }
     local shippedFirst = CastAheadSaveButtons[265].heal[1]
     S.Shift("heal", 1, 1)
     check(CastAheadSaveButtons[265].heal[1] == shippedFirst and CastAheadDB.saveButtons[265].heal[2] == shippedFirst,
         "Shift on a shipped list writes a copy, the shipped table stays")
 
-    CastAheadDB = { saveButtons = { [265] = { big = {} } } }
+    CastAheadDB = { saveCalls = true, saveButtons = { [265] = { big = {} } } }
     local add = S.Addable("big")
     local addSeen = {}
     for _, e in ipairs(add) do addSeen[type(e) == "table" and "use" .. e.use or e] = true end
@@ -3678,7 +3719,7 @@ do
     local dialog = StaticPopupDialogs.CASTAHEAD_RESET_SAVES
     check(dialog and dialog.hideOnEscape and dialog.timeout == 0 and type(dialog.OnAccept) == "function",
         "the reset confirmation is registered")
-    CastAheadDB = { saveButtons = { [265] = { big = {} } } }
+    CastAheadDB = { saveCalls = true, saveButtons = { [265] = { big = {} } } }
     if dialog then dialog.OnAccept() end
     check(CastAheadDB.saveButtons[265] == nil, "accepting the reset clears the spec's lists")
 
@@ -3686,6 +3727,75 @@ do
     GetSpecialization, GetSpecializationInfo, IsPlayerSpell = nil, nil, nil
     CastAheadSaveButtons, CastAheadDB = savedButtons, savedDB
     S.Refresh()
+end
+
+do
+    local savedButtons, savedDB = CastAheadSaveButtons, CastAheadDB
+    local shipped = {
+        [265] = { full = { 111 } },
+        [266] = { full = { 222 }, mini = { 333 } },
+        [267] = { full = { 444, { use = 452930 } } },
+        [66] = { full = { 555 } },
+    }
+    local changes = 0
+    local burst = CastAheadLists.New({
+        dbKey = "burstButtons",
+        shipped = function() return shipped end,
+        keys = { "full", "mini" },
+        specID = function() return 265 end,
+        onChange = function() changes = changes + 1 end,
+    })
+    CastAheadSaveButtons = { [265] = { small = { 108416 } } }
+    IsPlayerSpell = function(id) return id ~= 999 end
+    local saves = { [265] = { big = { 104773 } } }
+    CastAheadDB = { saveCalls = true, saveButtons = saves }
+
+    check(burst.Keys()[1] == "full" and burst.Keys()[2] == "mini", "a burst store keeps its keys")
+    check(burst.List("full") == shipped[265].full and #burst.List("mini") == 0, "a burst store reads its shipped lists")
+    burst.SetList("full", { 111, 222 })
+    check(CastAheadDB.burstButtons[265].full[2] == 222 and changes == 1, "SetList writes the burst lists and calls onChange")
+    burst.Shift("full", 1, 1)
+    check(CastAheadDB.burstButtons[265].full[1] == 222 and changes == 2, "Shift writes the burst lists")
+    burst.MoveEntry("full", 1, "mini")
+    check(CastAheadDB.burstButtons[265].mini[1] == 222 and #CastAheadDB.burstButtons[265].full == 1 and changes == 3,
+        "MoveEntry writes the burst lists")
+    check(CastAheadDB.saveButtons == saves and #saves[265].big == 1 and saves[265].big[1] == 104773 and saves[265].small == nil,
+        "editing burst lists leaves the save lists alone")
+
+    local seen = {}
+    for _, e in ipairs(burst.Addable("full")) do seen[type(e) == "table" and "use" .. e.use or e] = true end
+    check(seen[222] and seen[333] and seen[444] and seen.use452930, "Addable offers the class mates' shipped burst entries")
+    check(not seen[111] and not seen[555] and not seen[108416] and not seen[104773],
+        "Addable skips the list's own entries, other classes and save buttons")
+
+    burst.ResetSpec()
+    check(CastAheadDB.burstButtons[265] == nil and changes == 4, "ResetSpec clears the spec's burst lists")
+    check(CastAheadDB.saveButtons[265] == saves[265] and saves[265].big[1] == 104773, "ResetSpec on burst leaves the save lists")
+
+    IsPlayerSpell = nil
+    CastAheadSaveButtons, CastAheadDB = savedButtons, savedDB
+end
+
+do
+    local savedDB, savedKnown, savedName = CastAheadDB, IsPlayerSpell, C_Spell.GetSpellName
+    local shipped = { [265] = { big = { 104773 } }, [66] = { big = { 86659 } }, [65] = { big = { 642 } } }
+    local view = 66
+    local store = CastAheadLists.New({ dbKey = "saveButtons", shipped = function() return shipped end, keys = { "big" },
+        specID = function() return 265 end, editSpecID = function() return view end, onChange = function() end })
+    IsPlayerSpell = function(id) return id == 104773 end
+    C_Spell.GetSpellName = function(id) return id == 31850 and "Ardent Defender" or nil end
+    CastAheadDB = {}
+    store.SetList("big", { 86659, 31850 })
+    check(CastAheadDB.saveButtons[66].big[2] == 31850 and store.List("big")[1] == 104773,
+        "editing another spec writes its list, the calls keep the real one")
+    check(store.EditList("big")[1] == 86659, "the page reads the edited spec")
+    check(store.ParseEntry("31850", {}) == 31850, "another spec's list takes a spell this character does not know")
+    local seen = {}
+    for _, e in ipairs(store.Addable("big")) do seen[e] = true end
+    check(seen[642], "another spec offers its class spells this character does not know")
+    view = 265
+    check(store.ParseEntry("31850", {}) == nil, "the real spec's list still wants a known spell")
+    IsPlayerSpell, C_Spell.GetSpellName, CastAheadDB = savedKnown, savedName, savedDB
 end
 
 do
@@ -3739,6 +3849,59 @@ do
 end
 
 do
+    local savedCreate, savedDB, savedWindows = CreateFrame, CastAheadDB, CastAheadBurstWindows
+    local savedSlider = MinimalSliderWithSteppersMixin
+    MinimalSliderWithSteppersMixin = savedSlider or { Label = { Min = 1, Max = 2 }, Event = { OnValueChanged = 1 } }
+    local made, texts = {}, {}
+    CreateFrame = function(kind, name, parent, ...)
+        local f = savedCreate(kind, name, parent, ...)
+        made[#made + 1] = f
+        local createText = f.CreateFontString
+        f.CreateFontString = function(...)
+            local fs = createText(...)
+            local setText = fs.SetText
+            fs.SetText = function(self, t) setText(self, t) rawset(self, "value", t) end
+            fs.SetShown = function(self, on) self.shown = on and true or false end
+            texts[#texts + 1] = fs
+            return fs
+        end
+        f.SetShown = function(self, on) self.shown = on and true or false end
+        f.SetText = function(self, t) rawset(self, "buttonText", t) end
+        f.h, f.flowTop, f.MinText, f.MaxText, f.Slider = 0, 6, StubRegion(), StubRegion(), StubRegion()
+        f.SetSize = function(self, w, h) self.w, self.h = w, h end
+        f.SetHeight = function(self, h) self.h = h end
+        f.GetHeight = function(self) return self.h end
+        f.GetWidth = function(self) return rawget(self, "w") or 600 end
+        f.GetFrameLevel = function() return 1 end
+        f.SetValue = function() end
+        return f
+    end
+    CastAheadDB = {}
+    CastAheadBurstWindows = { [3492] = { [15] = { name = "Ula'tek", { release = 145.5, target = "Venomous Heart" } } } }
+    local host = CreateFrame("Frame")
+    local ok, err = pcall(CastAheadOptions.ShowPanel, host, "Bursts")
+    check(ok, "the Bursts page builds headless " .. tostring(err))
+    ok, err = pcall(CastAheadOptions.ShowPanel, host, "Defensives")
+    check(ok, "the Defensives page builds headless " .. tostring(err))
+    ok, err = pcall(CastAheadOptions.ShowPanel, host, "Report")
+    check(ok, "the Report page builds headless " .. tostring(err))
+    local guide, lists
+    for _, fs in ipairs(texts) do
+        local v = tostring(rawget(fs, "value"))
+        if v:find("Venomous Heart", 1, true) then guide = v end
+    end
+    for _, f in ipairs(made) do
+        local title = rawget(f, "title") and rawget(f.title, "value")
+        if title == "Full burst" or title == "Mini burst" then lists = true end
+    end
+    check(guide and guide:find("Ula'tek", 1, true), "the Bursts page shows the guide for Heroic, got " .. tostring(guide))
+    check(not lists, "the Bursts page has no button lists")
+
+    CreateFrame, CastAheadDB, CastAheadBurstWindows = savedCreate, savedDB, savedWindows
+    MinimalSliderWithSteppersMixin = savedSlider
+end
+
+do
     local sized = 0
     local made, scripts, panelsShown = {}, {}, {}
     local savedCreate, savedShowPanel = CreateFrame, CastAheadOptions.ShowPanel
@@ -3784,6 +3947,19 @@ do
     check(CastAheadWindow.Current() == "General", "Development switched off while open shows General")
     check(panelsShown[#panelsShown] == "General", "each settings page shows its own panel")
     check(sized == before, "switching pages, dungeons and Development mode never resizes the window")
+    CastAheadDB.burstCalls = true
+    CastAheadUI.ShowTab("Bursts")
+    check(CastAheadWindow.Current() == "Bursts", "burst windows switched on show the Bursts page")
+    CastAheadDB.burstCalls = nil
+    CastAheadUI.RefreshTabs()
+    check(CastAheadWindow.Current() == "General", "burst windows switched off while open show General")
+    CastAheadDB.burstCalls = true
+    CastAheadUI.ShowTab("Bursts")
+    CastAhead_Toggle()
+    CastAheadDB.burstCalls = nil
+    CastAhead_Toggle()
+    check(CastAheadWindow.Current() == "General", "a saved Bursts page with bursts off reopens on General")
+    CastAhead_Toggle()
 
     SlashCmdList.CASTAHEAD("sounds")
     check(f:IsShown() and CastAheadWindow.Current() == "Sounds", "/ca sounds opens the Sounds page")
@@ -3809,6 +3985,10 @@ do
     CastAheadWindow.Toggle()
     check(CastAheadWindow.Current() == "General", "a saved hidden page opens the first visible page of its group")
     check(sized == before, "opening and closing never resizes the window")
+    CastAheadDB.window.width, CastAheadDB.window.height = 1200, 900
+    CastAheadWindow.ResetSize()
+    check(f.w == 900 and f.h == 560 and CastAheadDB.window.width == nil and CastAheadDB.window.height == nil,
+        "Reset size goes back to the default size and forgets the saved one")
     CastAheadOptions.ShowPanel = savedShowPanel
 
     CastAheadDB = { window = { width = 1900, height = 560 } }
@@ -3860,6 +4040,431 @@ do
     check(W.Dungeon() == 2, "a clicked dungeon stays selected wherever the player goes")
     CastAheadData, GetInstanceInfo, CreateFrame = savedData, savedInfo, savedCreate
     UIParent, CastAheadDB = nil, nil
+end
+
+-- Burst windows: "burst soon" five seconds before the phase, "burst now" as it starts, a save call goes first.
+do
+    local B, S, A = CastAheadBurst, CastAheadSaves, CastAheadMatch.ADVICE
+    local heard = {}
+    local savedPlay, savedWindows = PlaySoundFile, CastAheadBurstWindows
+    PlaySoundFile = function(path) heard[#heard + 1] = path:match("([%w_]+)%.ogg$") return true, 1 end
+    local role = "DAMAGER"
+    GetSpecialization = function() return 1 end
+    GetSpecializationRole = function() return role end
+    CastAheadBurstWindows = { [3492] = { [15] = { { release = 30 } }, [14] = { { release = 3 } },
+        [8] = { { release = 3, pull = true }, { release = 20, group = true } } } }
+    CastAheadDB = { burstCalls = true }
+    local function run(seconds)
+        for _ = 1, seconds * 2 do
+            now = now + 0.5
+            S.Tick(now)
+            B.Tick(now)
+        end
+    end
+    local function Heard() return table.concat(heard, ",") end
+
+    local t0 = now
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(24.5)
+    check(#heard == 0, "burst: quiet before the heads-up, heard " .. Heard())
+    run(0.5)
+    check(Heard() == "SOON", "burst: burst soon five seconds before the phase, heard " .. Heard())
+    local pend = B.Pending(now)
+    check(#pend == 1 and pend[1].advice == A.SOON and pend[1].endAt == t0 + 30 and pend[1].icons[1] ~= nil,
+        "burst: the centre counts down to the phase")
+    run(5)
+    check(Heard() == "SOON,BURST", "burst: burst now as the phase starts, heard " .. Heard())
+    run(10)
+    check(#B.Pending(now) == 0 and Heard() == "SOON,BURST", "burst: each call once, then off the screen")
+
+    heard = {}
+    B.OnEncounter("ENCOUNTER_START", 3492, 14, now)
+    run(5)
+    check(Heard() == "BURST", "burst: a phase under five seconds in gets no heads-up, heard " .. Heard())
+
+    heard = {}
+    B.OnEncounter("ENCOUNTER_START", 3492, 8, now)
+    run(25)
+    check(Heard() == "SOON,BURST", "burst: the pull moment is silent, a group moment is called, heard " .. Heard())
+
+    heard = {}
+    role = "HEALER"
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(40)
+    check(#heard == 0 and #B.Pending(now) == 0, "burst: a healer skips the damage window")
+    role = "DAMAGER"
+
+    heard = {}
+    UnitIsDeadOrGhost = function(unit) return unit == "player" end
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(40)
+    UnitIsDeadOrGhost = nil
+    check(#heard == 0 and #B.Pending(now) == 0, "burst: a dead player hears and sees nothing")
+
+    heard = {}
+    role = "TANK"
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(35)
+    role = "DAMAGER"
+    check(Heard() == "SOON,BURST", "burst: a tank hears the damage windows too, heard " .. Heard())
+
+    heard = {}
+    CastAheadDB = {}
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(40)
+    check(#heard == 0, "burst: burstCalls is off by default")
+    CastAheadDB = { burstCalls = true }
+
+    B.OnEncounter("ENCOUNTER_START", 3492, 16, now)
+    run(40)
+    check(#heard == 0, "burst: a difficulty without windows is silent")
+
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(15)
+    heard = {}
+    B.OnEncounter("ENCOUNTER_END", 3492, 15, now)
+    run(30)
+    check(#heard == 0 and #B.Pending(now) == 0, "burst: ENCOUNTER_END drops a pending burst")
+
+    heard = {}
+    local t1 = now
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(10.5)
+    S.Schedule("test:save1", 1, t1 + 29, t1 + 33, A.BIG)
+    run(20)
+    check(Heard() == "SOON,BIG_soon", "burst: the save call is heard and the burst waits, heard " .. Heard())
+    run(0.5)
+    check(Heard() == "SOON,BIG_soon,BURST", "burst: the burst follows 2 s after the save, heard " .. Heard())
+    run(10)
+
+    heard = {}
+    local t2 = now
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    S.Schedule("test:save2", 1, t2 + 31, t2 + 35, A.BIG)
+    run(32.5)
+    check(Heard() == "SOON,BIG_soon", "burst: a save due 1 s after the phase goes first, heard " .. Heard())
+    run(1)
+    check(Heard() == "SOON,BIG_soon,BURST", "burst: and the burst speaks 2 s after that save, heard " .. Heard())
+    run(10)
+
+    heard = {}
+    local t3 = now
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    S.Schedule("test:save3", 1, t3 + 25, t3 + 29, A.BIG)
+    run(26.5)
+    check(Heard() == "BIG_soon", "burst: a heads-up landing on a save waits, heard " .. Heard())
+    run(0.5)
+    check(Heard() == "BIG_soon,SOON", "burst: and comes 2 s after it, heard " .. Heard())
+    run(10)
+
+    heard = {}
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    IsEncounterInProgress = function() return false end
+    run(40)
+    check(#heard == 0 and #B.Pending(now) == 0, "burst: an encounter that ended unseen stays silent, heard " .. Heard())
+    IsEncounterInProgress = nil
+
+    B.OnEncounter("ENCOUNTER_END", 3492, 15, now)
+    local specLookups = 0
+    GetSpecialization = function() specLookups = specLookups + 1 return 1 end
+    B.Tick(now)
+    B.Pending(now)
+    check(specLookups == 0, "burst: no windows, no spec lookups per frame")
+    S.Cancel("test:save1")
+    S.Cancel("test:save2")
+    S.Cancel("test:save3")
+    PlaySoundFile, CastAheadBurstWindows = savedPlay, savedWindows
+    GetSpecialization, GetSpecializationRole = nil, nil
+    CastAheadDB = nil
+end
+
+-- Burst windows through Core, in a raid instance that has no trash data.
+do
+    local heard = {}
+    local savedPlay, savedWindows, savedInfo = PlaySoundFile, CastAheadBurstWindows, GetInstanceInfo
+    PlaySoundFile = function(path) heard[#heard + 1] = path:match("([%w_]+)%.ogg$") return true, 1 end
+    local function Heard() return table.concat(heard, ",") end
+    local function Line(prefix)
+        for i = 1, #allFrames do
+            local f = allFrames[i]
+            if type(f.timeValue) == "string" and f.timeValue:sub(1, #prefix) == prefix then return f end
+        end
+    end
+    GetSpecialization = function() return 1 end
+    GetSpecializationRole = function() return "DAMAGER" end
+    CastAheadBurstWindows = { [3492] = { [15] = { { release = 30 } } } }
+    CastAheadDB = { burstCalls = true, centerText = true, saveCalls = true }
+    GetInstanceInfo = function() return "Abyss", "raid", 15, "", 0, 0, false, 9999 end
+    fire("PLAYER_ENTERING_WORLD")
+
+    fire("ENCOUNTER_START", 3492, "Ula'tek", 15, 20)
+    for _ = 1, 51 do advance(0.5) end
+    local line = Line("Burst soon")
+    check(Heard() == "SOON", "raid burst: burst soon through Core with no trash data, heard " .. Heard())
+    check(line ~= nil and line.shown, "raid burst: the countdown line is on screen")
+    for _ = 1, 10 do advance(0.5) end
+    local burstLine = Line("Burst now")
+    check(Heard() == "SOON,BURST", "raid burst: burst now through Core as the phase starts, heard " .. Heard())
+    check(burstLine ~= nil and burstLine.shown, "raid burst: the burst line is on screen")
+    fire("ENCOUNTER_END", 3492, "Ula'tek", 15, 20, 0)
+    advance(0.5)
+    check(burstLine ~= nil and not burstLine.shown, "raid burst: the line leaves the screen when the fight ends")
+
+    heard = {}
+    fire("ENCOUNTER_START", 3492, "Ula'tek", 15, 20)
+    for _ = 1, 51 do advance(0.5) end
+    check(Heard() == "SOON", "raid burst: a re-pull lays the windows out again, heard " .. Heard())
+    fire("ENCOUNTER_END", 3492, "Ula'tek", 15, 20, 0)
+
+    heard = {}
+    fire("ENCOUNTER_START", 3492, "Ula'tek", 2, 5)
+    for _ = 1, 70 do advance(0.5) end
+    check(#heard == 0, "raid burst: another difficulty stays silent, heard " .. Heard())
+    fire("ENCOUNTER_END", 3492, "Ula'tek", 2, 5, 0)
+
+    heard = {}
+    CastAheadDefensives = { spells = { [1299684] = { DAMAGER = "BIG", lead = 3.0 } }, alias = {} }
+    fire("ENCOUNTER_START", 3470, "Nek'zali", 15, 20)
+    CastAheadBossAdapter.OnBar("dbm", "raidbar", 1299684, 10, now)
+    for _ = 1, 16 do advance(0.5) end
+    check(Heard() == "BIG_soon", "raid burst: a boss save call fires in a raid with no trash data, heard " .. Heard())
+    fire("ENCOUNTER_END", 3470, "Nek'zali", 15, 20, 0)
+
+    local savedAdapter, savedPrint, lines = CastAheadBossAdapter, print, 0
+    dofile("BossAdapter.lua")
+    DBM = { RegisterCallback = function() end }
+    CastAheadBossAdapter.Connect()
+    DBM = nil
+    print = function() lines = lines + 1 end
+    fire("ENCOUNTER_START", 3470, "Nek'zali", 15, 20)
+    for _ = 1, 64 do advance(0.5) end
+    print = savedPrint
+    check(lines == 0, string.format("raid burst: no boss-timer warning where no trash data runs, got %d line(s)", lines))
+    fire("ENCOUNTER_END", 3470, "Nek'zali", 15, 20, 0)
+    CastAheadBossAdapter = savedAdapter
+
+    CastAheadDefensives = { spells = {}, alias = {} }
+    PlaySoundFile, CastAheadBurstWindows, GetInstanceInfo = savedPlay, savedWindows, savedInfo
+    GetSpecialization, GetSpecializationRole = nil, nil
+    CastAheadDB = nil
+    fire("PLAYER_ENTERING_WORLD")
+end
+
+do
+    local ok = pcall(dofile, "Options.lua")
+    check(ok and CastAheadOptions and CastAheadOptions.Switches and CastAheadOptions.Switches.burstCalls
+        and CastAheadOptions.Switches.burstCalls.defaultOff == true, "the burst switch exists and is off by default")
+    check(ok and table.concat(CastAheadOptions.TABS, ",") == "General,Sounds,Defensives,Bursts,Development,Report",
+        "bursts have their own settings page right after Defensives, Report comes last")
+    local savedMeta, savedBuild, savedLocale, savedInfo, savedDB = C_AddOns, GetBuildInfo, GetLocale, GetSpecializationInfoByID, CastAheadDB
+    local savedSpec, savedSpecInfo = GetSpecialization, GetSpecializationInfo
+    GetSpecialization, GetSpecializationInfo = function() return 1 end, function() return 577 end
+    C_AddOns = { GetAddOnMetadata = function(_, field) return field == "Version" and "9.9.9" or nil end }
+    GetBuildInfo = function() return "12.1.0", "65000" end
+    GetLocale = function() return "enUS" end
+    GetSpecializationInfoByID = function(id) return id, "Havoc", "", 0, "DAMAGER", "DEMONHUNTER", "Demon Hunter" end
+    CastAheadDB = { burstCalls = true }
+    local save = CastAheadOptions.ReportText("save")
+    check(save:find("Cast Ahead report: Wrong defensive call\nAddon 9.9.9, game 12.1.0 (65000), enUS\n", 1, true)
+        and save:find("Spec: Havoc Demon Hunter", 1, true) and save:find("Defensive calls: off", 1, true)
+        and save:find("Anything else about what happened:\n$"), "a defensive report carries version, spec, the switch and ends on its question")
+    local burst = CastAheadOptions.ReportText("burst")
+    check(burst:find("Burst guide: Heroic\nBurst windows: on\n", 1, true) and not burst:find("Defensive calls", 1, true),
+        "a burst report carries the guide difficulty and the burst switch instead")
+    local someId, someData = next(CastAheadData)
+    CastAheadOptions.SetReportPicks({ dungeon = someId, spell = { id = 101, name = "Bolt", mob = "Caster" },
+        what = "Called too late", level = "+10 to +15", often = "Sometimes" })
+    local cast = CastAheadOptions.ReportText("cast")
+    check(cast:find("Dungeon picked: " .. someData.name, 1, true)
+        and cast:find("Spell: Bolt (101) from Caster\nProblem: Called too late\nKey level: +10 to +15\nHow often: Sometimes\n", 1, true),
+        "the picked dungeon, spell, problem, key level and frequency go into the report")
+    CastAheadOptions.SetReportPicks({ boss = { id = 3492, diff = 16, name = "Ula'tek" }, spell = { id = 101, name = "Bolt" },
+        level = "+20 and up", often = "Once" })
+    local picked = CastAheadOptions.ReportText("burst")
+    check(picked:find("Boss: Ula'tek (Mythic, encounter 3492)\n", 1, true) and picked:find("How often: Once\n", 1, true)
+        and not picked:find("Spell:", 1, true) and not picked:find("Key level", 1, true),
+        "a burst report takes the boss and frequency, not the spell or key level")
+    CastAheadOptions.SetReportPicks(nil)
+    C_AddOns, GetBuildInfo, GetLocale, GetSpecializationInfoByID, CastAheadDB = savedMeta, savedBuild, savedLocale, savedInfo, savedDB
+    GetSpecialization, GetSpecializationInfo = savedSpec, savedSpecInfo
+end
+
+-- The guide lists every window of a difficulty by boss, the same for every spec.
+do
+    local B = CastAheadBurst
+    local saved = CastAheadBurstWindows
+    local function Guide(difficulty)
+        local text = table.concat(B.GuideLines(difficulty), "\n")
+        return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+    end
+    CastAheadBurstWindows = {
+        [3492] = { [16] = { name = "Ula'tek", { release = 294.5, target = "Venomous Heart" },
+            { release = 145.5, target = "Venomous Heart" }, { release = 108.1, role = "HEALER" } } },
+        [3455] = { [16] = { name = "Vashnik", { release = 128.4, group = true }, { release = 3.2, pull = true } } },
+        [3470] = { [16] = { name = "Nek'zali" } },
+        [3101] = { [8] = { name = "Kystia Manaheart", { event = 610, target = "Light Infusion" } } } }
+    check(B.Clock(197) == "3:17" and B.Clock(59.6) == "1:00", "burst guide: clock formats m:ss")
+    local text = Guide(16)
+    check(text == "Nek'zali\n  no shared moment - burst on the pull, then on cooldown\n\n"
+        .. "Ula'tek\n  1:48 burst (healers)\n  2:26 Venomous Heart\n  4:55 Venomous Heart\n\n"
+        .. "Vashnik\n  0:03 on the pull\n  2:08 group burst",
+        "burst guide: every boss by name, windows by time, healer windows marked, got " .. text)
+    check(B.GuideLines(16)[1] == "|cffffd100Nek'zali|r", "burst guide: the boss name is a gold heading")
+    text = Guide(8)
+    check(text == "Kystia Manaheart\n  Light Infusion - on the boss warning", "burst guide: a boss-event window names the warning, got " .. text)
+    check(#B.GuideLines(15) == 0, "burst guide: no windows, no lines")
+    CastAheadBurstWindows = saved
+end
+
+-- Healer windows go to healers only; a boss-event window puts our clip on the game's own warning.
+do
+    local B, S = CastAheadBurst, CastAheadSaves
+    local heard, sounds, timers = {}, {}, {}
+    local savedPlay, savedWindows = PlaySoundFile, CastAheadBurstWindows
+    PlaySoundFile = function(path) heard[#heard + 1] = path:match("([%w_]+)%.ogg$") return true, 1 end
+    C_Timer = { After = function(delay, fn) timers[#timers + 1] = { at = now + delay, fn = fn } end }
+    C_EncounterEvents = { SetEventSound = function(id, trigger, sound)
+        sounds[#sounds + 1] = { id = id, trigger = trigger, sound = sound }
+    end }
+    local role = "HEALER"
+    GetSpecialization = function() return 1 end
+    GetSpecializationRole = function() return role end
+    CastAheadBurstWindows = {
+        [3492] = { [15] = { name = "Ula'tek", { release = 30 }, { release = 70, role = "HEALER" } } },
+        [3101] = { [8] = { name = "Kystia Manaheart", { event = 610, target = "Light Infusion" } } } }
+    CastAheadDB = { burstCalls = true }
+    local function run(seconds)
+        for _ = 1, seconds * 2 do
+            now = now + 0.5
+            for i = #timers, 1, -1 do
+                if now >= timers[i].at then table.remove(timers, i).fn() end
+            end
+            S.Tick(now)
+            B.Tick(now)
+        end
+    end
+    local function Heard() return table.concat(heard, ",") end
+
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(35)
+    check(#heard == 0, "burst roles: a healer skips the damage window, heard " .. Heard())
+    run(40)
+    check(Heard() == "SOON,BURST", "burst roles: a healer hears the healer window, heard " .. Heard())
+    B.OnEncounter("ENCOUNTER_END", 3492, 15, now)
+    heard, role = {}, "DAMAGER"
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(35)
+    check(Heard() == "SOON,BURST", "burst roles: a damage dealer hears the damage window, heard " .. Heard())
+    run(40)
+    check(Heard() == "SOON,BURST", "burst roles: and skips the healer window, heard " .. Heard())
+    B.OnEncounter("ENCOUNTER_END", 3492, 15, now)
+
+    heard, sounds = {}, {}
+    B.OnEncounter("ENCOUNTER_START", 3101, 8, now)
+    run(1.5)
+    check(#sounds == 0, "burst event: nothing is armed before boss mods have set theirs")
+    run(1)
+    local armed = sounds[1]
+    check(#sounds == 1 and armed.id == 610 and armed.trigger == 0 and armed.sound
+        and armed.sound.file:match("\\BURST%.ogg$") and armed.sound.channel == "Master" and armed.sound.volume == 1,
+        "burst event: the burst clip goes on the boss event's warning")
+    check(#heard == 0, "burst event: the addon says nothing itself, heard " .. Heard())
+    B.OnEncounter("ENCOUNTER_END", 3101, 8, now)
+    check(#sounds == 2 and sounds[2].id == 610 and sounds[2].trigger == 0 and sounds[2].sound == nil,
+        "burst event: the fight's end takes the sound off")
+
+    sounds = {}
+    B.OnEncounter("ENCOUNTER_START", 3101, 8, now)
+    B.OnEncounter("ENCOUNTER_END", 3101, 8, now)
+    run(3)
+    check(#sounds == 0, "burst event: a fight over before the delay arms nothing")
+
+    role = "HEALER"
+    B.OnEncounter("ENCOUNTER_START", 3101, 8, now)
+    run(3)
+    check(#sounds == 1, "burst event: a healer gets the boss-event call too")
+    B.OnEncounter("ENCOUNTER_END", 3101, 8, now)
+
+    for _, db in ipairs({ {}, { burstCalls = true, voice = false }, { burstCalls = true, sound = false } }) do
+        sounds, CastAheadDB = {}, db
+        B.OnEncounter("ENCOUNTER_START", 3101, 8, now)
+        run(3)
+        B.OnEncounter("ENCOUNTER_END", 3101, 8, now)
+        check(#sounds == 0, "burst event: switched off, voice off or sound off arms nothing")
+    end
+
+    C_Timer, C_EncounterEvents = nil, nil
+    PlaySoundFile, CastAheadBurstWindows = savedPlay, savedWindows
+    GetSpecialization, GetSpecializationRole = nil, nil
+    CastAheadDB = nil
+end
+
+do
+    GetNumSpecializations = function() return 2 end
+    GetSpecializationInfo = function(i) return i == 1 and 1480 or 577, i == 1 and "Devourer" or "Havoc", "", 1 end
+    local host = CreateFrame("Frame")
+    local h = CastAheadWindow.SpecBar and CastAheadWindow.SpecBar(host, 0, 0, function() end)
+    check(h and h > 0, "spec bar: a two-spec class gets a bar")
+    GetNumSpecializations = function() return 1 end
+    check(CastAheadWindow.SpecBar and CastAheadWindow.SpecBar(host, 0, 0, function() end) > 0,
+        "spec bar: a one-spec class keeps the bar, for picking another class")
+    local ok = pcall(CastAheadWindow.PaintSpecBars)
+    check(ok, "spec bar: repainting every bar works")
+    GetNumSpecializations, GetSpecializationInfo = nil, nil
+end
+
+do
+    local B = CastAheadBurst
+    local savedCreate, savedDB, savedAuras = CreateFrame, CastAheadDB, C_UnitAuras
+    local frame
+    CreateFrame = function(kind, ...)
+        local f = savedCreate(kind, ...)
+        f.events = {}
+        f.RegisterEvent = function(self, e) self.events[e] = true end
+        f.UnregisterAllEvents = function(self) wipe(self.events) end
+        f.SetScript = function(self, script, fn) self[script] = fn end
+        frame = f
+        return f
+    end
+    C_Secrets = { ShouldSpellAuraBeSecret = function(id) return id == 1265412 end }
+    local aura
+    C_UnitAuras = { GetUnitAuraBySpellID = function(unit, id) return id == 1230304 and aura or nil end }
+
+    CastAheadDB = { devMode = true, recordAll = false }
+    B.OnEncounter("ENCOUNTER_START", 3101, 8, now)
+    check(frame == nil and CastAheadDB.phaseProbe == nil, "phase probe: recording off registers and stores nothing")
+
+    CastAheadDB.recordAll = nil
+    B.OnEncounter("ENCOUNTER_START", 3101, 8, now)
+    local s = CastAheadDB.phaseProbe and CastAheadDB.phaseProbe[1]
+    check(s and s.enc == 3101 and s.rows[1].kind == "secrecy", "phase probe: encounter start opens a session with a secrecy row")
+    check(s and s.rows[1].spells[1265412].should == "true" and s.rows[1].spells[1265412].secrecy == "-",
+        "phase probe: secrecy facts are read, a missing function is '-'")
+    check(frame and frame.events.UNIT_AURA and frame.events.ENCOUNTER_END, "phase probe: session events are registered")
+
+    aura = { spellId = 1230304 }
+    now = now + 12.34
+    frame.OnEvent(frame, "UNIT_AURA", "boss1", {})
+    frame.OnEvent(frame, "UNIT_AURA", "boss1", {})
+    frame.OnEvent(frame, "UNIT_AURA", "nameplate1", {})
+    local auraRows = 0
+    for _, row in ipairs(s.rows) do if row.kind == "aura" then auraRows = auraRows + 1 end end
+    check(auraRows == 1 and s.rows[2].found == "+" and s.rows[2].t == 12.3 and s.rows[2].unit == "boss1",
+        "phase probe: an aura logs once until it changes, got " .. auraRows)
+    check(s.auraEvents.boss1 == 2 and s.auraEvents.nameplate1 == nil, "phase probe: boss aura events are counted")
+
+    local secret = {}
+    issecretvalue = function(v) return v == secret end
+    frame.OnEvent(frame, "ENCOUNTER_WARNING", { duration = 5, severity = 2, shouldPlaySound = secret })
+    issecretvalue = nil
+    local w = s.rows[#s.rows]
+    check(w.kind == "warning" and w.duration == "5" and w.severity == "2" and w.sound == "S",
+        "phase probe: a warning logs duration and severity, a secret as 'S'")
+
+    frame.OnEvent(frame, "ENCOUNTER_END", 3101, "Kystia", 8, 5, 1)
+    check(next(frame.events) == nil and s.result == "kill", "phase probe: encounter end unregisters and closes the session")
+
+    CreateFrame, CastAheadDB, C_UnitAuras, C_Secrets = savedCreate, savedDB, savedAuras, nil
 end
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
