@@ -194,14 +194,25 @@ if StaticPopupDialogs then
     }
 end
 
+function S.Fits(e, row)
+    local limit = e.kind == "spell" and CastAheadButtonLimits and CastAheadButtonLimits[e.id]
+    if not (limit and row) then return true end
+    if limit == "aoe" then return row.aoe ~= false end
+    local school = row.school
+    if not school then return true end
+    if limit == "physical" then return school % 2 == 1 end
+    return school ~= 1
+end
+
 local SIZE = { SMALL = "small", BIG = "big", HEAL = "heal" }
 local NO_ICONS = {}
-function S.Icons(advice)
+function S.Icons(advice, spellID)
     local size = advice and SIZE[advice.key]
     if not size then return NO_ICONS end
+    local row = spellID and M.SaveRow(spellID)
     local out = {}
     for _, e in ipairs(S.Available(size)) do
-        if e.icon then out[#out + 1] = e.icon end
+        if e.icon and S.Fits(e, row) then out[#out + 1] = e.icon end
         if #out == 3 then break end
     end
     return out
@@ -249,6 +260,14 @@ local function BossCadence(id)
     return CastAheadBossCadence and CastAheadBossCadence[id] or NO_CADENCE
 end
 
+local function FitsRow(buttons, row)
+    local out = {}
+    for _, b in ipairs(buttons) do
+        if S.Fits(b, row) then out[#out + 1] = b end
+    end
+    return out
+end
+
 function S.ViewRows(instanceID)
     local out = {}
     local spells = CastAheadDefensives and CastAheadDefensives.spells
@@ -273,7 +292,7 @@ function S.ViewRows(instanceID)
                 first = (cast[id] or BossCadence(id)).first, cd = (cast[id] or BossCadence(id)).cd,
                 repeating = cast[id] ~= nil,
                 wins = wins[id] or Wins({ prio = CastAheadPriority and CastAheadPriority[id] }),
-                buttons = buttons[size],
+                buttons = FitsRow(buttons[size], row),
             }
         end
     end
@@ -469,7 +488,7 @@ function S.Pending(now)
     wipe(pending)
     for _, c in pairs(scheduled) do
         if not c.pausedAt and c.fired and c.endAt > now then
-            local icons = S.Icons(c.advice)
+            local icons = S.Icons(c.advice, c.spell)
             if c.advice ~= M.ADVICE.HEAL or #icons > 0 then
                 pending[#pending + 1] = { endAt = c.endAt, advice = c.advice, row = { spell = c.spell }, icons = icons }
             end

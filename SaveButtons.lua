@@ -40,3 +40,13 @@ CastAheadSaveButtons = {
     [72]  = { small = { 23920 }, big = { 184364 }, heal = { 202168, { use = 1295247 }, { use = 1234768 }, { use = 6262 }, { use = 452930 } } },
     [73]  = { small = { 23920 }, big = { 871 }, heal = { 202168, { use = 1295247 }, { use = 6262 }, { use = 1234768 }, { use = 452930 } } },
 }
+
+CastAheadButtonLimits = {
+    [48707] = "magic",
+    [31224] = "magic",
+    [23920] = "magic",
+    [1022] = "physical",
+    [5277] = "physical",
+    [203720] = "physical",
+    [1966] = "aoe",
+}

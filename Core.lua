@@ -2517,12 +2517,12 @@ local function CenterPick(now)
             local advice = CastAheadMatch.ConsensusAdvice(c.candidates, state.interruptible)
             if advice then
                 centerPicks[#centerPicks + 1] = { endAt = c.endAt, advice = advice, row = c.row,
-                                                  icons = CastAheadSaves and CastAheadSaves.Icons(advice) or nil }
+                                                  icons = CastAheadSaves and CastAheadSaves.Icons(advice, c.row and c.row.spell) or nil }
                 local save = advice == CastAheadMatch.ADVICE.TARGET and CastAheadSaves and c.candidates[1]
                     and CastAheadMatch.SaveAdvice(c.candidates[1])
                 if save then
                     centerPicks[#centerPicks + 1] = { endAt = c.endAt, advice = save, row = c.row,
-                                                      icons = CastAheadSaves.Icons(save), onlyIfTarget = unit }
+                                                      icons = CastAheadSaves.Icons(save, c.candidates[1].spell), onlyIfTarget = unit }
                 end
             else
                 -- Disagreement is still a cast going out: show both answers

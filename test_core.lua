@@ -2582,6 +2582,44 @@ check(#CastAheadSaves.Icons(CastAheadMatch.ADVICE.BIG) == 0, "a spec without a t
 GetSpecializationInfo = function() return 265 end
 CastAheadSaves.Refresh()
 
+do
+    local savedButtons, savedDefensives = CastAheadSaveButtons, CastAheadDefensives
+    assert(loadfile("SaveButtons.lua"))()
+    local Fits = CastAheadSaves.Fits
+    local function spell(id) return { kind = "spell", id = id } end
+    check(not Fits(spell(48707), { school = 1 }) and Fits(spell(48707), { school = 4 }) and Fits(spell(48707), { school = 127 }),
+        "a magic-only button skips a physical hit and fits fire and chaos")
+    check(Fits(spell(1022), { school = 1 }) and not Fits(spell(1022), { school = 32 }) and Fits(spell(1022), { school = 127 }),
+        "a physical-only button fits physical and chaos, not shadow")
+    check(not Fits(spell(1966), { aoe = false }) and Fits(spell(1966), { aoe = true }) and Fits(spell(1966), { school = 1 }),
+        "an area-only button skips a single-target hit and fits one with no flag")
+    check(Fits(spell(48707), {}) and Fits(spell(48707), nil) and Fits(spell(104773), { school = 1 })
+        and Fits({ kind = "item", id = 48707 }, { school = 1 }), "no school, no row, an unlimited button or an item always fit")
+
+    IsPlayerSpell = function(id) return id == 48707 or id == 48792 end
+    textures[48707], textures[48792] = 3001, 3002
+    CastAheadSaveButtons = { [265] = { small = { 48707, 48792 }, big = {} } }
+    CastAheadDefensives = { spells = { [200] = { DAMAGER = "SMALL", lead = 2.0, school = 1, aoe = false },
+                                       [201] = { DAMAGER = "SMALL", lead = 2.0, school = 4 } }, alias = { [202] = 200 } }
+    CastAheadSaves.Refresh()
+    local small = CastAheadMatch.ADVICE.SMALL
+    check(CastAheadSaves.Icons(small, 200)[1] == 3002 and #CastAheadSaves.Icons(small, 200) == 1,
+        "a physical hit shows the next button instead of the magic-only one")
+    check(CastAheadSaves.Icons(small, 202)[1] == 3002, "an aliased cast takes the school of its hit")
+    check(CastAheadSaves.Icons(small, 201)[1] == 3001 and #CastAheadSaves.Icons(small, 201) == 2,
+        "a fire hit keeps the magic-only button first")
+    check(CastAheadSaves.Icons(small)[1] == 3001, "a call with no hit keeps the whole list")
+    CastAheadDefensives.spells[200].dungeon, CastAheadDefensives.spells[201].dungeon = 9100, 9100
+    local view = {}
+    for _, r in ipairs(CastAheadSaves.ViewRows(9100)) do view[r.id] = r end
+    check(view[200] and #view[200].buttons == 1 and view[200].buttons[1].id == 48792 and view[201] and #view[201].buttons == 2,
+        "the guide drops the magic-only button on a physical hit and keeps both on a fire hit")
+    CastAheadSaveButtons, CastAheadDefensives = savedButtons, savedDefensives
+    textures[48707], textures[48792] = nil, nil
+    IsPlayerSpell = function(id) return id == 104773 or id == 108416 end
+    CastAheadSaves.Refresh()
+end
+
 reset()
 CastAheadDB = { saveCalls = true, centerText = true, leadSeconds = 0 }
 CastAheadCore.ReapplyData()
