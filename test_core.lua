@@ -2808,6 +2808,14 @@ end)
 check(ok, "no error without the Saves module: " .. tostring(err))
 check(Alerts() == 1, string.format("the ordinary heads-up still fires once, got %d", Alerts()))
 reset()
+do
+    local savedLists = CastAheadLists
+    CastAheadLists = nil
+    local loaded, loadErr = pcall(dofile, "Saves.lua")
+    check(loaded and CastAheadSaves == nil,
+        "Saves.lua without the new Lists.lua leaves no half-built module: " .. tostring(loadErr))
+    CastAheadLists = savedLists
+end
 CastAheadSaves = savedSaves
 
 -- Aura sounds: registered for the player's role out of combat only, replaced on spec change.
@@ -4464,6 +4472,17 @@ do
         run(3)
         B.OnEncounter("ENCOUNTER_END", 3101, 8, now)
         check(#sounds == 0, "burst event: switched off, voice off or sound off arms nothing")
+    end
+
+    for _, change in ipairs({ "burstCalls", "voice", "sound" }) do
+        sounds, CastAheadDB = {}, { burstCalls = true }
+        B.OnEncounter("ENCOUNTER_START", 3101, 8, now)
+        run(3)
+        CastAheadDB[change] = change == "burstCalls" and nil or false
+        run(0.5)
+        check(#sounds == 2 and sounds[2].id == 610 and sounds[2].sound == nil,
+            "burst event: " .. change .. " switched off mid-fight takes the sound off, got " .. #sounds)
+        B.OnEncounter("ENCOUNTER_END", 3101, 8, now)
     end
 
     C_Timer, C_EncounterEvents = nil, nil

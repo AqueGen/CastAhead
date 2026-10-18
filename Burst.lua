@@ -198,6 +198,10 @@ function B.OnEncounter(event, encounterID, difficultyID, now)
 end
 
 function B.Tick(now)
+    if next(armed) and not (On() and CastAheadCore and CastAheadCore.AdviceFile
+            and CastAheadCore.AdviceFile(M.ADVICE.BURST)) then
+        Disarm()
+    end
     if #entries == 0 then return end
     if IsEncounterInProgress and not IsEncounterInProgress() then wipe(entries) return end
     if not On() then return end

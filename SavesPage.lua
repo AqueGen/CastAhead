@@ -77,8 +77,14 @@ local function CreateSaveRow(parent, index)
     return row
 end
 
+local RESTART = "Restart the game to finish the Cast Ahead update - defensive calls are off until then."
+
 local function RefreshGuide()
     if not (guideHost and guideHost:IsVisible()) then return end
+    if not CastAheadSaves then
+        guideText:SetText(RESTART)
+        return
+    end
     local lines = CastAheadSaves and CastAheadSaves.GuideLines and CastAheadSaves.GuideLines(CastAheadWindow.Dungeon()) or {}
     if #lines == 0 then
         lines = { CastAheadSaves.ViewRole() and "Nothing in this dungeon calls a save for this role."
@@ -91,6 +97,10 @@ end
 
 local function RefreshSaves()
     if not (savesHost and savesHost:IsVisible()) then return end
+    if not CastAheadSaves then
+        CastAheadWindow.SetFooter(RESTART)
+        return
+    end
     local saves = CastAheadSaves and CastAheadSaves.ViewRows and CastAheadSaves.ViewRows(CastAheadWindow.Dungeon()) or {}
     local items, group = {}, nil
     for _, s in ipairs(saves) do

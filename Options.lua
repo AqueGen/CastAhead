@@ -834,6 +834,12 @@ local function Caveat(parent, text, kind)
 end
 
 function BuildDefensives(panel)
+    if not CastAheadSaves then
+        local note = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        note:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -6)
+        note:SetText("Restart the game to finish the Cast Ahead update - defensive calls are off until then.")
+        return
+    end
     local group = BuildGroup(panel, "Defensive calls", DEFENSIVES_H)
     local Paint
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, function()
