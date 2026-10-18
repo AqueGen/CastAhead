@@ -3987,7 +3987,7 @@ do
     check(sized == before, "opening and closing never resizes the window")
     CastAheadDB.window.width, CastAheadDB.window.height = 1200, 900
     CastAheadWindow.ResetSize()
-    check(f.w == 900 and f.h == 560 and CastAheadDB.window.width == nil and CastAheadDB.window.height == nil,
+    check(f.w == 1200 and f.h == 640 and CastAheadDB.window.width == nil and CastAheadDB.window.height == nil,
         "Reset size goes back to the default size and forgets the saved one")
     CastAheadOptions.ShowPanel = savedShowPanel
 
@@ -4271,15 +4271,17 @@ do
     local burst = CastAheadOptions.ReportText("burst")
     check(burst:find("Burst guide: Heroic\nBurst windows: on\n", 1, true) and not burst:find("Defensive calls", 1, true),
         "a burst report carries the guide difficulty and the burst switch instead")
+    CastAheadOptions.SetReportPicks(nil)
+    check(CastAheadOptions.ReportText("cast"):find("Key level: +12\n", 1, true), "a fresh report starts at key level +12")
     local someId, someData = next(CastAheadData)
     CastAheadOptions.SetReportPicks({ dungeon = someId, spell = { id = 101, name = "Bolt", mob = "Caster" },
-        what = "Called too late", level = "+10 to +15", often = "Sometimes" })
+        what = "Called too late", level = 12, often = "Sometimes" })
     local cast = CastAheadOptions.ReportText("cast")
     check(cast:find("Dungeon picked: " .. someData.name, 1, true)
-        and cast:find("Spell: Bolt (101) from Caster\nProblem: Called too late\nKey level: +10 to +15\nHow often: Sometimes\n", 1, true),
+        and cast:find("Spell: Bolt (101) from Caster\nProblem: Called too late\nKey level: +12\nHow often: Sometimes\n", 1, true),
         "the picked dungeon, spell, problem, key level and frequency go into the report")
     CastAheadOptions.SetReportPicks({ boss = { id = 3492, diff = 16, name = "Ula'tek" }, spell = { id = 101, name = "Bolt" },
-        level = "+20 and up", often = "Once" })
+        level = 20, often = "Once" })
     local picked = CastAheadOptions.ReportText("burst")
     check(picked:find("Boss: Ula'tek (Mythic, encounter 3492)\n", 1, true) and picked:find("How often: Once\n", 1, true)
         and not picked:find("Spell:", 1, true) and not picked:find("Key level", 1, true),

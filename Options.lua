@@ -1016,9 +1016,10 @@ local REPORT_KINDS = {
       what = { "Lua error", "Something on screen looks wrong", "A setting does not work" } },
     { key = "idea", label = "Idea", ask = "What would help you:" },
 }
-local REPORT_LEVELS = { "+2 to +9", "+10 to +15", "+16 to +19", "+20 and up", "Not a key" }
+local LEVEL_MIN, LEVEL_MAX, LEVEL_DEFAULT = 2, 40, 12
 local REPORT_OFTEN = { "Every time", "Sometimes", "Once" }
-local reportKind, pick = "cast", {}
+local function NewPicks() return { level = LEVEL_DEFAULT } end
+local reportKind, pick = "cast", NewPicks()
 
 local function OnOff(on) return on and "on" or "off" end
 
@@ -1029,7 +1030,7 @@ end
 
 local function InPlay(key) return key == "cast" or key == "save" end
 
-function CastAheadOptions.SetReportPicks(picks) pick = picks or {} end
+function CastAheadOptions.SetReportPicks(picks) pick = picks or NewPicks() end
 
 function CastAheadOptions.ReportText(key)
     local kind = KindOf(key)
@@ -1062,7 +1063,7 @@ function CastAheadOptions.ReportText(key)
         lines[#lines + 1] = string.format("Spell: %s (%d) from %s", pick.spell.name, pick.spell.id, pick.spell.mob or "?")
     end
     if kind.what and pick.what then lines[#lines + 1] = "Problem: " .. pick.what end
-    if InPlay(kind.key) and pick.level then lines[#lines + 1] = "Key level: " .. pick.level end
+    if InPlay(kind.key) and pick.level then lines[#lines + 1] = "Key level: +" .. pick.level end
     if kind.key ~= "idea" and pick.often then lines[#lines + 1] = "How often: " .. pick.often end
     if kind.key == "cast" and CastAheadConfig.Dev() then
         lines[#lines + 1] = "Key journal: paste the /ca report text below for exact timings."
@@ -1100,15 +1101,24 @@ function BuildReport(panel)
     local box, shownKind, Rebuild
     local buttons, rows = {}, {}
 
-    local function Row(label, menu)
+    local function Row(label, menu, control)
         local row = {}
         row.label = details:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        row.drop = CreateFrame("DropdownButton", nil, details, "WowStyle1DropdownTemplate")
-        row.drop:SetSize(COL_W - 104, 24)
-        row.drop:SetupMenu(function(_, root) menu(root) end)
+        row.control = control
+        if not control then
+            row.control = CreateFrame("DropdownButton", nil, details, "WowStyle1DropdownTemplate")
+            row.control:SetSize(COL_W - 104, 24)
+            row.control:SetupMenu(function(_, root) menu(root) end)
+        end
         row.title = label
         rows[#rows + 1] = row
         return row
+    end
+
+    local function SpellRadio(root, text, s, chosen, choose)
+        local icon = C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(s.id)
+        local radio = root:CreateRadio(icon and string.format("|T%s:16|t %s", icon, text) or text, chosen, choose)
+        if radio.SetTooltip then radio:SetTooltip(function(tooltip) tooltip:SetSpellByID(s.id) end) end
     end
 
     local place = Row(function() return reportKind == "burst" and "Boss" or "Dungeon" end, function(root)
@@ -1148,7 +1158,7 @@ function BuildReport(panel)
                 hits[#hits + 1] = { id = r.id, name = r.name, mob = r.mob }
             end
             for _, s in ipairs(SortedBy(hits, "name")) do
-                root:CreateRadio(string.format("%s (%s)", s.name, s.mob or "?"), Chosen(s), Choose(s))
+                SpellRadio(root, string.format("%s (%s)", s.name, s.mob or "?"), s, Chosen(s), Choose(s))
             end
             return
         end
@@ -1160,7 +1170,7 @@ function BuildReport(panel)
         end
         for _, m in ipairs(SortedBy(mobs, "name")) do
             local sub = root:CreateButton(m.name)
-            for _, s in ipairs(SortedBy(byMob[m.name], "name")) do sub:CreateRadio(s.name, Chosen(s), Choose(s)) end
+            for _, s in ipairs(SortedBy(byMob[m.name], "name")) do SpellRadio(sub, s.name, s, Chosen(s), Choose(s)) end
         end
     end)
     spell.kinds = { cast = true, save = true }
@@ -1170,10 +1180,39 @@ function BuildReport(panel)
     end)
     what.kinds = { cast = true, save = true, burst = true, bug = true }
 
-    local level = Row(function() return "Key level" end, function(root)
-        Radios(root, REPORT_LEVELS, "level", function() Rebuild() end)
+    local stepper = CreateFrame("Frame", nil, details)
+    stepper:SetSize(COL_W - 104, 24)
+    local levelBox = CreateFrame("EditBox", nil, stepper, "InputBoxTemplate")
+    levelBox:SetSize(44, 20)
+    levelBox:SetPoint("LEFT", stepper, "LEFT", 36, 0)
+    levelBox:SetAutoFocus(false)
+    levelBox:SetNumeric(true)
+    levelBox:SetMaxLetters(2)
+    levelBox:SetJustifyH("CENTER")
+    local function SetLevel(value)
+        pick.level = value and math.min(LEVEL_MAX, math.max(LEVEL_MIN, value)) or nil
+        levelBox:SetText(pick.level and tostring(pick.level) or "")
+        Rebuild()
+    end
+    levelBox:SetScript("OnTextChanged", function(self, typed)
+        if not typed then return end
+        local value = tonumber(self:GetText())
+        pick.level = value and math.min(LEVEL_MAX, math.max(LEVEL_MIN, value)) or nil
+        Rebuild()
     end)
+    levelBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() SetLevel(pick.level) end)
+    levelBox:SetScript("OnEscapePressed", levelBox.ClearFocus)
+    local minus = CastAheadWindow.Button(stepper, "-", 28)
+    minus:SetPoint("LEFT", stepper, "LEFT", 0, 0)
+    minus:SetScript("OnClick", function() SetLevel(pick.level and pick.level - 1 or LEVEL_DEFAULT) end)
+    local plus = CastAheadWindow.Button(stepper, "+", 28)
+    plus:SetPoint("LEFT", levelBox, "RIGHT", 4, 0)
+    plus:SetScript("OnClick", function() SetLevel(pick.level and pick.level + 1 or LEVEL_DEFAULT) end)
+    local level = Row(function() return "Key level" end, nil, stepper)
     level.kinds = { cast = true, save = true }
+    level.refresh = function()
+        if not levelBox:HasFocus() then levelBox:SetText(pick.level and tostring(pick.level) or "") end
+    end
 
     local often = Row(function() return "How often" end, function(root)
         Radios(root, REPORT_OFTEN, "often", function() Rebuild() end)
@@ -1194,13 +1233,14 @@ function BuildReport(panel)
         for _, row in ipairs(rows) do
             local on = row.kinds[reportKind] == true
             row.label:SetShown(on)
-            row.drop:SetShown(on)
+            row.control:SetShown(on)
             if on then
                 row.label:SetText(row.title())
                 row.label:SetPoint("TOPLEFT", details, "TOPLEFT", 10, y - 6)
-                row.drop:SetPoint("TOPLEFT", details, "TOPLEFT", 90, y)
-                if row.drop.SetDefaultText then row.drop:SetDefaultText("Pick one") end
-                if row.drop.GenerateMenu then row.drop:GenerateMenu() end
+                row.control:SetPoint("TOPLEFT", details, "TOPLEFT", 90, y)
+                if row.control.SetDefaultText then row.control:SetDefaultText("Pick one") end
+                if row.control.GenerateMenu then row.control:GenerateMenu() end
+                if row.refresh then row.refresh() end
                 y = y - 30
             end
         end
@@ -1245,7 +1285,7 @@ function BuildReport(panel)
     local fresh = CastAheadWindow.Button(area, "Start over", 90)
     fresh:SetPoint("LEFT", all, "RIGHT", 6, 0)
     fresh:SetScript("OnClick", function()
-        pick, shownKind = {}, nil
+        pick, shownKind = NewPicks(), nil
         Paint()
     end)
     local copyHint = area:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
