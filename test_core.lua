@@ -2589,8 +2589,8 @@ do
     local function spell(id) return { kind = "spell", id = id } end
     check(not Fits(spell(48707), { school = 1 }) and Fits(spell(48707), { school = 4 }) and Fits(spell(48707), { school = 127 }),
         "a magic-only button skips a physical hit and fits fire and chaos")
-    check(Fits(spell(1022), { school = 1 }) and not Fits(spell(1022), { school = 32 }) and Fits(spell(1022), { school = 127 }),
-        "a physical-only button fits physical and chaos, not shadow")
+    check(Fits(spell(1022), { school = 1 }) and not Fits(spell(1022), { school = 32 }) and not Fits(spell(1022), { school = 127 }),
+        "a physical-only button fits pure physical only, not shadow or chaos")
     check(not Fits(spell(1966), { aoe = false }) and Fits(spell(1966), { aoe = true }) and Fits(spell(1966), { school = 1 }),
         "an area-only button skips a single-target hit and fits one with no flag")
     check(Fits(spell(48707), {}) and Fits(spell(48707), nil) and Fits(spell(104773), { school = 1 })

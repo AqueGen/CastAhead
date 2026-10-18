@@ -200,7 +200,7 @@ function S.Fits(e, row)
     if limit == "aoe" then return row.aoe ~= false end
     local school = row.school
     if not school then return true end
-    if limit == "physical" then return school % 2 == 1 end
+    if limit == "physical" then return school == 1 end
     return school ~= 1
 end
 
