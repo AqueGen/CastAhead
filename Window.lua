@@ -464,7 +464,7 @@ function W.Toggle()
     end
     local saved = pages[CastAheadDB and CastAheadDB.window and CastAheadDB.window.page]
     local name = saved and (saved.shown and saved.name or FirstShown(saved.group))
-        or current or (order[1] and order[1].name)
+        or current or FirstShown("Settings")
     if name then W.Show(name) end
 end
 

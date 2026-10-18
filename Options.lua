@@ -306,21 +306,6 @@ function BuildGeneral(panel)
     local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 }, RedrawAndSaves)
     BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 }, RedrawAndSaves)
 
-    -- Development mode ----------------------------------------------------
-    local extra = BuildGroup(panel, "Advanced", 136)
-    local dev = BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
-        if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
-    end)
-    local burst = BuildSwitch(panel, "burstCalls", { "TOPLEFT", dev, "BOTTOMLEFT", 0, -4 }, function()
-        Redraw()
-        if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
-    end)
-    local resetAll = CastAheadWindow.Button(panel, "Reset all settings", 130)
-    resetAll:SetPoint("TOPLEFT", burst, "BOTTOMLEFT", 0, -10)
-    resetAll:SetScript("OnClick", function()
-        if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_ALL") end
-    end)
-
     -- Where the icons go --------------------------------------------------
     local plates = BuildGroup(panel, "Nameplate icons", 417)
     local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 })
@@ -515,6 +500,21 @@ function BuildGeneral(panel)
 
     BuildReset(panel, { "LEFT", move, "RIGHT", 6, 0 },
         { "centerScale", "centerTextScale", "centerX", "centerY" }, centerScale)
+
+    -- Development mode ----------------------------------------------------
+    local extra = BuildGroup(panel, "Advanced", 136)
+    local dev = BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
+        if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
+    end)
+    local burst = BuildSwitch(panel, "burstCalls", { "TOPLEFT", dev, "BOTTOMLEFT", 0, -4 }, function()
+        Redraw()
+        if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
+    end)
+    local resetAll = CastAheadWindow.Button(panel, "Reset all settings", 130)
+    resetAll:SetPoint("TOPLEFT", burst, "BOTTOMLEFT", 0, -10)
+    resetAll:SetScript("OnClick", function()
+        if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_ALL") end
+    end)
 end
 
 local function DevButton(panel, label, width, point, command, tip)
