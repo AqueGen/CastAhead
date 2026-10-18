@@ -39,11 +39,25 @@ local memo = {}
 function S.ListFor(spec, size) return store.ListFor(spec, size) end
 function S.List(size) return store.List(size) end
 
--- The Guide and Saves pages can read another spec of the class without
--- the player changing spec; calls and lists still follow the real one.
-local viewSpec
+-- The Guide and Saves pages can read any spec of any class without the
+-- player changing spec; calls and lists still follow the real one.
+local viewSpec, viewClass
 
-function S.SetViewSpec(spec) viewSpec = spec end
+function S.SetViewSpec(spec)
+    viewSpec = spec
+    if spec == nil then viewClass = nil end
+end
+
+function S.OwnClassID()
+    return UnitClass and select(3, UnitClass("player")) or nil
+end
+
+function S.SetViewClass(classID)
+    viewClass = classID ~= S.OwnClassID() and classID or nil
+    viewSpec = viewClass and GetSpecializationInfoForClassID and GetSpecializationInfoForClassID(viewClass, 1) or nil
+end
+
+function S.ViewClassID() return viewClass or S.OwnClassID() end
 
 function S.ViewSpecID()
     local own = S.SpecID()
@@ -53,9 +67,11 @@ end
 
 function S.ViewRole()
     local spec = S.ViewSpecID()
-    if spec == S.SpecID() then return M.SpecRole() end
-    if not CastAheadConfig.SaveCalls() then return nil end
-    return GetSpecializationInfoByID and select(5, GetSpecializationInfoByID(spec)) or nil
+    if spec and spec == S.SpecID() then
+        local index = GetSpecialization and GetSpecialization()
+        return index and GetSpecializationRole and GetSpecializationRole(index) or nil
+    end
+    return spec and GetSpecializationInfoByID and select(5, GetSpecializationInfoByID(spec)) or nil
 end
 
 function S.ScanBags()
@@ -305,12 +321,20 @@ end
 
 local function Icon(texture) return texture and ("|T" .. texture .. ":16|t ") or "" end
 
+local function Link(kind, id, text) return string.format("|H%s:%d|h%s|h", kind, id, text) end
+
+local function ButtonLink(b)
+    local text = Icon(b.icon) .. ButtonName(b)
+    if b.kind == "item" and b.id then return Link("item", b.id, text) end
+    return Link("spell", b.kind == "item" and b.use or b.id, text)
+end
+
 local function GuideLine(r)
     local names = {}
-    for _, b in ipairs(r.buttons) do names[#names + 1] = Icon(b.icon) .. ButtonName(b) end
+    for _, b in ipairs(r.buttons) do names[#names + 1] = ButtonLink(b) end
     local press = #names > 0 and table.concat(names, ", then ") or "no button in your list"
-    local line = string.format("- %s%s from %s (%s): %s save - %s", Icon(SpellTexture(r.id)), r.name, r.mob or "?", Heard(r.trigger),
-        r.size == "BIG" and "big" or "small", press)
+    local line = string.format("- %s from %s (%s): %s save - %s", Link("spell", r.id, Icon(SpellTexture(r.id)) .. r.name),
+        r.mob or "?", Heard(r.trigger), r.size == "BIG" and "big" or "small", press)
     if r.size == "BIG" and #S.ListFor(S.ViewSpecID(), "heal") > 0 then line = line .. "; heal up after the hit" end
     local wins = r.wins and M.ADVICE[r.wins]
     if wins then line = line .. string.format(" (%s comes first)", wins.say) end

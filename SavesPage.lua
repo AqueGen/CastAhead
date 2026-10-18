@@ -190,6 +190,13 @@ local function BuildGuide(host)
         guideText:SetWidth(width - 8)
         RefreshGuide()
     end)
+    host:SetHyperlinksEnabled(true)
+    host:SetScript("OnHyperlinkEnter", function(self, link)
+        GameTooltip:SetOwner(self, "ANCHOR_CURSOR_RIGHT")
+        GameTooltip:SetHyperlink(link)
+        GameTooltip:Show()
+    end)
+    host:SetScript("OnHyperlinkLeave", GameTooltip_Hide)
 end
 
 CastAheadWindow.Register("Guide", "Dungeon", BuildGuide, RefreshGuide, "Casts")

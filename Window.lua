@@ -61,11 +61,19 @@ function W.Button(parent, text, width, primary)
     return b
 end
 
-local SPEC_W, SPEC_GAP, SPEC_BAR_H = 150, 4, 28
+local SPEC_W, SPEC_GAP, SPEC_BAR_H, CLASS_W, MAX_SPECS = 150, 4, 28, 150, 4
 local specBars = {}
 
 local function Specs()
     local out = {}
+    local class = CastAheadSaves and CastAheadSaves.ViewClassID()
+    if class and class ~= CastAheadSaves.OwnClassID() and GetNumSpecializationsForClassID then
+        for i = 1, GetNumSpecializationsForClassID(class) or 0 do
+            local id, name, _, icon = GetSpecializationInfoForClassID(class, i)
+            if id then out[#out + 1] = { id = id, name = name, icon = icon } end
+        end
+        return out
+    end
     if not (GetNumSpecializations and GetSpecializationInfo) then return out end
     for i = 1, GetNumSpecializations() or 0 do
         local id, name, _, icon = GetSpecializationInfo(i)
@@ -76,31 +84,61 @@ end
 
 function W.PaintSpecBars()
     local viewing = CastAheadSaves and CastAheadSaves.ViewSpecID()
+    local specs = Specs()
     for _, bar in ipairs(specBars) do
-        for _, b in ipairs(bar) do
-            local on = b.specID == viewing
-            b:SetBackdropColor(unpack(on and T.selected or T.panel))
-            b.label:SetTextColor(unpack(on and T.gold or T.text))
+        if bar.pick and bar.pick.GenerateMenu then bar.pick:GenerateMenu() end
+        for i, b in ipairs(bar) do
+            local spec = specs[i]
+            b:SetShown(spec ~= nil)
+            if spec then
+                b.specID = spec.id
+                b:SetText(string.format("|T%s:14|t %s", spec.icon or "", spec.name or ""))
+                local on = spec.id == viewing
+                b:SetBackdropColor(unpack(on and T.selected or T.panel))
+                b.label:SetTextColor(unpack(on and T.gold or T.text))
+            end
         end
     end
 end
 
+local function ClassPick(parent, x, y, onPick)
+    if not (GetNumClasses and C_CreatureInfo and C_CreatureInfo.GetClassInfo) then return nil end
+    local pick = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
+    pick:SetSize(CLASS_W, ENTRY_H + 4)
+    pick:SetPoint("TOPLEFT", parent, "TOPLEFT", x, -y + 2)
+    pick:SetupMenu(function(_, root)
+        for classID = 1, GetNumClasses() do
+            local info = C_CreatureInfo.GetClassInfo(classID)
+            if info then
+                root:CreateRadio(info.className,
+                    function() return CastAheadSaves.ViewClassID() == classID end,
+                    function()
+                        CastAheadSaves.SetViewClass(classID)
+                        if onPick then onPick() end
+                        W.PaintSpecBars()
+                    end)
+            end
+        end
+    end)
+    return pick
+end
+
 function W.SpecBar(parent, x, y, onPick)
-    local specs = Specs()
-    if #specs < 2 then return 0 end
     local bar = {}
-    for i, spec in ipairs(specs) do
-        local b = W.Button(parent, string.format("|T%s:14|t %s", spec.icon or "", spec.name or ""), SPEC_W)
-        b.specID = spec.id
-        b:SetPoint("TOPLEFT", parent, "TOPLEFT", x + (i - 1) * (SPEC_W + SPEC_GAP), -y)
-        b:SetScript("OnClick", function()
-            CastAheadSaves.SetViewSpec(spec.id)
+    bar.pick = ClassPick(parent, x, y, onPick)
+    local left = x + (bar.pick and CLASS_W + SPEC_GAP or 0)
+    for i = 1, MAX_SPECS do
+        local b = W.Button(parent, "", SPEC_W)
+        b:SetPoint("TOPLEFT", parent, "TOPLEFT", left + (i - 1) * (SPEC_W + SPEC_GAP), -y)
+        b:SetScript("OnClick", function(self)
+            CastAheadSaves.SetViewSpec(self.specID)
             if onPick then onPick() end
             W.PaintSpecBars()
         end)
         bar[i] = b
     end
     specBars[#specBars + 1] = bar
+    W.PaintSpecBars()
     return SPEC_BAR_H
 end
 

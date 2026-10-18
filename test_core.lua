@@ -2892,35 +2892,36 @@ do
     local text = table.concat(guide, "\n")
     check(guide[1] == "Boss: Abe" and text:find("\nBoss: Boss A\n", 1, true) and text:find("\nTrash\n", 1, true),
         "the guide groups bosses by name, then trash")
-    check(guide[2]:find("Zap from Abe (boss timer): big save - |T2001:16|t Unending Resolve", 1, true) and guide[2]:find("(interrupt comes first)", 1, true),
+    check(guide[2]:find("Zap|h from Abe (boss timer): big save - |Hspell:104773|h|T2001:16|t Unending Resolve|h", 1, true) and guide[2]:find("(interrupt comes first)", 1, true),
         "a guide line names the hit, the mob, how it is heard, the size, the first button and what wins")
-    check(text:find("Burn from ground effect (debuff on you): big save", 1, true), "a debuff-only hit says it lands on you")
-    check(guide[2]:find("big save - |T2001:16|t Unending Resolve", 1, true), "a button carries its icon")
+    check(text:find("Burn|h from ground effect (debuff on you): big save", 1, true), "a debuff-only hit says it lands on you")
+    check(guide[2]:find("big save - |Hspell:104773|h|T2001:16|t Unending Resolve|h", 1, true), "a button carries its icon inside a link")
+    check(text:find("|Hitem:5512|h|T9512:16|t", 1, true), "an item in the bags links to the item")
     local textureSaved = C_Spell.GetSpellTexture
     C_Spell.GetSpellTexture = function(id) return id == 806 and 4242 or textureSaved(id) end
-    check(CastAheadSaves.GuideLines(9000)[2]:find("^%- |T4242:16|t Zap from Abe"), "a hit carries its spell icon in front of its name")
+    check(CastAheadSaves.GuideLines(9000)[2]:find("^%- |Hspell:806|h|T4242:16|t Zap|h from Abe"), "a hit carries its spell icon in front of its name, both inside its link")
     C_Spell.GetSpellTexture = textureSaved
-    check(text:find("Bolt from Caster (cast): small save", 1, true) and text:find("Casts about 12s after the pull, then every 20s", 1, true),
+    check(text:find("Bolt|h from Caster (cast): small save", 1, true) and text:find("Casts about 12s after the pull, then every 20s", 1, true),
         "a cast with one cooldown gives its first cast and its period")
     check(text:find("9s, 16s, 9s x2, repeating", 1, true), "a cooldown cycle is spelled out, repeats folded")
-    check(not text:find("Burn from ground effect (debuff on you): big save[^\n]*every"), "a hit without cast data gets no cadence")
+    check(not text:find("Burn|h from ground effect %(debuff on you%): big save[^\n]*every"), "a hit without cast data gets no cadence")
     CastAheadBossCadence = { [801] = { first = 9.6, cd = { 25.0, 40.2, 25.0 }, steady = false }, [806] = { first = 7.0, cd = { 40.0 }, steady = true } }
     text = table.concat(CastAheadSaves.GuideLines(9000), "\n")
-    check(text:find("Slam from Boss A %(boss timer%): small save[^\n]*Casts about 10s after the pull, then 25s, 40s, 25s\n")
-        and text:find("Zap from Abe[^\n]*Casts about 7s after the pull, then every 40s"),
+    check(text:find("Slam|h from Boss A %(boss timer%): small save[^\n]*Casts about 10s after the pull, then 25s, 40s, 25s\n")
+        and text:find("Zap|h from Abe[^\n]*Casts about 7s after the pull, then every 40s"),
         "a boss hit takes its cadence from the boss table, a sequence without repeating")
-    check(text:find("Magma from Pool %(cast%): big save[^\n]*Casts with gaps of about 9s, 16s, 9s x2, repeating"),
+    check(text:find("Magma|h from Pool %(cast%): big save[^\n]*Casts with gaps of about 9s, 16s, 9s x2, repeating"),
         "a cycle without a first cast reads as gaps")
     CastAheadBossCadence = nil
     C_Spell.GetSpellName = nameSaved
-    local savedSpecRole = CastAheadMatch.SpecRole
-    CastAheadMatch.SpecRole = function() return "TANK" end
+    local savedSpecRole = GetSpecializationRole
+    GetSpecializationRole = function() return "TANK" end
     CastAheadDefensives.spells[810] = { DAMAGER = "BIG", TANK = "SMALL", lead = 2.0, aura = false, name = "Quake", mob = "Brute", boss = "", dungeon = 9000, bar = false }
     local tankIds = {}
     for _, r in ipairs(CastAheadSaves.ViewRows(9000)) do tankIds[#tankIds + 1] = r.id end
     check(table.concat(tankIds, ",") == "805", "a tank sees only tank busters in the Saves view, got " .. table.concat(tankIds, ","))
     CastAheadDefensives.spells[810] = nil
-    CastAheadMatch.SpecRole = savedSpecRole
+    GetSpecializationRole = savedSpecRole
     local hex = by[809]
     check(hex and hex.wins == "KICK", "a kickable cast with no curated category beats the save, as in the game")
     check(bolt and bolt.trigger.cast and not bolt.trigger.bar and bolt.wins == "DODGE" and bolt.name == "Bolt",
@@ -2951,6 +2952,24 @@ do
     CastAheadSaves.SetViewSpec(66)
     fire("PLAYER_SPECIALIZATION_CHANGED", "player")
     check(CastAheadSaves.ViewSpecID() == 265, "a real spec change drops the view")
+    local savedUnitClass, savedForClass = UnitClass, GetSpecializationInfoForClassID
+    UnitClass = function() return "Warlock", "WARLOCK", 9 end
+    GetSpecializationInfoForClassID = function(class, i) if class == 2 then return ({ 65, 66, 70 })[i] end end
+    GetSpecializationInfoByID = function(id) return id, "X", "", 0, id == 66 and "TANK" or id == 65 and "HEALER" or "DAMAGER" end
+    CastAheadSaves.SetViewClass(2)
+    check(CastAheadSaves.ViewClassID() == 2 and CastAheadSaves.ViewSpecID() == 65 and CastAheadSaves.ViewRole() == "HEALER",
+        "another class opens on its first spec and takes its role")
+    CastAheadDB.saveCalls = nil
+    check(CastAheadSaves.ViewRole() == "HEALER", "the viewed role does not need the defensive calls switch")
+    CastAheadDB.saveCalls = true
+    CastAheadSaves.SetViewSpec(66)
+    check(CastAheadSaves.ViewClassID() == 2 and CastAheadSaves.ViewSpecID() == 66, "a spec of the viewed class keeps the class")
+    CastAheadSaves.SetViewClass(9)
+    check(CastAheadSaves.ViewClassID() == 9 and CastAheadSaves.ViewSpecID() == 265, "the own class goes back to the real spec")
+    CastAheadSaves.SetViewClass(2)
+    fire("PLAYER_SPECIALIZATION_CHANGED", "player")
+    check(CastAheadSaves.ViewClassID() == 9 and CastAheadSaves.ViewSpecID() == 265, "a real spec change drops the class view")
+    UnitClass, GetSpecializationInfoForClassID = savedUnitClass, savedForClass
     CastAheadSaveButtons[66] = nil
     GetSpecializationInfoByID = nil
     local saved = CastAheadDefensives
@@ -4321,8 +4340,8 @@ do
     local h = CastAheadWindow.SpecBar and CastAheadWindow.SpecBar(host, 0, 0, function() end)
     check(h and h > 0, "spec bar: a two-spec class gets a bar")
     GetNumSpecializations = function() return 1 end
-    check(CastAheadWindow.SpecBar and CastAheadWindow.SpecBar(host, 0, 0, function() end) == 0,
-        "spec bar: a one-spec class gets none")
+    check(CastAheadWindow.SpecBar and CastAheadWindow.SpecBar(host, 0, 0, function() end) > 0,
+        "spec bar: a one-spec class keeps the bar, for picking another class")
     local ok = pcall(CastAheadWindow.PaintSpecBars)
     check(ok, "spec bar: repainting every bar works")
     GetNumSpecializations, GetSpecializationInfo = nil, nil
