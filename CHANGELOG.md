@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.18.0](https://github.com/AqueGen/CastAhead/compare/v0.17.0...v0.18.0) (2026-10-18)
+
+
+### Features
+
+* burst windows, Report page, class and spec views, defensive calls off by default ([#66](https://github.com/AqueGen/CastAhead/issues/66)) ([25f8a72](https://github.com/AqueGen/CastAhead/commit/25f8a7286cf2c25d4ca147cd7ba4f972dc3c0cde))
+* save buttons that fit the hit, raid boss calls behind a switch ([#73](https://github.com/AqueGen/CastAhead/issues/73)) ([f340811](https://github.com/AqueGen/CastAhead/commit/f3408112fbfea00593113ee35e09faf7cab29f3e))
+* spell icons and exact key level on the Report page ([#72](https://github.com/AqueGen/CastAhead/issues/72)) ([f3f92ac](https://github.com/AqueGen/CastAhead/commit/f3f92ac15f4fee0359ddb4904d65f356ff4e3582))
+
 ## [0.17.0](https://github.com/AqueGen/CastAhead/compare/v0.16.1...v0.17.0) (2026-10-16)
 
 
