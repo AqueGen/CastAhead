@@ -4489,6 +4489,18 @@ do
         check(#sounds == 0, "burst event: switched off, voice off or sound off arms nothing")
     end
 
+    do
+        local savedDead = UnitIsDeadOrGhost
+        sounds, CastAheadDB = {}, { burstCalls = true }
+        B.OnEncounter("ENCOUNTER_START", 3101, 8, now)
+        run(3)
+        UnitIsDeadOrGhost = function() return true end
+        run(1)
+        UnitIsDeadOrGhost = savedDead
+        check(#sounds == 1, "burst event: dying mid-fight keeps the sound for after a battle res, got " .. #sounds)
+        B.OnEncounter("ENCOUNTER_END", 3101, 8, now)
+    end
+
     for _, change in ipairs({ "burstCalls", "voice", "sound" }) do
         sounds, CastAheadDB = {}, { burstCalls = true }
         B.OnEncounter("ENCOUNTER_START", 3101, 8, now)

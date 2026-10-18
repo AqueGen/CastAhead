@@ -198,7 +198,7 @@ function B.OnEncounter(event, encounterID, difficultyID, now)
 end
 
 function B.Tick(now)
-    if next(armed) and not (On() and CastAheadCore and CastAheadCore.AdviceFile
+    if next(armed) and not (CastAheadConfig.Get("burstCalls") == true and CastAheadCore and CastAheadCore.AdviceFile
             and CastAheadCore.AdviceFile(M.ADVICE.BURST)) then
         Disarm()
     end

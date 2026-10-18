@@ -513,7 +513,14 @@ function BuildGeneral(panel)
         if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
     end)
     local resetAll = CastAheadWindow.Button(panel, "Reset all settings", 130)
-    local raid = BuildSwitch(panel, "raidSaves", { "TOPLEFT", burst, "BOTTOMLEFT", 0, -4 }, SaveRefresh)
+    local raid = BuildSwitch(panel, "raidSaves", { "TOPLEFT", burst, "BOTTOMLEFT", 0, -4 }, function(on)
+        SaveRefresh()
+        local inRaid = GetInstanceInfo and select(2, GetInstanceInfo()) == "raid"
+        if not on and inRaid and CastAheadSaves then
+            CastAheadSaves.CancelPrefix("dbm:")
+            CastAheadSaves.CancelPrefix("bw:")
+        end
+    end)
     resetAll:SetPoint("TOPLEFT", raid, "BOTTOMLEFT", 0, -10)
     resetAll:SetScript("OnClick", function()
         if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_ALL") end
