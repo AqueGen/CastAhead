@@ -3882,6 +3882,8 @@ do
     check(ok, "the Bursts page builds headless " .. tostring(err))
     ok, err = pcall(CastAheadOptions.ShowPanel, host, "Defensives")
     check(ok, "the Defensives page builds headless " .. tostring(err))
+    ok, err = pcall(CastAheadOptions.ShowPanel, host, "Report")
+    check(ok, "the Report page builds headless " .. tostring(err))
     local guide, lists
     for _, fs in ipairs(texts) do
         local v = tostring(rawget(fs, "value"))
@@ -4247,8 +4249,25 @@ do
     local ok = pcall(dofile, "Options.lua")
     check(ok and CastAheadOptions and CastAheadOptions.Switches and CastAheadOptions.Switches.burstCalls
         and CastAheadOptions.Switches.burstCalls.defaultOff == true, "the burst switch exists and is off by default")
-    check(ok and table.concat(CastAheadOptions.TABS, ",") == "General,Sounds,Defensives,Bursts,Development",
-        "bursts have their own settings page right after Defensives")
+    check(ok and table.concat(CastAheadOptions.TABS, ",") == "General,Sounds,Defensives,Bursts,Development,Report",
+        "bursts have their own settings page right after Defensives, Report comes last")
+    local savedMeta, savedBuild, savedLocale, savedInfo, savedDB = C_AddOns, GetBuildInfo, GetLocale, GetSpecializationInfoByID, CastAheadDB
+    local savedSpec, savedSpecInfo = GetSpecialization, GetSpecializationInfo
+    GetSpecialization, GetSpecializationInfo = function() return 1 end, function() return 577 end
+    C_AddOns = { GetAddOnMetadata = function(_, field) return field == "Version" and "9.9.9" or nil end }
+    GetBuildInfo = function() return "12.1.0", "65000" end
+    GetLocale = function() return "enUS" end
+    GetSpecializationInfoByID = function(id) return id, "Havoc", "", 0, "DAMAGER", "DEMONHUNTER", "Demon Hunter" end
+    CastAheadDB = { burstCalls = true }
+    local save = CastAheadOptions.ReportText("save")
+    check(save:find("Cast Ahead report: Wrong defensive call\nAddon 9.9.9, game 12.1.0 (65000), enUS\n", 1, true)
+        and save:find("Spec: Havoc Demon Hunter", 1, true) and save:find("Defensive calls: off", 1, true)
+        and save:find("what you needed:\n$"), "a defensive report carries version, spec, the switch and ends on its question")
+    local burst = CastAheadOptions.ReportText("burst")
+    check(burst:find("Burst guide: Heroic\nBurst windows: on\n", 1, true) and not burst:find("Defensive calls", 1, true),
+        "a burst report carries the guide difficulty and the burst switch instead")
+    C_AddOns, GetBuildInfo, GetLocale, GetSpecializationInfoByID, CastAheadDB = savedMeta, savedBuild, savedLocale, savedInfo, savedDB
+    GetSpecialization, GetSpecializationInfo = savedSpec, savedSpecInfo
 end
 
 -- The guide lists every window of a difficulty by boss, the same for every spec.

@@ -1,6 +1,6 @@
 CastAheadOptions = {}
 
-CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Bursts", "Development" }
+CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Bursts", "Development", "Report" }
 local panels = {}
 local T = CastAheadWindow.THEME
 local FLAT = { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 }
@@ -44,7 +44,7 @@ end
 
 -- Forward declarations: Build calls these, and Lua resolves a local by
 -- what it holds at call time, so they must exist as upvalues before it runs.
-local BuildGeneral, BuildSounds, BuildDefensives, BuildBursts, BuildDevelopment
+local BuildGeneral, BuildSounds, BuildDefensives, BuildBursts, BuildDevelopment, BuildReport
 -- Widgets are painted once, when a panel is first built, but storage can
 -- change behind their back: the /ca anchor|grow|offset|center slash commands
 -- and the Move button all write it. Every widget that displays stored state
@@ -789,41 +789,46 @@ local function BuildButtonList(panel, store, key, titles, hint, emptyText)
 end
 
 local DEFENSIVES_H, DEFENSIVES_OFF_H, SPEC_BAR_PAD = 366, 56, 34
-local REPORT_URL = "https://github.com/AqueGen/CastAhead/issues"
+local REPORT_URL = "https://github.com/AqueGen/CastAhead/issues/new?template=report.yml"
 
-local function Caveat(parent, text)
+local function CopyBox(parent, text, width)
+    local box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    box:SetSize(width, 20)
+    box:SetAutoFocus(false)
+    box:SetText(text)
+    box:SetCursorPosition(0)
+    box:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+    box:SetScript("OnTextChanged", function(self, typed)
+        if typed then
+            self:SetText(text)
+            self:HighlightText()
+        end
+    end)
+    box:SetScript("OnEscapePressed", box.ClearFocus)
+    box:SetScript("OnEnterPressed", box.ClearFocus)
+    return box
+end
+
+local function Caveat(parent, text, kind)
     local c = {}
     c.text = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     c.text:SetJustifyH("LEFT")
     c.text:SetJustifyV("TOP")
     c.text:SetWordWrap(true)
-    c.text:SetText("|cffd9a54aExperimental:|r |cffaaaaaa" .. text
-        .. " Please report anything off to the author, on GitHub (click the link, Ctrl+C) or in a CurseForge comment.|r")
-    c.box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
-    c.box:SetSize(300, 20)
-    c.box:SetAutoFocus(false)
-    c.box:SetText(REPORT_URL)
-    c.box:SetCursorPosition(0)
-    c.box:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
-    c.box:SetScript("OnTextChanged", function(self, typed)
-        if typed then
-            self:SetText(REPORT_URL)
-            self:HighlightText()
-        end
-    end)
-    c.box:SetScript("OnEscapePressed", c.box.ClearFocus)
-    c.box:SetScript("OnEnterPressed", c.box.ClearFocus)
+    c.text:SetText("|cffd9a54aExperimental:|r |cffaaaaaa" .. text .. " Tell the author if anything is off.|r")
+    c.button = CastAheadWindow.Button(parent, "Report", 70)
+    c.button:SetScript("OnClick", function() CastAheadOptions.ShowReport(kind) end)
     function c.Place(x, y, width)
         c.text:ClearAllPoints()
         c.text:SetPoint("TOPLEFT", parent, "TOPLEFT", x, -y)
-        c.text:SetWidth(width)
-        c.box:ClearAllPoints()
-        c.box:SetPoint("TOPLEFT", c.text, "BOTTOMLEFT", 6, -4)
-        return c.text:GetStringHeight() + 24
+        c.text:SetWidth(width - 80)
+        c.button:ClearAllPoints()
+        c.button:SetPoint("LEFT", c.text, "RIGHT", 10, 0)
+        return math.max(c.text:GetStringHeight(), 20)
     end
     function c.SetShown(on)
         c.text:SetShown(on)
-        c.box:SetShown(on)
+        c.button:SetShown(on)
     end
     return c
 end
@@ -876,7 +881,7 @@ function BuildDefensives(panel)
 
     local reset = CastAheadWindow.Button(panel, "Reset to default", 110)
     reset:SetPoint("TOPLEFT", early, "BOTTOMLEFT", -10, -24)
-    local caveat = Caveat(panel, "the hits, their timings and the shipped button lists come from logs and may be wrong or missing.")
+    local caveat = Caveat(panel, "the hits, their timings and the shipped button lists come from logs and may be wrong or missing.", "save")
     reset:SetScript("OnClick", function()
         if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_SAVES") end
     end)
@@ -921,7 +926,7 @@ local burstDifficulty = 15
 
 function BuildBursts(panel)
     local Paint
-    local caveat = Caveat(panel, "the phases and group moments come from top-player logs and may not match your group.")
+    local caveat = Caveat(panel, "the phases and group moments come from top-player logs and may not match your group.", "burst")
     panel.flowTop = function() return 6 + caveat.Place(COL_X, 6, math.max(panel:GetWidth() - 2 * COL_X, 1)) end
     local guide = BuildGroup(panel, "Guide", 120, true)
     local buttons = {}
@@ -991,6 +996,129 @@ function BuildBursts(panel)
         end
         blocks[#blocks + 1] = block
         panel:Relayout()
+    end
+    table.insert(refreshers, Paint)
+end
+
+local REPORT_KINDS = {
+    { key = "cast", label = "Wrong trash call", ask = "Which mob and spell, what Cast Ahead said, and what really happened:" },
+    { key = "save", label = "Wrong defensive call", ask = "Which hit, what Cast Ahead said (small, big or nothing), and what you needed:" },
+    { key = "burst", label = "Burst timing off", ask = "Which boss, the time it called, and what fit your group better:" },
+    { key = "bug", label = "Bug or error", ask = "What you did and what went wrong (paste any Lua error):" },
+    { key = "idea", label = "Idea", ask = "What would help you:" },
+}
+local reportKind = "cast"
+
+local function OnOff(on) return on and "on" or "off" end
+
+function CastAheadOptions.ReportText(key)
+    local kind = REPORT_KINDS[1]
+    for _, k in ipairs(REPORT_KINDS) do if k.key == key then kind = k end end
+    local meta = C_AddOns and C_AddOns.GetAddOnMetadata
+    local game, build
+    if GetBuildInfo then game, build = GetBuildInfo() end
+    local lines = {
+        "Cast Ahead report: " .. kind.label,
+        string.format("Addon %s, game %s (%s), %s", meta and meta("CastAhead", "Version") or "?", game or "?", build or "?",
+            GetLocale and GetLocale() or "?"),
+    }
+    local spec = CastAheadSaves and CastAheadSaves.SpecID()
+    local info = spec and GetSpecializationInfoByID and { GetSpecializationInfoByID(spec) }
+    lines[#lines + 1] = "Spec: " .. (info and string.format("%s %s", info[2] or "?", info[7] or "?") or "none")
+    local dungeon = CastAheadWindow.Dungeon and CastAheadWindow.Dungeon()
+    if kind.key == "burst" then
+        for _, d in ipairs(BURST_DIFFICULTIES) do
+            if d[1] == burstDifficulty then lines[#lines + 1] = "Burst guide: " .. d[2] end
+        end
+        lines[#lines + 1] = "Burst windows: " .. OnOff(SwitchOn("burstCalls"))
+    elseif kind.key ~= "idea" then
+        lines[#lines + 1] = "Dungeon picked: " .. (dungeon and CastAheadData[dungeon] and CastAheadData[dungeon].name or "?")
+        lines[#lines + 1] = string.format("Defensive calls: %s, boss mod: %s", OnOff(SwitchOn("saveCalls")),
+            CastAheadBossAdapter and CastAheadBossAdapter.Status() or "none")
+    end
+    if kind.key == "cast" and CastAheadConfig.Dev() then
+        lines[#lines + 1] = "Key journal: paste the /ca report text below for exact timings."
+    end
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = kind.ask
+    lines[#lines + 1] = ""
+    return table.concat(lines, "\n")
+end
+
+function CastAheadOptions.ShowReport(key)
+    reportKind = key or reportKind
+    if CastAheadUI and CastAheadUI.ShowTab then CastAheadUI.ShowTab("Report") end
+end
+
+function BuildReport(panel)
+    local intro = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    intro:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -6)
+    intro:SetJustifyH("LEFT")
+    intro:SetText("|cffaaaaaaPick what it is about, finish the text in the box, copy all of it and paste it into a new GitHub issue or a CurseForge comment. No names of people are included.|r")
+    panel.flowTop = 30
+    local kinds = BuildGroup(panel, "What to report", 36 + #REPORT_KINDS * 24)
+    local box, shownKind
+    local buttons = {}
+    local function Paint()
+        if shownKind ~= reportKind then
+            shownKind = reportKind
+            box:SetText(CastAheadOptions.ReportText(reportKind))
+        end
+        for i, k in ipairs(REPORT_KINDS) do
+            local on = k.key == reportKind
+            buttons[i]:SetBackdropColor(unpack(on and T.selected or T.panel))
+            buttons[i].label:SetTextColor(unpack(on and T.gold or T.text))
+        end
+    end
+    for i, k in ipairs(REPORT_KINDS) do
+        local b = CastAheadWindow.Button(kinds, k.label, COL_W - 20)
+        b:SetPoint("TOPLEFT", kinds, "TOPLEFT", 10, -26 - (i - 1) * 24)
+        b:SetScript("OnClick", function()
+            reportKind, shownKind = k.key, nil
+            Paint()
+        end)
+        buttons[i] = b
+    end
+
+    local area = BuildGroup(panel, "Report text", 300, true)
+    local scroll = CreateFrame("ScrollFrame", nil, area, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", area, "TOPLEFT", 10, -26)
+    scroll:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -30, 74)
+    box = CreateFrame("EditBox", nil, scroll)
+    box:SetMultiLine(true)
+    box:SetFontObject(ChatFontNormal)
+    box:SetAutoFocus(false)
+    box:SetScript("OnEscapePressed", box.ClearFocus)
+    scroll:SetScrollChild(box)
+    local all = CastAheadWindow.Button(area, "Select all", 90)
+    all:SetPoint("BOTTOMLEFT", area, "BOTTOMLEFT", 10, 44)
+    all:SetScript("OnClick", function()
+        box:SetFocus()
+        box:HighlightText()
+    end)
+    local fresh = CastAheadWindow.Button(area, "Start over", 90)
+    fresh:SetPoint("LEFT", all, "RIGHT", 6, 0)
+    fresh:SetScript("OnClick", function()
+        shownKind = nil
+        Paint()
+    end)
+    local copyHint = area:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    copyHint:SetPoint("LEFT", fresh, "RIGHT", 10, 0)
+    copyHint:SetText("|cffaaaaaaCtrl+C copies the selection.|r")
+    local where = area:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    where:SetPoint("BOTTOMLEFT", area, "BOTTOMLEFT", 10, 16)
+    where:SetText("New GitHub issue:")
+    local link = CopyBox(area, REPORT_URL, 420)
+    link:SetPoint("LEFT", where, "RIGHT", 12, 0)
+
+    panel.flowBottom = function(y)
+        local width = math.max(panel:GetWidth() - 2 * COL_X, COL_W)
+        intro:SetWidth(width)
+        area:ClearAllPoints()
+        area:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -(y + COL_GAP))
+        area:SetWidth(width)
+        box:SetWidth(width - 50)
+        return area:GetHeight() + COL_GAP
     end
     table.insert(refreshers, Paint)
 end
@@ -1152,11 +1280,12 @@ function BuildSounds(panel)
 end
 
 BUILDERS = { General = BuildGeneral, Sounds = BuildSounds, Defensives = BuildDefensives, Bursts = BuildBursts,
-             Development = BuildDevelopment }
+             Development = BuildDevelopment, Report = BuildReport }
+local MENU_GROUPS = { Bursts = "Experimental", Report = "Feedback" }
 
 for _, name in ipairs(CastAheadOptions.TABS) do
     local host
-    CastAheadWindow.Register(name, name == "Bursts" and "Experimental" or "Settings",
+    CastAheadWindow.Register(name, MENU_GROUPS[name] or "Settings",
         function(h) host = h end,
         function() CastAheadOptions.ShowPanel(host, name) end)
 end

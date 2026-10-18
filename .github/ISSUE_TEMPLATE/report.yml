@@ -1,0 +1,10 @@
+name: Report from the addon
+description: Paste the text from the Report page in the Cast Ahead window
+body:
+  - type: textarea
+    id: report
+    attributes:
+      label: Report text
+      description: In the Cast Ahead window open Report, pick what it is about, finish the text in the box, then copy all of it here.
+    validations:
+      required: true
