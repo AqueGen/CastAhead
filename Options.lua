@@ -29,7 +29,7 @@ function CastAheadOptions.RelayoutGroups(panel)
     for _, g in ipairs(panel.groups) do
         if g:IsShown() then
             shown[#shown + 1] = g
-            heights[#heights + 1] = g:GetHeight()
+            heights[#heights + 1] = g:GetHeight() + (g.flowPad or 0)
         end
     end
     local pos, total = CastAheadOptions.Flow(panel:GetWidth() - COL_X, COL_W, COL_GAP, heights)
@@ -37,7 +37,7 @@ function CastAheadOptions.RelayoutGroups(panel)
     if type(top) == "function" then top = top() end
     for i, g in ipairs(shown) do
         g:ClearAllPoints()
-        g:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X + pos[i].x, -(top + pos[i].y))
+        g:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X + pos[i].x, -(top + pos[i].y + (g.flowPad or 0)))
     end
     panel:SetHeight(top + total + (panel.flowBottom and panel.flowBottom(top + total) or 0) + 12)
 end
@@ -788,11 +788,9 @@ local function BuildButtonList(panel, store, key, titles, hint, emptyText)
     return group
 end
 
-local DEFENSIVES_H, DEFENSIVES_OFF_H = 366, 56
+local DEFENSIVES_H, DEFENSIVES_OFF_H, SPEC_BAR_PAD = 366, 56, 34
 
 function BuildDefensives(panel)
-    panel.flowTop = 6 + CastAheadWindow.SpecBar(panel, COL_X, 6, RefreshAll) + 4
-    table.insert(refreshers, CastAheadWindow.PaintSpecBars)
     local group = BuildGroup(panel, "Defensive calls", DEFENSIVES_H)
     local Paint
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, function()
@@ -834,6 +832,9 @@ function BuildDefensives(panel)
         BuildButtonList(panel, store, "heal", titles, "Pressed right after a big hit lands: stone, potion, self-heal.",
             "Empty - no heal up call"),
     }
+    CastAheadWindow.SpecBar(lists[1], 0, -SPEC_BAR_PAD, RefreshAll)
+    for _, list in ipairs(lists) do list.flowPad = SPEC_BAR_PAD end
+    table.insert(refreshers, CastAheadWindow.PaintSpecBars)
 
     local reset = CastAheadWindow.Button(panel, "Reset to default", 110)
     reset:SetPoint("TOPLEFT", early, "BOTTOMLEFT", -10, -24)
