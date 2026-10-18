@@ -219,6 +219,7 @@ CreateFrame = function(kind)
         if barOnly[key] and kind ~= "StatusBar" then
             return nil
         end
+        if type(key) == "string" and key:match("^%l") then return nil end
         return function() end
     end })
     return f
@@ -4262,17 +4263,24 @@ do
     local save = CastAheadOptions.ReportText("save")
     check(save:find("Cast Ahead report: Wrong defensive call\nAddon 9.9.9, game 12.1.0 (65000), enUS\n", 1, true)
         and save:find("Spec: Havoc Demon Hunter", 1, true) and save:find("Defensive calls: off", 1, true)
-        and save:find("what you needed:\n$"), "a defensive report carries version, spec, the switch and ends on its question")
+        and save:find("Anything else about what happened:\n$"), "a defensive report carries version, spec, the switch and ends on its question")
     local burst = CastAheadOptions.ReportText("burst")
     check(burst:find("Burst guide: Heroic\nBurst windows: on\n", 1, true) and not burst:find("Defensive calls", 1, true),
         "a burst report carries the guide difficulty and the burst switch instead")
     local someId, someData = next(CastAheadData)
-    CastAheadOptions.SetReportPlace(someId, nil)
-    check(CastAheadOptions.ReportText("cast"):find("Dungeon picked: " .. someData.name, 1, true), "the picked dungeon goes into the report")
-    CastAheadOptions.SetReportPlace(nil, { id = 3492, diff = 16, name = "Ula'tek" })
-    check(CastAheadOptions.ReportText("burst"):find("Boss: Ula'tek (Mythic, encounter 3492)\n", 1, true),
-        "the picked boss and its difficulty go into a burst report")
-    CastAheadOptions.SetReportPlace(nil, nil)
+    CastAheadOptions.SetReportPicks({ dungeon = someId, spell = { id = 101, name = "Bolt", mob = "Caster" },
+        what = "Called too late", level = "+10 to +15", often = "Sometimes" })
+    local cast = CastAheadOptions.ReportText("cast")
+    check(cast:find("Dungeon picked: " .. someData.name, 1, true)
+        and cast:find("Spell: Bolt (101) from Caster\nProblem: Called too late\nKey level: +10 to +15\nHow often: Sometimes\n", 1, true),
+        "the picked dungeon, spell, problem, key level and frequency go into the report")
+    CastAheadOptions.SetReportPicks({ boss = { id = 3492, diff = 16, name = "Ula'tek" }, spell = { id = 101, name = "Bolt" },
+        level = "+20 and up", often = "Once" })
+    local picked = CastAheadOptions.ReportText("burst")
+    check(picked:find("Boss: Ula'tek (Mythic, encounter 3492)\n", 1, true) and picked:find("How often: Once\n", 1, true)
+        and not picked:find("Spell:", 1, true) and not picked:find("Key level", 1, true),
+        "a burst report takes the boss and frequency, not the spell or key level")
+    CastAheadOptions.SetReportPicks(nil)
     C_AddOns, GetBuildInfo, GetLocale, GetSpecializationInfoByID, CastAheadDB = savedMeta, savedBuild, savedLocale, savedInfo, savedDB
     GetSpecialization, GetSpecializationInfo = savedSpec, savedSpecInfo
 end
