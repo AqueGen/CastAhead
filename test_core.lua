@@ -4266,6 +4266,13 @@ do
     local burst = CastAheadOptions.ReportText("burst")
     check(burst:find("Burst guide: Heroic\nBurst windows: on\n", 1, true) and not burst:find("Defensive calls", 1, true),
         "a burst report carries the guide difficulty and the burst switch instead")
+    local someId, someData = next(CastAheadData)
+    CastAheadOptions.SetReportPlace(someId, nil)
+    check(CastAheadOptions.ReportText("cast"):find("Dungeon picked: " .. someData.name, 1, true), "the picked dungeon goes into the report")
+    CastAheadOptions.SetReportPlace(nil, { id = 3492, diff = 16, name = "Ula'tek" })
+    check(CastAheadOptions.ReportText("burst"):find("Boss: Ula'tek (Mythic, encounter 3492)\n", 1, true),
+        "the picked boss and its difficulty go into a burst report")
+    CastAheadOptions.SetReportPlace(nil, nil)
     C_AddOns, GetBuildInfo, GetLocale, GetSpecializationInfoByID, CastAheadDB = savedMeta, savedBuild, savedLocale, savedInfo, savedDB
     GetSpecialization, GetSpecializationInfo = savedSpec, savedSpecInfo
 end

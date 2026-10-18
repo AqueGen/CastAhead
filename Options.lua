@@ -1007,13 +1007,21 @@ local REPORT_KINDS = {
     { key = "bug", label = "Bug or error", ask = "What you did and what went wrong (paste any Lua error):" },
     { key = "idea", label = "Idea", ask = "What would help you:" },
 }
-local reportKind = "cast"
+local reportKind, reportDungeon, reportBoss = "cast", nil, nil
 
 local function OnOff(on) return on and "on" or "off" end
 
+local function KindOf(key)
+    for _, k in ipairs(REPORT_KINDS) do if k.key == key then return k end end
+    return REPORT_KINDS[1]
+end
+
+function CastAheadOptions.SetReportPlace(dungeon, boss)
+    reportDungeon, reportBoss = dungeon, boss
+end
+
 function CastAheadOptions.ReportText(key)
-    local kind = REPORT_KINDS[1]
-    for _, k in ipairs(REPORT_KINDS) do if k.key == key then kind = k end end
+    local kind = KindOf(key)
     local meta = C_AddOns and C_AddOns.GetAddOnMetadata
     local game, build
     if GetBuildInfo then game, build = GetBuildInfo() end
@@ -1025,10 +1033,13 @@ function CastAheadOptions.ReportText(key)
     local spec = CastAheadSaves and CastAheadSaves.SpecID()
     local info = spec and GetSpecializationInfoByID and { GetSpecializationInfoByID(spec) }
     lines[#lines + 1] = "Spec: " .. (info and string.format("%s %s", info[2] or "?", info[7] or "?") or "none")
-    local dungeon = CastAheadWindow.Dungeon and CastAheadWindow.Dungeon()
+    local dungeon = reportDungeon or CastAheadWindow.Dungeon and CastAheadWindow.Dungeon()
     if kind.key == "burst" then
         for _, d in ipairs(BURST_DIFFICULTIES) do
-            if d[1] == burstDifficulty then lines[#lines + 1] = "Burst guide: " .. d[2] end
+            if d[1] == (reportBoss and reportBoss.diff or burstDifficulty) then
+                lines[#lines + 1] = reportBoss and string.format("Boss: %s (%s, encounter %d)", reportBoss.name, d[2], reportBoss.id)
+                    or "Burst guide: " .. d[2]
+            end
         end
         lines[#lines + 1] = "Burst windows: " .. OnOff(SwitchOn("burstCalls"))
     elseif kind.key ~= "idea" then
@@ -1056,8 +1067,8 @@ function BuildReport(panel)
     intro:SetJustifyH("LEFT")
     intro:SetText("|cffaaaaaaPick what it is about, finish the text in the box, copy all of it and paste it into a new GitHub issue or a CurseForge comment. No names of people are included.|r")
     panel.flowTop = 30
-    local kinds = BuildGroup(panel, "What to report", 36 + #REPORT_KINDS * 24)
-    local box, shownKind
+    local kinds = BuildGroup(panel, "What to report", 70 + #REPORT_KINDS * 24)
+    local box, shownKind, place
     local buttons = {}
     local function Paint()
         if shownKind ~= reportKind then
@@ -1069,7 +1080,47 @@ function BuildReport(panel)
             buttons[i]:SetBackdropColor(unpack(on and T.selected or T.panel))
             buttons[i].label:SetTextColor(unpack(on and T.gold or T.text))
         end
+        place:SetShown(reportKind ~= "idea")
+        if place.SetDefaultText then place:SetDefaultText(reportKind == "burst" and "Pick a boss" or "Pick a dungeon") end
+        if place.GenerateMenu then place:GenerateMenu() end
     end
+    local function Rebuild()
+        local ask = KindOf(reportKind).ask .. "\n"
+        local old = box:GetText()
+        local _, stop = old:find(ask, 1, true)
+        box:SetText(CastAheadOptions.ReportText(reportKind) .. (stop and old:sub(stop + 1) or ""))
+        Paint()
+    end
+    place = CreateFrame("DropdownButton", nil, kinds, "WowStyle1DropdownTemplate")
+    place:SetSize(COL_W - 20, 24)
+    place:SetPoint("TOPLEFT", kinds, "TOPLEFT", 10, -30 - #REPORT_KINDS * 24)
+    place:SetupMenu(function(_, root)
+        if reportKind == "burst" then
+            for _, d in ipairs(BURST_DIFFICULTIES) do
+                local bosses = {}
+                for id, byDifficulty in pairs(CastAheadBurstWindows or {}) do
+                    local w = byDifficulty[d[1]]
+                    if w then bosses[#bosses + 1] = { id = id, diff = d[1], name = w.name or tostring(id) } end
+                end
+                table.sort(bosses, function(a, b) return a.name < b.name end)
+                local sub = root:CreateButton(d[2])
+                for _, boss in ipairs(bosses) do
+                    sub:CreateRadio(boss.name,
+                        function() return reportBoss and reportBoss.id == boss.id and reportBoss.diff == boss.diff end,
+                        function() reportBoss = boss Rebuild() end)
+                end
+            end
+            return
+        end
+        local dungeons = {}
+        for id, data in pairs(CastAheadData) do dungeons[#dungeons + 1] = { id = id, name = data.name or tostring(id) } end
+        table.sort(dungeons, function(a, b) return a.name < b.name end)
+        for _, d in ipairs(dungeons) do
+            root:CreateRadio(d.name,
+                function() return (reportDungeon or CastAheadWindow.Dungeon()) == d.id end,
+                function() reportDungeon = d.id Rebuild() end)
+        end
+    end)
     for i, k in ipairs(REPORT_KINDS) do
         local b = CastAheadWindow.Button(kinds, k.label, COL_W - 20)
         b:SetPoint("TOPLEFT", kinds, "TOPLEFT", 10, -26 - (i - 1) * 24)
