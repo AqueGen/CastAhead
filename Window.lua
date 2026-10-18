@@ -379,38 +379,26 @@ local function Build()
         W.ApplyScale()
     end
 
-    local function Grip(corner, pin, getX, getY, flip)
-        local grip = CreateFrame("Button", nil, frame)
-        grip:SetSize(16, 16)
-        grip:SetPoint(corner, corner:find("LEFT") and 2 or -2, corner:find("TOP") and -2 or 2)
-        grip:SetFrameLevel((titleBar:GetFrameLevel() or 0) + 5)
-        local file = "Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-"
-        grip:SetNormalTexture(file .. "Up")
-        grip:SetHighlightTexture(file .. "Highlight")
-        grip:SetPushedTexture(file .. "Down")
-        if flip then
-            for _, tex in ipairs({ grip:GetNormalTexture(), grip:GetHighlightTexture(), grip:GetPushedTexture() }) do
-                tex:SetTexCoord(1, 0, 1, 0)
-            end
-        end
-        grip:SetScript("OnMouseDown", function()
-            local x, y = getX(), getY()
-            frame:ClearAllPoints()
-            frame:SetPoint(pin, UIParent, "BOTTOMLEFT", x, y)
-            sizing = true
-            frame:StartSizing(corner)
-        end)
-        grip:SetScript("OnMouseUp", function()
-            frame:StopMovingOrSizing()
-            sizing = false
-            local s = Saved()
-            s.width, s.height = frame:GetWidth(), frame:GetHeight()
-            Resized()
-        end)
-    end
-    Grip("BOTTOMRIGHT", "TOPLEFT", function() return frame:GetLeft() end, function() return frame:GetTop() end)
-    Grip("TOPLEFT", "BOTTOMRIGHT", function() return frame:GetRight() end, function() return frame:GetBottom() end, true)
-    titleText:SetPoint("LEFT", titleBar, "LEFT", PAD + 18, 0)
+    local grip = CreateFrame("Button", nil, frame)
+    grip:SetSize(16, 16)
+    grip:SetPoint("BOTTOMRIGHT", -2, 2)
+    grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    grip:SetScript("OnMouseDown", function()
+        local left, top = frame:GetLeft(), frame:GetTop()
+        frame:ClearAllPoints()
+        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+        sizing = true
+        frame:StartSizing("BOTTOMRIGHT")
+    end)
+    grip:SetScript("OnMouseUp", function()
+        frame:StopMovingOrSizing()
+        sizing = false
+        local s = Saved()
+        s.width, s.height = frame:GetWidth(), frame:GetHeight()
+        Resized()
+    end)
     frame:SetClampedToScreen(true)
 
     function W.ResetSize()
