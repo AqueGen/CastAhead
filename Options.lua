@@ -1016,9 +1016,10 @@ local REPORT_KINDS = {
       what = { "Lua error", "Something on screen looks wrong", "A setting does not work" } },
     { key = "idea", label = "Idea", ask = "What would help you:" },
 }
-local LEVEL_MIN, LEVEL_MAX, LEVEL_START = 2, 40, 10
+local LEVEL_MIN, LEVEL_MAX, LEVEL_DEFAULT = 2, 40, 12
 local REPORT_OFTEN = { "Every time", "Sometimes", "Once" }
-local reportKind, pick = "cast", {}
+local function NewPicks() return { level = LEVEL_DEFAULT } end
+local reportKind, pick = "cast", NewPicks()
 
 local function OnOff(on) return on and "on" or "off" end
 
@@ -1029,7 +1030,7 @@ end
 
 local function InPlay(key) return key == "cast" or key == "save" end
 
-function CastAheadOptions.SetReportPicks(picks) pick = picks or {} end
+function CastAheadOptions.SetReportPicks(picks) pick = picks or NewPicks() end
 
 function CastAheadOptions.ReportText(key)
     local kind = KindOf(key)
@@ -1203,10 +1204,10 @@ function BuildReport(panel)
     levelBox:SetScript("OnEscapePressed", levelBox.ClearFocus)
     local minus = CastAheadWindow.Button(stepper, "-", 28)
     minus:SetPoint("LEFT", stepper, "LEFT", 0, 0)
-    minus:SetScript("OnClick", function() SetLevel(pick.level and pick.level - 1 or LEVEL_START) end)
+    minus:SetScript("OnClick", function() SetLevel(pick.level and pick.level - 1 or LEVEL_DEFAULT) end)
     local plus = CastAheadWindow.Button(stepper, "+", 28)
     plus:SetPoint("LEFT", levelBox, "RIGHT", 4, 0)
-    plus:SetScript("OnClick", function() SetLevel(pick.level and pick.level + 1 or LEVEL_START) end)
+    plus:SetScript("OnClick", function() SetLevel(pick.level and pick.level + 1 or LEVEL_DEFAULT) end)
     local level = Row(function() return "Key level" end, nil, stepper)
     level.kinds = { cast = true, save = true }
     level.refresh = function()
@@ -1284,7 +1285,7 @@ function BuildReport(panel)
     local fresh = CastAheadWindow.Button(area, "Start over", 90)
     fresh:SetPoint("LEFT", all, "RIGHT", 6, 0)
     fresh:SetScript("OnClick", function()
-        pick, shownKind = {}, nil
+        pick, shownKind = NewPicks(), nil
         Paint()
     end)
     local copyHint = area:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")

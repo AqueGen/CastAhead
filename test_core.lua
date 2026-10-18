@@ -4271,6 +4271,8 @@ do
     local burst = CastAheadOptions.ReportText("burst")
     check(burst:find("Burst guide: Heroic\nBurst windows: on\n", 1, true) and not burst:find("Defensive calls", 1, true),
         "a burst report carries the guide difficulty and the burst switch instead")
+    CastAheadOptions.SetReportPicks(nil)
+    check(CastAheadOptions.ReportText("cast"):find("Key level: +12\n", 1, true), "a fresh report starts at key level +12")
     local someId, someData = next(CastAheadData)
     CastAheadOptions.SetReportPicks({ dungeon = someId, spell = { id = 101, name = "Bolt", mob = "Caster" },
         what = "Called too late", level = 12, often = "Sometimes" })
