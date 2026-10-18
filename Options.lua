@@ -789,15 +789,43 @@ local function BuildButtonList(panel, store, key, titles, hint, emptyText)
 end
 
 local DEFENSIVES_H, DEFENSIVES_OFF_H, SPEC_BAR_PAD = 366, 56, 34
-local REPORT_TO = "Please report anything off to the author: github.com/AqueGen/CastAhead/issues or a comment on CurseForge."
+local REPORT_URL = "https://github.com/AqueGen/CastAhead/issues"
 
 local function Caveat(parent, text)
-    local line = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    line:SetJustifyH("LEFT")
-    line:SetJustifyV("TOP")
-    line:SetWordWrap(true)
-    line:SetText("|cffd9a54aExperimental:|r |cffaaaaaa" .. text .. " " .. REPORT_TO .. "|r")
-    return line
+    local c = {}
+    c.text = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    c.text:SetJustifyH("LEFT")
+    c.text:SetJustifyV("TOP")
+    c.text:SetWordWrap(true)
+    c.text:SetText("|cffd9a54aExperimental:|r |cffaaaaaa" .. text
+        .. " Please report anything off to the author, on GitHub (click the link, Ctrl+C) or in a CurseForge comment.|r")
+    c.box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    c.box:SetSize(300, 20)
+    c.box:SetAutoFocus(false)
+    c.box:SetText(REPORT_URL)
+    c.box:SetCursorPosition(0)
+    c.box:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+    c.box:SetScript("OnTextChanged", function(self, typed)
+        if typed then
+            self:SetText(REPORT_URL)
+            self:HighlightText()
+        end
+    end)
+    c.box:SetScript("OnEscapePressed", c.box.ClearFocus)
+    c.box:SetScript("OnEnterPressed", c.box.ClearFocus)
+    function c.Place(x, y, width)
+        c.text:ClearAllPoints()
+        c.text:SetPoint("TOPLEFT", parent, "TOPLEFT", x, -y)
+        c.text:SetWidth(width)
+        c.box:ClearAllPoints()
+        c.box:SetPoint("TOPLEFT", c.text, "BOTTOMLEFT", 6, -4)
+        return c.text:GetStringHeight() + 24
+    end
+    function c.SetShown(on)
+        c.text:SetShown(on)
+        c.box:SetShown(on)
+    end
+    return c
 end
 
 function BuildDefensives(panel)
@@ -848,31 +876,35 @@ function BuildDefensives(panel)
 
     local reset = CastAheadWindow.Button(panel, "Reset to default", 110)
     reset:SetPoint("TOPLEFT", early, "BOTTOMLEFT", -10, -24)
-    local caveat = Caveat(group, "the hits, their timings and the shipped button lists come from logs and may be wrong or missing.")
-    caveat:SetPoint("TOPLEFT", reset, "BOTTOMLEFT", 0, -12)
-    caveat:SetWidth(COL_W - 24)
+    local caveat = Caveat(panel, "the hits, their timings and the shipped button lists come from logs and may be wrong or missing.")
     reset:SetScript("OnClick", function()
         if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_SAVES") end
     end)
 
     local note = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    note:SetPoint("TOPLEFT", group, "BOTTOMLEFT", 0, -10)
     note:SetJustifyH("LEFT")
     note:SetJustifyV("TOP")
     note:SetWordWrap(true)
-    panel:HookScript("OnSizeChanged", function(self, width)
-        note:SetWidth(math.max(width - 2 * COL_X, 1))
-        if self:IsShown() then self:Relayout() end
-    end)
     note:SetText("|cffaaaaaaNo shipped defensive lists for this specialization.|r")
-    panel.flowBottom = function() return note:IsShown() and note:GetStringHeight() + 10 or 0 end
+    panel.flowBottom = function(y)
+        local width, h = math.max(panel:GetWidth() - 2 * COL_X, 1), 0
+        if note:IsShown() then
+            note:ClearAllPoints()
+            note:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -(y + 10))
+            note:SetWidth(width)
+            h = note:GetStringHeight() + 10
+        end
+        if caveat.text:IsShown() then h = h + 10 + caveat.Place(COL_X, y + h + 10, width) end
+        return h
+    end
 
     Paint = function()
         local on = SwitchOn("saveCalls")
         local spec = CastAheadSaves and CastAheadSaves.ViewSpecID()
         local shipped = spec and CastAheadSaveButtons and CastAheadSaveButtons[spec] and true or false
         status:SetText("|cffaaaaaa" .. (CastAheadBossAdapter and CastAheadBossAdapter.Status() or "No boss mod") .. "|r")
-        for _, w in ipairs({ boss, small, big, heal, early, earlyLabel, caveat }) do w:SetShown(on) end
+        for _, w in ipairs({ boss, small, big, heal, early, earlyLabel }) do w:SetShown(on) end
+        caveat.SetShown(on)
         group:SetHeight(on and DEFENSIVES_H or DEFENSIVES_OFF_H)
         note:SetShown(on and not shipped)
         for _, list in ipairs(lists) do list:SetShown(on and shipped) end
@@ -890,12 +922,7 @@ local burstDifficulty = 15
 function BuildBursts(panel)
     local Paint
     local caveat = Caveat(panel, "the phases and group moments come from top-player logs and may not match your group.")
-    caveat:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -6)
-    panel:HookScript("OnSizeChanged", function(self, width)
-        caveat:SetWidth(math.max(width - 2 * COL_X, 1))
-        if self:IsShown() then self:Relayout() end
-    end)
-    panel.flowTop = function() return 6 + caveat:GetStringHeight() end
+    panel.flowTop = function() return 6 + caveat.Place(COL_X, 6, math.max(panel:GetWidth() - 2 * COL_X, 1)) end
     local guide = BuildGroup(panel, "Guide", 120, true)
     local buttons = {}
     for i, d in ipairs(BURST_DIFFICULTIES) do
