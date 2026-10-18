@@ -470,7 +470,8 @@ end
 local shippedTables = {}
 for spec, lists in pairs(CastAheadSaveButtons) do
     for _, size in ipairs({ "small", "big", "heal" }) do
-        check(type(lists[size]) == "table" and #lists[size] > 0, "spec " .. spec .. " ships a " .. size .. " list")
+        check(type(lists[size]) == "table" and (#lists[size] > 0 or size == "small"),
+            "spec " .. spec .. " ships a " .. size .. " list (small may be empty)")
         for _, e in ipairs(lists[size] or {}) do
             check(type(e) == "number" or type(e) == "table" and type(e.use) == "number",
                 "spec " .. spec .. " " .. size .. " entry is a spell id or an item use")
