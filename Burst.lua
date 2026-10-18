@@ -181,7 +181,7 @@ function B.OnEncounter(event, encounterID, difficultyID, now)
         local mine = ForRole(w, role)
         if mine and w.event then
             events[#events + 1] = w.event
-        elseif mine then
+        elseif mine and not w.pull then
             local at = now + w.release
             if w.release >= SOON then
                 entries[#entries + 1] = { fireAt = at - SOON, endAt = at, advice = M.ADVICE.SOON }
@@ -236,7 +236,8 @@ local function WindowLine(w)
     if w.event then
         return string.format("  %s %s- on the boss warning|r", w.target or "Boss event", GREY)
     end
-    local line = string.format("  %s %s", B.Clock(w.release), w.target or "burst")
+    if w.pull then return string.format("  %s %son the pull|r", B.Clock(w.release), GREY) end
+    local line = string.format("  %s %s", B.Clock(w.release), w.target or (w.group and "group burst" or "burst"))
     return w.role == "HEALER" and (line .. " " .. GREY .. "(healers)|r") or line
 end
 
@@ -245,7 +246,7 @@ function B.GuideLines(difficultyID)
     local bosses = {}
     for _, byDifficulty in pairs(CastAheadBurstWindows or {}) do
         local list = byDifficulty[difficultyID]
-        if list and #list > 0 then bosses[#bosses + 1] = list end
+        if list then bosses[#bosses + 1] = list end
     end
     table.sort(bosses, function(a, b) return (a.name or "") < (b.name or "") end)
     local lines = {}
@@ -256,6 +257,7 @@ function B.GuideLines(difficultyID)
         if #lines > 0 then lines[#lines + 1] = "" end
         lines[#lines + 1] = GOLD .. (list.name or "?") .. "|r"
         for _, w in ipairs(sorted) do lines[#lines + 1] = WindowLine(w) end
+        if #sorted == 0 then lines[#lines + 1] = "  " .. GREY .. "no shared moment - burst on the pull, then on cooldown|r" end
     end
     return lines
 end

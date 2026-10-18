@@ -69,11 +69,11 @@ Boss coverage is partial today. A boss threat gets a call only when DBM or BigWi
 
 ## Burst windows (alpha)
 
-Some bosses have a phase worth saving your burst for, such as Ula'tek's Venomous Heart or the moments on Vashnik where top players hold their cooldowns. With "Burst windows" switched on (Bursts page in the settings, off by default), Cast Ahead says "burst soon" five seconds before such a phase and "burst now" when it starts, with a countdown in the centre block when "Show the centre call" is on. It does not say which buttons to press. On every other boss it stays silent, which means press on cooldown. The phases are measured from the boss pull in top-player runs and kept only where at least three specs agree, so the list is short on purpose.
+Some bosses have a phase worth saving your burst for, such as Ula'tek's Venomous Heart or the moments on Vashnik where top players hold their cooldowns. With "Burst windows" switched on (Bursts page in the settings, off by default), Cast Ahead says "burst soon" five seconds before such a phase and "burst now" when it starts, with a countdown in the centre block when "Show the centre call" is on. It does not say which buttons to press. The phases are measured from the boss pull in top-player runs and kept only where at least three specs agree. Every other boss gets its group moments instead: the times, counted from the pull, where at least a quarter of the damage specs press their big cooldowns together, such as around 2:08 on most raid bosses. Those get the same two calls, except the burst on the pull, which needs no reminder.
 
 Damage dealers and tanks share these phases. Healers get their own: the moments top healers press their big group-healing cooldown. A phase the boss starts at a health mark, like Kystia Manaheart's Light Infusion, has no time to count from, so there Cast Ahead puts "burst now" on the game's own boss warning for that phase. It plays the moment the warning shows, for every role. That needs the game's boss warnings switched on, and for that fight it replaces a boss mod's own sound on the same warning. When a defensive call comes within two seconds of a burst call, you hear the defensive first and the burst call two seconds after it.
 
-Under the switch, a guide per difficulty lists every phase by boss and time.
+Under the switch, a guide per difficulty lists every boss with its phases and group moments by time.
 
 ## Reporting a wrong call
 
