@@ -3776,6 +3776,28 @@ do
 end
 
 do
+    local savedDB, savedKnown, savedName = CastAheadDB, IsPlayerSpell, C_Spell.GetSpellName
+    local shipped = { [265] = { big = { 104773 } }, [66] = { big = { 86659 } }, [65] = { big = { 642 } } }
+    local view = 66
+    local store = CastAheadLists.New({ dbKey = "saveButtons", shipped = function() return shipped end, keys = { "big" },
+        specID = function() return 265 end, editSpecID = function() return view end, onChange = function() end })
+    IsPlayerSpell = function(id) return id == 104773 end
+    C_Spell.GetSpellName = function(id) return id == 31850 and "Ardent Defender" or nil end
+    CastAheadDB = {}
+    store.SetList("big", { 86659, 31850 })
+    check(CastAheadDB.saveButtons[66].big[2] == 31850 and store.List("big")[1] == 104773,
+        "editing another spec writes its list, the calls keep the real one")
+    check(store.EditList("big")[1] == 86659, "the page reads the edited spec")
+    check(store.ParseEntry("31850", {}) == 31850, "another spec's list takes a spell this character does not know")
+    local seen = {}
+    for _, e in ipairs(store.Addable("big")) do seen[e] = true end
+    check(seen[642], "another spec offers its class spells this character does not know")
+    view = 265
+    check(store.ParseEntry("31850", {}) == nil, "the real spec's list still wants a known spell")
+    IsPlayerSpell, C_Spell.GetSpellName, CastAheadDB = savedKnown, savedName, savedDB
+end
+
+do
     local ok, err = pcall(dofile, "Options.lua")
     check(ok and CastAheadOptions and CastAheadOptions.Flow, "Options.lua loads and exposes Flow " .. tostring(err))
     local Flow = CastAheadOptions and CastAheadOptions.Flow or function() return {}, 0 end

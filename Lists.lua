@@ -32,7 +32,12 @@ local function Has(list, entry)
     return false
 end
 
-function L.ParseEntry(text, list)
+local function Exists(id)
+    return C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(id) ~= nil
+end
+
+function L.ParseEntry(text, list, anySpell)
+    local Usable = anySpell and Exists or Known
     text = tostring(text or ""):match("^%s*(.-)%s*$")
     local itemLink = tonumber(text:match("|Hitem:(%d+)"))
     local spellLink = tonumber(text:match("|Hspell:(%d+)"))
@@ -41,12 +46,12 @@ function L.ParseEntry(text, list)
     if itemLink then
         entry, why = ItemEntry(itemLink)
     elseif spellLink then
-        entry = Known(spellLink) and spellLink or nil
+        entry = Usable(spellLink) and spellLink or nil
     elseif number then
-        if Known(number) then entry = number else entry, why = ItemEntry(number) end
+        if Usable(number) then entry = number else entry, why = ItemEntry(number) end
     elseif text ~= "" and C_Spell and C_Spell.GetSpellInfo then
         local info = C_Spell.GetSpellInfo(text)
-        if info and Known(info.spellID) then entry = info.spellID end
+        if info and Usable(info.spellID) then entry = info.spellID end
     end
     if not entry then return nil, why or NOT_FOUND end
     for _, e in ipairs(list or {}) do
@@ -72,9 +77,15 @@ local CLASS_SPECS = {
 }
 
 function L.New(opts)
-    local store = { ParseEntry = L.ParseEntry }
+    local store = {}
 
     function store.Keys() return opts.keys end
+
+    function store.EditSpec() return opts.editSpecID and opts.editSpecID() or opts.specID() end
+
+    local function EditingReal() return store.EditSpec() == opts.specID() end
+
+    function store.ParseEntry(text, list) return L.ParseEntry(text, list, not EditingReal()) end
 
     function store.Shipped(spec, key)
         local all = opts.shipped()
@@ -98,6 +109,7 @@ function L.New(opts)
     end
 
     function store.List(key) return store.ListFor(opts.specID(), key) end
+    function store.EditList(key) return store.ListFor(store.EditSpec(), key) end
 
     local function Write(spec, key, list)
         CastAheadDB = CastAheadDB or {}
@@ -107,22 +119,22 @@ function L.New(opts)
     end
 
     function store.SetList(key, list)
-        local spec = opts.specID()
+        local spec = store.EditSpec()
         if not spec then return end
         Write(spec, key, list)
         opts.onChange()
     end
 
     function store.MoveEntry(from, index, to)
-        local spec = opts.specID()
-        local source = store.List(from)
+        local spec = store.EditSpec()
+        local source = store.EditList(from)
         local entry = source[index]
         if not (spec and entry) or from == to then return end
         local kept = {}
         for i, e in ipairs(source) do
             if i ~= index then kept[#kept + 1] = e end
         end
-        local target = { unpack(store.List(to)) }
+        local target = { unpack(store.EditList(to)) }
         if not Has(target, entry) then target[#target + 1] = entry end
         Write(spec, from, kept)
         Write(spec, to, target)
@@ -130,8 +142,8 @@ function L.New(opts)
     end
 
     function store.Shift(key, index, step)
-        local spec = opts.specID()
-        local list = { unpack(store.List(key)) }
+        local spec = store.EditSpec()
+        local list = { unpack(store.EditList(key)) }
         local other = index + step
         if not (spec and list[index] and list[other]) then return end
         list[index], list[other] = list[other], list[index]
@@ -159,16 +171,16 @@ function L.New(opts)
     end
 
     function store.Addable(key)
-        local spec = opts.specID()
-        local list, out = store.List(key), {}
+        local spec, own = store.EditSpec(), EditingReal()
+        local list, out = store.EditList(key), {}
         for _, e in ipairs(store.Catalogue(spec)) do
-            if (type(e) ~= "number" or Known(e)) and not Has(list, e) then out[#out + 1] = e end
+            if (type(e) ~= "number" or not own or Known(e)) and not Has(list, e) then out[#out + 1] = e end
         end
         return out
     end
 
     function store.ResetSpec()
-        local spec = opts.specID()
+        local spec = store.EditSpec()
         if spec and CastAheadDB and CastAheadDB[opts.dbKey] then CastAheadDB[opts.dbKey][spec] = nil end
         opts.onChange()
     end

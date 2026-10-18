@@ -18,6 +18,7 @@ local store = CastAheadLists.New({
     shipped = function() return CastAheadSaveButtons end,
     keys = { "small", "big", "heal" },
     specID = function() return S.SpecID() end,
+    editSpecID = function() return S.ViewSpecID() end,
     onChange = function() S.Refresh() end,
 })
 S.Store = store

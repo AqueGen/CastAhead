@@ -594,7 +594,7 @@ local LIST_FOOT = 92
 
 local function ListRows(store)
     local n = LIST_MIN_ROWS
-    for _, key in ipairs(store.Keys()) do n = math.max(n, #store.List(key)) end
+    for _, key in ipairs(store.Keys()) do n = math.max(n, #store.EditList(key)) end
     return n
 end
 
@@ -634,7 +634,7 @@ local function BuildButtonList(panel, store, key, titles, hint, emptyText)
 
     local function Remove(i)
         local list = {}
-        for j, e in ipairs(store.List(key)) do
+        for j, e in ipairs(store.EditList(key)) do
             if j ~= i then list[#list + 1] = e end
         end
         store.SetList(key, list)
@@ -642,7 +642,7 @@ local function BuildButtonList(panel, store, key, titles, hint, emptyText)
     end
 
     local function RowMenu(owner, i)
-        if not (MenuUtil and MenuUtil.CreateContextMenu) or not store.List(key)[i] then return end
+        if not (MenuUtil and MenuUtil.CreateContextMenu) or not store.EditList(key)[i] then return end
         MenuUtil.CreateContextMenu(owner, function(_, root)
             for _, target in ipairs(store.Keys()) do
                 if target ~= key then
@@ -724,7 +724,7 @@ local function BuildButtonList(panel, store, key, titles, hint, emptyText)
         end
         for _, e in ipairs(entries) do
             root:CreateButton(EntryLabel(e), function()
-                local copy = { unpack(store.List(key)) }
+                local copy = { unpack(store.EditList(key)) }
                 copy[#copy + 1] = type(e) == "table" and { use = e.use } or e
                 store.SetList(key, copy)
                 RefreshAll()
@@ -737,7 +737,7 @@ local function BuildButtonList(panel, store, key, titles, hint, emptyText)
     reason:SetJustifyH("LEFT")
 
     local function Submit()
-        local list = store.List(key)
+        local list = store.EditList(key)
         local entry, why = store.ParseEntry(box:GetText(), list)
         if not entry then
             reason:SetText(why)
@@ -762,7 +762,7 @@ local function BuildButtonList(panel, store, key, titles, hint, emptyText)
     box:SetScript("OnLeave", GameTooltip_Hide)
 
     local function Paint()
-        local list = store.List(key)
+        local list = store.EditList(key)
         local n = ListRows(store)
         for i = 1, math.max(#list, #rows, 1) do
             local row = Row(i)
@@ -791,6 +791,8 @@ end
 local DEFENSIVES_H, DEFENSIVES_OFF_H = 366, 56
 
 function BuildDefensives(panel)
+    panel.flowTop = 6 + CastAheadWindow.SpecBar(panel, COL_X, 6, RefreshAll) + 4
+    table.insert(refreshers, CastAheadWindow.PaintSpecBars)
     local group = BuildGroup(panel, "Defensive calls", DEFENSIVES_H)
     local Paint
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, function()
@@ -853,7 +855,7 @@ function BuildDefensives(panel)
 
     Paint = function()
         local on = SwitchOn("saveCalls")
-        local spec = CastAheadSaves and CastAheadSaves.SpecID()
+        local spec = CastAheadSaves and CastAheadSaves.ViewSpecID()
         local shipped = spec and CastAheadSaveButtons and CastAheadSaveButtons[spec] and true or false
         status:SetText("|cffaaaaaa" .. (CastAheadBossAdapter and CastAheadBossAdapter.Status() or "No boss mod") .. "|r")
         for _, w in ipairs({ boss, small, big, heal, early, earlyLabel }) do w:SetShown(on) end
