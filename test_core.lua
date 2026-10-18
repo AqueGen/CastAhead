@@ -3884,6 +3884,12 @@ do
     check(CastAheadWindow.Current() == "General", "Development switched off while open shows General")
     check(panelsShown[#panelsShown] == "General", "each settings page shows its own panel")
     check(sized == before, "switching pages, dungeons and Development mode never resizes the window")
+    CastAheadDB.burstCalls = true
+    CastAheadUI.ShowTab("Bursts")
+    check(CastAheadWindow.Current() == "Bursts", "burst windows switched on show the Bursts page")
+    CastAheadDB.burstCalls = nil
+    CastAheadUI.RefreshTabs()
+    check(CastAheadWindow.Current() == "General", "burst windows switched off while open show General")
 
     SlashCmdList.CASTAHEAD("sounds")
     check(f:IsShown() and CastAheadWindow.Current() == "Sounds", "/ca sounds opens the Sounds page")

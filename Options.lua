@@ -296,6 +296,12 @@ function BuildGeneral(panel)
         if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
     end)
 
+    local experimental = BuildGroup(panel, "Experimental", 70)
+    BuildSwitch(panel, "burstCalls", { "TOPLEFT", experimental, "TOPLEFT", 10, -26 }, function()
+        Redraw()
+        if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
+    end)
+
     -- Where the icons go --------------------------------------------------
     local plates = BuildGroup(panel, "Nameplate icons", 417)
     local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 })
@@ -764,7 +770,6 @@ local function BuildButtonList(panel, store, key, titles, hint, emptyText)
 end
 
 local DEFENSIVES_H, DEFENSIVES_OFF_H = 366, 56
-local BURST_H = 56
 
 function BuildDefensives(panel)
     local group = BuildGroup(panel, "Defensive calls", DEFENSIVES_H)
@@ -848,13 +853,7 @@ local GUIDE_COL_W, GUIDE_COL_GAP = 300, 24
 local burstDifficulty = 15
 
 function BuildBursts(panel)
-    BuildGroup(panel, "Burst windows", BURST_H)
     local Paint
-    BuildSwitch(panel, "burstCalls", { "TOPLEFT", panel.groups[#panel.groups], "TOPLEFT", 10, -26 }, function()
-        Redraw()
-        Paint()
-    end)
-    -- The guide spans the page under the cards, one column of text per boss group.
     local guide = BuildGroup(panel, "Guide", 120, true)
     local buttons = {}
     for i, d in ipairs(BURST_DIFFICULTIES) do
