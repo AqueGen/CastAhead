@@ -789,6 +789,16 @@ local function BuildButtonList(panel, store, key, titles, hint, emptyText)
 end
 
 local DEFENSIVES_H, DEFENSIVES_OFF_H, SPEC_BAR_PAD = 366, 56, 34
+local REPORT_TO = "Please report anything off to the author: github.com/AqueGen/CastAhead/issues or a comment on CurseForge."
+
+local function Caveat(parent, text)
+    local line = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    line:SetJustifyH("LEFT")
+    line:SetJustifyV("TOP")
+    line:SetWordWrap(true)
+    line:SetText("|cffd9a54aExperimental:|r |cffaaaaaa" .. text .. " " .. REPORT_TO .. "|r")
+    return line
+end
 
 function BuildDefensives(panel)
     local group = BuildGroup(panel, "Defensive calls", DEFENSIVES_H)
@@ -838,6 +848,9 @@ function BuildDefensives(panel)
 
     local reset = CastAheadWindow.Button(panel, "Reset to default", 110)
     reset:SetPoint("TOPLEFT", early, "BOTTOMLEFT", -10, -24)
+    local caveat = Caveat(group, "the hits, their timings and the shipped button lists come from logs and may be wrong or missing.")
+    caveat:SetPoint("TOPLEFT", reset, "BOTTOMLEFT", 0, -12)
+    caveat:SetWidth(COL_W - 24)
     reset:SetScript("OnClick", function()
         if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_SAVES") end
     end)
@@ -859,7 +872,7 @@ function BuildDefensives(panel)
         local spec = CastAheadSaves and CastAheadSaves.ViewSpecID()
         local shipped = spec and CastAheadSaveButtons and CastAheadSaveButtons[spec] and true or false
         status:SetText("|cffaaaaaa" .. (CastAheadBossAdapter and CastAheadBossAdapter.Status() or "No boss mod") .. "|r")
-        for _, w in ipairs({ boss, small, big, heal, early, earlyLabel }) do w:SetShown(on) end
+        for _, w in ipairs({ boss, small, big, heal, early, earlyLabel, caveat }) do w:SetShown(on) end
         group:SetHeight(on and DEFENSIVES_H or DEFENSIVES_OFF_H)
         note:SetShown(on and not shipped)
         for _, list in ipairs(lists) do list:SetShown(on and shipped) end
@@ -876,6 +889,13 @@ local burstDifficulty = 15
 
 function BuildBursts(panel)
     local Paint
+    local caveat = Caveat(panel, "the phases and group moments come from top-player logs and may not match your group.")
+    caveat:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -6)
+    panel:HookScript("OnSizeChanged", function(self, width)
+        caveat:SetWidth(math.max(width - 2 * COL_X, 1))
+        if self:IsShown() then self:Relayout() end
+    end)
+    panel.flowTop = function() return 6 + caveat:GetStringHeight() end
     local guide = BuildGroup(panel, "Guide", 120, true)
     local buttons = {}
     for i, d in ipairs(BURST_DIFFICULTIES) do
