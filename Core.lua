@@ -295,7 +295,7 @@ CastAheadMatch.SizeOn = function(key)
 end
 
 CastAheadMatch.SpecRole = function()
-    if not CastAheadConfig.Enabled("saveCalls") then return nil end
+    if not CastAheadConfig.SaveCalls() then return nil end
     if not (GetSpecialization and GetSpecializationRole) then return nil end
     local spec = GetSpecialization()
     return spec and GetSpecializationRole(spec) or nil
@@ -2547,7 +2547,7 @@ local function CenterPick(now)
             end
         end
     end
-    if CastAheadSaves and CastAheadConfig.Enabled("saveCalls") then
+    if CastAheadSaves and CastAheadConfig.SaveCalls() then
         for _, pick in ipairs(CastAheadSaves.Pending(now)) do centerPicks[#centerPicks + 1] = pick end
     end
     if CastAheadBurst then
@@ -2614,7 +2614,7 @@ end
 frame:SetScript("OnUpdate", function()
     if not (dungeon or inEncounter or (center and center:IsShown())) then return end
     local now = GetTime()
-    if CastAheadSaves and CastAheadConfig.Enabled("saveCalls") then CastAheadSaves.Tick(now) end
+    if CastAheadSaves and CastAheadConfig.SaveCalls() then CastAheadSaves.Tick(now) end
     if CastAheadBurst then CastAheadBurst.Tick(now) end
     UpdateCenter(now)
     if not dungeon then return end
@@ -2667,7 +2667,7 @@ frame:SetScript("OnUpdate", function()
                         if not entry.casting and entry.track and not entry.track.warned then
                             local lead = CastAheadConfig.Lead()
                             local first = entry.candidates and entry.candidates[1]
-                            local saveLead = CastAheadSaves and CastAheadConfig.Enabled("saveCalls")
+                            local saveLead = CastAheadSaves and CastAheadConfig.SaveCalls()
                                 and first and first.save and CastAheadConfig.SaveLead() or 0
                             local window = math.max(lead, saveLead)
                             if window > 0 and remaining <= window then

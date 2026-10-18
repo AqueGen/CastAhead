@@ -144,6 +144,10 @@ function C.Dev()
     return C.Get("devMode") == true
 end
 
+function C.SaveCalls()
+    return C.Get("saveCalls") == true
+end
+
 function C.Recording()
     return C.Dev() and C.Enabled("recordAll")
 end
@@ -222,5 +226,8 @@ function C.Migrate()
             if type(value) == "number" then picks[size] = { value } end
         end
     end
-    CastAheadDB.schema = 2
+    if existing and (tonumber(CastAheadDB.schema) or 0) < 3 and CastAheadDB.saveCalls == nil then
+        CastAheadDB.saveCalls = true
+    end
+    CastAheadDB.schema = 3
 end

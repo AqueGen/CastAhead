@@ -143,7 +143,7 @@ local SWITCHES = {
         tip = "Adds the Development tab and starts recording everything for improving the addon's data (the Record everything switch there, on by default). Nothing here changes what the addon calls out." },
     recordAll = { label = "Record everything",
         tip = "The game's combat log with advanced logging in every dungeon (off again when you leave, unless you had started it yourself), a journal of each key, and what the game lets an addon read off each enemy cast. Holds 12 keys: when the journal fills up it asks you to reload so it reaches the disk, then you copy it off and clear it on this tab. No names of people are recorded." },
-    saveCalls = { label = "Defensive calls",
+    saveCalls = { label = "Defensive calls", defaultOff = true,
         tip = "Call a small or big defensive ahead of damage that needs one, and show your button for it in the centre." },
     bossAdapter = { label = "Boss calls from DBM / BigWigs",
         tip = "Also call defensives for boss abilities announced by DBM or BigWigs." },

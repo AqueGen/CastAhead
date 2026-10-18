@@ -54,7 +54,7 @@ end
 function S.ViewRole()
     local spec = S.ViewSpecID()
     if spec == S.SpecID() then return M.SpecRole() end
-    if not CastAheadConfig.Enabled("saveCalls") then return nil end
+    if not CastAheadConfig.SaveCalls() then return nil end
     return GetSpecializationInfoByID and select(5, GetSpecializationInfoByID(spec)) or nil
 end
 
@@ -333,7 +333,7 @@ function S.GuideLines(instanceID)
 end
 
 function S.HealReady()
-    return CastAheadConfig.Enabled("saveCalls") and CastAheadConfig.Get("healCalls") == true and #S.Available("heal") > 0
+    return CastAheadConfig.SaveCalls() and CastAheadConfig.Get("healCalls") == true and #S.Available("heal") > 0
 end
 
 local SOUND_ROOT = "Interface\\AddOns\\CastAhead\\Sounds\\en\\"
@@ -364,7 +364,7 @@ local function RegisterAuraSounds()
     if Blocked() then auraPending = true return end
     auraPending = false
     ClearAuraSounds()
-    if not (CastAheadConfig.Enabled("saveCalls") and CastAheadConfig.Enabled("sound")) then return end
+    if not (CastAheadConfig.SaveCalls() and CastAheadConfig.Enabled("sound")) then return end
     local voice = CastAheadConfig.Enabled("voice")
     for spellID, row in pairs(CastAheadDefensives and CastAheadDefensives.spells or {}) do
         local advice = row.aura and M.SaveAdvice({ save = row, prio = CastAheadPriority and CastAheadPriority[spellID] })
