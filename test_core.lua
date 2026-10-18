@@ -3985,6 +3985,10 @@ do
     CastAheadWindow.Toggle()
     check(CastAheadWindow.Current() == "General", "a saved hidden page opens the first visible page of its group")
     check(sized == before, "opening and closing never resizes the window")
+    CastAheadDB.window.width, CastAheadDB.window.height = 1200, 900
+    CastAheadWindow.ResetSize()
+    check(f.w == 900 and f.h == 560 and CastAheadDB.window.width == nil and CastAheadDB.window.height == nil,
+        "Reset size goes back to the default size and forgets the saved one")
     CastAheadOptions.ShowPanel = savedShowPanel
 
     CastAheadDB = { window = { width = 1900, height = 560 } }
