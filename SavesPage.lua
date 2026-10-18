@@ -11,7 +11,11 @@ local SAVE_COLUMNS = {
           return string.format("|cff%02x%02x%02x%s|r", advice.r * 255, advice.g * 255, advice.b * 255, advice.short)
       end },
     { key = "buttons", header = "Buttons", width = MAX_SAVE_ICONS * 18 },
-    { key = "name", header = "Hit", width = 160, text = function(s) return s.name end },
+    { key = "name", header = "Hit", width = 160,
+      text = function(s)
+          local icon = C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(s.id)
+          return icon and ("|T" .. icon .. ":16|t " .. s.name) or s.name
+      end },
     { key = "mob", header = "Mob", width = 150,
       text = function(s) return "|cff9999ff" .. (s.mob or "?") .. "|r" end },
     { key = "trigger", header = "Heard by", width = 130,
