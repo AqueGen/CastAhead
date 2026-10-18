@@ -130,6 +130,7 @@ local function ClassPick(parent, x, y, onPick)
 end
 
 function W.SpecBar(parent, x, y, onPick, roomFromParentLeft)
+    if not CastAheadSaves then return 0 end
     local bar = { parent = parent, y = y, width = roomFromParentLeft or function() return parent:GetWidth() end }
     bar.pick = ClassPick(parent, x, y, onPick)
     bar.left = x + (bar.pick and CLASS_W + SPEC_GAP or 0)

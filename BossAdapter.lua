@@ -17,8 +17,13 @@ local function Secret(...)
     return false
 end
 
+local function InRaid()
+    return GetInstanceInfo and select(2, GetInstanceInfo()) == "raid"
+end
+
 local function Verdict(spellID)
     if not CastAheadConfig.Enabled("bossAdapter") then return nil end
+    if InRaid() and CastAheadConfig.Get("raidSaves") ~= true then return nil end
     local row, resolvedId = M.SaveRow(spellID)
     if not row then return nil end
     local advice = M.Advice({ prio = CastAheadPriority and (CastAheadPriority[spellID] or CastAheadPriority[resolvedId]),

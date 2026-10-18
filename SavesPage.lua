@@ -11,7 +11,11 @@ local SAVE_COLUMNS = {
           return string.format("|cff%02x%02x%02x%s|r", advice.r * 255, advice.g * 255, advice.b * 255, advice.short)
       end },
     { key = "buttons", header = "Buttons", width = MAX_SAVE_ICONS * 18 },
-    { key = "name", header = "Hit", width = 160, text = function(s) return s.name end },
+    { key = "name", header = "Hit", width = 160,
+      text = function(s)
+          local icon = C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(s.id)
+          return icon and ("|T" .. icon .. ":16|t " .. s.name) or s.name
+      end },
     { key = "mob", header = "Mob", width = 150,
       text = function(s) return "|cff9999ff" .. (s.mob or "?") .. "|r" end },
     { key = "trigger", header = "Heard by", width = 130,
@@ -46,15 +50,29 @@ local function CreateSaveRow(parent, index)
     local row = CreateFrame("Button", nil, parent)
     row:SetSize(SAVE_WIDTH, ROW_HEIGHT)
     row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -(index - 1) * ROW_HEIGHT)
-    row.cells, row.icons = {}, {}
+    row.cells, row.icons, row.iconHits = {}, {}, {}
     for _, column in ipairs(SAVE_COLUMNS) do
         if column.key == "buttons" then
             for j = 1, MAX_SAVE_ICONS do
-                local icon = row:CreateTexture(nil, "ARTWORK")
-                icon:SetSize(16, 16)
-                icon:SetPoint("LEFT", row, "LEFT", column.x + (j - 1) * 18, 0)
+                local hit = CreateFrame("Button", nil, row)
+                hit:SetSize(16, 16)
+                hit:SetPoint("LEFT", row, "LEFT", column.x + (j - 1) * 18, 0)
+                hit:SetScript("OnEnter", function(self)
+                    local e = self.entry
+                    if not e then return end
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    if e.kind == "item" and e.id then
+                        GameTooltip:SetItemByID(e.id)
+                    else
+                        GameTooltip:SetSpellByID(e.kind == "item" and e.use or e.id)
+                    end
+                    GameTooltip:Show()
+                end)
+                hit:SetScript("OnLeave", GameTooltip_Hide)
+                local icon = hit:CreateTexture(nil, "ARTWORK")
+                icon:SetAllPoints()
                 icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-                row.icons[j] = icon
+                row.icons[j], row.iconHits[j] = icon, hit
             end
         else
             local text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -77,8 +95,14 @@ local function CreateSaveRow(parent, index)
     return row
 end
 
+local RESTART = "Restart the game to finish the Cast Ahead update - defensive calls are off until then."
+
 local function RefreshGuide()
     if not (guideHost and guideHost:IsVisible()) then return end
+    if not CastAheadSaves then
+        guideText:SetText(RESTART)
+        return
+    end
     local lines = CastAheadSaves and CastAheadSaves.GuideLines and CastAheadSaves.GuideLines(CastAheadWindow.Dungeon()) or {}
     if #lines == 0 then
         lines = { CastAheadSaves.ViewRole() and "Nothing in this dungeon calls a save for this role."
@@ -91,6 +115,10 @@ end
 
 local function RefreshSaves()
     if not (savesHost and savesHost:IsVisible()) then return end
+    if not CastAheadSaves then
+        CastAheadWindow.SetFooter(RESTART)
+        return
+    end
     local saves = CastAheadSaves and CastAheadSaves.ViewRows and CastAheadSaves.ViewRows(CastAheadWindow.Dungeon()) or {}
     local items, group = {}, nil
     for _, s in ipairs(saves) do
@@ -119,6 +147,8 @@ local function RefreshSaves()
                 row.icons[j]:SetShown(button and button.icon ~= nil or false)
                 row.icons[j]:SetDesaturated(not (button and button.available))
                 row.icons[j]:SetAlpha(button and button.available and 1 or 0.4)
+                row.iconHits[j].entry = button or nil
+                row.iconHits[j]:SetShown(button ~= nil and button.icon ~= nil)
             end
             row:Show()
         else

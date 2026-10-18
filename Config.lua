@@ -234,7 +234,7 @@ function C.Migrate()
     CastAheadDB.schema = C.SCHEMA
 end
 
-local RECORDED = { "journal", "probe", "phaseProbe", "sweep", "fingerprints", "diag", "combatLogOurs" }
+local RECORDED = { "journal", "probe", "phaseProbe", "sweep", "fingerprints", "diag", "combatLogOurs", "dispel" }
 
 -- Every setting back to a new install; recorded data stays until the
 -- Development tab clears it.

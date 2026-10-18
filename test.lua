@@ -490,6 +490,12 @@ for id, row in pairs(CastAheadDefensives.spells) do
     check(row.name ~= "" and row.mob ~= "", "spell " .. id .. " has a non-empty name and mob")
     check(type(row.dungeon) == "number" and CastAheadData[row.dungeon] ~= nil, "spell " .. id .. " names a known dungeon")
     check(type(row.bar) == "boolean", "spell " .. id .. " has a boolean bar flag")
+    check(type(row.school) == "number" and row.school > 0 and row.school < 128,
+        "spell " .. id .. " has a damage school mask")
+    check(row.aoe == nil or type(row.aoe) == "boolean", "spell " .. id .. " has no or a boolean aoe flag")
+end
+for id, limit in pairs(CastAheadButtonLimits) do
+    check(limit == "magic" or limit == "physical" or limit == "aoe", "button " .. id .. " has a known limit")
 end
 
 print(string.format("%d dungeons, %d spells, %d unresolvable after two casts, %d needing the mob check",

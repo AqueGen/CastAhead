@@ -402,11 +402,12 @@ check(not CastAheadConfig.SaveCalls(), "a new install starts with defensive call
 CastAheadDB = { schema = 3 }
 fire("ADDON_LOADED", "CastAhead")
 check(not CastAheadConfig.SaveCalls(), "a profile that switched them off after the change keeps them off")
-CastAheadDB = { schema = 3, saveCalls = true, voice = false, window = { width = 900 }, journal = { 1 }, probe = { 2 } }
+CastAheadDB = { schema = 3, saveCalls = true, voice = false, window = { width = 900 }, journal = { 1 }, probe = { 2 },
+    dispel = { [100] = "Magic" } }
 CastAheadConfig.ResetAll()
 fire("ADDON_LOADED", "CastAhead")
 check(CastAheadDB.voice == nil and CastAheadDB.window == nil and not CastAheadConfig.SaveCalls()
-    and CastAheadDB.journal[1] == 1 and CastAheadDB.probe[1] == 2,
+    and CastAheadDB.journal[1] == 1 and CastAheadDB.probe[1] == 2 and (CastAheadDB.dispel or {})[100] == "Magic",
     "a full reset reads as a new install after the reload and keeps the recorded data")
 
 -- The UI helpers write where the accessor reads.
@@ -2582,6 +2583,56 @@ check(#CastAheadSaves.Icons(CastAheadMatch.ADVICE.BIG) == 0, "a spec without a t
 GetSpecializationInfo = function() return 265 end
 CastAheadSaves.Refresh()
 
+do
+    local savedButtons, savedDefensives = CastAheadSaveButtons, CastAheadDefensives
+    assert(loadfile("SaveButtons.lua"))()
+    local Fits = CastAheadSaves.Fits
+    local function spell(id) return { kind = "spell", id = id } end
+    check(not Fits(spell(48707), { school = 1 }) and Fits(spell(48707), { school = 4 }) and Fits(spell(48707), { school = 127 }),
+        "a magic-only button skips a physical hit and fits fire and chaos")
+    check(Fits(spell(1022), { school = 1 }) and not Fits(spell(1022), { school = 32 }) and not Fits(spell(1022), { school = 127 }),
+        "a physical-only button fits pure physical only, not shadow or chaos")
+    check(not Fits(spell(1966), { aoe = false }) and Fits(spell(1966), { aoe = true }) and Fits(spell(1966), { school = 1 }),
+        "an area-only button skips a single-target hit and fits one with no flag")
+    check(Fits(spell(48707), {}) and Fits(spell(48707), nil) and Fits(spell(104773), { school = 1 })
+        and Fits({ kind = "item", id = 48707 }, { school = 1 }), "no school, no row, an unlimited button or an item always fit")
+
+    IsPlayerSpell = function(id) return id == 48707 or id == 48792 end
+    textures[48707], textures[48792] = 3001, 3002
+    CastAheadSaveButtons = { [265] = { small = { 48707, 48792 }, big = {} } }
+    CastAheadDefensives = { spells = { [200] = { DAMAGER = "SMALL", lead = 2.0, school = 1, aoe = false },
+                                       [201] = { DAMAGER = "SMALL", lead = 2.0, school = 4 } }, alias = { [202] = 200 } }
+    CastAheadSaves.Refresh()
+    local small = CastAheadMatch.ADVICE.SMALL
+    check(CastAheadSaves.Icons(small, 200)[1] == 3002 and #CastAheadSaves.Icons(small, 200) == 1,
+        "a physical hit shows the next button instead of the magic-only one")
+    check(CastAheadSaves.Icons(small, 202)[1] == 3002, "an aliased cast takes the school of its hit")
+    check(CastAheadSaves.Icons(small, 201)[1] == 3001 and #CastAheadSaves.Icons(small, 201) == 2,
+        "a fire hit keeps the magic-only button first")
+    check(CastAheadSaves.Icons(small)[1] == 3001, "a call with no hit keeps the whole list")
+    check(CastAheadSaves.Icons(small, { { spell = 200 }, { spell = 201 } })[1] == 3001,
+        "a button that fits any candidate cast stays")
+    check(CastAheadSaves.Icons(small, { { spell = 202 } })[1] == 3002, "a single physical candidate drops it")
+    CastAheadSaves.Schedule("test:physical", 200, now - 0.1, now + 5, small)
+    CastAheadSaves.Tick(now)
+    local scheduled
+    for _, p in ipairs(CastAheadSaves.Pending(now)) do
+        if p.row.spell == 200 then scheduled = p end
+    end
+    check(scheduled and scheduled.icons[1] == 3002 and #scheduled.icons == 1,
+        "a scheduled call on a physical hit shows the next button, not the magic-only one")
+    CastAheadSaves.Cancel("test:physical")
+    CastAheadDefensives.spells[200].dungeon, CastAheadDefensives.spells[201].dungeon = 9100, 9100
+    local view = {}
+    for _, r in ipairs(CastAheadSaves.ViewRows(9100)) do view[r.id] = r end
+    check(view[200] and #view[200].buttons == 1 and view[200].buttons[1].id == 48792 and view[201] and #view[201].buttons == 2,
+        "the guide drops the magic-only button on a physical hit and keeps both on a fire hit")
+    CastAheadSaveButtons, CastAheadDefensives = savedButtons, savedDefensives
+    textures[48707], textures[48792] = nil, nil
+    IsPlayerSpell = function(id) return id == 104773 or id == 108416 end
+    CastAheadSaves.Refresh()
+end
+
 reset()
 CastAheadDB = { saveCalls = true, centerText = true, leadSeconds = 0 }
 CastAheadCore.ReapplyData()
@@ -2758,6 +2809,14 @@ end)
 check(ok, "no error without the Saves module: " .. tostring(err))
 check(Alerts() == 1, string.format("the ordinary heads-up still fires once, got %d", Alerts()))
 reset()
+do
+    local savedLists = CastAheadLists
+    CastAheadLists = nil
+    local loaded, loadErr = pcall(dofile, "Saves.lua")
+    check(loaded and CastAheadSaves == nil,
+        "Saves.lua without the new Lists.lua leaves no half-built module: " .. tostring(loadErr))
+    CastAheadLists = savedLists
+end
 CastAheadSaves = savedSaves
 
 -- Aura sounds: registered for the player's role out of combat only, replaced on spec change.
@@ -3436,6 +3495,27 @@ do
     fire("UNIT_SPELLCAST_STOP", unit)
     reset()
 
+    local savedLimits = CastAheadButtonLimits
+    CastAheadButtonLimits = { [108416] = "magic" }
+    CastAheadDefensives.spells[100].school = 1
+    CastAheadSaves.Refresh()
+    enter()
+    castFor(3.0)
+    advance(15.0)
+    advance(1.5)
+    advance(3.0)
+    fire("UNIT_SPELLCAST_START", unit)
+    advance(1.0)
+    line = CenterLine()
+    check(line and line.icon.textureValue == 9512 and not line.extra[1].shown,
+        "a live cast of a physical hit skips a magic-only button in the centre")
+    advance(2.0)
+    fire("UNIT_SPELLCAST_STOP", unit)
+    reset()
+    CastAheadButtonLimits = savedLimits
+    CastAheadDefensives.spells[100].school = nil
+    CastAheadSaves.Refresh()
+
     local heard = {}
     local realPlay = PlaySoundFile
     PlaySoundFile = function(path) heard[#heard + 1] = path return realPlay(path) end
@@ -3790,6 +3870,11 @@ do
         "editing another spec writes its list, the calls keep the real one")
     check(store.EditList("big")[1] == 86659, "the page reads the edited spec")
     check(store.ParseEntry("31850", {}) == 31850, "another spec's list takes a spell this character does not know")
+    local savedItem = C_Item
+    C_Item = { GetItemSpell = function(id) if id == 31850 then return "Use", 452930 end end }
+    local asItem = store.ParseEntry("31850", {})
+    check(type(asItem) == "table" and asItem.use == 452930, "for another spec a number that is also a usable item is the item")
+    C_Item = savedItem
     local seen = {}
     for _, e in ipairs(store.Addable("big")) do seen[e] = true end
     check(seen[642], "another spec offers its class spells this character does not know")
@@ -4227,8 +4312,17 @@ do
     fire("ENCOUNTER_START", 3470, "Nek'zali", 15, 20)
     CastAheadBossAdapter.OnBar("dbm", "raidbar", 1299684, 10, now)
     for _ = 1, 16 do advance(0.5) end
-    check(Heard() == "BIG_soon", "raid burst: a boss save call fires in a raid with no trash data, heard " .. Heard())
+    check(#heard == 0, "raid saves: off by default, a raid boss bar calls nothing, heard " .. Heard())
     fire("ENCOUNTER_END", 3470, "Nek'zali", 15, 20, 0)
+
+    heard = {}
+    CastAheadDB.raidSaves = true
+    fire("ENCOUNTER_START", 3470, "Nek'zali", 15, 20)
+    CastAheadBossAdapter.OnBar("dbm", "raidbar", 1299684, 10, now)
+    for _ = 1, 16 do advance(0.5) end
+    check(Heard() == "BIG_soon", "raid saves: switched on, a boss save call fires in a raid with no trash data, heard " .. Heard())
+    fire("ENCOUNTER_END", 3470, "Nek'zali", 15, 20, 0)
+    CastAheadDB.raidSaves = nil
 
     local savedAdapter, savedPrint, lines = CastAheadBossAdapter, print, 0
     dofile("BossAdapter.lua")
@@ -4393,6 +4487,29 @@ do
         run(3)
         B.OnEncounter("ENCOUNTER_END", 3101, 8, now)
         check(#sounds == 0, "burst event: switched off, voice off or sound off arms nothing")
+    end
+
+    do
+        local savedDead = UnitIsDeadOrGhost
+        sounds, CastAheadDB = {}, { burstCalls = true }
+        B.OnEncounter("ENCOUNTER_START", 3101, 8, now)
+        run(3)
+        UnitIsDeadOrGhost = function() return true end
+        run(1)
+        UnitIsDeadOrGhost = savedDead
+        check(#sounds == 1, "burst event: dying mid-fight keeps the sound for after a battle res, got " .. #sounds)
+        B.OnEncounter("ENCOUNTER_END", 3101, 8, now)
+    end
+
+    for _, change in ipairs({ "burstCalls", "voice", "sound" }) do
+        sounds, CastAheadDB = {}, { burstCalls = true }
+        B.OnEncounter("ENCOUNTER_START", 3101, 8, now)
+        run(3)
+        CastAheadDB[change] = change == "burstCalls" and nil or false
+        run(0.5)
+        check(#sounds == 2 and sounds[2].id == 610 and sounds[2].sound == nil,
+            "burst event: " .. change .. " switched off mid-fight takes the sound off, got " .. #sounds)
+        B.OnEncounter("ENCOUNTER_END", 3101, 8, now)
     end
 
     C_Timer, C_EncounterEvents = nil, nil
