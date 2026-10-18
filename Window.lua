@@ -18,7 +18,7 @@ local DEFAULT_W, DEFAULT_H = 900, 560
 local TITLE_H, MENU_W, FOOTER_H = 26, 120, 20
 local ENTRY_H, HEADER_H, GAP, PAD, SCROLLBAR_W = 20, 18, 4, 8, 24
 local PER_ROW = 4
-local GROUPS = { "Settings", "Dungeon" }
+local GROUPS = { "Settings", "Experimental", "Dungeon" }
 local SCALE_STEPS = { 75, 100, 125, 150 }
 local SCALE_MIN, SCALE_MAX, SCALE_DEFAULT = 75, 150, 100
 local SIDE_HINT = "Shift + mouse wheel scrolls sideways"
@@ -416,6 +416,7 @@ local function FirstShown(group)
     for _, p in ipairs(order) do
         if p.group == group and p.shown then return p.name end
     end
+    if group == "Experimental" then return FirstShown("Settings") end
 end
 
 function W.Toggle()

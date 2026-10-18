@@ -1074,7 +1074,7 @@ BUILDERS = { General = BuildGeneral, Sounds = BuildSounds, Defensives = BuildDef
 
 for _, name in ipairs(CastAheadOptions.TABS) do
     local host
-    CastAheadWindow.Register(name, "Settings",
+    CastAheadWindow.Register(name, name == "Bursts" and "Experimental" or "Settings",
         function(h) host = h end,
         function() CastAheadOptions.ShowPanel(host, name) end)
 end

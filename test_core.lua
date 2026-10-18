@@ -3890,6 +3890,13 @@ do
     CastAheadDB.burstCalls = nil
     CastAheadUI.RefreshTabs()
     check(CastAheadWindow.Current() == "General", "burst windows switched off while open show General")
+    CastAheadDB.burstCalls = true
+    CastAheadUI.ShowTab("Bursts")
+    CastAhead_Toggle()
+    CastAheadDB.burstCalls = nil
+    CastAhead_Toggle()
+    check(CastAheadWindow.Current() == "General", "a saved Bursts page with bursts off reopens on General")
+    CastAhead_Toggle()
 
     SlashCmdList.CASTAHEAD("sounds")
     check(f:IsShown() and CastAheadWindow.Current() == "Sounds", "/ca sounds opens the Sounds page")
