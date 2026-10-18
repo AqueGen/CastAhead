@@ -153,6 +153,8 @@ local SWITCHES = {
         tip = "Say \"big defensive\" ahead of hits that need a big save." },
     healCalls = { label = "Heal up after a big hit", defaultOff = true,
         tip = "Right after a hit that called a big defensive, say \"heal up\" when your Healthstone or potion is ready." },
+    raidSaves = { label = "Raid boss defensive calls (experimental)", defaultOff = true,
+        tip = "Also call defensives on raid bosses from DBM or BigWigs timers. The defensive table holds dungeon abilities only for now, so raid calls stay rare. Dungeon calls do not need this switch." },
     burstCalls = { label = "Burst windows (experimental)", defaultOff = true,
         tip = "On bosses with a phase worth bursting into, say \"burst soon\" five seconds before it and \"burst now\" when it starts, with a countdown in the centre block. Healers get their own phases for group-healing cooldowns. On every other boss it stays silent: press on cooldown." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
@@ -502,7 +504,7 @@ function BuildGeneral(panel)
         { "centerScale", "centerTextScale", "centerX", "centerY" }, centerScale)
 
     -- Development mode ----------------------------------------------------
-    local extra = BuildGroup(panel, "Advanced", 136)
+    local extra = BuildGroup(panel, "Advanced", 170)
     local dev = BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
         if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
     end)
@@ -511,7 +513,8 @@ function BuildGeneral(panel)
         if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
     end)
     local resetAll = CastAheadWindow.Button(panel, "Reset all settings", 130)
-    resetAll:SetPoint("TOPLEFT", burst, "BOTTOMLEFT", 0, -10)
+    local raid = BuildSwitch(panel, "raidSaves", { "TOPLEFT", burst, "BOTTOMLEFT", 0, -4 }, SaveRefresh)
+    resetAll:SetPoint("TOPLEFT", raid, "BOTTOMLEFT", 0, -10)
     resetAll:SetScript("OnClick", function()
         if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_ALL") end
     end)

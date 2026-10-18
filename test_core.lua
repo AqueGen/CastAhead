@@ -4312,8 +4312,17 @@ do
     fire("ENCOUNTER_START", 3470, "Nek'zali", 15, 20)
     CastAheadBossAdapter.OnBar("dbm", "raidbar", 1299684, 10, now)
     for _ = 1, 16 do advance(0.5) end
-    check(Heard() == "BIG_soon", "raid burst: a boss save call fires in a raid with no trash data, heard " .. Heard())
+    check(#heard == 0, "raid saves: off by default, a raid boss bar calls nothing, heard " .. Heard())
     fire("ENCOUNTER_END", 3470, "Nek'zali", 15, 20, 0)
+
+    heard = {}
+    CastAheadDB.raidSaves = true
+    fire("ENCOUNTER_START", 3470, "Nek'zali", 15, 20)
+    CastAheadBossAdapter.OnBar("dbm", "raidbar", 1299684, 10, now)
+    for _ = 1, 16 do advance(0.5) end
+    check(Heard() == "BIG_soon", "raid saves: switched on, a boss save call fires in a raid with no trash data, heard " .. Heard())
+    fire("ENCOUNTER_END", 3470, "Nek'zali", 15, 20, 0)
+    CastAheadDB.raidSaves = nil
 
     local savedAdapter, savedPrint, lines = CastAheadBossAdapter, print, 0
     dofile("BossAdapter.lua")
