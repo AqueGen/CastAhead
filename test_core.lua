@@ -402,11 +402,12 @@ check(not CastAheadConfig.SaveCalls(), "a new install starts with defensive call
 CastAheadDB = { schema = 3 }
 fire("ADDON_LOADED", "CastAhead")
 check(not CastAheadConfig.SaveCalls(), "a profile that switched them off after the change keeps them off")
-CastAheadDB = { schema = 3, saveCalls = true, voice = false, window = { width = 900 }, journal = { 1 }, probe = { 2 } }
+CastAheadDB = { schema = 3, saveCalls = true, voice = false, window = { width = 900 }, journal = { 1 }, probe = { 2 },
+    dispel = { [100] = "Magic" } }
 CastAheadConfig.ResetAll()
 fire("ADDON_LOADED", "CastAhead")
 check(CastAheadDB.voice == nil and CastAheadDB.window == nil and not CastAheadConfig.SaveCalls()
-    and CastAheadDB.journal[1] == 1 and CastAheadDB.probe[1] == 2,
+    and CastAheadDB.journal[1] == 1 and CastAheadDB.probe[1] == 2 and (CastAheadDB.dispel or {})[100] == "Magic",
     "a full reset reads as a new install after the reload and keeps the recorded data")
 
 -- The UI helpers write where the accessor reads.
@@ -3869,6 +3870,11 @@ do
         "editing another spec writes its list, the calls keep the real one")
     check(store.EditList("big")[1] == 86659, "the page reads the edited spec")
     check(store.ParseEntry("31850", {}) == 31850, "another spec's list takes a spell this character does not know")
+    local savedItem = C_Item
+    C_Item = { GetItemSpell = function(id) if id == 31850 then return "Use", 452930 end end }
+    local asItem = store.ParseEntry("31850", {})
+    check(type(asItem) == "table" and asItem.use == 452930, "for another spec a number that is also a usable item is the item")
+    C_Item = savedItem
     local seen = {}
     for _, e in ipairs(store.Addable("big")) do seen[e] = true end
     check(seen[642], "another spec offers its class spells this character does not know")

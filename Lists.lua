@@ -47,6 +47,9 @@ function L.ParseEntry(text, list, anySpell)
         entry, why = ItemEntry(itemLink)
     elseif spellLink then
         entry = Usable(spellLink) and spellLink or nil
+    elseif number and anySpell then
+        entry, why = ItemEntry(number)
+        if not entry and why == NOT_FOUND and Exists(number) then entry, why = number, nil end
     elseif number then
         if Usable(number) then entry = number else entry, why = ItemEntry(number) end
     elseif text ~= "" and C_Spell and C_Spell.GetSpellInfo then
