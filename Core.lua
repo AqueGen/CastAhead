@@ -439,7 +439,7 @@ local function Voice(advice, lead)
         if not ttsHintShown then
             ttsHintShown = true
             print("|cff33ff99Cast Ahead|r the game's TTS voice could not speak - enable Combat Audio Alerts"
-                .. " (Options > Sound) and give its categories volume. Playing the clip instead.")
+                .. " (Options > Accessibility) and give its categories volume. Playing the clip instead.")
         end
         return PlayClip(advice, lead)
     end

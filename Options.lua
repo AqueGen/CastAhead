@@ -997,13 +997,26 @@ function BuildSounds(panel)
     tts:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", -4, -4)
     tts.text = tts:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     tts.text:SetPoint("LEFT", tts, "RIGHT", 2, 0)
+    local openGame = CastAheadWindow.Button(panel, "Open game options", 130)
+    openGame:SetPoint("LEFT", tts.text, "RIGHT", 10, 0)
+    openGame:SetScript("OnClick", function()
+        if not (Settings and Settings.OpenToCategory) then return end
+        local id
+        for _, c in ipairs(SettingsPanel and SettingsPanel:GetAllCategories() or {}) do
+            if c:GetName() == ACCESSIBILITY_AUDIO_LABEL then id = c:GetID() break end
+        end
+        Settings.OpenToCategory(id, CAA_ENABLE_COMBAT_AUDIO_ALERTS)
+    end)
     local function PaintTTS()
         local api = C_CombatAudioAlert
         local gameOn = api and api.IsEnabled and api.IsEnabled()
         tts:SetEnabled(gameOn and true or false)
         tts.text:SetText(gameOn and "Game TTS voice"
-            or "Game TTS voice |cffff6060(off in game Sound options)|r")
+            or "Game TTS voice |cffff6060(Combat Audio Alerts are off in the game's Accessibility options)|r")
+        openGame:SetShown(not gameOn)
     end
+    tts:RegisterEvent("CVAR_UPDATE")
+    tts:SetScript("OnEvent", PaintTTS)
     tts:SetChecked(CastAheadDB and CastAheadDB.voiceTTS == true)
     PaintTTS()
     tts:SetScript("OnClick", function(self)
@@ -1013,7 +1026,7 @@ function BuildSounds(panel)
     tts:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText("Game TTS voice", 1, 1, 1)
-        GameTooltip:AddLine("Use the game's built-in combat text-to-speech instead of the addon's recorded clips. Needs Combat Audio Alerts enabled in the game's Sound options; when it cannot speak, the clips play instead.", nil, nil, nil, true)
+        GameTooltip:AddLine("Use the game's built-in combat text-to-speech instead of the addon's recorded clips. Needs Combat Audio Alerts enabled in the game's Accessibility options; when it cannot speak, the clips play instead.", nil, nil, nil, true)
         GameTooltip:Show()
     end)
     tts:SetScript("OnLeave", GameTooltip_Hide)
