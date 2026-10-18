@@ -401,6 +401,12 @@ check(not CastAheadConfig.SaveCalls(), "a new install starts with defensive call
 CastAheadDB = { schema = 3 }
 fire("ADDON_LOADED", "CastAhead")
 check(not CastAheadConfig.SaveCalls(), "a profile that switched them off after the change keeps them off")
+CastAheadDB = { schema = 3, saveCalls = true, voice = false, window = { width = 900 }, journal = { 1 }, probe = { 2 } }
+CastAheadConfig.ResetAll()
+fire("ADDON_LOADED", "CastAhead")
+check(CastAheadDB.voice == nil and CastAheadDB.window == nil and not CastAheadConfig.SaveCalls()
+    and CastAheadDB.journal[1] == 1 and CastAheadDB.probe[1] == 2,
+    "a full reset reads as a new install after the reload and keeps the recorded data")
 
 -- The UI helpers write where the accessor reads.
 CastAheadDB = nil

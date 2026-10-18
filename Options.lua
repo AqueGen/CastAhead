@@ -260,6 +260,22 @@ function CastAheadOptions.ShowPanel(host, name)
     panel:Relayout()
 end
 
+if StaticPopupDialogs then
+    StaticPopupDialogs.CASTAHEAD_RESET_ALL = {
+        text = "Reset every Cast Ahead setting, list and window position to a new install, then reload the UI? Recorded data stays.",
+        button1 = YES or "Yes",
+        button2 = NO or "No",
+        OnAccept = function()
+            CastAheadConfig.ResetAll()
+            ReloadUI()
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+        preferredIndex = 3,
+    }
+end
+
 -- Groups in reading order: what is announced at all first, then the places
 -- it is drawn. Each group carries its own on/off switch, so nothing has to be
 -- traced across the page.
@@ -291,13 +307,18 @@ function BuildGeneral(panel)
     BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 }, RedrawAndSaves)
 
     -- Development mode ----------------------------------------------------
-    local extra = BuildGroup(panel, "Advanced", 100)
+    local extra = BuildGroup(panel, "Advanced", 136)
     local dev = BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
         if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
     end)
-    BuildSwitch(panel, "burstCalls", { "TOPLEFT", dev, "BOTTOMLEFT", 0, -4 }, function()
+    local burst = BuildSwitch(panel, "burstCalls", { "TOPLEFT", dev, "BOTTOMLEFT", 0, -4 }, function()
         Redraw()
         if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
+    end)
+    local resetAll = CastAheadWindow.Button(panel, "Reset all settings", 130)
+    resetAll:SetPoint("TOPLEFT", burst, "BOTTOMLEFT", 0, -10)
+    resetAll:SetScript("OnClick", function()
+        if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_ALL") end
     end)
 
     -- Where the icons go --------------------------------------------------

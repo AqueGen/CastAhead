@@ -192,6 +192,8 @@ end
 -- otherwise read as a reset: the per-context one (CastAheadDB.ctx.key), the
 -- flat one from before the early warning became a number, and any profile
 -- from before the centre call became opt-in, which keeps it on.
+C.SCHEMA = 3
+
 function C.Migrate()
     local existing = CastAheadDB ~= nil
     CastAheadDB = CastAheadDB or {}
@@ -226,8 +228,18 @@ function C.Migrate()
             if type(value) == "number" then picks[size] = { value } end
         end
     end
-    if existing and (tonumber(CastAheadDB.schema) or 0) < 3 and CastAheadDB.saveCalls == nil then
+    if existing and (tonumber(CastAheadDB.schema) or 0) < C.SCHEMA and CastAheadDB.saveCalls == nil then
         CastAheadDB.saveCalls = true
     end
-    CastAheadDB.schema = 3
+    CastAheadDB.schema = C.SCHEMA
+end
+
+local RECORDED = { "journal", "probe", "phaseProbe", "sweep", "fingerprints", "diag", "combatLogOurs" }
+
+-- Every setting back to a new install; recorded data stays until the
+-- Development tab clears it.
+function C.ResetAll()
+    local fresh = { schema = C.SCHEMA }
+    for _, key in ipairs(RECORDED) do fresh[key] = CastAheadDB and CastAheadDB[key] end
+    CastAheadDB = fresh
 end
