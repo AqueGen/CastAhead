@@ -44,8 +44,8 @@ local function Dungeons()
     return list
 end
 
-function W.Button(parent, text, width, primary, kind)
-    local b = CreateFrame(kind or "Button", nil, parent, "BackdropTemplate")
+function W.Button(parent, text, width, primary)
+    local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
     b:SetSize(width, ENTRY_H)
     b:SetBackdrop(FLAT)
     b:SetBackdropColor(unpack(T.panel))
@@ -85,10 +85,8 @@ end
 function W.PaintSpecBars()
     local viewing = CastAheadSaves and CastAheadSaves.ViewSpecID()
     local specs = Specs()
-    local class = CastAheadSaves and CastAheadSaves.ViewClassID()
-    local info = class and C_CreatureInfo and C_CreatureInfo.GetClassInfo and C_CreatureInfo.GetClassInfo(class)
     for _, bar in ipairs(specBars) do
-        if bar.pick then bar.pick:SetText(info and info.className or "Class") end
+        if bar.pick and bar.pick.GenerateMenu then bar.pick:GenerateMenu() end
         for i, b in ipairs(bar) do
             local spec = specs[i]
             b:SetShown(spec ~= nil)
@@ -105,14 +103,9 @@ end
 
 local function ClassPick(parent, x, y, onPick)
     if not (GetNumClasses and C_CreatureInfo and C_CreatureInfo.GetClassInfo) then return nil end
-    local pick = W.Button(parent, "", CLASS_W, false, "DropdownButton")
-    pick:SetPoint("TOPLEFT", parent, "TOPLEFT", x, -y)
-    pick.label:ClearAllPoints()
-    pick.label:SetPoint("LEFT", pick, "LEFT", PAD, 0)
-    local arrow = pick:CreateTexture(nil, "OVERLAY")
-    arrow:SetAtlas("minimal-scrollbar-arrow-bottom")
-    arrow:SetSize(12, 12)
-    arrow:SetPoint("RIGHT", pick, "RIGHT", -4, 0)
+    local pick = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
+    pick:SetSize(CLASS_W, ENTRY_H + 4)
+    pick:SetPoint("TOPLEFT", parent, "TOPLEFT", x, -y + 2)
     pick:SetupMenu(function(_, root)
         for classID = 1, GetNumClasses() do
             local info = C_CreatureInfo.GetClassInfo(classID)
