@@ -3341,7 +3341,7 @@ do
     GetSpecializationInfo = function() return 265 end
     IsPlayerSpell = function(id) return id == 108416 or id == 104773 end
     InCombatLockdown = function() return false end
-    CastAheadSaveButtons = { [265] = { def = { 108416, { use = 452930 } }, heal = { { use = 452930 } } } }
+    CastAheadSaveButtons = { [265] = { def = { 108416, { use = 452930 } } } }
     CastAheadDB = { saveCalls = true }
     CastAheadSaves.ScanBags()
     local def = CastAheadSaves.Available()
@@ -3371,7 +3371,7 @@ do
     CastAheadDB.saveButtons = { [265] = { def = { 999, 104773 } } }
     check(CastAheadSaves.Available()[1].id == 104773, "an override skips an unknown spell to the next entry")
     advance(1)
-    CastAheadDB.saveButtons = { [265] = { heal = { 104773 } } }
+    CastAheadDB.saveButtons = { [265] = {} }
     check(#CastAheadSaves.Available() == 2, "a def list missing from the override keeps the shipped one")
     advance(1)
     CastAheadDB = { saveCalls = true, saveButtons = { [265] = { small = 108416 } } }
@@ -3543,11 +3543,11 @@ do
     PlaySoundFile = function(path) heard[#heard + 1] = path return realPlay(path) end
     local function LastBig()
         local at = 0
-        for i, p in ipairs(heard) do if p:match("\DEFENSIVE") then at = i end end
+        for i, p in ipairs(heard) do if p:match("\\DEFENSIVE") then at = i end end
         return at
     end
     CastAheadDefensives = { spells = { [100] = { DAMAGER = true, lead = 4.0 } }, alias = {} }
-    CastAheadDB = { saveCalls = true, centerText = true, leadSeconds = 0 }
+    CastAheadDB = { saveCalls = true, healCalls = true, centerText = true, leadSeconds = 0 }
     CastAheadCore.ReapplyData()
     local centreSaid
     local function BigCast(kick, lockKick)

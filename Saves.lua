@@ -191,7 +191,7 @@ function S.ResetSpec() return store.ResetSpec() end
 
 if StaticPopupDialogs then
     StaticPopupDialogs.CASTAHEAD_RESET_SAVES = {
-        text = "Reset the Defensive and Heal lists for this specialization to the defaults?",
+        text = "Reset the Defensive list for this specialization to the defaults?",
         button1 = YES or "Yes",
         button2 = NO or "No",
         OnAccept = function()
