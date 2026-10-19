@@ -46,7 +46,6 @@ LINES = {
     "SWITCH": "switch target",
     "ALERT": "danger",
     "DEFENSIVE": "defensive",
-    "HEAL": "heal up",
     "SOON": "burst soon",
     "BURST": "burst now",
 }

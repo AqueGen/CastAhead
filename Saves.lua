@@ -23,7 +23,7 @@ local Known = CastAheadLists.Known
 local store = CastAheadLists.New({
     dbKey = "saveButtons",
     shipped = function() return CastAheadSaveButtons end,
-    keys = { "def", "heal" },
+    keys = { "def" },
     specID = function() return S.SpecID() end,
     editSpecID = function() return S.ViewSpecID() end,
     onChange = function() S.Refresh() end,
@@ -184,7 +184,6 @@ S.ItemFor = ItemFor
 
 function S.ParseEntry(text, list) return store.ParseEntry(text, list) end
 function S.SetList(size, list) return store.SetList(size, list) end
-function S.MoveEntry(from, index, to) return store.MoveEntry(from, index, to) end
 function S.Shift(size, index, step) return store.Shift(size, index, step) end
 function S.Catalogue(spec) return store.Catalogue(spec) end
 function S.Addable(size) return store.Addable(size) end
@@ -216,7 +215,7 @@ function S.Fits(e, row)
     return school ~= 1
 end
 
-local LIST = { DEFENSIVE = "def", HEAL = "heal" }
+local LIST = { DEFENSIVE = "def" }
 local NO_ICONS = {}
 local function FitsAny(e, rows)
     if #rows == 0 then return true end
@@ -378,7 +377,6 @@ local function GuideLine(r)
     local press = #names > 0 and table.concat(names, ", then ") or "no button in your list"
     local line = string.format("- %s from %s (%s): defensive - %s", Link("spell", r.id, Icon(SpellTexture(r.id)) .. r.name),
         r.mob or "?", Heard(r.trigger), press)
-    if #store.ListFor(S.ViewSpecID(), "heal") > 0 then line = line .. "; heal up after the hit" end
     local wins = r.wins and M.ADVICE[r.wins]
     if wins then line = line .. string.format(" (%s comes first)", wins.say) end
     local cadence = Cadence(r)
@@ -397,10 +395,6 @@ function S.GuideLines(instanceID)
         lines[#lines + 1] = GuideLine(r)
     end
     return lines
-end
-
-function S.HealReady()
-    return CastAheadConfig.SaveCalls() and CastAheadConfig.Get("healCalls") == true and #Available("heal") > 0
 end
 
 local SOUND_ROOT = "Interface\\AddOns\\CastAhead\\Sounds\\en\\"
@@ -456,12 +450,6 @@ function S.Schedule(key, spellID, fireAt, endAt, advice)
     scheduled[key] = { spell = spellID, fireAt = fireAt, endAt = endAt, advice = advice }
 end
 
-local flashes = 0
-function S.Flash(advice, now, seconds)
-    flashes = flashes + 1
-    scheduled["flash:" .. flashes] = { fireAt = now, endAt = now + seconds, advice = advice, fired = true, firedAt = now }
-end
-
 function S.Cancel(key)
     scheduled[key] = nil
 end
@@ -511,17 +499,13 @@ function S.Pending(now)
     wipe(pending)
     for _, c in pairs(scheduled) do
         if not c.pausedAt and c.fired and c.endAt > now then
-            local icons = S.Icons(c.advice, c.spell)
-            if c.advice ~= M.ADVICE.HEAL or #icons > 0 then
-                pending[#pending + 1] = { endAt = c.endAt, advice = c.advice, row = { spell = c.spell }, icons = icons }
-            end
+            pending[#pending + 1] = { endAt = c.endAt, advice = c.advice, row = { spell = c.spell }, icons = S.Icons(c.advice, c.spell) }
         end
     end
     return pending
 end
 
 function S.Tick(now)
-    local healed = false
     for key, c in pairs(scheduled) do
         if not c.pausedAt then
             if not c.fired and now >= c.fireAt and now < c.endAt then
@@ -529,16 +513,7 @@ function S.Tick(now)
                 lastFiredAt = now
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice, true) end
             end
-            if now >= c.endAt then
-                if c.fired and c.advice == M.ADVICE.DEFENSIVE and S.HealReady()
-                    and CastAheadCore and CastAheadCore.Announce then
-                    CastAheadCore.Announce(M.ADVICE.HEAL)
-                    lastFiredAt = now
-                    healed = true
-                end
-                scheduled[key] = nil
-            end
+            if now >= c.endAt then scheduled[key] = nil end
         end
     end
-    if healed then S.Flash(M.ADVICE.HEAL, now, 3) end
 end

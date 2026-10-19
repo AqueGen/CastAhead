@@ -52,7 +52,6 @@ M.ADVICE = {
     TANK = { label = "TANKBUSTER", short = "BUSTER", say = "tank buster", r = 1.00, g = 0.45, b = 0.10 },
     AOE  = { label = "AOE", say = "aoe damage", r = 1.00, g = 0.75, b = 0.15 },
     DEFENSIVE = { label = "DEFENSIVE", short = "DEF", say = "defensive", r = 1.00, g = 0.35, b = 0.85 },
-    HEAL  = { label = "HEAL UP", short = "HEAL", say = "heal up", r = 0.40, g = 0.95, b = 0.45 },
     SOON  = { label = "BURST SOON", short = "SOON", say = "burst soon", r = 1.00, g = 0.65, b = 0.20 },
     BURST = { label = "BURST", say = "burst now", r = 1.00, g = 0.30, b = 0.10 },
     -- Categories assigned by the curated priority set (row.prio).

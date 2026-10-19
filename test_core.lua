@@ -3541,23 +3541,14 @@ do
     local heard = {}
     local realPlay = PlaySoundFile
     PlaySoundFile = function(path) heard[#heard + 1] = path return realPlay(path) end
-    local function Heals()
-        local n = 0
-        for _, p in ipairs(heard) do if p:match("\\HEAL%.ogg$") then n = n + 1 end end
-        return n
-    end
     local function LastBig()
         local at = 0
-        for i, p in ipairs(heard) do if p:match("\\DEFENSIVE") then at = i end end
+        for i, p in ipairs(heard) do if p:match("\DEFENSIVE") then at = i end end
         return at
     end
     CastAheadDefensives = { spells = { [100] = { DAMAGER = true, lead = 4.0 } }, alias = {} }
     CastAheadDB = { saveCalls = true, centerText = true, leadSeconds = 0 }
     CastAheadCore.ReapplyData()
-    local function HealLine()
-        local l = CenterLine()
-        return l and l.timeValue:match("^Heal up") and l
-    end
     local centreSaid
     local function BigCast(kick, lockKick)
         reset()
@@ -3576,37 +3567,19 @@ do
         fire("UNIT_SPELLCAST_STOP", unit)
         advance(0.1)
     end
-    CastAheadConfig.Set("healCalls", nil)
     BigCast(false)
-    check(LastBig() > 0 and Heals() == 0, "heal up is off by default")
+    local calls = #heard
+    check(LastBig() == calls and calls > 0, "a defensive trash cast calls the defensive: " .. table.concat(heard, ","))
+    advance(5.0)
+    check(#heard == calls and not CenterLine(), "nothing follows a completed defensive cast: " .. table.concat(heard, ","))
     CastAheadDB.saveButtons = { [265] = { def = {} } }
     CastAheadSaves.Refresh()
     BigCast(false)
     check(LastBig() == 0, "a spec with an empty def list hears nothing on a trash cast: " .. table.concat(heard, ","))
     CastAheadDB.saveButtons = nil
     CastAheadSaves.Refresh()
-    CastAheadConfig.Set("healCalls", true)
-    BigCast(false)
-    check(Heals() == 1 and LastBig() > 0 and LastBig() < #heard and (heard[#heard] or ""):match("\\HEAL%.ogg$"),
-        "a completed defensive cast calls heal up once, after the defensive call: " .. table.concat(heard, ","))
-    line = HealLine()
-    check(line and line.icon.textureValue == 9512, "the heal call shows the healthstone in the centre")
-    cds[5512] = { now, 60 }
-    advance(0.5)
-    check(not HealLine(), "the heal line leaves once the healthstone goes on cooldown")
-    cds[5512] = { 0, 0 }
-    advance(3.0)
-    check(not HealLine(), "the heal line leaves after its seconds")
     BigCast(true)
-    check(LastBig() > 0 and Heals() == 0, "a kicked defensive cast calls no heal")
-    counts[5512] = 0
-    BigCast(false)
-    check(LastBig() > 0 and Heals() == 0, "no heal call without a ready heal item")
-    counts[5512] = 3
-    CastAheadConfig.SetEnabled("healCalls", false)
-    BigCast(false)
-    check(LastBig() > 0 and Heals() == 0, "healCalls off silences the heal call")
-    CastAheadConfig.Set("healCalls", true)
+    check(LastBig() > 0, "a kicked defensive cast still called the defensive")
 
     reset()
     enter()
@@ -3614,42 +3587,33 @@ do
     castFor(3.0)
     advance(0.1)
     local last = CastAheadCore.LastCandidates(unit)
-    check(last and #last == 1 and last[1].spell == 100 and LastBig() == 0 and Heals() == 0,
-        "a cast unidentified at its start that resolves to the defensive hit at its stop calls no heal: " .. table.concat(heard, ","))
+    check(last and #last == 1 and last[1].spell == 100 and LastBig() == 0,
+        "a cast unidentified at its start that resolves to the defensive hit at its stop calls nothing: " .. table.concat(heard, ","))
 
     CastAheadPriority[100] = "KICK"
     CastAheadCore.ReapplyData()
     BigCast(false, true)
-    check(centreSaid and centreSaid:match("^Defensive") and Heals() == 1,
-        "a kickable cast the game locked shows the defensive and heals on completion: " .. tostring(centreSaid))
+    check(centreSaid and centreSaid:match("^Defensive"),
+        "a kickable cast the game locked shows the defensive: " .. tostring(centreSaid))
     BigCast(false)
-    check(centreSaid and centreSaid:match("^Interrupt") and Heals() == 0,
-        "the same cast left kickable calls interrupt and no heal: " .. tostring(centreSaid))
+    check(centreSaid and centreSaid:match("^Interrupt"),
+        "the same cast left kickable calls interrupt: " .. tostring(centreSaid))
     CastAheadPriority[100] = "AOE"
     CastAheadCore.ReapplyData()
-    CastAheadConfig.Set("healCalls", true)
     CastAheadDB.saveCalls = nil
     BigCast(false)
-    check(Heals() == 0 and LastBig() == 0, "saveCalls off silences the defensive and heal")
+    check(LastBig() == 0, "saveCalls off silences the defensive: " .. table.concat(heard, ","))
     CastAheadDB.saveCalls = true
     reset()
 
     enter()
     wipe(heard)
-    CastAheadSaves.Schedule("test:heal1", 100, now + 1, now + 3, CastAheadMatch.ADVICE.DEFENSIVE)
+    CastAheadSaves.Schedule("test:boss1", 100, now + 1, now + 3, CastAheadMatch.ADVICE.DEFENSIVE)
     advance(1.5)
-    check(LastBig() == 1 and Heals() == 0, "a boss defensive call fires at its time, no heal yet")
+    check(LastBig() == 1 and #heard == 1, "a boss defensive call fires at its time")
     advance(2.0)
-    check(Heals() == 1 and (heard[#heard] or ""):match("\\HEAL%.ogg$"), "the boss hit lands: heal up once")
-    check(HealLine(), "the boss heal call shows its centre line")
-    advance(2.0)
-    check(Heals() == 1, "only once")
-    wipe(heard)
-    CastAheadSaves.Schedule("test:heal3", 100, now + 1, now + 3, CastAheadMatch.ADVICE.DEFENSIVE)
-    advance(1.5)
-    CastAheadSaves.Cancel("test:heal3")
-    advance(2.0)
-    check(Heals() == 0, "a cancelled boss bar gives no heal")
+    advance(5.0)
+    check(#heard == 1 and not CenterLine(), "nothing follows when the boss bar ends: " .. table.concat(heard, ","))
     reset()
     PlaySoundFile = realPlay
 
@@ -3759,21 +3723,6 @@ do
     local refreshes = 0
     local realRefresh = S.Refresh
     S.Refresh = function() refreshes = refreshes + 1 return realRefresh() end
-
-    CastAheadDB = { saveCalls = true, saveButtons = { [265] = { def = { 108416, { use = 452930 }, 6789 }, heal = { 104773 } } } }
-    S.MoveEntry("def", 2, "heal")
-    local o = CastAheadDB.saveButtons[265]
-    check(#o.def == 2 and o.def[1] == 108416 and o.def[2] == 6789, "a moved entry leaves its list")
-    check(#o.heal == 2 and o.heal[2].use == 452930 and refreshes == 1, "a moved entry is appended to the target, one refresh")
-    o.def = { 104773, 108416 }
-    S.MoveEntry("def", 1, "heal")
-    check(#o.def == 1 and o.def[1] == 108416 and #o.heal == 2, "moving an entry the target already has only removes it")
-
-    CastAheadDB = { saveCalls = true }
-    local shippedDef = #CastAheadSaveButtons[265].def
-    S.MoveEntry("def", 1, "heal")
-    check(#CastAheadSaveButtons[265].def == shippedDef and CastAheadDB.saveButtons[265].heal[#CastAheadDB.saveButtons[265].heal] == 108416,
-        "moving out of a shipped list copies it, the shipped table stays")
 
     CastAheadDB = { saveCalls = true, saveButtons = { [265] = { def = { 108416, 6789, 104773 } } } }
     refreshes = 0
