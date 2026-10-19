@@ -3547,7 +3547,8 @@ do
         return at
     end
     CastAheadDefensives = { spells = { [100] = { DAMAGER = true, lead = 4.0 } }, alias = {} }
-    CastAheadDB = { saveCalls = true, healCalls = true, centerText = true, leadSeconds = 0 }
+    local staleHeal = { [265] = { heal = { { use = 452930 } } } }
+    CastAheadDB = { saveCalls = true, healCalls = true, centerText = true, leadSeconds = 0, saveButtons = staleHeal }
     CastAheadCore.ReapplyData()
     local centreSaid
     local function BigCast(kick, lockKick)
@@ -3576,7 +3577,7 @@ do
     CastAheadSaves.Refresh()
     BigCast(false)
     check(LastBig() == 0, "a spec with an empty def list hears nothing on a trash cast: " .. table.concat(heard, ","))
-    CastAheadDB.saveButtons = nil
+    CastAheadDB.saveButtons = staleHeal
     CastAheadSaves.Refresh()
     BigCast(true)
     check(LastBig() > 0, "a kicked defensive cast still called the defensive")
