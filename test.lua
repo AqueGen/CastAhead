@@ -482,7 +482,9 @@ for spec, lists in pairs(CastAheadSaveButtons) do
 end
 for id, row in pairs(CastAheadDefensives.spells) do
     for _, role in ipairs({ "DAMAGER", "HEALER", "TANK" }) do
-        check(row[role] == nil or row[role] == "SMALL" or row[role] == "BIG", "spell " .. id .. " has a valid " .. role .. " verdict")
+        check(row[role] == nil or row[role] == true, "spell " .. id .. " has a valid " .. role .. " verdict")
+        check(row[role] == nil or type(row.ep) == "table" and type(row.ep[role]) == "number",
+            "spell " .. id .. " has an episode size for " .. role)
     end
     check(type(row.name) == "string" and type(row.mob) == "string" and type(row.boss) == "string", "spell " .. id .. " carries name, mob and boss strings")
     check(row.name ~= "" and row.mob ~= "", "spell " .. id .. " has a non-empty name and mob")
