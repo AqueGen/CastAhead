@@ -469,16 +469,14 @@ for enc, byDifficulty in pairs(CastAheadBurstWindows) do
 end
 local shippedTables = {}
 for spec, lists in pairs(CastAheadSaveButtons) do
-    for _, size in ipairs({ "small", "big", "heal" }) do
-        check(type(lists[size]) == "table" and (#lists[size] > 0 or size == "small"),
-            "spec " .. spec .. " ships a " .. size .. " list (small may be empty)")
-        for _, e in ipairs(lists[size] or {}) do
-            check(type(e) == "number" or type(e) == "table" and type(e.use) == "number",
-                "spec " .. spec .. " " .. size .. " entry is a spell id or an item use")
-            if type(e) == "table" then
-                check(not shippedTables[e], "spec " .. spec .. " " .. size .. " item entry is its own table")
-                shippedTables[e] = true
-            end
+    check(type(lists.def) == "table" and lists.small == nil and lists.big == nil and lists.heal == nil,
+        "spec " .. spec .. " ships one def list and no small, big or heal list")
+    for _, e in ipairs(lists.def or {}) do
+        check(type(e) == "number" or type(e) == "table" and type(e.use) == "number",
+            "spec " .. spec .. " def entry is a spell id or an item use")
+        if type(e) == "table" then
+            check(not shippedTables[e], "spec " .. spec .. " def item entry is its own table")
+            shippedTables[e] = true
         end
     end
 end
