@@ -23,7 +23,7 @@ local Known = CastAheadLists.Known
 local store = CastAheadLists.New({
     dbKey = "saveButtons",
     shipped = function() return CastAheadSaveButtons end,
-    keys = { "small", "big", "heal" },
+    keys = { "def", "heal" },
     specID = function() return S.SpecID() end,
     editSpecID = function() return S.ViewSpecID() end,
     onChange = function() S.Refresh() end,
@@ -44,8 +44,8 @@ local useToItem = {}
 local bagsPending = false
 local memo = {}
 
-function S.ListFor(spec, size) return store.ListFor(spec, size) end
-function S.List(size) return store.List(size) end
+function S.ListFor(spec) return store.ListFor(spec, "def") end
+function S.List() return store.List("def") end
 
 -- The Guide and Saves pages can read any spec of any class without the
 -- player changing spec; calls and lists still follow the real one.
@@ -150,19 +150,24 @@ local function Collect(list, out)
     return resolved
 end
 
-function S.Available(size)
+local function Available(key)
     local stamp = GetTime()
-    local hit = memo[size]
-    if hit and hit.stamp == stamp then return hit.list end
+    local hit = memo[key]
+    if hit and hit.stamp == stamp then return hit.list, hit.resolved end
     local out = {}
-    memo[size] = { stamp = stamp, list = out }
-    local list = S.List(size)
-    if not Collect(list, out) and #list > 0 then
-        local shipped = store.Shipped(S.SpecID(), size)
-        if shipped ~= list then Collect(shipped, out) end
+    local list = store.List(key)
+    local resolved = Collect(list, out)
+    if not resolved and #list > 0 then
+        local shipped = store.Shipped(S.SpecID(), key)
+        if shipped ~= list then resolved = Collect(shipped, out) end
     end
-    return out
+    memo[key] = { stamp = stamp, list = out, resolved = resolved }
+    return out, resolved
 end
+
+function S.Available() return (Available("def")) end
+
+M.HasButton = function() return select(2, Available("def")) end
 
 local firstMemo = setmetatable({}, { __mode = "k" })
 function S.FirstAvailable(list)
@@ -187,7 +192,7 @@ function S.ResetSpec() return store.ResetSpec() end
 
 if StaticPopupDialogs then
     StaticPopupDialogs.CASTAHEAD_RESET_SAVES = {
-        text = "Reset Small, Big and Heal lists for this specialization to the defaults?",
+        text = "Reset the Defensive and Heal lists for this specialization to the defaults?",
         button1 = YES or "Yes",
         button2 = NO or "No",
         OnAccept = function()
@@ -211,7 +216,7 @@ function S.Fits(e, row)
     return school ~= 1
 end
 
-local SIZE = { SMALL = "small", BIG = "big", HEAL = "heal" }
+local LIST = { DEFENSIVE = "def", HEAL = "heal" }
 local NO_ICONS = {}
 local function FitsAny(e, rows)
     if #rows == 0 then return true end
@@ -222,8 +227,8 @@ local function FitsAny(e, rows)
 end
 
 function S.Icons(advice, spellOrCandidates)
-    local size = advice and SIZE[advice.key]
-    if not size then return NO_ICONS end
+    local key = advice and LIST[advice.key]
+    if not key then return NO_ICONS end
     local rows = {}
     local hits = spellOrCandidates
     for _, h in ipairs(type(hits) == "table" and hits or { hits }) do
@@ -231,7 +236,7 @@ function S.Icons(advice, spellOrCandidates)
         if row then rows[#rows + 1] = row end
     end
     local out = {}
-    for _, e in ipairs(S.Available(size)) do
+    for _, e in ipairs((Available(key))) do
         if e.icon and FitsAny(e, rows) then out[#out + 1] = e.icon end
         if #out == 3 then break end
     end
@@ -245,14 +250,14 @@ end
 
 -- Another spec's buttons have no cooldown to read, so they all count as
 -- available: the view is for reading, not for pressing.
-local function ViewButtons(size, spec)
+local function ViewButtons(spec)
     local own = spec == S.SpecID()
     local ready = {}
     if own then
-        for _, e in ipairs(S.Available(size)) do ready[e.kind .. e.id] = true end
+        for _, e in ipairs(S.Available()) do ready[e.kind .. e.id] = true end
     end
     local out = {}
-    for _, e in ipairs(S.ListFor(spec, size)) do
+    for _, e in ipairs(S.ListFor(spec)) do
         if type(e) == "number" then
             out[#out + 1] = { kind = "spell", id = e, available = not own or ready["spell" .. e] == true,
                 icon = SpellTexture(e) }
@@ -270,7 +275,6 @@ end
 local function ViewOrder(a, b)
     if (a.boss == "") ~= (b.boss == "") then return a.boss ~= "" end
     if a.boss ~= b.boss then return a.boss < b.boss end
-    if a.size ~= b.size then return a.size == "BIG" end
     if a.name ~= b.name then return a.name < b.name end
     return a.id < b.id
 end
@@ -293,7 +297,7 @@ function S.ViewRows(instanceID)
     local spells = CastAheadDefensives and CastAheadDefensives.spells
     local role, spec = S.ViewRole(), S.ViewSpecID()
     if not (spells and role) then return out end
-    local cast, wins, buttons = {}, {}, {}
+    local cast, wins, buttons = {}, {}
     for _, c in ipairs(CastAheadData and CastAheadData[instanceID] or {}) do
         local _, id = M.SaveRow(c.spell)
         if id then
@@ -302,17 +306,16 @@ function S.ViewRows(instanceID)
         end
     end
     for id, row in pairs(spells) do
-        local size = M.SaveKey(row, role, CastAheadPriority and CastAheadPriority[id])
-        if size and (row.dungeon == instanceID or cast[id]) then
-            buttons[size] = buttons[size] or ViewButtons(SIZE[size], spec)
+        if M.SaveKey(row, role, CastAheadPriority and CastAheadPriority[id]) and (row.dungeon == instanceID or cast[id]) then
+            buttons = buttons or ViewButtons(spec)
             out[#out + 1] = {
-                id = id, name = row.name or "", boss = row.boss or "", size = size, lead = row.lead,
+                id = id, name = row.name or "", boss = row.boss or "", lead = row.lead,
                 mob = row.mob == "Environment" and "ground effect" or row.mob,
                 trigger = { cast = cast[id] ~= nil, bar = row.bar == true, debuff = row.aura == true },
                 first = (cast[id] or BossCadence(id)).first, cd = (cast[id] or BossCadence(id)).cd,
                 repeating = cast[id] ~= nil,
                 wins = wins[id] or Wins({ prio = CastAheadPriority and CastAheadPriority[id] }),
-                buttons = FitsRow(buttons[size], row),
+                buttons = FitsRow(buttons, row),
             }
         end
     end
@@ -373,9 +376,9 @@ local function GuideLine(r)
     local names = {}
     for _, b in ipairs(r.buttons) do names[#names + 1] = ButtonLink(b) end
     local press = #names > 0 and table.concat(names, ", then ") or "no button in your list"
-    local line = string.format("- %s from %s (%s): %s save - %s", Link("spell", r.id, Icon(SpellTexture(r.id)) .. r.name),
-        r.mob or "?", Heard(r.trigger), r.size == "BIG" and "big" or "small", press)
-    if r.size == "BIG" and #S.ListFor(S.ViewSpecID(), "heal") > 0 then line = line .. "; heal up after the hit" end
+    local line = string.format("- %s from %s (%s): defensive - %s", Link("spell", r.id, Icon(SpellTexture(r.id)) .. r.name),
+        r.mob or "?", Heard(r.trigger), press)
+    if #store.ListFor(S.ViewSpecID(), "heal") > 0 then line = line .. "; heal up after the hit" end
     local wins = r.wins and M.ADVICE[r.wins]
     if wins then line = line .. string.format(" (%s comes first)", wins.say) end
     local cadence = Cadence(r)
@@ -397,7 +400,7 @@ function S.GuideLines(instanceID)
 end
 
 function S.HealReady()
-    return CastAheadConfig.SaveCalls() and CastAheadConfig.Get("healCalls") == true and #S.Available("heal") > 0
+    return CastAheadConfig.SaveCalls() and CastAheadConfig.Get("healCalls") == true and #Available("heal") > 0
 end
 
 local SOUND_ROOT = "Interface\\AddOns\\CastAhead\\Sounds\\en\\"
@@ -527,7 +530,7 @@ function S.Tick(now)
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice, true) end
             end
             if now >= c.endAt then
-                if c.fired and c.advice == M.ADVICE.BIG and S.HealReady()
+                if c.fired and c.advice == M.ADVICE.DEFENSIVE and S.HealReady()
                     and CastAheadCore and CastAheadCore.Announce then
                     CastAheadCore.Announce(M.ADVICE.HEAL)
                     lastFiredAt = now

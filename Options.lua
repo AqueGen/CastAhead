@@ -144,15 +144,11 @@ local SWITCHES = {
     recordAll = { label = "Record everything",
         tip = "The game's combat log with advanced logging in every dungeon (off again when you leave, unless you had started it yourself), a journal of each key, and what the game lets an addon read off each enemy cast. Holds 12 keys: when the journal fills up it asks you to reload so it reaches the disk, then you copy it off and clear it on this tab. No names of people are recorded." },
     saveCalls = { label = "Defensive calls", defaultOff = true,
-        tip = "Call a small or big defensive ahead of damage that needs one, and show your button for it in the centre." },
+        tip = "Call a defensive ahead of damage that needs one, and show your button for it in the centre." },
     bossAdapter = { label = "Boss calls from DBM / BigWigs",
         tip = "Also call defensives for boss abilities announced by DBM or BigWigs." },
-    smallCalls = { label = "Small defensive calls",
-        tip = "Say \"small defensive\" ahead of hits that need a small save." },
-    bigCalls = { label = "Big defensive calls",
-        tip = "Say \"big defensive\" ahead of hits that need a big save." },
-    healCalls = { label = "Heal up after a big hit", defaultOff = true,
-        tip = "Right after a hit that called a big defensive, say \"heal up\" when your Healthstone or potion is ready." },
+    healCalls = { label = "Heal up after a defensive hit", defaultOff = true,
+        tip = "Right after a hit that called a defensive, say \"heal up\" when your Healthstone or potion is ready." },
     raidSaves = { label = "Raid boss defensive calls (experimental)", defaultOff = true,
         tip = "Also call defensives on raid bosses from DBM or BigWigs timers. The defensive table holds dungeon abilities only for now, so raid calls stay rare. Dungeon calls do not need this switch." },
     burstCalls = { label = "Burst windows (experimental)", defaultOff = true,
@@ -798,7 +794,7 @@ local function BuildButtonList(panel, store, key, titles, hint, emptyText)
     return group
 end
 
-local DEFENSIVES_H, DEFENSIVES_OFF_H, SPEC_BAR_PAD = 366, 56, 34
+local DEFENSIVES_H, DEFENSIVES_OFF_H, SPEC_BAR_PAD = 300, 56, 34
 local REPORT_URL = "https://github.com/AqueGen/CastAhead/issues/new?template=report.yml"
 
 local function CopyBox(parent, text, width)
@@ -865,9 +861,7 @@ function BuildDefensives(panel)
     end)
     local status = boss:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     status:SetPoint("TOPLEFT", boss.text, "BOTTOMLEFT", 0, -2)
-    local small = BuildSwitch(panel, "smallCalls", { "TOPLEFT", boss, "BOTTOMLEFT", 0, -18 }, SaveRefresh)
-    local big = BuildSwitch(panel, "bigCalls", { "TOPLEFT", small, "BOTTOMLEFT", 0, -4 }, SaveRefresh)
-    local heal = BuildSwitch(panel, "healCalls", { "TOPLEFT", big, "BOTTOMLEFT", 0, -4 })
+    local heal = BuildSwitch(panel, "healCalls", { "TOPLEFT", boss, "BOTTOMLEFT", 0, -18 })
     local early, earlyLabel = BuildSlider(panel, {
         key = "saveLeadSeconds",
         default = 0,
@@ -883,12 +877,11 @@ function BuildDefensives(panel)
     })
 
     local store = CastAheadSaves.Store
-    local titles = { small = "Small defensive", big = "Big defensive", heal = "Heal after the hit" }
+    local titles = { def = "Defensive", heal = "Heal after the hit" }
     local noButton = "Empty - this call shows no button"
     local lists = {
-        BuildButtonList(panel, store, "small", titles, nil, noButton),
-        BuildButtonList(panel, store, "big", titles, nil, noButton),
-        BuildButtonList(panel, store, "heal", titles, "Pressed right after a big hit lands: stone, potion, self-heal.",
+        BuildButtonList(panel, store, "def", titles, nil, noButton),
+        BuildButtonList(panel, store, "heal", titles, "Pressed right after a defensive hit lands: stone, potion, self-heal.",
             "Empty - no heal up call"),
     }
     CastAheadWindow.SpecBar(lists[1], 0, -SPEC_BAR_PAD, RefreshAll, function()
@@ -927,7 +920,7 @@ function BuildDefensives(panel)
         local spec = CastAheadSaves and CastAheadSaves.ViewSpecID()
         local shipped = spec and CastAheadSaveButtons and CastAheadSaveButtons[spec] and true or false
         status:SetText("|cffaaaaaa" .. (CastAheadBossAdapter and CastAheadBossAdapter.Status() or "No boss mod") .. "|r")
-        for _, w in ipairs({ boss, small, big, heal, early, earlyLabel }) do w:SetShown(on) end
+        for _, w in ipairs({ boss, heal, early, earlyLabel }) do w:SetShown(on) end
         caveat.SetShown(on)
         group:SetHeight(on and DEFENSIVES_H or DEFENSIVES_OFF_H)
         note:SetShown(on and not shipped)
@@ -1327,7 +1320,7 @@ end
 
 local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
     "POISON", "CURSE", "MAGIC", "DISEASE", "BLEED", "SOOTHE", "PURGE", "SWITCH", "ALERT",
-    "SMALL", "BIG", "HEAL", "SOON", "BURST" }
+    "DEFENSIVE", "HEAL", "SOON", "BURST" }
 local SOUND_ROW_H = 26
 
 -- Default plus every sound LibSharedMedia knows. Shared with the casts

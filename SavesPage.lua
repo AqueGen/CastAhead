@@ -5,11 +5,6 @@ local MAX_SAVE_ICONS = 5
 local TRIGGER_WORDS = { { "cast", "cast" }, { "bar", "boss bar" }, { "debuff", "debuff" } }
 
 local SAVE_COLUMNS = {
-    { key = "size", header = "Save", width = 50,
-      text = function(s)
-          local advice = CastAheadMatch.ADVICE[s.size]
-          return string.format("|cff%02x%02x%02x%s|r", advice.r * 255, advice.g * 255, advice.b * 255, advice.short)
-      end },
     { key = "buttons", header = "Buttons", width = MAX_SAVE_ICONS * 18 },
     { key = "name", header = "Hit", width = 160,
       text = function(s)

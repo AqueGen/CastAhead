@@ -240,8 +240,7 @@ local ADVICE_SOUND = {           -- keyed by CastAheadMatch.ADVICE key
     BLEED = "ALARM_CLOCK_WARNING_3",
     SWITCH = "RAID_WARNING",
     ALERT = "RAID_WARNING",
-    SMALL = "ALARM_CLOCK_WARNING_2",
-    BIG = "RAID_WARNING",
+    DEFENSIVE = "RAID_WARNING",
     HEAL = "ALARM_CLOCK_WARNING_1",
     SOON = "ALARM_CLOCK_WARNING_1",
     BURST = "RAID_WARNING",
@@ -288,10 +287,6 @@ CastAheadMatch.PlayerRole = function()
     if not (GetSpecialization and GetSpecializationRole) then return nil end
     local spec = GetSpecialization()
     return spec and GetSpecializationRole(spec) or nil
-end
-
-CastAheadMatch.SizeOn = function(key)
-    return CastAheadConfig.Enabled(key == "SMALL" and "smallCalls" or "bigCalls")
 end
 
 CastAheadMatch.SpecRole = function()
@@ -2142,8 +2137,8 @@ local function StopCast(unit, channel)
     local state = plates[unit]
     local open = state and state.castStartAt
     local casting = state and state.casting
-    local calledBig = casting and Announceable(casting.candidates)
-        and CastAheadMatch.ConsensusAdvice(casting.candidates, state.interruptible) == CastAheadMatch.ADVICE.BIG
+    local calledDefensive = casting and Announceable(casting.candidates)
+        and CastAheadMatch.ConsensusAdvice(casting.candidates, state.interruptible) == CastAheadMatch.ADVICE.DEFENSIVE
     OnCastStop(unit, channel)
     state = plates[unit]
     if open and state and not state.castStartAt and state.lastMeasured then
@@ -2151,7 +2146,7 @@ local function StopCast(unit, channel)
         local advice = final and Announceable(final) and CastAheadMatch.ConsensusAdvice(final)
         Record("STOP", unit, channel and 1 or 0, math.floor(state.lastMeasured * 1000 + 0.5),
             Ids(final), advice and advice.key or "-")
-        if calledBig and CastAheadSaves and CastAheadSaves.HealReady() then
+        if calledDefensive and CastAheadSaves and CastAheadSaves.HealReady() then
             PlayAdviceSound(CastAheadMatch.ADVICE.HEAL)
             CastAheadSaves.Flash(CastAheadMatch.ADVICE.HEAL, GetTime(), 3)
         end
