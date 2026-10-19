@@ -192,7 +192,7 @@ end
 -- otherwise read as a reset: the per-context one (CastAheadDB.ctx.key), the
 -- flat one from before the early warning became a number, and any profile
 -- from before the centre call became opt-in, which keeps it on.
-C.SCHEMA = 3
+C.SCHEMA = 4
 
 function C.Migrate()
     local existing = CastAheadDB ~= nil
@@ -228,8 +228,41 @@ function C.Migrate()
             if type(value) == "number" then picks[size] = { value } end
         end
     end
-    if existing and (tonumber(CastAheadDB.schema) or 0) < C.SCHEMA and CastAheadDB.saveCalls == nil then
+    if existing and (tonumber(CastAheadDB.schema) or 0) < 3 and CastAheadDB.saveCalls == nil then
         CastAheadDB.saveCalls = true
+    end
+    if existing and (tonumber(CastAheadDB.schema) or 0) < 4 then
+        local function same(a, b)
+            if type(a) == "table" and type(b) == "table" then return a.use == b.use end
+            return a == b
+        end
+        for _, picks in pairs(type(CastAheadDB.saveButtons) == "table" and CastAheadDB.saveButtons or {}) do
+            if type(picks) == "table" then
+                if type(picks.big) == "table" or type(picks.small) == "table" then
+                    local joined = {}
+                    for _, list in ipairs({ picks.big or {}, picks.small or {} }) do
+                        for _, entry in ipairs(type(list) == "table" and list or {}) do
+                            local seen = false
+                            for _, have in ipairs(joined) do
+                                if same(have, entry) then seen = true break end
+                            end
+                            if not seen then joined[#joined + 1] = entry end
+                        end
+                    end
+                    picks.def = joined
+                end
+                picks.small, picks.big, picks.heal = nil, nil, nil
+            end
+        end
+        if CastAheadDB.smallCalls == false and CastAheadDB.bigCalls == false then
+            CastAheadDB.saveCalls = false
+        end
+        CastAheadDB.smallCalls, CastAheadDB.bigCalls, CastAheadDB.healCalls = nil, nil, nil
+        local sounds = CastAheadDB.sounds
+        if type(sounds) == "table" then
+            if sounds.DEFENSIVE == nil then sounds.DEFENSIVE = sounds.BIG or sounds.SMALL end
+            sounds.SMALL, sounds.BIG, sounds.HEAL = nil, nil, nil
+        end
     end
     CastAheadDB.schema = C.SCHEMA
 end
