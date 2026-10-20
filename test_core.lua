@@ -521,6 +521,15 @@ do
     fire("ADDON_LOADED", "CastAhead")
     check(CastAheadDB.raidSaves == false and CastAheadDB.raidMode == nil,
         "raid calls turned off by the schema 5 reset do not turn the raid switch on")
+    CastAheadDB = { schema = 3, burstCalls = true }
+    fire("ADDON_LOADED", "CastAhead")
+    check(CastAheadDB.raidMode == true and CastAheadDB.burstCalls == true,
+        "a schema 3 profile with burst windows on keeps them on under the raid switch")
+    CastAheadDB = { schema = 3, burstCalls = true, raidSaves = true }
+    fire("ADDON_LOADED", "CastAhead")
+    check(CastAheadDB.raidMode == true and CastAheadDB.burstCalls == true and CastAheadDB.raidSaves == false
+        and CastAheadDB.saveCallsNotice == true,
+        "a schema 3 profile with both raid features on keeps bursts, loses raid calls once and is flagged")
 
     local savedInfo = GetInstanceInfo
     CastAheadDB = { saveCalls = true, raidSaves = false }
