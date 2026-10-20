@@ -392,7 +392,8 @@ fire("PLAYER_ENTERING_WORLD")
 check(CastAheadDB.schema == nil, "another addon loading, or a zone-in, does not migrate")
 CastAheadDB = { schema = 2 }
 fire("ADDON_LOADED", "CastAhead")
-check(CastAheadConfig.SaveCalls(), "a profile from before the default changed keeps its defensive calls on")
+check(not CastAheadConfig.SaveCalls() and CastAheadDB.saveCallsNotice == true,
+    "a profile from before the default changed ends with its defensive calls off and the notice flagged")
 CastAheadDB = { schema = 2, saveCalls = false }
 fire("ADDON_LOADED", "CastAhead")
 check(not CastAheadConfig.SaveCalls(), "and one that had them off keeps them off")
@@ -436,7 +437,7 @@ check(#sb[71].def == 3 and sb[71].def[1] == 2 and sb[71].def[2] == 1 and sb[71].
 check(sb[72].small == nil, "the small list is gone after the join")
 check(sb[73].def and #sb[73].def == 0, "a spec the player emptied on purpose stays empty")
 check(sb[74].def == nil and sb[74].heal == nil, "a spec with only heal entries falls back to the shipped list")
-check(CastAheadDB.schema == 4, "the profile is stamped schema 4")
+check(CastAheadDB.schema == 5, "the profile is stamped schema 5")
 CastAheadDB = { schema = 3, saveCalls = true, smallCalls = false, bigCalls = false, healCalls = false }
 fire("ADDON_LOADED", "CastAhead")
 check(CastAheadDB.saveCalls == false and CastAheadDB.smallCalls == nil and CastAheadDB.bigCalls == nil
@@ -446,7 +447,7 @@ CastAheadConfig.Migrate()
 check(CastAheadDB.saveCalls == false, "an old profile with small and big off ends with the defensive calls off")
 CastAheadDB = { schema = 3, saveCalls = true, smallCalls = false }
 fire("ADDON_LOADED", "CastAhead")
-check(CastAheadDB.saveCalls == true and CastAheadDB.smallCalls == nil, "only small off leaves the defensive calls on")
+check(CastAheadDB.saveCalls == false and CastAheadDB.smallCalls == nil, "only small off still ends with the one-time reset")
 CastAheadDB = { schema = 3, sounds = { SMALL = "x", HEAL = "h" } }
 fire("ADDON_LOADED", "CastAhead")
 check(CastAheadDB.sounds.DEFENSIVE == "x" and CastAheadDB.sounds.SMALL == nil and CastAheadDB.sounds.HEAL == nil,
@@ -473,7 +474,60 @@ end
 CastAheadSaveButtons = {}
 CastAheadDB = nil
 fire("ADDON_LOADED", "CastAhead")
-check(CastAheadDB.schema == 4 and CastAheadDB.saveButtons == nil, "a new install is schema 4 with no saved lists")
+check(CastAheadDB.schema == 5 and CastAheadDB.saveButtons == nil, "a new install is schema 5 with no saved lists")
+
+do
+    CastAheadDB = { schema = 4, saveCalls = true, raidSaves = true }
+    fire("ADDON_LOADED", "CastAhead")
+    check(CastAheadDB.schema == 5 and CastAheadDB.saveCalls == false and CastAheadDB.saveCallsNotice == true
+        and CastAheadDB.raidSaves == true, "a schema 4 profile with defensive calls on is turned off once and flagged")
+    CastAheadDB.saveCalls = true
+    CastAheadDB.saveCallsNotice = nil
+    fire("ADDON_LOADED", "CastAhead")
+    check(CastAheadDB.schema == 5 and CastAheadDB.saveCalls == true and CastAheadDB.saveCallsNotice == nil,
+        "migrating again changes nothing and raises no flag")
+    CastAheadDB = nil
+    fire("ADDON_LOADED", "CastAhead")
+    check(CastAheadDB.saveCalls == nil and CastAheadDB.saveCallsNotice == nil, "a new install has no stored choice and no flag")
+    for _, stored in ipairs({ false, "nil" }) do
+        CastAheadDB = { schema = 4, saveCalls = stored ~= "nil" and stored or nil }
+        fire("ADDON_LOADED", "CastAhead")
+        check(CastAheadDB.saveCalls == (stored ~= "nil" and stored or nil) and CastAheadDB.saveCallsNotice == nil,
+            "a schema 4 profile with defensive calls off or unset stays as it was")
+    end
+
+    local savedInfo = GetInstanceInfo
+    CastAheadDB = { saveCalls = true, raidSaves = false }
+    GetInstanceInfo = function() return "d", "party", 0, "", 0, 0, false, 1877 end
+    check(CastAheadConfig.SaveCalls() == true, "outside a raid SaveCalls follows saveCalls")
+    GetInstanceInfo = function() return "r", "raid", 0, "", 0, 0, false, 1878 end
+    check(CastAheadConfig.SaveCalls() == false, "in a raid SaveCalls follows raidSaves, off")
+    CastAheadDB = { saveCalls = false, raidSaves = true }
+    check(CastAheadConfig.SaveCalls() == true, "in a raid SaveCalls follows raidSaves, on")
+    GetInstanceInfo = function() return "d", "party", 0, "", 0, 0, false, 1877 end
+    check(CastAheadConfig.SaveCalls() == false, "outside a raid raidSaves does not count")
+    check(CastAheadConfig.DungeonSaves() == false and CastAheadConfig.RaidSaves() == true, "the page accessors ignore the zone")
+    GetInstanceInfo = savedInfo
+
+    local realPrint, lines = print, {}
+    print = function(text) lines[#lines + 1] = tostring(text) end
+    CastAheadDB = { schema = 5, saveCallsNotice = true }
+    fire("PLAYER_LOGIN")
+    fire("PLAYER_LOGIN")
+    print = realPrint
+    check(#lines == 1 and lines[1]:find("Cast Ahead|r defensive calls are now off by default. Turn them on in /ca - General - Features.", 1, true)
+        and CastAheadDB.saveCallsNotice == nil, "the notice prints once and clears")
+
+    CastAheadDB = {}
+    CastAheadOptions = CastAheadOptions or {}
+    local ok, err = pcall(dofile, "Options.lua")
+    check(ok and CastAheadOptions.SetSwitch, "Options.lua exposes SetSwitch " .. tostring(err))
+    CastAheadOptions.SetSwitch("saveCalls", true)
+    check(CastAheadDB.saveCalls == true, "switching a default-off switch on stores true")
+    CastAheadOptions.SetSwitch("saveCalls", false)
+    check(CastAheadDB.saveCalls == false, "switching it off stores false, not nil")
+    CastAheadDB = nil
+end
 
 -- The UI helpers write where the accessor reads.
 CastAheadDB = nil

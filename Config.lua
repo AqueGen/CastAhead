@@ -144,8 +144,17 @@ function C.Dev()
     return C.Get("devMode") == true
 end
 
-function C.SaveCalls()
+function C.DungeonSaves()
     return C.Get("saveCalls") == true
+end
+
+function C.RaidSaves()
+    return C.Get("raidSaves") == true
+end
+
+function C.SaveCalls()
+    if GetInstanceInfo and select(2, GetInstanceInfo()) == "raid" then return C.RaidSaves() end
+    return C.DungeonSaves()
 end
 
 function C.Recording()
@@ -192,7 +201,7 @@ end
 -- otherwise read as a reset: the per-context one (CastAheadDB.ctx.key), the
 -- flat one from before the early warning became a number, and any profile
 -- from before the centre call became opt-in, which keeps it on.
-C.SCHEMA = 4
+C.SCHEMA = 5
 
 function C.Migrate()
     local existing = CastAheadDB ~= nil
@@ -282,6 +291,10 @@ function C.Migrate()
             if sounds.DEFENSIVE == nil then sounds.DEFENSIVE = sounds.BIG or sounds.SMALL end
             sounds.SMALL, sounds.BIG, sounds.HEAL = nil, nil, nil
         end
+    end
+    if existing and (tonumber(CastAheadDB.schema) or 0) < 5 and CastAheadDB.saveCalls == true then
+        CastAheadDB.saveCalls = false
+        CastAheadDB.saveCallsNotice = true
     end
     CastAheadDB.schema = C.SCHEMA
 end

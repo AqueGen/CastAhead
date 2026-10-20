@@ -163,11 +163,12 @@ end
 
 local function SetSwitch(key, on)
     if SWITCHES[key].defaultOff then
-        CastAheadConfig.Set(key, on or nil)
+        CastAheadConfig.Set(key, on and true or false)
     else
         CastAheadConfig.SetEnabled(key, on)
     end
 end
+CastAheadOptions.SetSwitch = SetSwitch
 
 -- `free` keeps the group out of the column flow, for one the caller places itself.
 local function BuildGroup(panel, title, height, free)
