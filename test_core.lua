@@ -4089,6 +4089,52 @@ do
     check(guide and guide:find("Ula'tek", 1, true), "the Bursts page shows the guide for Heroic, got " .. tostring(guide))
     check(not lists, "the Bursts page has no button lists")
 
+    local wanted = { Features = true, ["Defensive calls in dungeons"] = true,
+        ["Defensive calls in raids (experimental)"] = true, ["Burst windows (experimental)"] = true,
+        Advanced = true, ["Development mode"] = true }
+    local function Labels(from)
+        local seen = {}
+        for i = from, #texts do
+            local v = rawget(texts[i], "value")
+            if wanted[v] then seen[#seen + 1] = v end
+        end
+        return table.concat(seen, " | ")
+    end
+    check(Labels(1) == "", "the Defensives page has no defensive calls switch")
+    local before = #texts
+    ok, err = pcall(CastAheadOptions.ShowPanel, host, "General")
+    check(ok, "the General page builds headless " .. tostring(err))
+    check(Labels(before + 1) == "Features | Defensive calls in dungeons | Defensive calls in raids (experimental)"
+        .. " | Burst windows (experimental) | Advanced | Development mode",
+        "General lists the feature switches in their group, then Advanced")
+
+    local function Frame(label)
+        for _, f in ipairs(made) do
+            local t = rawget(f, "text")
+            if t and rawget(t, "value") == label then return f end
+        end
+    end
+    local function OffNote()
+        for _, fs in ipairs(texts) do
+            local v = rawget(fs, "value")
+            if type(v) == "string" and v:find("turn them on in General - Features", 1, true) then return fs end
+        end
+    end
+    for _, case in ipairs({ { {}, false }, { { saveCalls = true }, true }, { { raidSaves = true }, true } }) do
+        CastAheadDB = case[1]
+        CastAheadOptions.ShowPanel(host, "Defensives")
+        local boss, note = Frame("Boss calls from DBM / BigWigs"), OffNote()
+        local label = next(case[1]) or "all off"
+        check(boss and boss.shown == case[2], "Defensives boss switch visibility, " .. label)
+        check(note and note.shown == not case[2], "Defensives off note visibility, " .. label)
+    end
+
+    CastAheadDB = {}
+    CastAheadOptions.SetSwitch("centerText", false)
+    check(CastAheadDB.centerText == false, "switching the centre call off stores false")
+    CastAheadOptions.SetSwitch("centerText", true)
+    check(CastAheadDB.centerText == nil, "switching it on clears the stored choice")
+
     CreateFrame, CastAheadDB, CastAheadBurstWindows = savedCreate, savedDB, savedWindows
     MinimalSliderWithSteppersMixin = savedSlider
 end

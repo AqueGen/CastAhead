@@ -148,7 +148,7 @@ local SWITCHES = {
     bossAdapter = { label = "Boss calls from DBM / BigWigs",
         tip = "Also call defensives for boss abilities announced by DBM or BigWigs." },
     raidSaves = { label = "Defensive calls in raids (experimental)", defaultOff = true,
-        tip = "In raids, call defensives for trash and boss bars. Bosses need boss timers from DBM or BigWigs. The defensive table holds dungeon abilities only for now, so raid calls stay rare. Does not need the dungeon switch." },
+        tip = "In raids, call defensives for boss abilities from DBM or BigWigs timers, so it needs one of them. The defensive table holds dungeon abilities only for now, so raid calls stay rare. Does not need the dungeon switch." },
     burstCalls = { label = "Burst windows (experimental)", defaultOff = true,
         tip = "On bosses with a phase worth bursting into, say \"burst soon\" five seconds before it and \"burst now\" when it starts, with a countdown in the centre block. Healers get their own phases for group-healing cooldowns. On every other boss it stays silent: press on cooldown." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
@@ -498,7 +498,7 @@ function BuildGeneral(panel)
     BuildReset(panel, { "LEFT", move, "RIGHT", 6, 0 },
         { "centerScale", "centerTextScale", "centerX", "centerY" }, centerScale)
 
-    -- Development mode ----------------------------------------------------
+    -- Features ------------------------------------------------------------
     local features = BuildGroup(panel, "Features", 114)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", features, "TOPLEFT", 10, -26 }, function()
         SaveRefresh()
@@ -518,7 +518,7 @@ function BuildGeneral(panel)
         if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
     end)
 
-    local extra = BuildGroup(panel, "Advanced", 114)
+    local extra = BuildGroup(panel, "Advanced", 86)
     local dev = BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
         if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
     end)

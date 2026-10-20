@@ -199,8 +199,7 @@ end
 -- minimap icon has already created the table, and a fresh install would
 -- read as an old profile. Older profile shapes exist and each would
 -- otherwise read as a reset: the per-context one (CastAheadDB.ctx.key), the
--- flat one from before the early warning became a number, and any profile
--- from before the centre call became opt-in, which keeps it on.
+-- flat one from before the early warning became a number.
 C.SCHEMA = 5
 
 function C.Migrate()
