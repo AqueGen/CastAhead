@@ -288,9 +288,13 @@ function C.Migrate()
             sounds.SMALL, sounds.BIG, sounds.HEAL = nil, nil, nil
         end
     end
-    if existing and (tonumber(CastAheadDB.schema) or 0) < 5 and CastAheadDB.saveCalls == true then
-        CastAheadDB.saveCalls = false
-        CastAheadDB.saveCallsNotice = true
+    if existing and (tonumber(CastAheadDB.schema) or 0) < 5 then
+        for _, key in ipairs({ "saveCalls", "raidSaves" }) do
+            if CastAheadDB[key] == true then
+                CastAheadDB[key] = false
+                CastAheadDB.saveCallsNotice = true
+            end
+        end
     end
     CastAheadDB.schema = C.SCHEMA
 end

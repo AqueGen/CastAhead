@@ -480,7 +480,15 @@ do
     CastAheadDB = { schema = 4, saveCalls = true, raidSaves = true }
     fire("ADDON_LOADED", "CastAhead")
     check(CastAheadDB.schema == 5 and CastAheadDB.saveCalls == false and CastAheadDB.saveCallsNotice == true
-        and CastAheadDB.raidSaves == true, "a schema 4 profile with defensive calls on is turned off once and flagged")
+        and CastAheadDB.raidSaves == false, "a schema 4 profile with defensive calls on is turned off once and flagged")
+    CastAheadDB = { schema = 3, raidSaves = true }
+    fire("ADDON_LOADED", "CastAhead")
+    check(CastAheadDB.raidSaves == false and CastAheadDB.saveCallsNotice == true,
+        "raid calls alone on are turned off once and flagged")
+    CastAheadDB = { schema = 3, saveCalls = true, raidSaves = true }
+    fire("ADDON_LOADED", "CastAhead")
+    check(CastAheadDB.saveCalls == false and CastAheadDB.raidSaves == false and CastAheadDB.saveCallsNotice == true,
+        "both on are both turned off with one flag")
     CastAheadDB.saveCalls = true
     CastAheadDB.saveCallsNotice = nil
     fire("ADDON_LOADED", "CastAhead")
@@ -4209,6 +4217,20 @@ do
     CastAhead_Toggle()
     check(not f:IsShown(), "and /ca again closes it")
 
+    do
+        local savedFooter, savedInfo, footer = CastAheadWindow.SetFooter, GetInstanceInfo, nil
+        CastAheadWindow.SetFooter = function(text) footer = text end
+        GetInstanceInfo = function() return "Abyss", "raid", 15, "", 0, 0, false, 9999 end
+        CastAheadDB.saveCalls, CastAheadDB.raidSaves = true, nil
+        CastAheadWindow.Show("Saves")
+        for _, frame in ipairs(allFrames) do frame.IsVisible = function(self) return self.shown end end
+        CastAheadUI.RefreshSaves()
+        check(footer ~= nil and footer ~= "" and not footer:find("off", 1, true), "the Saves footer follows the dungeon switch, got " .. tostring(footer))
+        f:Hide()
+        CastAheadDB.saveCalls = nil
+        CastAheadWindow.SetFooter, GetInstanceInfo = savedFooter, savedInfo
+    end
+
     CastAheadDB.devMode = true
     CastAheadUI.ShowTab("Development")
     CastAhead_Toggle()
@@ -4479,6 +4501,13 @@ do
     CastAheadBossAdapter.OnBar("dbm", "raidbar", 1299684, 10, now)
     for _ = 1, 16 do advance(0.5) end
     check(Heard() == "DEFENSIVE_soon", "raid saves: switched on, a boss save call fires in a raid with no trash data, heard " .. Heard())
+    fire("ENCOUNTER_END", 3470, "Nek'zali", 15, 20, 0)
+    CastAheadDB.saveCalls = nil
+    heard = {}
+    fire("ENCOUNTER_START", 3470, "Nek'zali", 15, 20)
+    CastAheadBossAdapter.OnBar("dbm", "raidbar", 1299684, 10, now)
+    for _ = 1, 16 do advance(0.5) end
+    check(Heard() == "DEFENSIVE_soon", "raid saves: the raid switch alone is enough, heard " .. Heard())
     fire("ENCOUNTER_END", 3470, "Nek'zali", 15, 20, 0)
     CastAheadDB.raidSaves = nil
     CastAheadSaveButtons, GetSpecializationInfo, IsPlayerSpell = savedRaidButtons, nil, nil
