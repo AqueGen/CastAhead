@@ -437,7 +437,7 @@ local function RegisterAuraSounds()
     if not (CastAheadConfig.SaveCalls() and CastAheadConfig.Enabled("sound")) then return end
     local voice = CastAheadConfig.Enabled("voice")
     for spellID, row in pairs(CastAheadDefensives and CastAheadDefensives.spells or {}) do
-        local advice = row.aura and M.SaveAdvice({ save = row, prio = CastAheadPriority and CastAheadPriority[spellID] })
+        local advice = row.aura and M.AuraAdvice(row, CastAheadPriority and CastAheadPriority[spellID])
         local file = advice and (PickedFile(advice) or voice and SOUND_ROOT .. advice.file .. ".ogg")
         if file then
             local ok, id = pcall(C_UnitAuras.AddAuraSound, Enum.UnitAuraSoundTrigger.Added, {

@@ -3139,6 +3139,27 @@ do
     CastAheadDB.saveButtons = nil
     C_UnitAuras.AddAuraSound = function() error("restricted") end
     check(pcall(CastAheadSaves.Refresh) and CastAheadSaves.AuraSoundCount() == 0, "a failing AddAuraSound is skipped")
+    C_UnitAuras.AddAuraSound = function(trigger, info) files[#files + 1] = info.soundFileName return #files end
+    CastAheadDefensives = { spells = { [373693] = { DAMAGER = true, HEALER = true, aura = true, dispel = "Magic" },
+                                       [1238084] = { TANK = true, aura = true, dispel = "Magic" } }, alias = {} }
+    local magic = { [527] = true, [4987] = true, [77130] = true, [88423] = true, [115450] = true, [360823] = true,
+                    [32375] = true }
+    local savedIsPlayerSpell, knowsDispel = IsPlayerSpell, true
+    IsPlayerSpell = function(id)
+        if magic[id] then return knowsDispel and id == 527 end
+        return savedIsPlayerSpell == nil or savedIsPlayerSpell(id)
+    end
+    role = "HEALER"
+    fire("SPELLS_CHANGED")
+    check(files[#files]:match("Sounds\\en\\MAGIC%.ogg$") and CastAheadSaves.AuraSoundCount() == 1,
+        "a healer who can remove the magic hears the dispel, and nothing on a tank's debuff")
+    knowsDispel = false
+    fire("SPELLS_CHANGED")
+    check(files[#files]:match("Sounds\\en\\DEFENSIVE%.ogg$"), "a healer without a magic dispel hears the defensive")
+    knowsDispel, role = true, "DAMAGER"
+    fire("PLAYER_SPECIALIZATION_CHANGED", "player")
+    check(files[#files]:match("Sounds\\en\\DEFENSIVE%.ogg$"), "a damage dealer with a magic dispel still hears the defensive")
+    IsPlayerSpell = savedIsPlayerSpell
     C_UnitAuras.AddAuraSound, C_UnitAuras.RemoveAuraSound = nil, nil
     C_ChatInfo, InCombatLockdown, Enum.UnitAuraSoundTrigger = nil, nil, nil
     CastAheadDefensives = { spells = {}, alias = {} }
