@@ -410,19 +410,30 @@ check(CastAheadDB.voice == nil and CastAheadDB.window == nil and not CastAheadCo
     and CastAheadDB.journal[1] == 1 and CastAheadDB.probe[1] == 2 and (CastAheadDB.dispel or {})[100] == "Magic",
     "a full reset reads as a new install after the reload and keeps the recorded data")
 
+CastAheadSaveButtons = { [72] = { def = { 7, 3 } }, [75] = { def = { 8 } }, [76] = { def = { 8 } } }
 CastAheadDB = { schema = 3, saveCalls = true, saveButtons = {
     [71] = { big = { 1, { use = 5 } }, small = { 2, 1, { use = 5 } }, heal = { 9 } },
     [72] = { small = { 3 } },
     [73] = { big = {}, small = {} },
     [74] = { heal = { 9 } },
+    [75] = { small = {} },
+    [76] = { big = {}, small = { 8 } },
+    [77] = { small = { 108416 }, def = { 104773, { use = 452930 } }, big = { 5 }, heal = { 9 } },
 } }
 fire("ADDON_LOADED", "CastAhead")
 do
 local sb = CastAheadDB.saveButtons
+check(#sb[77].def == 2 and sb[77].def[1] == 104773 and sb[77].def[2].use == 452930
+    and sb[77].small == nil and sb[77].big == nil and sb[77].heal == nil,
+    "a defensive list already saved survives and the stale keys go")
+check(sb[75].def == nil and sb[75].small == nil, "one side emptied on its own leaves the shipped list in place")
+check(#sb[76].def == 1 and sb[76].def[1] == 8, "both sides present and one empty: the other alone")
+check(#sb[72].def == 2 and sb[72].def[1] == 3 and sb[72].def[2] == 7,
+    "one side custom: its entries first, then the shipped ones not already there")
 check(#sb[71].def == 3 and sb[71].def[1] == 1 and sb[71].def[2].use == 5 and sb[71].def[3] == 2
     and sb[71].small == nil and sb[71].big == nil and sb[71].heal == nil,
     "schema 4 joins big then small entries into one list without repeats")
-check(#sb[72].def == 1 and sb[72].def[1] == 3 and sb[72].small == nil, "a spec with only small entries keeps them")
+check(sb[72].small == nil, "the small list is gone after the join")
 check(sb[73].def and #sb[73].def == 0, "a spec the player emptied on purpose stays empty")
 check(sb[74].def == nil and sb[74].heal == nil, "a spec with only heal entries falls back to the shipped list")
 check(CastAheadDB.schema == 4, "the profile is stamped schema 4")
@@ -430,6 +441,9 @@ CastAheadDB = { schema = 3, saveCalls = true, smallCalls = false, bigCalls = fal
 fire("ADDON_LOADED", "CastAhead")
 check(CastAheadDB.saveCalls == false and CastAheadDB.smallCalls == nil and CastAheadDB.bigCalls == nil
     and CastAheadDB.healCalls == nil, "small and big both off read as defensive calls off")
+CastAheadDB = { smallCalls = false, bigCalls = false }
+CastAheadConfig.Migrate()
+check(CastAheadDB.saveCalls == false, "an old profile with small and big off ends with the defensive calls off")
 CastAheadDB = { schema = 3, saveCalls = true, smallCalls = false }
 fire("ADDON_LOADED", "CastAhead")
 check(CastAheadDB.saveCalls == true and CastAheadDB.smallCalls == nil, "only small off leaves the defensive calls on")
@@ -447,6 +461,7 @@ fire("ADDON_LOADED", "CastAhead")
 check(#CastAheadDB.saveButtons[71].def == once[1] and CastAheadDB.sounds.DEFENSIVE == once[2],
     "migrating twice changes nothing more")
 end
+CastAheadSaveButtons = {}
 CastAheadDB = nil
 fire("ADDON_LOADED", "CastAhead")
 check(CastAheadDB.schema == 4 and CastAheadDB.saveButtons == nil, "a new install is schema 4 with no saved lists")

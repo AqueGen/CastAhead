@@ -188,7 +188,7 @@ end
 
 -- Run once, the moment the saved variables arrive: by PLAYER_LOGIN the
 -- minimap icon has already created the table, and a fresh install would
--- read as an old profile. Three older profile shapes exist and each would
+-- read as an old profile. Older profile shapes exist and each would
 -- otherwise read as a reset: the per-context one (CastAheadDB.ctx.key), the
 -- flat one from before the early warning became a number, and any profile
 -- from before the centre call became opt-in, which keeps it on.
@@ -236,20 +236,29 @@ function C.Migrate()
             if type(a) == "table" and type(b) == "table" then return a.use == b.use end
             return a == b
         end
-        for _, picks in pairs(type(CastAheadDB.saveButtons) == "table" and CastAheadDB.saveButtons or {}) do
+        local function append(joined, list)
+            for _, entry in ipairs(type(list) == "table" and list or {}) do
+                local seen = false
+                for _, have in ipairs(joined) do
+                    if same(have, entry) then seen = true break end
+                end
+                if not seen then joined[#joined + 1] = entry end
+            end
+        end
+        for spec, picks in pairs(type(CastAheadDB.saveButtons) == "table" and CastAheadDB.saveButtons or {}) do
             if type(picks) == "table" then
-                if type(picks.big) == "table" or type(picks.small) == "table" then
+                local big, small = type(picks.big) == "table", type(picks.small) == "table"
+                if type(picks.def) ~= "table" and (big or small) then
                     local joined = {}
-                    for _, list in ipairs({ picks.big or {}, picks.small or {} }) do
-                        for _, entry in ipairs(type(list) == "table" and list or {}) do
-                            local seen = false
-                            for _, have in ipairs(joined) do
-                                if same(have, entry) then seen = true break end
-                            end
-                            if not seen then joined[#joined + 1] = entry end
-                        end
+                    append(joined, picks.big)
+                    append(joined, picks.small)
+                    if big and small then
+                        picks.def = joined
+                    elseif #joined > 0 then
+                        local shipped = CastAheadSaveButtons and CastAheadSaveButtons[spec]
+                        append(joined, shipped and shipped.def)
+                        picks.def = joined
                     end
-                    picks.def = joined
                 end
                 picks.small, picks.big, picks.heal = nil, nil, nil
             end
