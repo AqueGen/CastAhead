@@ -75,7 +75,7 @@ end
 
 local viewLevel
 
-local function ClampLevel(level) return math.max(2, math.min(25, level)) end
+local function ClampLevel(level) return math.max(10, math.min(25, level)) end
 
 local function KeystoneLevel()
     local ok, level = pcall(C_ChallengeMode and C_ChallengeMode.GetActiveKeystoneInfo or error)

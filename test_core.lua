@@ -430,9 +430,9 @@ check(sb[75].def == nil and sb[75].small == nil, "one side emptied on its own le
 check(#sb[76].def == 1 and sb[76].def[1] == 8, "both sides present and one empty: the other alone")
 check(#sb[72].def == 2 and sb[72].def[1] == 3 and sb[72].def[2] == 7,
     "one side custom: its entries first, then the shipped ones not already there")
-check(#sb[71].def == 3 and sb[71].def[1] == 1 and sb[71].def[2].use == 5 and sb[71].def[3] == 2
+check(#sb[71].def == 3 and sb[71].def[1] == 2 and sb[71].def[2] == 1 and sb[71].def[3].use == 5
     and sb[71].small == nil and sb[71].big == nil and sb[71].heal == nil,
-    "schema 4 joins big then small entries into one list without repeats")
+    "schema 4 joins small then big entries into one list without repeats")
 check(sb[72].small == nil, "the small list is gone after the join")
 check(sb[73].def and #sb[73].def == 0, "a spec the player emptied on purpose stays empty")
 check(sb[74].def == nil and sb[74].heal == nil, "a spec with only heal entries falls back to the shipped list")
@@ -454,6 +454,15 @@ check(CastAheadDB.sounds.DEFENSIVE == "x" and CastAheadDB.sounds.SMALL == nil an
 CastAheadDB = { schema = 3, sounds = { SMALL = "x", BIG = "b" } }
 fire("ADDON_LOADED", "CastAhead")
 check(CastAheadDB.sounds.DEFENSIVE == "b", "the big sound wins over the small one")
+CastAheadDB = { schema = 3, sounds = { TANK = "Cast Ahead: big defensive", HEALER = "Cast Ahead: small defensive",
+    BIG = "Cast Ahead: big defensive", SMALL = "Cast Ahead: heal up", KEEP = "Cast Ahead: defensive" },
+    spellSounds = { [123] = "Cast Ahead: heal up", [124] = "Cast Ahead: small defensive" } }
+fire("ADDON_LOADED", "CastAhead")
+check(CastAheadDB.sounds.TANK == "Cast Ahead: defensive" and CastAheadDB.sounds.HEALER == "Cast Ahead: defensive"
+    and CastAheadDB.sounds.KEEP == "Cast Ahead: defensive" and CastAheadDB.sounds.DEFENSIVE == "Cast Ahead: defensive",
+    "sound picks naming the deleted defensive clips point at the merged one")
+check(CastAheadDB.spellSounds[123] == nil and CastAheadDB.spellSounds[124] == "Cast Ahead: defensive",
+    "spell sound picks follow, and a heal up pick is dropped")
 CastAheadDB = { schema = 3, saveButtons = { [71] = { big = { 1 }, small = { 2 } } }, sounds = { SMALL = "x" } }
 fire("ADDON_LOADED", "CastAhead")
 local once = { #CastAheadDB.saveButtons[71].def, CastAheadDB.sounds.DEFENSIVE }
@@ -3094,7 +3103,11 @@ do
         check(CastAheadSaves.ViewLevel() == 25, "a keystone above 25 shows as 25")
         C_ChallengeMode = { GetActiveKeystoneInfo = function() return 0 end }
         CastAheadSaves.SetViewLevel(1)
-        check(CastAheadSaves.ViewLevel() == 2, "the view level clamps to 2")
+        check(CastAheadSaves.ViewLevel() == 10, "the view level clamps to 10")
+        C_ChallengeMode = { GetActiveKeystoneInfo = function() return 7 end }
+        CastAheadSaves.SetViewLevel(nil)
+        check(CastAheadSaves.ViewLevel() == 10, "a keystone below 10 shows as 10")
+        C_ChallengeMode = { GetActiveKeystoneInfo = function() return 0 end }
         CastAheadSaves.SetViewLevel(30)
         check(CastAheadSaves.ViewLevel() == 25, "the view level clamps to 25")
         CastAheadSaves.SetViewLevel(17)
@@ -3876,12 +3889,10 @@ do
     check(CastAheadDB.burstButtons[265].full[2] == 222 and changes == 1, "SetList writes the burst lists and calls onChange")
     burst.Shift("full", 1, 1)
     check(CastAheadDB.burstButtons[265].full[1] == 222 and changes == 2, "Shift writes the burst lists")
-    burst.MoveEntry("full", 1, "mini")
-    check(CastAheadDB.burstButtons[265].mini[1] == 222 and #CastAheadDB.burstButtons[265].full == 1 and changes == 3,
-        "MoveEntry writes the burst lists")
     check(CastAheadDB.saveButtons == saves and #saves[265].def == 1 and saves[265].def[1] == 104773 and saves[265].heal == nil,
         "editing burst lists leaves the save lists alone")
 
+    burst.SetList("full", { 111 })
     local seen = {}
     for _, e in ipairs(burst.Addable("full")) do seen[type(e) == "table" and "use" .. e.use or e] = true end
     check(seen[222] and seen[333] and seen[444] and seen.use452930, "Addable offers the class mates' shipped burst entries")

@@ -250,8 +250,8 @@ function C.Migrate()
                 local big, small = type(picks.big) == "table", type(picks.small) == "table"
                 if type(picks.def) ~= "table" and (big or small) then
                     local joined = {}
-                    append(joined, picks.big)
                     append(joined, picks.small)
+                    append(joined, picks.big)
                     if big and small then
                         picks.def = joined
                     elseif #joined > 0 then
@@ -267,6 +267,16 @@ function C.Migrate()
             CastAheadDB.saveCalls = false
         end
         CastAheadDB.smallCalls, CastAheadDB.bigCalls, CastAheadDB.healCalls = nil, nil, nil
+        for _, field in ipairs({ "sounds", "spellSounds" }) do
+            local picks = CastAheadDB[field]
+            for key, name in pairs(type(picks) == "table" and picks or {}) do
+                if name == "Cast Ahead: small defensive" or name == "Cast Ahead: big defensive" then
+                    picks[key] = "Cast Ahead: defensive"
+                elseif name == "Cast Ahead: heal up" then
+                    picks[key] = nil
+                end
+            end
+        end
         local sounds = CastAheadDB.sounds
         if type(sounds) == "table" then
             if sounds.DEFENSIVE == nil then sounds.DEFENSIVE = sounds.BIG or sounds.SMALL end

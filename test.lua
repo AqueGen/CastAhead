@@ -478,7 +478,7 @@ for enc, byDifficulty in pairs(CastAheadBurstWindows) do
 end
 local shippedTables = {}
 for spec, lists in pairs(CastAheadSaveButtons) do
-    check(type(lists.def) == "table" and lists.small == nil and lists.big == nil and lists.heal == nil,
+    check(type(lists.def) == "table" and #lists.def > 0 and lists.small == nil and lists.big == nil and lists.heal == nil,
         "spec " .. spec .. " ships one def list and no small, big or heal list")
     for _, e in ipairs(lists.def or {}) do
         check(type(e) == "number" or type(e) == "table" and type(e.use) == "number",
