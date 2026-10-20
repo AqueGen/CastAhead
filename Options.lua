@@ -499,7 +499,7 @@ function BuildGeneral(panel)
         { "centerScale", "centerTextScale", "centerX", "centerY" }, centerScale)
 
     -- Features ------------------------------------------------------------
-    local features = BuildGroup(panel, "Features", 114)
+    local features = BuildGroup(panel, "Features", 133)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", features, "TOPLEFT", 10, -26 }, function()
         SaveRefresh()
         CastAheadOptions.RefreshDefensives()
@@ -518,7 +518,7 @@ function BuildGeneral(panel)
         if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
     end)
 
-    local extra = BuildGroup(panel, "Advanced", 86)
+    local extra = BuildGroup(panel, "Advanced", 97)
     local dev = BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
         if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
     end)
@@ -840,6 +840,9 @@ function BuildDefensives(panel)
     local Paint
     local offNote = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     offNote:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -26)
+    offNote:SetWidth(COL_W - 20)
+    offNote:SetJustifyH("LEFT")
+    offNote:SetWordWrap(true)
     offNote:SetText("|cffaaaaaaDefensive calls are off - turn them on in General - Features.|r")
     local boss = BuildSwitch(panel, "bossAdapter", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, function(on)
         Redraw()
