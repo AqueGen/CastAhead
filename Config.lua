@@ -128,7 +128,7 @@ function C.ShortLabels()
 end
 
 function C.CenterText()
-    return C.Get("centerText") == true
+    return C.Get("centerText") ~= false
 end
 
 function C.Set(key, value)
@@ -144,8 +144,21 @@ function C.Dev()
     return C.Get("devMode") == true
 end
 
-function C.SaveCalls()
+function C.DungeonSaves()
     return C.Get("saveCalls") == true
+end
+
+function C.RaidSaves()
+    return C.Get("raidMode") == true and C.Get("raidSaves") == true
+end
+
+function C.BurstCalls()
+    return C.Get("raidMode") == true and C.Get("burstCalls") == true
+end
+
+function C.SaveCalls()
+    if GetInstanceInfo and select(2, GetInstanceInfo()) == "raid" then return C.RaidSaves() end
+    return C.DungeonSaves()
 end
 
 function C.Recording()
@@ -188,11 +201,10 @@ end
 
 -- Run once, the moment the saved variables arrive: by PLAYER_LOGIN the
 -- minimap icon has already created the table, and a fresh install would
--- read as an old profile. Three older profile shapes exist and each would
+-- read as an old profile. Older profile shapes exist and each would
 -- otherwise read as a reset: the per-context one (CastAheadDB.ctx.key), the
--- flat one from before the early warning became a number, and any profile
--- from before the centre call became opt-in, which keeps it on.
-C.SCHEMA = 3
+-- flat one from before the early warning became a number.
+C.SCHEMA = 6
 
 function C.Migrate()
     local existing = CastAheadDB ~= nil
@@ -212,9 +224,6 @@ function C.Migrate()
         end
         CastAheadDB.leadWarning = nil
     end
-    if existing and CastAheadDB.schema == nil and CastAheadDB.centerText == nil then
-        CastAheadDB.centerText = true
-    end
     for _, field in ipairs({ "sounds", "spellSounds" }) do
         local picks = CastAheadDB[field]
         for key, name in pairs(type(picks) == "table" and picks or {}) do
@@ -228,8 +237,72 @@ function C.Migrate()
             if type(value) == "number" then picks[size] = { value } end
         end
     end
-    if existing and (tonumber(CastAheadDB.schema) or 0) < C.SCHEMA and CastAheadDB.saveCalls == nil then
+    if existing and (tonumber(CastAheadDB.schema) or 0) < 3 and CastAheadDB.saveCalls == nil then
         CastAheadDB.saveCalls = true
+    end
+    if existing and (tonumber(CastAheadDB.schema) or 0) < 4 then
+        local function same(a, b)
+            if type(a) == "table" and type(b) == "table" then return a.use == b.use end
+            return a == b
+        end
+        local function append(joined, list)
+            for _, entry in ipairs(type(list) == "table" and list or {}) do
+                local seen = false
+                for _, have in ipairs(joined) do
+                    if same(have, entry) then seen = true break end
+                end
+                if not seen then joined[#joined + 1] = entry end
+            end
+        end
+        for spec, picks in pairs(type(CastAheadDB.saveButtons) == "table" and CastAheadDB.saveButtons or {}) do
+            if type(picks) == "table" then
+                local big, small = type(picks.big) == "table", type(picks.small) == "table"
+                if type(picks.def) ~= "table" and (big or small) then
+                    local joined = {}
+                    append(joined, picks.small)
+                    append(joined, picks.big)
+                    if big and small then
+                        picks.def = joined
+                    elseif #joined > 0 then
+                        local shipped = CastAheadSaveButtons and CastAheadSaveButtons[spec]
+                        append(joined, shipped and shipped.def)
+                        picks.def = joined
+                    end
+                end
+                picks.small, picks.big, picks.heal = nil, nil, nil
+            end
+        end
+        if CastAheadDB.smallCalls == false and CastAheadDB.bigCalls == false then
+            CastAheadDB.saveCalls = false
+        end
+        CastAheadDB.smallCalls, CastAheadDB.bigCalls, CastAheadDB.healCalls = nil, nil, nil
+        for _, field in ipairs({ "sounds", "spellSounds" }) do
+            local picks = CastAheadDB[field]
+            for key, name in pairs(type(picks) == "table" and picks or {}) do
+                if name == "Cast Ahead: small defensive" or name == "Cast Ahead: big defensive" then
+                    picks[key] = "Cast Ahead: defensive"
+                elseif name == "Cast Ahead: heal up" then
+                    picks[key] = nil
+                end
+            end
+        end
+        local sounds = CastAheadDB.sounds
+        if type(sounds) == "table" then
+            if sounds.DEFENSIVE == nil then sounds.DEFENSIVE = sounds.BIG or sounds.SMALL end
+            sounds.SMALL, sounds.BIG, sounds.HEAL = nil, nil, nil
+        end
+    end
+    if existing and (tonumber(CastAheadDB.schema) or 0) < 5 then
+        for _, key in ipairs({ "saveCalls", "raidSaves" }) do
+            if CastAheadDB[key] == true then
+                CastAheadDB[key] = false
+                CastAheadDB.saveCallsNotice = true
+            end
+        end
+    end
+    if existing and (tonumber(CastAheadDB.schema) or 0) < 6
+            and (CastAheadDB.burstCalls == true or CastAheadDB.raidSaves == true) then
+        CastAheadDB.raidMode = true
     end
     CastAheadDB.schema = C.SCHEMA
 end

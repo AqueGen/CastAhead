@@ -5,11 +5,6 @@ local MAX_SAVE_ICONS = 5
 local TRIGGER_WORDS = { { "cast", "cast" }, { "bar", "boss bar" }, { "debuff", "debuff" } }
 
 local SAVE_COLUMNS = {
-    { key = "size", header = "Save", width = 50,
-      text = function(s)
-          local advice = CastAheadMatch.ADVICE[s.size]
-          return string.format("|cff%02x%02x%02x%s|r", advice.r * 255, advice.g * 255, advice.b * 255, advice.short)
-      end },
     { key = "buttons", header = "Buttons", width = MAX_SAVE_ICONS * 18 },
     { key = "name", header = "Hit", width = 160,
       text = function(s)
@@ -28,6 +23,8 @@ local SAVE_COLUMNS = {
       end },
     { key = "lead", header = "Lead", width = 44, justify = "RIGHT",
       text = function(s) return s.lead and string.format("%.1fs", s.lead) or "-" end },
+    { key = "ep", header = "Damage at +20", width = 90, justify = "RIGHT",
+      text = function(s) return s.ep and (s.ep .. "%") or "-" end },
     { key = "wins", header = "", width = 110,
       text = function(s)
           local advice = s.wins and CastAheadMatch.ADVICE[s.wins]
@@ -95,6 +92,20 @@ local function CreateSaveRow(parent, index)
     return row
 end
 
+local NOTE_H = 30
+
+local function EpNote(host, y)
+    if not CastAheadSaves then return 0 end
+    local note = host:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    note:SetPoint("TOPLEFT", host, "TOPLEFT", 4, -y)
+    note:SetPoint("TOPRIGHT", host, "TOPRIGHT", -4, -y)
+    note:SetHeight(NOTE_H)
+    note:SetJustifyH("LEFT")
+    note:SetJustifyV("TOP")
+    note:SetText(CastAheadSaves.EP_NOTE)
+    return NOTE_H
+end
+
 local RESTART = "Restart the game to finish the Cast Ahead update - defensive calls are off until then."
 
 local function RefreshGuide()
@@ -103,12 +114,10 @@ local function RefreshGuide()
         guideText:SetText(RESTART)
         return
     end
-    local lines = CastAheadSaves and CastAheadSaves.GuideLines and CastAheadSaves.GuideLines(CastAheadWindow.Dungeon()) or {}
-    if #lines == 0 then
-        lines = { CastAheadSaves.ViewRole() and "Nothing in this dungeon calls a save for this role."
-            or "No specialization role - pick a spec to see your guide." }
-    end
-    guideText:SetText(table.concat(lines, "\n"))
+    local text = CastAheadSaves.GuideText(CastAheadWindow.Dungeon())
+        or (CastAheadSaves.ViewRole() and "Nothing in this dungeon calls a save for this role."
+            or "No specialization role - pick a spec to see your guide.")
+    guideText:SetText(text)
     guideHost:SetHeight(guideTop + guideText:GetStringHeight() + 8)
     CastAheadWindow.PaintSpecBars()
 end
@@ -165,8 +174,8 @@ local function RefreshSaves()
     local S = CastAheadSaves
     local role, own = S.ViewRole(), S.ViewSpecID() == S.SpecID()
     local line
-    if not CastAheadConfig.SaveCalls() then
-        line = "Defensive calls are off - switch them on in the Defensives tab."
+    if not CastAheadConfig.DungeonSaves() then
+        line = "Defensive calls are off - turn them on in General - Features."
     elseif not role then
         line = "No specialization role - pick a spec to see your saves."
     else
@@ -186,6 +195,7 @@ end
 local function BuildSaves(host)
     savesHost = host
     savesTop = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end)
+    savesTop = savesTop + EpNote(host, savesTop)
     saveSide, saveTable = CastAheadWindow.SideScroll(host, savesTop)
     saveTable:SetWidth(SAVE_WIDTH)
     local saveHeader = CreateFrame("Frame", nil, saveTable)

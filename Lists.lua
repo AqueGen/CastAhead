@@ -128,22 +128,6 @@ function L.New(opts)
         opts.onChange()
     end
 
-    function store.MoveEntry(from, index, to)
-        local spec = store.EditSpec()
-        local source = store.EditList(from)
-        local entry = source[index]
-        if not (spec and entry) or from == to then return end
-        local kept = {}
-        for i, e in ipairs(source) do
-            if i ~= index then kept[#kept + 1] = e end
-        end
-        local target = { unpack(store.EditList(to)) }
-        if not Has(target, entry) then target[#target + 1] = entry end
-        Write(spec, from, kept)
-        Write(spec, to, target)
-        opts.onChange()
-    end
-
     function store.Shift(key, index, step)
         local spec = store.EditSpec()
         local list = { unpack(store.EditList(key)) }

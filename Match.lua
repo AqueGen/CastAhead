@@ -51,9 +51,7 @@ M.ADVICE = {
     -- height.
     TANK = { label = "TANKBUSTER", short = "BUSTER", say = "tank buster", r = 1.00, g = 0.45, b = 0.10 },
     AOE  = { label = "AOE", say = "aoe damage", r = 1.00, g = 0.75, b = 0.15 },
-    SMALL = { label = "SMALL SAVE", short = "SMALL", say = "small defensive", r = 0.55, g = 0.85, b = 1.00 },
-    BIG   = { label = "BIG SAVE", short = "BIG", say = "big defensive", r = 1.00, g = 0.35, b = 0.85 },
-    HEAL  = { label = "HEAL UP", short = "HEAL", say = "heal up", r = 0.40, g = 0.95, b = 0.45 },
+    DEFENSIVE = { label = "DEFENSIVE", short = "DEF", say = "defensive", r = 1.00, g = 0.35, b = 0.85 },
     SOON  = { label = "BURST SOON", short = "SOON", say = "burst soon", r = 1.00, g = 0.65, b = 0.20 },
     BURST = { label = "BURST", say = "burst now", r = 1.00, g = 0.30, b = 0.10 },
     -- Categories assigned by the curated priority set (row.prio).
@@ -153,20 +151,20 @@ end
 
 function M.SaveKey(save, role, prio)
     if role == "TANK" and prio ~= "TANK" and (save.DAMAGER or save.HEALER) then return nil end
-    return save[role]
+    return save[role] and "DEFENSIVE" or nil
 end
 
-M.SizeOn = function() return true end
+M.HasButton = function() return true end
 
 function M.SaveAdvice(row)
     local save = row and row.save
     local role = save and M.SpecRole()
     local key = role and M.SaveKey(save, role, row.prio)
-    return key and M.SizeOn(key) and M.ADVICE[key] or nil
+    return key and M.HasButton() and M.ADVICE[key] or nil
 end
 
 function M.IsSave(advice)
-    return advice == M.ADVICE.SMALL or advice == M.ADVICE.BIG
+    return advice == M.ADVICE.DEFENSIVE
 end
 
 local SAVE_REPLACES = {

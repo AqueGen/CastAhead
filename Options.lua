@@ -1,6 +1,6 @@
 CastAheadOptions = {}
 
-CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Bursts", "Development", "Report" }
+CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Bursts", "RaidDefensives", "Development", "Report" }
 local panels = {}
 local T = CastAheadWindow.THEME
 local FLAT = { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 }
@@ -127,7 +127,7 @@ local SWITCHES = {
         tip = "Hide calls this character cannot act on: dispels you do not have, tank busters for tanks and healers." },
     nameplates = { label = "Show icons on nameplates",
         tip = "Countdown icons next to enemy nameplates." },
-    centerText = { label = "Show the centre call", defaultOff = true,
+    centerText = { label = "Show the centre call",
         tip = "The response in words, big, near the middle of the screen while an important cast goes out." },
     timeline = { label = "Feed the Blizzard timeline",
         tip = "Feed confident predictions to the game's own encounter timeline." },
@@ -143,19 +143,15 @@ local SWITCHES = {
         tip = "Adds the Development tab and starts recording everything for improving the addon's data (the Record everything switch there, on by default). Nothing here changes what the addon calls out." },
     recordAll = { label = "Record everything",
         tip = "The game's combat log with advanced logging in every dungeon (off again when you leave, unless you had started it yourself), a journal of each key, and what the game lets an addon read off each enemy cast. Holds 12 keys: when the journal fills up it asks you to reload so it reaches the disk, then you copy it off and clear it on this tab. No names of people are recorded." },
-    saveCalls = { label = "Defensive calls", defaultOff = true,
-        tip = "Call a small or big defensive ahead of damage that needs one, and show your button for it in the centre." },
+    saveCalls = { label = "Defensive calls in dungeons", defaultOff = true,
+        tip = "In dungeons and the open world, call a defensive ahead of damage that needs one, and show your button for it in the centre. Raids have their own switch." },
     bossAdapter = { label = "Boss calls from DBM / BigWigs",
         tip = "Also call defensives for boss abilities announced by DBM or BigWigs." },
-    smallCalls = { label = "Small defensive calls",
-        tip = "Say \"small defensive\" ahead of hits that need a small save." },
-    bigCalls = { label = "Big defensive calls",
-        tip = "Say \"big defensive\" ahead of hits that need a big save." },
-    healCalls = { label = "Heal up after a big hit", defaultOff = true,
-        tip = "Right after a hit that called a big defensive, say \"heal up\" when your Healthstone or potion is ready." },
-    raidSaves = { label = "Raid boss defensive calls (experimental)", defaultOff = true,
-        tip = "Also call defensives on raid bosses from DBM or BigWigs timers. The defensive table holds dungeon abilities only for now, so raid calls stay rare. Dungeon calls do not need this switch." },
-    burstCalls = { label = "Burst windows (experimental)", defaultOff = true,
+    raidMode = { label = "Raid (experimental)", defaultOff = true,
+        tip = "Master switch for the raid features below. Off, neither runs and the Raid group leaves the menu; each keeps its own setting for when you turn this back on." },
+    raidSaves = { label = "Defensive calls in raids", defaultOff = true,
+        tip = "In raids, call defensives for boss abilities from DBM or BigWigs timers, so it needs one of them. The defensive table holds dungeon abilities only for now, so raid calls stay rare. Does not need the dungeon switch." },
+    burstCalls = { label = "Burst windows", defaultOff = true,
         tip = "On bosses with a phase worth bursting into, say \"burst soon\" five seconds before it and \"burst now\" when it starts, with a countdown in the centre block. Healers get their own phases for group-healing cooldowns. On every other boss it stays silent: press on cooldown." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
         tip = "A panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. Only while recording. The key bindings and /ca mark work without it." },
@@ -169,11 +165,12 @@ end
 
 local function SetSwitch(key, on)
     if SWITCHES[key].defaultOff then
-        CastAheadConfig.Set(key, on or nil)
+        CastAheadConfig.Set(key, on and true or false)
     else
         CastAheadConfig.SetEnabled(key, on)
     end
 end
+CastAheadOptions.SetSwitch = SetSwitch
 
 -- `free` keeps the group out of the column flow, for one the caller places itself.
 local function BuildGroup(panel, title, height, free)
@@ -503,25 +500,48 @@ function BuildGeneral(panel)
     BuildReset(panel, { "LEFT", move, "RIGHT", 6, 0 },
         { "centerScale", "centerTextScale", "centerX", "centerY" }, centerScale)
 
-    -- Development mode ----------------------------------------------------
-    local extra = BuildGroup(panel, "Advanced", 170)
-    local dev = BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
-        if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
-    end)
-    local burst = BuildSwitch(panel, "burstCalls", { "TOPLEFT", dev, "BOTTOMLEFT", 0, -4 }, function()
-        Redraw()
+    -- Features ------------------------------------------------------------
+    local features = BuildGroup(panel, "Features", 166)
+    local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", features, "TOPLEFT", 10, -26 }, function()
+        SaveRefresh()
+        CastAheadOptions.RefreshDefensives()
         if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
     end)
-    local resetAll = CastAheadWindow.Button(panel, "Reset all settings", 130)
-    local raid = BuildSwitch(panel, "raidSaves", { "TOPLEFT", burst, "BOTTOMLEFT", 0, -4 }, function(on)
+    local raidSaves, bursts
+    local function PaintRaid()
+        local on = SwitchOn("raidMode")
+        local color = on and { 1, 1, 1 } or T.muted
+        for _, child in ipairs({ raidSaves, bursts }) do
+            child:SetEnabled(on)
+            child.text:SetTextColor(unpack(color))
+        end
+    end
+    local function RaidChanged()
         SaveRefresh()
+        CastAheadOptions.RefreshDefensives()
         local inRaid = GetInstanceInfo and select(2, GetInstanceInfo()) == "raid"
-        if not on and inRaid and CastAheadSaves then
+        if not CastAheadConfig.RaidSaves() and inRaid and CastAheadSaves then
             CastAheadSaves.CancelPrefix("dbm:")
             CastAheadSaves.CancelPrefix("bw:")
         end
+        Redraw()
+        if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
+        PaintRaid()
+    end
+    local raid = BuildSwitch(panel, "raidMode", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, RaidChanged)
+    raidSaves = BuildSwitch(panel, "raidSaves", { "TOPLEFT", raid, "BOTTOMLEFT", 16, -4 }, RaidChanged)
+    bursts = BuildSwitch(panel, "burstCalls", { "TOPLEFT", raidSaves, "BOTTOMLEFT", 0, -4 }, RaidChanged)
+    for _, child in ipairs({ raidSaves, bursts }) do
+        if child.SetMotionScriptsWhileDisabled then child:SetMotionScriptsWhileDisabled(true) end
+    end
+    table.insert(refreshers, PaintRaid)
+
+    local extra = BuildGroup(panel, "Advanced", 97)
+    local dev = BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
+        if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
     end)
-    resetAll:SetPoint("TOPLEFT", raid, "BOTTOMLEFT", 0, -10)
+    local resetAll = CastAheadWindow.Button(panel, "Reset all settings", 130)
+    resetAll:SetPoint("TOPLEFT", dev, "BOTTOMLEFT", 0, -10)
     resetAll:SetScript("OnClick", function()
         if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_ALL") end
     end)
@@ -631,16 +651,8 @@ elseif ChatEdit_InsertLink then
     hooksecurefunc("ChatEdit_InsertLink", InsertLink)
 end
 
-local function BuildButtonList(panel, store, key, titles, hint, emptyText)
-    local title = titles[key]
+local function BuildButtonList(panel, store, key, title, emptyText)
     local group = BuildGroup(panel, title, ListHeight(LIST_MIN_ROWS))
-    if hint then
-        local line = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        line:SetPoint("TOPLEFT", group.title, "BOTTOMLEFT", 0, -3)
-        line:SetWidth(COL_W - 20)
-        line:SetJustifyH("LEFT")
-        line:SetText("|cffaaaaaa" .. hint .. "|r")
-    end
 
     local function Remove(i)
         local list = {}
@@ -654,14 +666,6 @@ local function BuildButtonList(panel, store, key, titles, hint, emptyText)
     local function RowMenu(owner, i)
         if not (MenuUtil and MenuUtil.CreateContextMenu) or not store.EditList(key)[i] then return end
         MenuUtil.CreateContextMenu(owner, function(_, root)
-            for _, target in ipairs(store.Keys()) do
-                if target ~= key then
-                    root:CreateButton("Move to " .. titles[target], function()
-                        store.MoveEntry(key, i, target)
-                        RefreshAll()
-                    end)
-                end
-            end
             root:CreateButton("Remove", function() Remove(i) end)
         end)
     end
@@ -798,7 +802,7 @@ local function BuildButtonList(panel, store, key, titles, hint, emptyText)
     return group
 end
 
-local DEFENSIVES_H, DEFENSIVES_OFF_H, SPEC_BAR_PAD = 366, 56, 34
+local DEFENSIVES_H, DEFENSIVES_OFF_H, SPEC_BAR_PAD = 250, 56, 34
 local REPORT_URL = "https://github.com/AqueGen/CastAhead/issues/new?template=report.yml"
 
 local function CopyBox(parent, text, width)
@@ -852,11 +856,13 @@ function BuildDefensives(panel)
     end
     local group = BuildGroup(panel, "Defensive calls", DEFENSIVES_H)
     local Paint
-    local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, function()
-        SaveRefresh()
-        Paint()
-    end)
-    local boss = BuildSwitch(panel, "bossAdapter", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, function(on)
+    local offNote = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    offNote:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -26)
+    offNote:SetWidth(COL_W - 20)
+    offNote:SetJustifyH("LEFT")
+    offNote:SetWordWrap(true)
+    offNote:SetText("|cffaaaaaaDefensive calls are off - turn them on in General - Features.|r")
+    local boss = BuildSwitch(panel, "bossAdapter", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, function(on)
         Redraw()
         if not on and CastAheadSaves then
             CastAheadSaves.CancelPrefix("dbm:")
@@ -865,15 +871,12 @@ function BuildDefensives(panel)
     end)
     local status = boss:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     status:SetPoint("TOPLEFT", boss.text, "BOTTOMLEFT", 0, -2)
-    local small = BuildSwitch(panel, "smallCalls", { "TOPLEFT", boss, "BOTTOMLEFT", 0, -18 }, SaveRefresh)
-    local big = BuildSwitch(panel, "bigCalls", { "TOPLEFT", small, "BOTTOMLEFT", 0, -4 }, SaveRefresh)
-    local heal = BuildSwitch(panel, "healCalls", { "TOPLEFT", big, "BOTTOMLEFT", 0, -4 })
     local early, earlyLabel = BuildSlider(panel, {
         key = "saveLeadSeconds",
         default = 0,
         min = 0, max = CastAheadConfig.SAVE_LEAD_MAX,
         low = "off", high = CastAheadConfig.SAVE_LEAD_MAX .. "s",
-        point = { "TOPLEFT", heal, "BOTTOMLEFT", 6, -12 },
+        point = { "TOPLEFT", boss, "BOTTOMLEFT", 6, -34 },
         width = COL_W - 50,
         caption = function(value)
             return value > 0
@@ -883,19 +886,12 @@ function BuildDefensives(panel)
     })
 
     local store = CastAheadSaves.Store
-    local titles = { small = "Small defensive", big = "Big defensive", heal = "Heal after the hit" }
-    local noButton = "Empty - this call shows no button"
-    local lists = {
-        BuildButtonList(panel, store, "small", titles, nil, noButton),
-        BuildButtonList(panel, store, "big", titles, nil, noButton),
-        BuildButtonList(panel, store, "heal", titles, "Pressed right after a big hit lands: stone, potion, self-heal.",
-            "Empty - no heal up call"),
-    }
-    CastAheadWindow.SpecBar(lists[1], 0, -SPEC_BAR_PAD, RefreshAll, function()
-        return (panel:GetRight() or 0) - (lists[1]:GetLeft() or 0)
+    local list = BuildButtonList(panel, store, "def", "Defensive", "Empty - no defensive call")
+    CastAheadWindow.SpecBar(list, 0, -SPEC_BAR_PAD, RefreshAll, function()
+        return (panel:GetRight() or 0) - (list:GetLeft() or 0)
     end)
     panel:HookScript("OnSizeChanged", CastAheadWindow.PaintSpecBars)
-    for _, list in ipairs(lists) do list.flowPad = SPEC_BAR_PAD end
+    list.flowPad = SPEC_BAR_PAD
     table.insert(refreshers, CastAheadWindow.PaintSpecBars)
 
     local reset = CastAheadWindow.Button(panel, "Reset to default", 110)
@@ -923,15 +919,16 @@ function BuildDefensives(panel)
     end
 
     Paint = function()
-        local on = SwitchOn("saveCalls")
+        local on = CastAheadConfig.DungeonSaves() or CastAheadConfig.RaidSaves()
         local spec = CastAheadSaves and CastAheadSaves.ViewSpecID()
         local shipped = spec and CastAheadSaveButtons and CastAheadSaveButtons[spec] and true or false
         status:SetText("|cffaaaaaa" .. (CastAheadBossAdapter and CastAheadBossAdapter.Status() or "No boss mod") .. "|r")
-        for _, w in ipairs({ boss, small, big, heal, early, earlyLabel }) do w:SetShown(on) end
+        for _, w in ipairs({ boss, early, earlyLabel }) do w:SetShown(on) end
         caveat.SetShown(on)
+        offNote:SetShown(not on)
         group:SetHeight(on and DEFENSIVES_H or DEFENSIVES_OFF_H)
         note:SetShown(on and not shipped)
-        for _, list in ipairs(lists) do list:SetShown(on and shipped) end
+        list:SetShown(on and shipped)
         reset:SetShown(on and shipped)
         panel:Relayout()
     end
@@ -1024,7 +1021,7 @@ local REPORT_KINDS = {
       what = { "Called, but the mob never cast it", "Cast, but Cast Ahead said nothing", "Named the wrong spell",
                "Called too early", "Called too late", "Wrong call type (kick, dodge, AoE...)" } },
     { key = "save", label = "Wrong defensive call", ask = "Anything else about what happened:",
-      what = { "Needed a big defensive", "A small one was enough", "No defensive was needed", "No call at all",
+      what = { "Needed a defensive", "No defensive was needed", "No call at all",
                "Called too early", "Called too late" } },
     { key = "burst", label = "Burst timing off", ask = "The time it called and what fit your group better:",
       what = { "Called too early", "Called too late", "Not a phase worth bursting", "A burst phase it missed" } },
@@ -1069,10 +1066,11 @@ function CastAheadOptions.ReportText(key)
                     or "Burst guide: " .. d[2]
             end
         end
-        lines[#lines + 1] = "Burst windows: " .. OnOff(SwitchOn("burstCalls"))
+        lines[#lines + 1] = "Burst windows: " .. OnOff(CastAheadConfig.BurstCalls())
     elseif kind.key ~= "idea" then
         lines[#lines + 1] = "Dungeon picked: " .. (dungeon and CastAheadData[dungeon] and CastAheadData[dungeon].name or "?")
-        lines[#lines + 1] = string.format("Defensive calls: %s, boss mod: %s", OnOff(SwitchOn("saveCalls")),
+        lines[#lines + 1] = string.format("Defensive calls: dungeons %s, raids %s, boss mod: %s",
+            OnOff(SwitchOn("saveCalls")), OnOff(CastAheadConfig.RaidSaves()),
             CastAheadBossAdapter and CastAheadBossAdapter.Status() or "none")
     end
     if InPlay(kind.key) and pick.spell then
@@ -1327,7 +1325,7 @@ end
 
 local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
     "POISON", "CURSE", "MAGIC", "DISEASE", "BLEED", "SOOTHE", "PURGE", "SWITCH", "ALERT",
-    "SMALL", "BIG", "HEAL", "SOON", "BURST" }
+    "DEFENSIVE", "SOON", "BURST" }
 local SOUND_ROW_H = 26
 
 -- Default plus every sound LibSharedMedia knows. Shared with the casts
@@ -1482,12 +1480,14 @@ function BuildSounds(panel)
 end
 
 BUILDERS = { General = BuildGeneral, Sounds = BuildSounds, Defensives = BuildDefensives, Bursts = BuildBursts,
-             Development = BuildDevelopment, Report = BuildReport }
-local MENU_GROUPS = { Bursts = "Experimental", Report = "Feedback" }
+             RaidDefensives = BuildDefensives, Development = BuildDevelopment, Report = BuildReport }
+local MENU_GROUPS = { Defensives = "Dungeon", Bursts = "Raid", RaidDefensives = "Raid", Report = "Feedback" }
+local MENU_LABELS = { RaidDefensives = "Defensives" }
 
 for _, name in ipairs(CastAheadOptions.TABS) do
     local host
     CastAheadWindow.Register(name, MENU_GROUPS[name] or "Settings",
         function(h) host = h end,
-        function() CastAheadOptions.ShowPanel(host, name) end)
+        function() CastAheadOptions.ShowPanel(host, name) end,
+        nil, name == "Defensives", MENU_LABELS[name])
 end

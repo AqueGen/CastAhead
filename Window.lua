@@ -18,7 +18,7 @@ local DEFAULT_W, DEFAULT_H = 1200, 640
 local TITLE_H, MENU_W, FOOTER_H = 26, 120, 20
 local ENTRY_H, HEADER_H, GAP, PAD, SCROLLBAR_W = 20, 18, 4, 8, 24
 local PER_ROW = 4
-local GROUPS = { "Settings", "Dungeon", "Experimental", "Feedback" }
+local GROUPS = { "Settings", "Dungeon", "Raid", "Feedback" }
 local SCALE_STEPS = { 75, 100, 125, 150 }
 local SCALE_MIN, SCALE_MAX, SCALE_DEFAULT = 75, 150, 100
 local SIDE_HINT = "Shift + mouse wheel scrolls sideways"
@@ -197,7 +197,7 @@ end
 
 local function Entry(page)
     if page.entry then return end
-    local b = W.Button(menu, page.name, MENU_W - 2 * PAD, false)
+    local b = W.Button(menu, page.label or page.name, MENU_W - 2 * PAD, false)
     b.label:ClearAllPoints()
     b.label:SetPoint("LEFT", b, "LEFT", PAD, 0)
     b.bar = b:CreateTexture(nil, "OVERLAY")
@@ -416,7 +416,7 @@ local function Build()
     W.ApplyScale()
 end
 
-function W.Register(name, group, build, refresh, before)
+function W.Register(name, group, build, refresh, before, ownBar, label)
     local page = pages[name]
     if not page then
         page = { name = name, shown = true }
@@ -427,7 +427,7 @@ function W.Register(name, group, build, refresh, before)
         end
         table.insert(order, at, page)
     end
-    page.group, page.build, page.refresh = group, build, refresh
+    page.group, page.build, page.refresh, page.ownBar, page.label = group, build, refresh, ownBar, label
     if menu then
         Entry(page)
         LayoutMenu()
@@ -441,7 +441,7 @@ function W.Show(name)
     if not frame then Build() end
     frame:Show()
     current = name
-    local dungeonPage = page.group == "Dungeon"
+    local dungeonPage = page.group == "Dungeon" and not page.ownBar
     grid:SetShown(dungeonPage)
     scroll:ClearAllPoints()
     if dungeonPage then
@@ -476,7 +476,7 @@ local function FirstShown(group)
     for _, p in ipairs(order) do
         if p.group == group and p.shown then return p.name end
     end
-    if group == "Experimental" then return FirstShown("Settings") end
+    if group == "Raid" then return FirstShown("Settings") end
 end
 
 function W.Toggle()
@@ -540,6 +540,13 @@ function W.SideScroll(host, top)
     end)
     side:SetScript("OnSizeChanged", function(self) W.SideHint(self, child) end)
     return side, child
+end
+
+W.GROUPS = GROUPS
+
+function W.Page(name)
+    local page = pages[name]
+    if page then return page.group, page.shown end
 end
 
 function W.Current() return current end

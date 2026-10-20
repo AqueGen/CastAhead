@@ -45,9 +45,7 @@ LINES = {
     "BLEED": "bleed, defensive",
     "SWITCH": "switch target",
     "ALERT": "danger",
-    "SMALL": "small defensive",
-    "BIG": "big defensive",
-    "HEAL": "heal up",
+    "DEFENSIVE": "defensive",
     "SOON": "burst soon",
     "BURST": "burst now",
 }

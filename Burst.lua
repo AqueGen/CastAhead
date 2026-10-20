@@ -16,7 +16,7 @@ local function Role()
 end
 
 local function On()
-    if CastAheadConfig.Get("burstCalls") ~= true then return false end
+    if not CastAheadConfig.BurstCalls() then return false end
     if UnitIsDeadOrGhost and UnitIsDeadOrGhost("player") then return false end
     return Role() ~= nil
 end
@@ -198,7 +198,7 @@ function B.OnEncounter(event, encounterID, difficultyID, now)
 end
 
 function B.Tick(now)
-    if next(armed) and not (CastAheadConfig.Get("burstCalls") == true and CastAheadCore and CastAheadCore.AdviceFile
+    if next(armed) and not (CastAheadConfig.BurstCalls() and CastAheadCore and CastAheadCore.AdviceFile
             and CastAheadCore.AdviceFile(M.ADVICE.BURST)) then
         Disarm()
     end
