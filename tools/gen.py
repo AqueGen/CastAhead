@@ -18,6 +18,7 @@ KICK_SHARE = 0.25       # kicked this often -> people clearly interrupt it
 AOE_TARGETS = 3         # lands on this many players -> group damage
 HEAVY_DAMAGE = 0.20     # takes this share of the victim's health -> defensive
 MIN_DAMAGE_SAMPLES = 3
+AOE_MARGIN = 0.5
 MIN_PER_POSITION = 3    # samples needed before a rotation slot is trusted
 MAX_ROTATION = 8
 FLAT_SPREAD = 0.15      # rotation this tight collapses to a single value
@@ -279,7 +280,7 @@ def settle(new, old):
         hold("first", moved(old["first"], new["first"], FIRST_STEP))
         hold("firstN", count_moved(old["firstN"], new["firstN"], MIN_OPENING_SAMPLES))
         hold("offset", moved(old["offset"], new["offset"], OFFSET_STEP))
-        hold("hits", moved(old["hits"], new["hits"], 1.0) or crossed(old["hits"], new["hits"], AOE_TARGETS, 0))
+        hold("hits", moved(old["hits"], new["hits"], 1.0) or crossed(old["hits"], new["hits"], AOE_TARGETS, AOE_MARGIN))
         hold("dmg", moved(old["dmg"], new["dmg"], SHARE_STEP) or crossed(old["dmg"], new["dmg"], HEAVY_DAMAGE)
              or crossed(old["dmg"], new["dmg"], HEAVY_SINGLE))
         hold("kick", moved(old["kick"], new["kick"], SHARE_STEP) or crossed(old["kick"], new["kick"], KICK_SHARE))
@@ -404,9 +405,12 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                     cast, is_channel = measured, False
                 cdn = support(r["iv"], cd) if cd else 0
                 approx = bool(cd) and cdn < APPROX_SUPPORT * len(r["iv"])
+                old = anchor.get((instance_id, int(spellid), int(npcid)))
                 first, firstN = densest(r["first"], FIRST_WINDOW)
+                bar = OPENING_SUPPORT if old is None else \
+                    OPENING_SUPPORT - SHARE_MARGIN if old["first"] is not None else OPENING_SUPPORT + SHARE_MARGIN
                 if first is not None and sum(1 for x in r["first"] if abs(x - first) <= FIRST_TOLERANCE) \
-                        < OPENING_SUPPORT * len(r["first"]):
+                        < bar * len(r["first"]):
                     first, firstN = None, 0
                 # Delay from the mob's very first cast to this spell's first.
                 # Measured across all logs this is far tighter than anything
@@ -420,12 +424,15 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                     if hi - lo <= OFFSET_SPREAD:
                         offset = round(statistics.median(offsets), 1)
                 t = threat(r)
+                if old is not None and old["dmg"] is None and len(r["dmg"]) < THIN_EVIDENCE:
+                    # The payload window books any hit of the caster, so a few samples
+                    # can be another spell's (Ethereal Shade: 3 of 775 casts).
+                    t["hits"] = t["dmg"] = None
                 forced = spellid in include
                 if spellid in exclude and not forced:
                     continue
                 row_key = (instance_id, int(spellid), int(npcid))
                 seen.add(row_key)
-                old = anchor.get(row_key)
                 row, changed = settle({
                     "spell": int(spellid), "npc": int(npcid),
                     "cast": round(cast, 1), "cd": cd or [], "first": first,
