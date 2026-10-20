@@ -501,7 +501,7 @@ function BuildGeneral(panel)
         { "centerScale", "centerTextScale", "centerX", "centerY" }, centerScale)
 
     -- Features ------------------------------------------------------------
-    local features = BuildGroup(panel, "Features", 100)
+    local features = BuildGroup(panel, "Features", 166)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", features, "TOPLEFT", 10, -26 }, function()
         SaveRefresh()
         CastAheadOptions.RefreshDefensives()
@@ -510,10 +510,11 @@ function BuildGeneral(panel)
     local raidSaves, bursts
     local function PaintRaid()
         local on = SwitchOn("raidMode")
-        raidSaves:SetShown(on)
-        bursts:SetShown(on)
-        features:SetHeight(on and 166 or 100)
-        panel:Relayout()
+        local color = on and { 1, 1, 1 } or T.muted
+        for _, child in ipairs({ raidSaves, bursts }) do
+            child:SetEnabled(on)
+            child.text:SetTextColor(unpack(color))
+        end
     end
     local function RaidChanged()
         SaveRefresh()

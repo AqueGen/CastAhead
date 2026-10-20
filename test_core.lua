@@ -4078,10 +4078,12 @@ do
             local setText = fs.SetText
             fs.SetText = function(self, t) setText(self, t) rawset(self, "value", t) end
             fs.SetShown = function(self, on) self.shown = on and true or false end
+            fs.SetTextColor = function(self, ...) self.color = (...) == 1 and "normal" or "muted" end
             texts[#texts + 1] = fs
             return fs
         end
         f.SetShown = function(self, on) self.shown = on and true or false end
+        f.SetEnabled = function(self, on) self.enabled = on and true or false end
         f.SetText = function(self, t) rawset(self, "buttonText", t) end
         local setScript = f.SetScript
         f.SetScript = function(self, script, fn)
@@ -4144,17 +4146,29 @@ do
         end
     end
     do
+        local function FeaturesHeight()
+            for _, f in ipairs(made) do
+                local title = rawget(f, "title")
+                if title and rawget(title, "value") == "Features" then return f.h end
+            end
+        end
         local raid, raidSaves, bursts = Frame("Raid (experimental)"), Frame("Defensive calls in raids"), Frame("Burst windows")
-        check(raid and raidSaves and bursts and raidSaves.shown == false and bursts.shown == false,
-            "with the raid switch off its two children are hidden")
+        local offHeight = FeaturesHeight()
+        check(raid and raidSaves and bursts,
+            "with the raid switch off its two children are still built")
+        check(raidSaves.enabled == false and bursts.enabled == false and raid.enabled ~= false,
+            "with the raid switch off its two children are disabled")
+        check(raidSaves.text.color == "muted" and bursts.text.color == "muted", "and their labels are greyed")
+        check(offHeight == 166, "the Features group keeps the four-row height, got " .. tostring(offHeight))
         CastAheadDB = { raidMode = true }
         CastAheadOptions.ShowPanel(host, "General")
-        check(raidSaves and bursts and raidSaves.shown == true and bursts.shown == true,
-            "with the raid switch on its two children are shown")
+        check(raidSaves.enabled == true and bursts.enabled == true, "with the raid switch on its two children are enabled")
+        check(raidSaves.text.color ~= "muted" and bursts.text.color ~= "muted", "and their labels are back to normal")
+        check(FeaturesHeight() == offHeight, "the Features group height does not change with the raid switch")
         CastAheadDB = { raidSaves = true, burstCalls = true }
         CastAheadOptions.ShowPanel(host, "General")
-        check(raidSaves and bursts and raidSaves.shown == false and bursts.shown == false,
-            "children switched on stay hidden while the raid switch is off")
+        check(raidSaves.enabled == false and bursts.enabled == false,
+            "children switched on stay disabled while the raid switch is off")
         CastAheadDB = {}
     end
     local function OffNote()
