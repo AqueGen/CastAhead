@@ -296,6 +296,41 @@ def test_damage_needs_three_samples():
     assert t["dmg"] == 0.4 and t["hits"] == 2.0
 
 
+def test_hits_hovering_at_the_aoe_line_keep_the_anchor():
+    _, changed = settle(row(hits=2.5), row(hits=3.0))
+    assert changed == []
+    _, changed = settle(row(hits=3.0), row(hits=2.5))
+    assert changed == []
+    _, changed = settle(row(hits=2.4), row(hits=3.0))
+    assert changed == ["hits"]
+
+
+def test_damage_new_to_an_anchored_row_needs_more_than_the_minimum():
+    with tempfile.TemporaryDirectory() as tmp:
+        def row_with(dmg):
+            casts = {"1|Zone": {"10": {"1000": _base_cast_record(hits=[1] * len(dmg), dmg=dmg, starts=5)}}}
+            lua, _ = _run_gen(tmp, casts, overrides={"include": ["1000"]})
+            return next(line for line in lua.splitlines() if "spell = 1000," in line)
+        assert "dmg = nil" in row_with([0.3, 0.3])
+        assert "dmg = nil" in row_with([0.3] * 4)
+        assert "dmg = 0.3" in row_with([0.3] * 5)
+
+
+def test_an_opening_needs_a_margin_to_flip():
+    def firsts(tight, spread):
+        return [8.0] * tight + [20.0 + 3 * i for i in range(spread)]
+    with tempfile.TemporaryDirectory() as tmp:
+        def first_of(values):
+            casts = {"1|Zone": {"10": {"1000": _base_cast_record(first=values, starts=50)}}}
+            lua, _ = _run_gen(tmp, casts, overrides={"include": ["1000"]})
+            return next(line for line in lua.splitlines() if "spell = 1000," in line)
+        assert "first = 8.0" in first_of(firsts(11, 9))
+        assert "first = 8.0" in first_of(firsts(24, 25))
+        assert "first = nil" in first_of(firsts(10, 11))
+        assert "first = nil" in first_of(firsts(26, 25))
+        assert "first = 8.0" in first_of(firsts(27, 23))
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
