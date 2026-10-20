@@ -149,7 +149,11 @@ function C.DungeonSaves()
 end
 
 function C.RaidSaves()
-    return C.Get("raidSaves") == true
+    return C.Get("raidMode") == true and C.Get("raidSaves") == true
+end
+
+function C.BurstCalls()
+    return C.Get("raidMode") == true and C.Get("burstCalls") == true
 end
 
 function C.SaveCalls()
@@ -200,7 +204,7 @@ end
 -- read as an old profile. Older profile shapes exist and each would
 -- otherwise read as a reset: the per-context one (CastAheadDB.ctx.key), the
 -- flat one from before the early warning became a number.
-C.SCHEMA = 5
+C.SCHEMA = 6
 
 function C.Migrate()
     local existing = CastAheadDB ~= nil
@@ -295,6 +299,10 @@ function C.Migrate()
                 CastAheadDB.saveCallsNotice = true
             end
         end
+    end
+    if existing and (tonumber(CastAheadDB.schema) or 0) < 6
+            and (CastAheadDB.burstCalls == true or CastAheadDB.raidSaves == true) then
+        CastAheadDB.raidMode = true
     end
     CastAheadDB.schema = C.SCHEMA
 end

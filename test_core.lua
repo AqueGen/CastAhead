@@ -437,7 +437,7 @@ check(#sb[71].def == 3 and sb[71].def[1] == 2 and sb[71].def[2] == 1 and sb[71].
 check(sb[72].small == nil, "the small list is gone after the join")
 check(sb[73].def and #sb[73].def == 0, "a spec the player emptied on purpose stays empty")
 check(sb[74].def == nil and sb[74].heal == nil, "a spec with only heal entries falls back to the shipped list")
-check(CastAheadDB.schema == 5, "the profile is stamped schema 5")
+check(CastAheadDB.schema == 6, "the profile is stamped schema 6")
 CastAheadDB = { schema = 3, saveCalls = true, smallCalls = false, bigCalls = false, healCalls = false }
 fire("ADDON_LOADED", "CastAhead")
 check(CastAheadDB.saveCalls == false and CastAheadDB.smallCalls == nil and CastAheadDB.bigCalls == nil
@@ -474,12 +474,12 @@ end
 CastAheadSaveButtons = {}
 CastAheadDB = nil
 fire("ADDON_LOADED", "CastAhead")
-check(CastAheadDB.schema == 5 and CastAheadDB.saveButtons == nil, "a new install is schema 5 with no saved lists")
+check(CastAheadDB.schema == 6 and CastAheadDB.saveButtons == nil, "a new install is schema 6 with no saved lists")
 
 do
     CastAheadDB = { schema = 4, saveCalls = true, raidSaves = true }
     fire("ADDON_LOADED", "CastAhead")
-    check(CastAheadDB.schema == 5 and CastAheadDB.saveCalls == false and CastAheadDB.saveCallsNotice == true
+    check(CastAheadDB.schema == 6 and CastAheadDB.saveCalls == false and CastAheadDB.saveCallsNotice == true
         and CastAheadDB.raidSaves == false, "a schema 4 profile with defensive calls on is turned off once and flagged")
     CastAheadDB = { schema = 3, raidSaves = true }
     fire("ADDON_LOADED", "CastAhead")
@@ -492,7 +492,7 @@ do
     CastAheadDB.saveCalls = true
     CastAheadDB.saveCallsNotice = nil
     fire("ADDON_LOADED", "CastAhead")
-    check(CastAheadDB.schema == 5 and CastAheadDB.saveCalls == true and CastAheadDB.saveCallsNotice == nil,
+    check(CastAheadDB.schema == 6 and CastAheadDB.saveCalls == true and CastAheadDB.saveCallsNotice == nil,
         "migrating again changes nothing and raises no flag")
     CastAheadDB = nil
     fire("ADDON_LOADED", "CastAhead")
@@ -503,6 +503,24 @@ do
         check(CastAheadDB.saveCalls == (stored ~= "nil" and stored or nil) and CastAheadDB.saveCallsNotice == nil,
             "a schema 4 profile with defensive calls off or unset stays as it was")
     end
+    CastAheadDB = { schema = 5, burstCalls = true }
+    fire("ADDON_LOADED", "CastAhead")
+    check(CastAheadDB.schema == 6 and CastAheadDB.raidMode == true and CastAheadDB.burstCalls == true,
+        "a schema 5 profile with burst windows on gets the raid switch on")
+    CastAheadDB = { schema = 5, raidSaves = true }
+    fire("ADDON_LOADED", "CastAhead")
+    check(CastAheadDB.raidMode == true and CastAheadDB.raidSaves == true,
+        "a schema 5 profile with raid defensive calls on gets the raid switch on")
+    CastAheadDB = { schema = 5 }
+    fire("ADDON_LOADED", "CastAhead")
+    check(CastAheadDB.raidMode == nil, "a schema 5 profile with both raid features off leaves the raid switch unset")
+    CastAheadDB = nil
+    fire("ADDON_LOADED", "CastAhead")
+    check(CastAheadDB.raidMode == nil, "a new install has the raid switch unset")
+    CastAheadDB = { schema = 3, raidSaves = true }
+    fire("ADDON_LOADED", "CastAhead")
+    check(CastAheadDB.raidSaves == false and CastAheadDB.raidMode == nil,
+        "raid calls turned off by the schema 5 reset do not turn the raid switch on")
 
     local savedInfo = GetInstanceInfo
     CastAheadDB = { saveCalls = true, raidSaves = false }
@@ -511,10 +529,18 @@ do
     GetInstanceInfo = function() return "r", "raid", 0, "", 0, 0, false, 1878 end
     check(CastAheadConfig.SaveCalls() == false, "in a raid SaveCalls follows raidSaves, off")
     CastAheadDB = { saveCalls = false, raidSaves = true }
+    check(CastAheadConfig.SaveCalls() == false, "in a raid raidSaves alone does nothing while the raid switch is off")
+    CastAheadDB = { saveCalls = false, raidMode = true, raidSaves = true }
     check(CastAheadConfig.SaveCalls() == true, "in a raid SaveCalls follows raidSaves, on")
     GetInstanceInfo = function() return "d", "party", 0, "", 0, 0, false, 1877 end
     check(CastAheadConfig.SaveCalls() == false, "outside a raid raidSaves does not count")
     check(CastAheadConfig.DungeonSaves() == false and CastAheadConfig.RaidSaves() == true, "the page accessors ignore the zone")
+    CastAheadDB = { raidSaves = true, burstCalls = true }
+    check(CastAheadConfig.RaidSaves() == false and not (CastAheadConfig.BurstCalls and CastAheadConfig.BurstCalls()),
+        "with the raid switch off raid defensive calls and burst windows are off even when stored on")
+    CastAheadDB = { raidMode = true, burstCalls = true }
+    check(CastAheadConfig.BurstCalls ~= nil and CastAheadConfig.BurstCalls() == true and CastAheadConfig.RaidSaves() == false,
+        "with the raid switch on each child follows its own switch")
     GetInstanceInfo = nil
     CastAheadDB = { saveCalls = true, raidSaves = false }
     check(CastAheadConfig.SaveCalls() == true, "without GetInstanceInfo SaveCalls follows saveCalls")
@@ -4048,6 +4074,11 @@ do
         end
         f.SetShown = function(self, on) self.shown = on and true or false end
         f.SetText = function(self, t) rawset(self, "buttonText", t) end
+        local setScript = f.SetScript
+        f.SetScript = function(self, script, fn)
+            setScript(self, script, fn)
+            if script == "OnClick" then rawset(self, "onClick", fn) end
+        end
         f.h, f.flowTop, f.MinText, f.MaxText, f.Slider = 0, 6, StubRegion(), StubRegion(), StubRegion()
         f.SetSize = function(self, w, h) self.w, self.h = w, h end
         f.SetHeight = function(self, h) self.h = h end
@@ -4079,7 +4110,7 @@ do
     check(not lists, "the Bursts page has no button lists")
 
     local wanted = { Features = true, ["Defensive calls in dungeons"] = true,
-        ["Defensive calls in raids (experimental)"] = true, ["Burst windows (experimental)"] = true,
+        ["Raid (experimental)"] = true, ["Defensive calls in raids"] = true, ["Burst windows"] = true,
         Advanced = true, ["Development mode"] = true }
     local function Labels(from)
         local seen = {}
@@ -4093,9 +4124,9 @@ do
     local before = #texts
     ok, err = pcall(CastAheadOptions.ShowPanel, host, "General")
     check(ok, "the General page builds headless " .. tostring(err))
-    check(Labels(before + 1) == "Features | Defensive calls in dungeons | Defensive calls in raids (experimental)"
-        .. " | Burst windows (experimental) | Advanced | Development mode",
-        "General lists the feature switches in their group, then Advanced")
+    check(Labels(before + 1) == "Features | Defensive calls in dungeons | Raid (experimental)"
+        .. " | Defensive calls in raids | Burst windows | Advanced | Development mode",
+        "General lists the feature switches in their group, the raid ones under the raid switch, then Advanced")
 
     local function Frame(label)
         for _, f in ipairs(made) do
@@ -4103,20 +4134,35 @@ do
             if t and rawget(t, "value") == label then return f end
         end
     end
+    do
+        local raid, raidSaves, bursts = Frame("Raid (experimental)"), Frame("Defensive calls in raids"), Frame("Burst windows")
+        check(raid and raidSaves and bursts and raidSaves.shown == false and bursts.shown == false,
+            "with the raid switch off its two children are hidden")
+        CastAheadDB = { raidMode = true }
+        CastAheadOptions.ShowPanel(host, "General")
+        check(raidSaves and bursts and raidSaves.shown == true and bursts.shown == true,
+            "with the raid switch on its two children are shown")
+        CastAheadDB = { raidSaves = true, burstCalls = true }
+        CastAheadOptions.ShowPanel(host, "General")
+        check(raidSaves and bursts and raidSaves.shown == false and bursts.shown == false,
+            "children switched on stay hidden while the raid switch is off")
+        CastAheadDB = {}
+    end
     local function OffNote()
         for _, fs in ipairs(texts) do
             local v = rawget(fs, "value")
             if type(v) == "string" and v:find("turn them on in General - Features", 1, true) then return fs end
         end
     end
-    for _, case in ipairs({ { {}, false }, { { saveCalls = true }, true }, { { raidSaves = true }, true } }) do
+    for _, case in ipairs({ { {}, false, "all off" }, { { saveCalls = true }, true, "dungeons" },
+        { { raidMode = true, raidSaves = true }, true, "raids" }, { { raidSaves = true }, false, "raids without the raid switch" } }) do
         CastAheadDB = case[1]
         CastAheadOptions.ShowPanel(host, "Defensives")
         local boss, note = Frame("Boss calls from DBM / BigWigs"), OffNote()
-        local label = next(case[1]) or "all off"
-        check(boss and boss.shown == case[2], "Defensives boss switch visibility, " .. label)
-        check(note and note.shown == not case[2], "Defensives off note visibility, " .. label)
+        check(boss and boss.shown == case[2], "Defensives boss switch visibility, " .. case[3])
+        check(note and note.shown == not case[2], "Defensives off note visibility, " .. case[3])
     end
+
 
     CastAheadDB = {}
     CastAheadOptions.SetSwitch("centerText", false)
@@ -4193,7 +4239,7 @@ do
     check(CastAheadWindow.Current() == "General", "Development switched off while open shows General")
     check(panelsShown[#panelsShown] == "General", "each settings page shows its own panel")
     check(sized == before, "switching pages, dungeons and Development mode never resizes the window")
-    CastAheadDB.burstCalls = true
+    CastAheadDB.raidMode, CastAheadDB.burstCalls = true, true
     CastAheadUI.ShowTab("Bursts")
     check(CastAheadWindow.Current() == "Bursts", "burst windows switched on show the Bursts page")
     CastAheadDB.burstCalls = nil
@@ -4227,7 +4273,7 @@ do
         CastAheadUI.RefreshTabs()
         check(CastAheadWindow.Current() == "Guide", "dungeon calls switched off while Defensives is open show Guide")
     end
-    CastAheadDB.burstCalls = true
+    CastAheadDB.raidMode, CastAheadDB.burstCalls = true, true
     CastAheadUI.ShowTab("Bursts")
     CastAhead_Toggle()
     CastAheadDB.burstCalls = nil
@@ -4341,7 +4387,7 @@ do
     GetSpecializationRole = function() return role end
     CastAheadBurstWindows = { [3492] = { [15] = { { release = 30 } }, [14] = { { release = 3 } },
         [8] = { { release = 3, pull = true }, { release = 20, group = true } } } }
-    CastAheadDB = { burstCalls = true }
+    CastAheadDB = { raidMode = true, burstCalls = true }
     local function run(seconds)
         for _ = 1, seconds * 2 do
             now = now + 0.5
@@ -4402,6 +4448,10 @@ do
     run(40)
     check(#heard == 0, "burst: burstCalls is off by default")
     CastAheadDB = { burstCalls = true }
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(40)
+    check(#heard == 0, "burst: burst windows stay silent while the raid switch is off")
+    CastAheadDB = { raidMode = true, burstCalls = true }
 
     B.OnEncounter("ENCOUNTER_START", 3492, 16, now)
     run(40)
@@ -4481,7 +4531,7 @@ do
     GetSpecialization = function() return 1 end
     GetSpecializationRole = function() return "DAMAGER" end
     CastAheadBurstWindows = { [3492] = { [15] = { { release = 30 } } } }
-    CastAheadDB = { burstCalls = true, centerText = true, saveCalls = true }
+    CastAheadDB = { raidMode = true, burstCalls = true, centerText = true, saveCalls = true }
     GetInstanceInfo = function() return "Abyss", "raid", 15, "", 0, 0, false, 9999 end
     fire("PLAYER_ENTERING_WORLD")
 
@@ -4567,8 +4617,9 @@ do
         and CastAheadOptions.Switches.burstCalls.defaultOff == true, "the burst switch exists and is off by default")
     local sw = CastAheadOptions.Switches
     check(sw.saveCalls.label == "Defensive calls in dungeons" and sw.saveCalls.defaultOff == true
-        and sw.raidSaves.label == "Defensive calls in raids (experimental)" and sw.raidSaves.defaultOff == true
-        and sw.burstCalls.label == "Burst windows (experimental)", "the three feature switches carry their labels and start off")
+        and sw.raidMode and sw.raidMode.label == "Raid (experimental)" and sw.raidMode.defaultOff == true
+        and sw.raidSaves.label == "Defensive calls in raids" and sw.raidSaves.defaultOff == true
+        and sw.burstCalls.label == "Burst windows", "the four feature switches carry their labels and start off")
     check(sw.centerText.defaultOff == nil, "the centre call is not a default-off switch")
     check(ok and table.concat(CastAheadOptions.TABS, ",") == "General,Sounds,Defensives,Bursts,Development,Report",
         "bursts have their own settings page right after Defensives, Report comes last")
@@ -4579,7 +4630,7 @@ do
     GetBuildInfo = function() return "12.1.0", "65000" end
     GetLocale = function() return "enUS" end
     GetSpecializationInfoByID = function(id) return id, "Havoc", "", 0, "DAMAGER", "DEMONHUNTER", "Demon Hunter" end
-    CastAheadDB = { burstCalls = true }
+    CastAheadDB = { raidMode = true, burstCalls = true }
     local save = CastAheadOptions.ReportText("save")
     check(save:find("Cast Ahead report: Wrong defensive call\nAddon 9.9.9, game 12.1.0 (65000), enUS\n", 1, true)
         and save:find("Spec: Havoc Demon Hunter", 1, true) and save:find("Defensive calls: dungeons off, raids off", 1, true)
@@ -4587,6 +4638,11 @@ do
     local burst = CastAheadOptions.ReportText("burst")
     check(burst:find("Burst guide: Heroic\nBurst windows: on\n", 1, true) and not burst:find("Defensive calls", 1, true),
         "a burst report carries the guide difficulty and the burst switch instead")
+    CastAheadDB = { burstCalls = true, raidSaves = true }
+    check(CastAheadOptions.ReportText("burst"):find("Burst windows: off\n", 1, true)
+        and CastAheadOptions.ReportText("save"):find("raids off", 1, true),
+        "the report reads the raid features as off while the raid switch is off")
+    CastAheadDB = { raidMode = true, burstCalls = true }
     CastAheadOptions.SetReportPicks(nil)
     check(CastAheadOptions.ReportText("cast"):find("Key level: +12\n", 1, true), "a fresh report starts at key level +12")
     local someId, someData = next(CastAheadData)
@@ -4650,7 +4706,7 @@ do
     CastAheadBurstWindows = {
         [3492] = { [15] = { name = "Ula'tek", { release = 30 }, { release = 70, role = "HEALER" } } },
         [3101] = { [8] = { name = "Kystia Manaheart", { event = 610, target = "Light Infusion" } } } }
-    CastAheadDB = { burstCalls = true }
+    CastAheadDB = { raidMode = true, burstCalls = true }
     local function run(seconds)
         for _ = 1, seconds * 2 do
             now = now + 0.5
@@ -4703,7 +4759,8 @@ do
     check(#sounds == 1, "burst event: a healer gets the boss-event call too")
     B.OnEncounter("ENCOUNTER_END", 3101, 8, now)
 
-    for _, db in ipairs({ {}, { burstCalls = true, voice = false }, { burstCalls = true, sound = false } }) do
+    for _, db in ipairs({ {}, { burstCalls = true }, { raidMode = true, burstCalls = true, voice = false },
+        { raidMode = true, burstCalls = true, sound = false } }) do
         sounds, CastAheadDB = {}, db
         B.OnEncounter("ENCOUNTER_START", 3101, 8, now)
         run(3)
@@ -4713,7 +4770,7 @@ do
 
     do
         local savedDead = UnitIsDeadOrGhost
-        sounds, CastAheadDB = {}, { burstCalls = true }
+        sounds, CastAheadDB = {}, { raidMode = true, burstCalls = true }
         B.OnEncounter("ENCOUNTER_START", 3101, 8, now)
         run(3)
         UnitIsDeadOrGhost = function() return true end
@@ -4723,8 +4780,8 @@ do
         B.OnEncounter("ENCOUNTER_END", 3101, 8, now)
     end
 
-    for _, change in ipairs({ "burstCalls", "voice", "sound" }) do
-        sounds, CastAheadDB = {}, { burstCalls = true }
+    for _, change in ipairs({ "burstCalls", "raidMode", "voice", "sound" }) do
+        sounds, CastAheadDB = {}, { raidMode = true, burstCalls = true }
         B.OnEncounter("ENCOUNTER_START", 3101, 8, now)
         run(3)
         CastAheadDB[change] = change == "burstCalls" and nil or false

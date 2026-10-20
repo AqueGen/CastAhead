@@ -147,9 +147,11 @@ local SWITCHES = {
         tip = "In dungeons and the open world, call a defensive ahead of damage that needs one, and show your button for it in the centre. Raids have their own switch." },
     bossAdapter = { label = "Boss calls from DBM / BigWigs",
         tip = "Also call defensives for boss abilities announced by DBM or BigWigs." },
-    raidSaves = { label = "Defensive calls in raids (experimental)", defaultOff = true,
+    raidMode = { label = "Raid (experimental)", defaultOff = true,
+        tip = "Master switch for the raid features below. Off, neither runs and the Raid group leaves the menu; each keeps its own setting for when you turn this back on." },
+    raidSaves = { label = "Defensive calls in raids", defaultOff = true,
         tip = "In raids, call defensives for boss abilities from DBM or BigWigs timers, so it needs one of them. The defensive table holds dungeon abilities only for now, so raid calls stay rare. Does not need the dungeon switch." },
-    burstCalls = { label = "Burst windows (experimental)", defaultOff = true,
+    burstCalls = { label = "Burst windows", defaultOff = true,
         tip = "On bosses with a phase worth bursting into, say \"burst soon\" five seconds before it and \"burst now\" when it starts, with a countdown in the centre block. Healers get their own phases for group-healing cooldowns. On every other boss it stays silent: press on cooldown." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
         tip = "A panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. Only while recording. The key bindings and /ca mark work without it." },
@@ -499,25 +501,36 @@ function BuildGeneral(panel)
         { "centerScale", "centerTextScale", "centerX", "centerY" }, centerScale)
 
     -- Features ------------------------------------------------------------
-    local features = BuildGroup(panel, "Features", 133)
+    local features = BuildGroup(panel, "Features", 100)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", features, "TOPLEFT", 10, -26 }, function()
         SaveRefresh()
         CastAheadOptions.RefreshDefensives()
         if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
     end)
-    local raid = BuildSwitch(panel, "raidSaves", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, function(on)
+    local raidSaves, bursts
+    local function PaintRaid()
+        local on = SwitchOn("raidMode")
+        raidSaves:SetShown(on)
+        bursts:SetShown(on)
+        features:SetHeight(on and 166 or 100)
+        panel:Relayout()
+    end
+    local function RaidChanged()
         SaveRefresh()
         CastAheadOptions.RefreshDefensives()
         local inRaid = GetInstanceInfo and select(2, GetInstanceInfo()) == "raid"
-        if not on and inRaid and CastAheadSaves then
+        if not CastAheadConfig.RaidSaves() and inRaid and CastAheadSaves then
             CastAheadSaves.CancelPrefix("dbm:")
             CastAheadSaves.CancelPrefix("bw:")
         end
-    end)
-    BuildSwitch(panel, "burstCalls", { "TOPLEFT", raid, "BOTTOMLEFT", 0, -4 }, function()
         Redraw()
         if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
-    end)
+        PaintRaid()
+    end
+    local raid = BuildSwitch(panel, "raidMode", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, RaidChanged)
+    raidSaves = BuildSwitch(panel, "raidSaves", { "TOPLEFT", raid, "BOTTOMLEFT", 16, -4 }, RaidChanged)
+    bursts = BuildSwitch(panel, "burstCalls", { "TOPLEFT", raidSaves, "BOTTOMLEFT", 0, -4 }, RaidChanged)
+    table.insert(refreshers, PaintRaid)
 
     local extra = BuildGroup(panel, "Advanced", 97)
     local dev = BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
@@ -1049,11 +1062,11 @@ function CastAheadOptions.ReportText(key)
                     or "Burst guide: " .. d[2]
             end
         end
-        lines[#lines + 1] = "Burst windows: " .. OnOff(SwitchOn("burstCalls"))
+        lines[#lines + 1] = "Burst windows: " .. OnOff(CastAheadConfig.BurstCalls())
     elseif kind.key ~= "idea" then
         lines[#lines + 1] = "Dungeon picked: " .. (dungeon and CastAheadData[dungeon] and CastAheadData[dungeon].name or "?")
         lines[#lines + 1] = string.format("Defensive calls: dungeons %s, raids %s, boss mod: %s",
-            OnOff(SwitchOn("saveCalls")), OnOff(SwitchOn("raidSaves")),
+            OnOff(SwitchOn("saveCalls")), OnOff(CastAheadConfig.RaidSaves()),
             CastAheadBossAdapter and CastAheadBossAdapter.Status() or "none")
     end
     if InPlay(kind.key) and pick.spell then
