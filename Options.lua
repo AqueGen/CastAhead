@@ -531,6 +531,9 @@ function BuildGeneral(panel)
     local raid = BuildSwitch(panel, "raidMode", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, RaidChanged)
     raidSaves = BuildSwitch(panel, "raidSaves", { "TOPLEFT", raid, "BOTTOMLEFT", 16, -4 }, RaidChanged)
     bursts = BuildSwitch(panel, "burstCalls", { "TOPLEFT", raidSaves, "BOTTOMLEFT", 0, -4 }, RaidChanged)
+    for _, child in ipairs({ raidSaves, bursts }) do
+        if child.SetMotionScriptsWhileDisabled then child:SetMotionScriptsWhileDisabled(true) end
+    end
     table.insert(refreshers, PaintRaid)
 
     local extra = BuildGroup(panel, "Advanced", 97)

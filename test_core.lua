@@ -4084,6 +4084,7 @@ do
         end
         f.SetShown = function(self, on) self.shown = on and true or false end
         f.SetEnabled = function(self, on) self.enabled = on and true or false end
+        f.SetMotionScriptsWhileDisabled = function(self, on) self.motionWhileDisabled = on end
         f.SetText = function(self, t) rawset(self, "buttonText", t) end
         local setScript = f.SetScript
         f.SetScript = function(self, script, fn)
@@ -4159,6 +4160,8 @@ do
         check(raidSaves.enabled == false and bursts.enabled == false and raid.enabled ~= false,
             "with the raid switch off its two children are disabled")
         check(raidSaves.text.color == "muted" and bursts.text.color == "muted", "and their labels are greyed")
+        check(raidSaves.motionWhileDisabled == true and bursts.motionWhileDisabled == true,
+            "the children keep their tooltips while disabled")
         check(offHeight == 166, "the Features group keeps the four-row height, got " .. tostring(offHeight))
         CastAheadDB = { raidMode = true }
         CastAheadOptions.ShowPanel(host, "General")
