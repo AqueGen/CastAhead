@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.20.0](https://github.com/AqueGen/CastAhead/compare/v0.19.1...v0.20.0) (2026-10-20)
+
+
+### Features
+
+* a healer who can remove the debuff hears the dispel instead of the defensive ([#82](https://github.com/AqueGen/CastAhead/issues/82)) ([249deb3](https://github.com/AqueGen/CastAhead/commit/249deb371e185aa153a1f1c72ef6ade988967013))
+* Play list on the Casts page ([#79](https://github.com/AqueGen/CastAhead/issues/79)) ([f397882](https://github.com/AqueGen/CastAhead/commit/f39788205dc876da61e87d24cc291e17e26e3be7))
+
 ## [0.19.1](https://github.com/AqueGen/CastAhead/compare/v0.19.0...v0.19.1) (2026-10-20)
 
 
