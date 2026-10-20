@@ -75,6 +75,8 @@ end
 
 local viewLevel
 
+local function ClampLevel(level) return math.max(2, math.min(25, level)) end
+
 local function KeystoneLevel()
     local ok, level = pcall(C_ChallengeMode and C_ChallengeMode.GetActiveKeystoneInfo or error)
     if ok and type(level) == "number" and level > 0 then return level end
@@ -83,11 +85,11 @@ local function KeystoneLevel()
 end
 
 function S.ViewLevel()
-    return viewLevel or KeystoneLevel() or 20
+    return viewLevel or ClampLevel(KeystoneLevel() or 20)
 end
 
 function S.SetViewLevel(level)
-    viewLevel = level and math.max(2, math.min(25, level)) or nil
+    viewLevel = level and ClampLevel(level) or nil
     if CastAheadUI and CastAheadUI.RefreshSaves then CastAheadUI.RefreshSaves() end
 end
 

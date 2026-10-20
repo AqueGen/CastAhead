@@ -95,7 +95,7 @@ local function CreateSaveRow(parent, index)
 end
 
 local STEP_W, LEVEL_W = 22, 40
-local STEPPER_W = STEP_W * 2 + LEVEL_W + COLUMN_GAP * 2 + 8
+local STEPPER_H = 24
 local steppers = {}
 
 local function PaintSteppers()
@@ -103,25 +103,23 @@ local function PaintSteppers()
     for _, level in ipairs(steppers) do level:SetText(text) end
 end
 
-local function Stepper(host)
+local function Stepper(host, y)
+    if not CastAheadSaves then return 0 end
     local function Step(label, delta, x)
         local b = CastAheadWindow.Button(host, label, STEP_W)
-        b:SetPoint("TOPRIGHT", host, "TOPRIGHT", x, 0)
+        b:SetPoint("TOPLEFT", host, "TOPLEFT", x, -y)
         b:SetScript("OnClick", function() CastAheadSaves.SetViewLevel(CastAheadSaves.ViewLevel() + delta) end)
     end
-    Step("+", 1, -4)
+    Step("-", -1, 0)
     local level = host:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     level:SetSize(LEVEL_W, 20)
-    level:SetPoint("TOPRIGHT", host, "TOPRIGHT", -4 - STEP_W - COLUMN_GAP, 0)
-    Step("-", -1, -4 - STEP_W - LEVEL_W - COLUMN_GAP * 2)
+    level:SetPoint("TOPLEFT", host, "TOPLEFT", STEP_W + COLUMN_GAP, -y)
+    Step("+", 1, STEP_W + LEVEL_W + COLUMN_GAP * 2)
     steppers[#steppers + 1] = level
+    return STEPPER_H
 end
 
-local function BarRoom(host)
-    return function() return (host:GetWidth() or 0) - STEPPER_W end
-end
-
-local RESTART ="Restart the game to finish the Cast Ahead update - defensive calls are off until then."
+local RESTART = "Restart the game to finish the Cast Ahead update - defensive calls are off until then."
 
 local function RefreshGuide()
     if not (guideHost and guideHost:IsVisible()) then return end
@@ -213,8 +211,8 @@ end
 
 local function BuildSaves(host)
     savesHost = host
-    savesTop = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end, BarRoom(host))
-    Stepper(host)
+    savesTop = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end)
+    savesTop = savesTop + Stepper(host, savesTop)
     saveSide, saveTable = CastAheadWindow.SideScroll(host, savesTop)
     saveTable:SetWidth(SAVE_WIDTH)
     local saveHeader = CreateFrame("Frame", nil, saveTable)
@@ -239,8 +237,8 @@ end
 
 local function BuildGuide(host)
     guideHost = host
-    guideTop = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end, BarRoom(host))
-    Stepper(host)
+    guideTop = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end)
+    guideTop = guideTop + Stepper(host, guideTop)
     guideText = host:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     guideText:SetPoint("TOPLEFT", host, "TOPLEFT", 4, -(guideTop + 4))
     guideText:SetWidth(math.max((host:GetWidth() or 0) - 8, 1))

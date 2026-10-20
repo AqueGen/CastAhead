@@ -3090,6 +3090,9 @@ do
         C_ChallengeMode = { GetActiveKeystoneInfo = function() return 0 end }
         C_MythicPlus = { GetOwnedKeystoneLevel = function() return 12 end }
         check(CastAheadSaves.ViewLevel() == 12, "no active keystone, the owned keystone sets it")
+        C_ChallengeMode = { GetActiveKeystoneInfo = function() return 28 end }
+        check(CastAheadSaves.ViewLevel() == 25, "a keystone above 25 shows as 25")
+        C_ChallengeMode = { GetActiveKeystoneInfo = function() return 0 end }
         CastAheadSaves.SetViewLevel(1)
         check(CastAheadSaves.ViewLevel() == 2, "the view level clamps to 2")
         CastAheadSaves.SetViewLevel(30)
