@@ -359,6 +359,15 @@ for key, advice in pairs(M.ADVICE) do
     end
 end
 
+local icon = io.open("Media/icon.tga", "rb")
+check(icon ~= nil, "Media/icon.tga missing")
+if icon then
+    local header = icon:read(18)
+    icon:close()
+    local w1, w2, h1, h2 = header:byte(13, 16)
+    check(w1 + w2 * 256 == 64 and h1 + h2 * 256 == 64, "Media/icon.tga must be 64x64")
+end
+
 -- The filter hides what the player cannot act on: TANK by role, dispel
 -- schools by whether a matching ability is known. Unknown role/permissive
 -- capability hides nothing.

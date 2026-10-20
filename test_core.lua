@@ -555,14 +555,53 @@ do
     check(CastAheadConfig.SaveCalls() == true, "without GetInstanceInfo SaveCalls follows saveCalls")
     GetInstanceInfo = savedInfo
 
+    local savedShowTab, savedCreate, savedNotice = CastAheadUI.ShowTab, CreateFrame, CastAheadUI.ShowUpdateNotice
+    local shows, noticeFrame = 0, nil
+    CastAheadUI.ShowUpdateNotice = function(...)
+        shows = shows + 1
+        return savedNotice(...)
+    end
+    CreateFrame = function(kind, name, ...)
+        local f = savedCreate(kind, name, ...)
+        local setScript = f.SetScript
+        f.scripts = {}
+        f.SetScript = function(self, script, fn)
+            self.scripts[script] = fn
+            return setScript(self, script, fn)
+        end
+        if name == "CastAheadUpdateNotice" then noticeFrame = f end
+        return f
+    end
     local realPrint, lines = print, {}
     print = function(text) lines[#lines + 1] = tostring(text) end
     CastAheadDB = { schema = 5, saveCallsNotice = true }
     fire("PLAYER_LOGIN")
     fire("PLAYER_LOGIN")
+    check(shows == 0, "the notice waits for the world to load")
+    local savedTimer, delays = C_Timer, {}
+    C_Timer = { After = function(delay, fn) delays[#delays + 1] = delay fn() end }
+    fire("PLAYER_ENTERING_WORLD")
+    fire("PLAYER_ENTERING_WORLD")
+    C_Timer = savedTimer
+    check(#delays == 1 and delays[1] > 0, "the notice is shown once, a moment after the world loads")
     print = realPrint
     check(#lines == 1 and lines[1]:find("Cast Ahead:|r defensive calls are now off by default. Turn them on in /ca - General - Features.", 1, true)
         and CastAheadDB.saveCallsNotice == nil, "the notice prints once and clears")
+    check(shows == 1 and noticeFrame and noticeFrame.shown and CastAheadDB.saveCallsNotice == nil,
+        "the update notice shows once and clears the flag")
+    check(noticeFrame.open and noticeFrame.close, "the notice has an Open settings and a Close button")
+    local inSpecial
+    for _, n in ipairs(UISpecialFrames) do inSpecial = inSpecial or n == "CastAheadUpdateNotice" end
+    check(inSpecial, "Escape closes the notice")
+    local shownTab
+    CastAheadUI.ShowTab = function(name) shownTab = name end
+    noticeFrame.open.scripts.OnClick()
+    check(shownTab == "General" and not noticeFrame.shown, "Open settings opens the General page and hides the notice")
+    CastAheadUI.ShowUpdateNotice()
+    check(noticeFrame.shown, "the notice shows again on request")
+    noticeFrame.close.scripts.OnClick()
+    check(not noticeFrame.shown, "Close hides the notice")
+    CastAheadUI.ShowTab, CreateFrame, CastAheadUI.ShowUpdateNotice = savedShowTab, savedCreate, savedNotice
 
     CastAheadDB = nil
 end

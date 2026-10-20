@@ -61,6 +61,10 @@ function CastAheadUI.ShowTab(name)
     CastAheadWindow.Show(name)
 end
 
+function CastAheadUI.ShowUpdateNotice()
+    CastAheadWindow.ShowUpdateNotice()
+end
+
 local function WindowShown()
     local frame = CastAheadWindow.Frame()
     return frame and frame:IsShown()
