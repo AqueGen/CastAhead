@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.1](https://github.com/AqueGen/CastAhead/compare/v0.19.0...v0.19.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* the test drive plays every call once ([#77](https://github.com/AqueGen/CastAhead/issues/77)) ([ce9071b](https://github.com/AqueGen/CastAhead/commit/ce9071bc2d6bb1a5af3471a17d1871d3ac01a27a))
+
 ## [0.19.0](https://github.com/AqueGen/CastAhead/compare/v0.18.0...v0.19.0) (2026-10-20)
 
 
