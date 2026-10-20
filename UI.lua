@@ -1,4 +1,4 @@
-local testButton, listButton
+local testButton
 local DUNGEON_PAGES = { Casts = true, Saves = true, Guide = true }
 
 -- Stored as nil when on, false when off, so a fresh profile defaults to on.
@@ -41,10 +41,9 @@ end
 -- button is repainted from the addon's state rather than from what was
 -- clicked. Core calls this when a run ends.
 function CastAheadUI.RefreshTest()
-    if not testButton then return end
     local running = CastAheadCore and CastAheadCore.Testing and CastAheadCore.Testing()
-    testButton:SetText(running and "Stop test" or "Test drive")
-    listButton:SetText(running and "Stop" or "Play list")
+    if testButton then testButton:SetText(running and "Stop test" or "Test drive") end
+    if CastAheadUI.RefreshPlayList then CastAheadUI.RefreshPlayList(running) end
 end
 
 function CastAheadUI.RefreshTabs()
@@ -82,19 +81,6 @@ function CastAheadWindow.titleButtons(add)
         GameTooltip:Show()
     end)
     testButton:SetScript("OnLeave", GameTooltip_Hide)
-
-    listButton = add("Play list", 80, false, function()
-        if CastAheadCore and CastAheadCore.Test then
-            CastAheadCore.Test(CastAheadWindow.Dungeon(), CastAheadUI.SortedRows())
-        end
-    end)
-    listButton:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-        GameTooltip:SetText("Play list", 1, 1, 1)
-        GameTooltip:AddLine("Play every cast in the table, top to bottom in its current order, one at a time: the countdown, the call, the voice and the sound each one is set to. Click again to stop.", nil, nil, nil, true)
-        GameTooltip:Show()
-    end)
-    listButton:SetScript("OnLeave", GameTooltip_Hide)
     CastAheadUI.RefreshTest()
 end
 

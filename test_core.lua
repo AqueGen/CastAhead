@@ -4341,7 +4341,7 @@ do
             fs.SetText = function(self, t) setText(self, t) pageTexts[#pageTexts + 1] = t end
             return fs
         end
-        f.SetText = function(_, t) buttonTexts[#buttonTexts + 1] = t end
+        f.SetText = function(self, t) rawset(self, "buttonText", t) buttonTexts[#buttonTexts + 1] = t end
         if name == "CastAheadMainWindow" then
             f.SetSize = function(self, w, h) sized = sized + 1 self.w, self.h = w, h end
             f.GetWidth = function(self) return self.w or 0 end
@@ -4351,9 +4351,37 @@ do
     end
     UIParent = { GetWidth = function() return 1920 end, GetHeight = function() return 1080 end }
     CastAheadDB = { window = { width = 300, height = 200 } }
+    local titleAdded = {}
+    CastAheadWindow.titleButtons(function(text)
+        titleAdded[#titleAdded + 1] = text
+        return { SetScript = function() end, SetText = function() end }
+    end)
+    check(titleAdded[1] == "Test drive" and #titleAdded == 1, "the title bar keeps only Test drive, got " .. table.concat(titleAdded, ","))
     CastAheadUI.ShowTab("Casts")
     local f = CastAheadWindow.Frame()
     check(f and f.w == 600 and f.h == 420, "a saved size below the minimum opens at the minimum")
+    do
+        local list
+        for _, b in ipairs(made) do
+            if rawget(b, "buttonText") == "Play list" then list = b end
+        end
+        check(list and scripts[list] and scripts[list].OnClick, "the Casts page has a Play list button")
+        local savedTest, savedTesting, savedDungeon = CastAheadCore.Test, CastAheadCore.Testing, CastAheadWindow.Dungeon
+        local running, args = false, nil
+        CastAheadCore.Testing = function() return running end
+        CastAheadCore.Test = function(...) args = { n = select("#", ...), ... } end
+        CastAheadWindow.Dungeon = function() return "pagedungeon" end
+        if list and scripts[list] and scripts[list].OnClick then scripts[list].OnClick(list) end
+        check(args and args.n == 2 and args[1] == "pagedungeon" and type(args[2]) == "table",
+            "Play list plays the page's dungeon with the table's rows")
+        running = true
+        CastAheadUI.RefreshTest()
+        check(list and rawget(list, "buttonText") == "Stop", "Play list reads Stop while a run is going")
+        running = false
+        CastAheadUI.RefreshTest()
+        check(list and rawget(list, "buttonText") == "Play list", "Play list is back once the run ends")
+        CastAheadCore.Test, CastAheadCore.Testing, CastAheadWindow.Dungeon = savedTest, savedTesting, savedDungeon
+    end
     local before = sized
     CastAheadUI.ShowTab("General")
     local textsBefore, buttonsBefore = #pageTexts, #buttonTexts
