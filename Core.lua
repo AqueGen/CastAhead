@@ -2187,7 +2187,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     if event == "PLAYER_LOGIN" then
         if CastAheadBossAdapter then CastAheadBossAdapter.Connect() end
         if CastAheadDB and CastAheadDB.saveCallsNotice then
-            print("|cff33ff99Cast Ahead|r defensive calls are now off by default. Turn them on in /ca - General - Features.")
+            print("|cff33ff99Cast Ahead:|r defensive calls are now off by default. Turn them on in /ca - General - Features.")
             CastAheadDB.saveCallsNotice = nil
         end
         return

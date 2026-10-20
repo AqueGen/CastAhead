@@ -390,6 +390,7 @@ CastAheadDB = { anchor = "left" }
 fire("ADDON_LOADED", "SomeOtherAddon")
 fire("PLAYER_ENTERING_WORLD")
 check(CastAheadDB.schema == nil, "another addon loading, or a zone-in, does not migrate")
+instanceKind = "party"
 CastAheadDB = { schema = 2 }
 fire("ADDON_LOADED", "CastAhead")
 check(not CastAheadConfig.SaveCalls() and CastAheadDB.saveCallsNotice == true,
@@ -410,6 +411,7 @@ fire("ADDON_LOADED", "CastAhead")
 check(CastAheadDB.voice == nil and CastAheadDB.window == nil and not CastAheadConfig.SaveCalls()
     and CastAheadDB.journal[1] == 1 and CastAheadDB.probe[1] == 2 and (CastAheadDB.dispel or {})[100] == "Magic",
     "a full reset reads as a new install after the reload and keeps the recorded data")
+instanceKind = "raid"
 
 CastAheadSaveButtons = { [72] = { def = { 7, 3 } }, [75] = { def = { 8 } }, [76] = { def = { 8 } } }
 CastAheadDB = { schema = 3, saveCalls = true, saveButtons = {
@@ -507,6 +509,9 @@ do
     GetInstanceInfo = function() return "d", "party", 0, "", 0, 0, false, 1877 end
     check(CastAheadConfig.SaveCalls() == false, "outside a raid raidSaves does not count")
     check(CastAheadConfig.DungeonSaves() == false and CastAheadConfig.RaidSaves() == true, "the page accessors ignore the zone")
+    GetInstanceInfo = nil
+    CastAheadDB = { saveCalls = true, raidSaves = false }
+    check(CastAheadConfig.SaveCalls() == true, "without GetInstanceInfo SaveCalls follows saveCalls")
     GetInstanceInfo = savedInfo
 
     local realPrint, lines = print, {}
@@ -515,17 +520,9 @@ do
     fire("PLAYER_LOGIN")
     fire("PLAYER_LOGIN")
     print = realPrint
-    check(#lines == 1 and lines[1]:find("Cast Ahead|r defensive calls are now off by default. Turn them on in /ca - General - Features.", 1, true)
+    check(#lines == 1 and lines[1]:find("Cast Ahead:|r defensive calls are now off by default. Turn them on in /ca - General - Features.", 1, true)
         and CastAheadDB.saveCallsNotice == nil, "the notice prints once and clears")
 
-    CastAheadDB = {}
-    CastAheadOptions = CastAheadOptions or {}
-    local ok, err = pcall(dofile, "Options.lua")
-    check(ok and CastAheadOptions.SetSwitch, "Options.lua exposes SetSwitch " .. tostring(err))
-    CastAheadOptions.SetSwitch("saveCalls", true)
-    check(CastAheadDB.saveCalls == true, "switching a default-off switch on stores true")
-    CastAheadOptions.SetSwitch("saveCalls", false)
-    check(CastAheadDB.saveCalls == false, "switching it off stores false, not nil")
     CastAheadDB = nil
 end
 
@@ -3991,6 +3988,13 @@ end
 do
     local ok, err = pcall(dofile, "Options.lua")
     check(ok and CastAheadOptions and CastAheadOptions.Flow, "Options.lua loads and exposes Flow " .. tostring(err))
+    local savedSwitchDB = CastAheadDB
+    CastAheadDB = {}
+    CastAheadOptions.SetSwitch("saveCalls", true)
+    check(CastAheadDB.saveCalls == true, "switching a default-off switch on stores true")
+    CastAheadOptions.SetSwitch("saveCalls", false)
+    check(CastAheadDB.saveCalls == false, "switching it off stores false, not nil")
+    CastAheadDB = savedSwitchDB
     local Flow = CastAheadOptions and CastAheadOptions.Flow or function() return {}, 0 end
     local pos, total = Flow(250, 250, 8, { 100, 50, 70 })
     check(#pos == 3 and pos[1].x == 0 and pos[1].y == 0 and pos[2].y == 108 and pos[3].y == 166 and total == 236,
