@@ -1,6 +1,6 @@
 CastAheadOptions = {}
 
-CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Bursts", "Development", "Report" }
+CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Bursts", "RaidDefensives", "Development", "Report" }
 local panels = {}
 local T = CastAheadWindow.THEME
 local FLAT = { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 }
@@ -1476,13 +1476,14 @@ function BuildSounds(panel)
 end
 
 BUILDERS = { General = BuildGeneral, Sounds = BuildSounds, Defensives = BuildDefensives, Bursts = BuildBursts,
-             Development = BuildDevelopment, Report = BuildReport }
-local MENU_GROUPS = { Defensives = "Dungeon", Bursts = "Raid", Report = "Feedback" }
+             RaidDefensives = BuildDefensives, Development = BuildDevelopment, Report = BuildReport }
+local MENU_GROUPS = { Defensives = "Dungeon", Bursts = "Raid", RaidDefensives = "Raid", Report = "Feedback" }
+local MENU_LABELS = { RaidDefensives = "Defensives" }
 
 for _, name in ipairs(CastAheadOptions.TABS) do
     local host
     CastAheadWindow.Register(name, MENU_GROUPS[name] or "Settings",
         function(h) host = h end,
         function() CastAheadOptions.ShowPanel(host, name) end,
-        nil, name == "Defensives")
+        nil, name == "Defensives", MENU_LABELS[name])
 end

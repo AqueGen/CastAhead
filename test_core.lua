@@ -4163,6 +4163,35 @@ do
         check(note and note.shown == not case[2], "Defensives off note visibility, " .. case[3])
     end
 
+    do
+        local savedSpec, savedSpecInfo, savedButtons = GetSpecialization, GetSpecializationInfo, CastAheadSaveButtons
+        GetSpecialization, GetSpecializationInfo = function() return 1 end, function() return 71 end
+        CastAheadSaveButtons = { [71] = { def = { 871 } } }
+        CastAheadDB = { saveCalls = true, raidMode = true, raidSaves = true }
+        CastAheadSaves.Store.SetList("def", { 871, 118038 })
+        CastAheadOptions.ShowPanel(host, "Defensives")
+        local mark = { made = #made, texts = #texts }
+        mark.built, mark.why = pcall(CastAheadOptions.ShowPanel, CreateFrame("Frame"), "RaidDefensives")
+        check(mark.built, "the raid Defensives page builds headless on its own host " .. tostring(mark.why))
+        local function Find(list, from, to, match)
+            for i = from, to do
+                if match(list[i]) then return list[i] end
+            end
+        end
+        local function Row871(fs) return rawget(fs, "value") == "871" end
+        local function RemoveButton(f) return rawget(f, "buttonText") == "X" and rawget(f, "onClick") ~= nil end
+        local dungeonRow, raidRow = Find(texts, 1, mark.texts, Row871), Find(texts, mark.texts + 1, #texts, Row871)
+        check(dungeonRow and raidRow, "both Defensives pages show the shared list")
+        mark.remove = Find(made, mark.made + 1, #made, RemoveButton)
+        if mark.remove then mark.remove.onClick(mark.remove) end
+        check(mark.remove and dungeonRow and rawget(dungeonRow, "value") == "118038",
+            "removing a row on the raid page shows on the dungeon page, got " .. tostring(dungeonRow and rawget(dungeonRow, "value")))
+        mark.remove = Find(made, 1, mark.made, RemoveButton)
+        if mark.remove then mark.remove.onClick(mark.remove) end
+        check(mark.remove and raidRow and rawget(raidRow, "value") ~= "118038",
+            "removing a row on the dungeon page shows on the raid page, got " .. tostring(raidRow and rawget(raidRow, "value")))
+        GetSpecialization, GetSpecializationInfo, CastAheadSaveButtons = savedSpec, savedSpecInfo, savedButtons
+    end
 
     CastAheadDB = {}
     CastAheadOptions.SetSwitch("centerText", false)
@@ -4272,6 +4301,35 @@ do
         CastAheadDB.saveCalls = nil
         CastAheadUI.RefreshTabs()
         check(CastAheadWindow.Current() == "Guide", "dungeon calls switched off while Defensives is open show Guide")
+    end
+    do
+        local W = CastAheadWindow
+        local function Shown(name) return select(2, W.Page(name)) end
+        CastAheadDB.raidMode, CastAheadDB.raidSaves, CastAheadDB.burstCalls = nil, true, true
+        CastAheadUI.RefreshTabs()
+        check(Shown("Bursts") == false and Shown("RaidDefensives") == false,
+            "the Raid group is hidden while the raid switch is off, whatever its children hold")
+        CastAheadDB.raidMode, CastAheadDB.burstCalls = true, nil
+        CastAheadUI.RefreshTabs()
+        check(W.Page("RaidDefensives") == "Raid" and Shown("RaidDefensives") == true and Shown("Bursts") == false,
+            "raid defensive calls on show Raid - Defensives without Bursts")
+        CastAheadDB.raidSaves, CastAheadDB.burstCalls = nil, true
+        CastAheadUI.RefreshTabs()
+        check(Shown("Bursts") == true and Shown("RaidDefensives") == false, "burst windows on show Bursts alone")
+        CastAheadDB.raidSaves, CastAheadDB.burstCalls = true, nil
+        CastAheadUI.ShowTab("RaidDefensives")
+        check(CastAheadWindow.Current() == "RaidDefensives" and panelsShown[#panelsShown] == "RaidDefensives",
+            "Raid - Defensives opens its own panel")
+        local labels, raw = 0, 0
+        for _, t in ipairs(buttonTexts) do
+            if t == "Defensives" then labels = labels + 1 end
+            if t == "RaidDefensives" then raw = raw + 1 end
+        end
+        check(labels >= 2 and raw == 0, "both menu entries read Defensives, got " .. labels .. " and " .. raw .. " raw names")
+        CastAheadDB.raidMode = nil
+        CastAheadUI.RefreshTabs()
+        check(CastAheadWindow.Current() == "General", "the raid switch turned off while Raid - Defensives is open shows General")
+        CastAheadDB.raidSaves = nil
     end
     CastAheadDB.raidMode, CastAheadDB.burstCalls = true, true
     CastAheadUI.ShowTab("Bursts")
@@ -4621,7 +4679,7 @@ do
         and sw.raidSaves.label == "Defensive calls in raids" and sw.raidSaves.defaultOff == true
         and sw.burstCalls.label == "Burst windows", "the four feature switches carry their labels and start off")
     check(sw.centerText.defaultOff == nil, "the centre call is not a default-off switch")
-    check(ok and table.concat(CastAheadOptions.TABS, ",") == "General,Sounds,Defensives,Bursts,Development,Report",
+    check(ok and table.concat(CastAheadOptions.TABS, ",") == "General,Sounds,Defensives,Bursts,RaidDefensives,Development,Report",
         "bursts have their own settings page right after Defensives, Report comes last")
     local savedMeta, savedBuild, savedLocale, savedInfo, savedDB = C_AddOns, GetBuildInfo, GetLocale, GetSpecializationInfoByID, CastAheadDB
     local savedSpec, savedSpecInfo = GetSpecialization, GetSpecializationInfo

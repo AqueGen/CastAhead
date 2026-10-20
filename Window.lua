@@ -197,7 +197,7 @@ end
 
 local function Entry(page)
     if page.entry then return end
-    local b = W.Button(menu, page.name, MENU_W - 2 * PAD, false)
+    local b = W.Button(menu, page.label or page.name, MENU_W - 2 * PAD, false)
     b.label:ClearAllPoints()
     b.label:SetPoint("LEFT", b, "LEFT", PAD, 0)
     b.bar = b:CreateTexture(nil, "OVERLAY")
@@ -416,7 +416,7 @@ local function Build()
     W.ApplyScale()
 end
 
-function W.Register(name, group, build, refresh, before, ownBar)
+function W.Register(name, group, build, refresh, before, ownBar, label)
     local page = pages[name]
     if not page then
         page = { name = name, shown = true }
@@ -427,7 +427,7 @@ function W.Register(name, group, build, refresh, before, ownBar)
         end
         table.insert(order, at, page)
     end
-    page.group, page.build, page.refresh, page.ownBar = group, build, refresh, ownBar
+    page.group, page.build, page.refresh, page.ownBar, page.label = group, build, refresh, ownBar, label
     if menu then
         Entry(page)
         LayoutMenu()
