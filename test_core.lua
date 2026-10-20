@@ -564,6 +564,22 @@ do
     check(#lines == 1 and lines[1]:find("Cast Ahead:|r defensive calls are now off by default. Turn them on in /ca - General - Features.", 1, true)
         and CastAheadDB.saveCallsNotice == nil, "the notice prints once and clears")
 
+    local noticePopups, savedShow, savedShowTab = {}, StaticPopup_Show, CastAheadUI.ShowTab
+    StaticPopup_Show = function(name) noticePopups[#noticePopups + 1] = name end
+    print = function() end
+    CastAheadDB = { schema = 5, saveCallsNotice = true }
+    fire("PLAYER_LOGIN")
+    fire("PLAYER_LOGIN")
+    print = realPrint
+    check(#noticePopups == 1 and noticePopups[1] == "CASTAHEAD_UPDATE_NOTICE" and CastAheadDB.saveCallsNotice == nil,
+        "the update popup shows once and clears the flag")
+    local shownTab
+    CastAheadUI.ShowTab = function(name) shownTab = name end
+    StaticPopupDialogs.CASTAHEAD_UPDATE_NOTICE.OnAccept()
+    check(shownTab == "General", "the popup's Open settings button opens the General page")
+    CastAheadUI.ShowTab = savedShowTab
+    StaticPopup_Show = savedShow
+
     CastAheadDB = nil
 end
 
