@@ -154,6 +154,14 @@ function M.SaveKey(save, role, prio)
     return save[role] and "DEFENSIVE" or nil
 end
 
+function M.Scale(level)
+    return 1.07 ^ math.min(level - 1, 9) * 1.10 ^ math.max(0, level - 10)
+end
+
+function M.AtLevel(ep, level)
+    return math.floor(ep * M.Scale(level) / M.Scale(20) + 0.5)
+end
+
 M.HasButton = function() return true end
 
 function M.SaveAdvice(row)

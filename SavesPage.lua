@@ -23,6 +23,10 @@ local SAVE_COLUMNS = {
       end },
     { key = "lead", header = "Lead", width = 44, justify = "RIGHT",
       text = function(s) return s.lead and string.format("%.1fs", s.lead) or "-" end },
+    { key = "ep", header = "Damage", width = 60, justify = "RIGHT",
+      text = function(s)
+          return s.ep and (CastAheadMatch.AtLevel(s.ep, CastAheadSaves.ViewLevel()) .. "%") or "-"
+      end },
     { key = "wins", header = "", width = 110,
       text = function(s)
           local advice = s.wins and CastAheadMatch.ADVICE[s.wins]
@@ -90,7 +94,34 @@ local function CreateSaveRow(parent, index)
     return row
 end
 
-local RESTART = "Restart the game to finish the Cast Ahead update - defensive calls are off until then."
+local STEP_W, LEVEL_W = 22, 40
+local STEPPER_W = STEP_W * 2 + LEVEL_W + COLUMN_GAP * 2 + 8
+local steppers = {}
+
+local function PaintSteppers()
+    local text = CastAheadSaves and ("+" .. CastAheadSaves.ViewLevel()) or ""
+    for _, level in ipairs(steppers) do level:SetText(text) end
+end
+
+local function Stepper(host)
+    local function Step(label, delta, x)
+        local b = CastAheadWindow.Button(host, label, STEP_W)
+        b:SetPoint("TOPRIGHT", host, "TOPRIGHT", x, 0)
+        b:SetScript("OnClick", function() CastAheadSaves.SetViewLevel(CastAheadSaves.ViewLevel() + delta) end)
+    end
+    Step("+", 1, -4)
+    local level = host:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    level:SetSize(LEVEL_W, 20)
+    level:SetPoint("TOPRIGHT", host, "TOPRIGHT", -4 - STEP_W - COLUMN_GAP, 0)
+    Step("-", -1, -4 - STEP_W - LEVEL_W - COLUMN_GAP * 2)
+    steppers[#steppers + 1] = level
+end
+
+local function BarRoom(host)
+    return function() return (host:GetWidth() or 0) - STEPPER_W end
+end
+
+local RESTART ="Restart the game to finish the Cast Ahead update - defensive calls are off until then."
 
 local function RefreshGuide()
     if not (guideHost and guideHost:IsVisible()) then return end
@@ -105,6 +136,7 @@ local function RefreshGuide()
     end
     guideText:SetText(table.concat(lines, "\n"))
     guideHost:SetHeight(guideTop + guideText:GetStringHeight() + 8)
+    PaintSteppers()
     CastAheadWindow.PaintSpecBars()
 end
 
@@ -170,6 +202,7 @@ local function RefreshSaves()
     end
     CastAheadWindow.SetFooter(line)
     CastAheadWindow.SideHint(saveSide, saveTable)
+    PaintSteppers()
     CastAheadWindow.PaintSpecBars()
 end
 
@@ -180,7 +213,8 @@ end
 
 local function BuildSaves(host)
     savesHost = host
-    savesTop = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end)
+    savesTop = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end, BarRoom(host))
+    Stepper(host)
     saveSide, saveTable = CastAheadWindow.SideScroll(host, savesTop)
     saveTable:SetWidth(SAVE_WIDTH)
     local saveHeader = CreateFrame("Frame", nil, saveTable)
@@ -205,7 +239,8 @@ end
 
 local function BuildGuide(host)
     guideHost = host
-    guideTop = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end)
+    guideTop = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end, BarRoom(host))
+    Stepper(host)
     guideText = host:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     guideText:SetPoint("TOPLEFT", host, "TOPLEFT", 4, -(guideTop + 4))
     guideText:SetWidth(math.max((host:GetWidth() or 0) - 8, 1))

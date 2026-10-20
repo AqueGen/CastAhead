@@ -410,6 +410,8 @@ check(M.Advice({ spell = 909, prio = "TANK", save = { DAMAGER = true, TANK = tru
     "a curated tank buster keeps the tank save even when dps were hit too")
 check(M.SaveKey({ DAMAGER = true, TANK = true }, "TANK") == nil and M.SaveKey({ DAMAGER = true, TANK = true }, "DAMAGER") == "DEFENSIVE",
     "SaveKey applies the tank buster rule to tanks only")
+check(M.AtLevel(100, 20) == 100 and M.AtLevel(100, 17) == 75 and M.AtLevel(100, 21) == 110,
+    "AtLevel scales damage from +20 to the chosen key level")
 local kickRow = { spell = 901, cast = 2.0, kickable = true, save = { TANK = true } }
 check(M.Advice(kickRow) == M.ADVICE.KICK, "a kickable cast still says interrupt")
 check(M.Advice({ spell = 902, prio = "KICK", save = { TANK = true } }) == M.ADVICE.KICK, "a curated kick still wins")

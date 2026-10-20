@@ -73,6 +73,24 @@ function S.ViewSpecID()
     return own
 end
 
+local viewLevel
+
+local function KeystoneLevel()
+    local ok, level = pcall(C_ChallengeMode and C_ChallengeMode.GetActiveKeystoneInfo or error)
+    if ok and type(level) == "number" and level > 0 then return level end
+    ok, level = pcall(C_MythicPlus and C_MythicPlus.GetOwnedKeystoneLevel or error)
+    if ok and type(level) == "number" and level > 0 then return level end
+end
+
+function S.ViewLevel()
+    return viewLevel or KeystoneLevel() or 20
+end
+
+function S.SetViewLevel(level)
+    viewLevel = level and math.max(2, math.min(25, level)) or nil
+    if CastAheadUI and CastAheadUI.RefreshSaves then CastAheadUI.RefreshSaves() end
+end
+
 function S.ViewRole()
     local spec = S.ViewSpecID()
     if spec and spec == S.SpecID() then
@@ -315,6 +333,7 @@ function S.ViewRows(instanceID)
                 repeating = cast[id] ~= nil,
                 wins = wins[id] or Wins({ prio = CastAheadPriority and CastAheadPriority[id] }),
                 buttons = FitsRow(buttons, row),
+                ep = row.ep and row.ep[role],
             }
         end
     end
@@ -379,6 +398,10 @@ local function GuideLine(r)
         r.mob or "?", Heard(r.trigger), press)
     local wins = r.wins and M.ADVICE[r.wins]
     if wins then line = line .. string.format(" (%s comes first)", wins.say) end
+    if r.ep then
+        local level = S.ViewLevel()
+        line = line .. string.format("; about %d%% HP at +%d", M.AtLevel(r.ep, level), level)
+    end
     local cadence = Cadence(r)
     if cadence then line = line .. ". Casts " .. cadence end
     return line

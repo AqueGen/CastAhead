@@ -3080,6 +3080,32 @@ do
     CastAheadSaves.SetViewSpec(66)
     fire("PLAYER_SPECIALIZATION_CHANGED", "player")
     check(CastAheadSaves.ViewSpecID() == 265, "a real spec change drops the view")
+    do
+        local keystone, owned = C_ChallengeMode, C_MythicPlus
+        C_ChallengeMode, C_MythicPlus = nil, nil
+        CastAheadSaves.SetViewLevel(nil)
+        check(CastAheadSaves.ViewLevel() == 20, "no keystone API, the view level is 20")
+        C_ChallengeMode = { GetActiveKeystoneInfo = function() return 17 end }
+        check(CastAheadSaves.ViewLevel() == 17, "the active keystone sets the default view level")
+        C_ChallengeMode = { GetActiveKeystoneInfo = function() return 0 end }
+        C_MythicPlus = { GetOwnedKeystoneLevel = function() return 12 end }
+        check(CastAheadSaves.ViewLevel() == 12, "no active keystone, the owned keystone sets it")
+        CastAheadSaves.SetViewLevel(1)
+        check(CastAheadSaves.ViewLevel() == 2, "the view level clamps to 2")
+        CastAheadSaves.SetViewLevel(30)
+        check(CastAheadSaves.ViewLevel() == 25, "the view level clamps to 25")
+        CastAheadSaves.SetViewLevel(17)
+        CastAheadDefensives.spells[806].ep = { DAMAGER = 120, TANK = 26 }
+        local zapRow
+        for _, r in ipairs(CastAheadSaves.ViewRows(9000)) do if r.id == 806 then zapRow = r end end
+        check(zapRow and zapRow.ep == 120, "a row carries the damage of the viewed role at +20")
+        check(CastAheadSaves.GuideLines(9000)[2]:find("; about 90% HP at +17", 1, true), "the guide line gives the damage at the view level")
+        check(select(2, table.concat(CastAheadSaves.GuideLines(9000), "\n"):gsub("%% HP at %+", "")) == 1,
+            "only the row with a damage figure has a damage clause")
+        CastAheadDefensives.spells[806].ep = nil
+        CastAheadSaves.SetViewLevel(nil)
+        C_ChallengeMode, C_MythicPlus = keystone, owned
+    end
     local savedUnitClass, savedForClass = UnitClass, GetSpecializationInfoForClassID
     UnitClass = function() return "Warlock", "WARLOCK", 9 end
     GetSpecializationInfoForClassID = function(class, i) if class == 2 then return ({ 65, 66, 70 })[i] end end
