@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.19.0](https://github.com/AqueGen/CastAhead/compare/v0.18.0...v0.19.0) (2026-10-20)
+
+
+### Features
+
+* an update notice in the addon's style and the CurseForge icon ([#76](https://github.com/AqueGen/CastAhead/issues/76)) ([e475c94](https://github.com/AqueGen/CastAhead/commit/e475c94baebaf0b73815e67ce0ae5ca2097645e6))
+* one defensive call instead of small, big and heal up ([#74](https://github.com/AqueGen/CastAhead/issues/74)) ([3f207cb](https://github.com/AqueGen/CastAhead/commit/3f207cbbf78ba86440374833e7a617b706168d65))
+
 ## [0.18.0](https://github.com/AqueGen/CastAhead/compare/v0.17.0...v0.18.0) (2026-10-18)
 
 
