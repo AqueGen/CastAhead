@@ -111,7 +111,7 @@ CastAheadTraits = {
         { npc = 254850, level = 91, power = 1, elite = true, lieutenant = true, family = false, stage = { 1, 2, 3, 4 }, casts = { 1.5, 2 }, channels = { 3 } },
     },
     [2923] = {
-        { npc = 244260, level = 91, power = 1, elite = true, lieutenant = true, family = nil, stage = { 1 }, channels = { 10 } },
+        { npc = 244260, level = 91, power = 1, elite = true, lieutenant = true, family = nil, stage = { 1 }, channels = { 8 } },
         { npc = 244309, level = 91, power = 1, elite = true, lieutenant = true, family = nil, stage = { 1 }, casts = { 2.5, 3.5 } },
         { npc = 245950, level = 91, power = 1, elite = true, lieutenant = false, family = nil, stage = { 2, 3 }, casts = { 2, 5 }, channels = { 4 } },
         { npc = 252053, level = 91, power = 1, elite = true, lieutenant = false, family = nil, stage = { 1, 2, 3 }, casts = { 2 }, channels = { 6, 30 } },
@@ -129,7 +129,7 @@ CastAheadTraits = {
         { npc = 261573, level = 91, power = 1, elite = true, lieutenant = false, family = false, stage = { 3 }, casts = { 2, 3 }, channels = { 5 } },
         { npc = 262011, level = 91, power = 1, elite = true, lieutenant = false, family = false, stage = { 2 }, casts = { 3 }, channels = { 5 } },
         { npc = 263109, level = 91, power = 0, elite = true, lieutenant = false, family = false, stage = { 3 }, casts = { 2, 3.5 }, channels = { 9 } },
-        { npc = 263112, level = 90, power = 1, elite = false, lieutenant = false, family = false, stage = { 3 } },
+        { npc = 263112, level = 90, power = 1, elite = false, lieutenant = false, family = false, stage = { 3 }, co = { 263109 } },
         { npc = 270306, level = 91, power = 1, elite = true, lieutenant = false, family = false, stage = { 1, 3 }, casts = { 3 }, channels = { 2 } },
     },
 }
