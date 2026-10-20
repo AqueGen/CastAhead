@@ -2360,7 +2360,7 @@ end)
 -- Centre-screen call: while an important cast is going out, its icon, the
 -- response in words and the seconds left, big, where the eyes already are.
 -- One at a time - the cast ending soonest - since two lines of shouting help
--- nobody. Off until `CastAheadDB.centerText = true`; `centerY` shifts it.
+-- nobody. Off only when `CastAheadDB.centerText = false`; `centerY` shifts it.
 local CENTER_Y = -120
 local center
 local centerUnlocked = false   -- /ca move: the block is being dragged

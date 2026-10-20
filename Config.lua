@@ -128,7 +128,7 @@ function C.ShortLabels()
 end
 
 function C.CenterText()
-    return C.Get("centerText") == true
+    return C.Get("centerText") ~= false
 end
 
 function C.Set(key, value)
@@ -220,9 +220,6 @@ function C.Migrate()
             CastAheadDB.leadSeconds = CastAheadDB.leadWarning == true and 5 or 0
         end
         CastAheadDB.leadWarning = nil
-    end
-    if existing and CastAheadDB.schema == nil and CastAheadDB.centerText == nil then
-        CastAheadDB.centerText = true
     end
     for _, field in ipairs({ "sounds", "spellSounds" }) do
         local picks = CastAheadDB[field]

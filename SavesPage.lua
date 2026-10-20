@@ -191,7 +191,7 @@ local function RefreshSaves()
     local role, own = S.ViewRole(), S.ViewSpecID() == S.SpecID()
     local line
     if not CastAheadConfig.SaveCalls() then
-        line = "Defensive calls are off - switch them on in the Defensives tab."
+        line = "Defensive calls are off - turn them on in General - Features."
     elseif not role then
         line = "No specialization role - pick a spec to see your saves."
     else

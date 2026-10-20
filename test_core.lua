@@ -362,15 +362,13 @@ check(CastAheadConfig.Lead() == 0, "so a fresh profile gets the documented defau
 
 CastAheadDB = nil
 CastAheadConfig.Migrate()
-check(not CastAheadConfig.CenterText(), "a new install starts with the centre call off")
-CastAheadConfig.Migrate()
-check(not CastAheadConfig.CenterText(), "and a later zone-in does not switch it on")
+check(CastAheadConfig.CenterText(), "a new install starts with the centre call on")
 CastAheadDB = { anchor = "left" }
 CastAheadConfig.Migrate()
-check(CastAheadConfig.CenterText(), "a profile from before the centre call became opt-in keeps it on")
-CastAheadDB.centerText = nil
+check(CastAheadConfig.CenterText(), "a profile with no stored choice has it on")
+CastAheadDB.centerText = false
 CastAheadConfig.Migrate()
-check(not CastAheadConfig.CenterText(), "switching it off afterwards survives the next zone-in")
+check(not CastAheadConfig.CenterText(), "switching it off survives the next zone-in")
 CastAheadDB = { centerText = false }
 CastAheadConfig.Migrate()
 check(not CastAheadConfig.CenterText(), "an old profile that had it off keeps it off")
@@ -380,8 +378,8 @@ fire("ADDON_LOADED", "CastAhead")
 CastAheadDB = CastAheadDB or {}
 CastAheadDB.minimap = CastAheadDB.minimap or {}
 fire("PLAYER_ENTERING_WORLD")
-check(not CastAheadConfig.CenterText(),
-    "a new install keeps the centre call off although the minimap icon creates the profile at login")
+check(CastAheadConfig.CenterText(),
+    "a new install has the centre call on although the minimap icon creates the profile at login")
 CastAheadDB = { ctx = { key = { voice = false } } }
 fire("ADDON_LOADED", "CastAhead")
 check(CastAheadDB.voice == false and CastAheadDB.ctx == nil and CastAheadConfig.CenterText(),
@@ -1835,7 +1833,7 @@ advance(17.0)
 fire("UNIT_SPELLCAST_START", unit)
 advance(0.5)
 local fresh = CenterFrameStub()
-check(not (fresh and fresh.shown), "a new profile draws no centre call")
+check(fresh and fresh.shown, "a new profile draws the centre call")
 reset()
 CastAheadDB = { leadSeconds = 5, centerText = true }
 
@@ -4464,6 +4462,11 @@ do
     local ok = pcall(dofile, "Options.lua")
     check(ok and CastAheadOptions and CastAheadOptions.Switches and CastAheadOptions.Switches.burstCalls
         and CastAheadOptions.Switches.burstCalls.defaultOff == true, "the burst switch exists and is off by default")
+    local sw = CastAheadOptions.Switches
+    check(sw.saveCalls.label == "Defensive calls in dungeons" and sw.saveCalls.defaultOff == true
+        and sw.raidSaves.label == "Defensive calls in raids (experimental)" and sw.raidSaves.defaultOff == true
+        and sw.burstCalls.label == "Burst windows (experimental)", "the three feature switches carry their labels and start off")
+    check(sw.centerText.defaultOff == nil, "the centre call is not a default-off switch")
     check(ok and table.concat(CastAheadOptions.TABS, ",") == "General,Sounds,Defensives,Bursts,Development,Report",
         "bursts have their own settings page right after Defensives, Report comes last")
     local savedMeta, savedBuild, savedLocale, savedInfo, savedDB = C_AddOns, GetBuildInfo, GetLocale, GetSpecializationInfoByID, CastAheadDB
@@ -4476,7 +4479,7 @@ do
     CastAheadDB = { burstCalls = true }
     local save = CastAheadOptions.ReportText("save")
     check(save:find("Cast Ahead report: Wrong defensive call\nAddon 9.9.9, game 12.1.0 (65000), enUS\n", 1, true)
-        and save:find("Spec: Havoc Demon Hunter", 1, true) and save:find("Defensive calls: off", 1, true)
+        and save:find("Spec: Havoc Demon Hunter", 1, true) and save:find("Defensive calls: dungeons off, raids off", 1, true)
         and save:find("Anything else about what happened:\n$"), "a defensive report carries version, spec, the switch and ends on its question")
     local burst = CastAheadOptions.ReportText("burst")
     check(burst:find("Burst guide: Heroic\nBurst windows: on\n", 1, true) and not burst:find("Defensive calls", 1, true),
