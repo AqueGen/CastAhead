@@ -163,6 +163,18 @@ function M.SaveAdvice(row)
     return key and M.HasButton() and M.ADVICE[key] or nil
 end
 
+-- A debuff landing on the player. A healer who can remove it is told to, and
+-- does the defensive only when the dispel is not there; everyone else, and
+-- the second of two bombs, still needs the defensive.
+function M.AuraAdvice(row, prio)
+    local category = row.dispel and M.DISPEL_CATEGORY[row.dispel]
+    if category and category ~= "BLEED" and row.HEALER and M.SpecRole() == "HEALER"
+        and M.PlayerCanHandle and M.PlayerCanHandle(category) then
+        return M.ADVICE[category]
+    end
+    return M.SaveAdvice({ save = row, prio = prio })
+end
+
 function M.IsSave(advice)
     return advice == M.ADVICE.DEFENSIVE
 end
