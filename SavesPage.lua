@@ -23,10 +23,8 @@ local SAVE_COLUMNS = {
       end },
     { key = "lead", header = "Lead", width = 44, justify = "RIGHT",
       text = function(s) return s.lead and string.format("%.1fs", s.lead) or "-" end },
-    { key = "ep", header = "Damage", width = 60, justify = "RIGHT",
-      text = function(s)
-          return s.ep and (CastAheadMatch.AtLevel(s.ep, CastAheadSaves.ViewLevel()) .. "%") or "-"
-      end },
+    { key = "ep", header = "Damage at +20", width = 90, justify = "RIGHT",
+      text = function(s) return s.ep and (s.ep .. "%") or "-" end },
     { key = "wins", header = "", width = 110,
       text = function(s)
           local advice = s.wins and CastAheadMatch.ADVICE[s.wins]
@@ -94,29 +92,18 @@ local function CreateSaveRow(parent, index)
     return row
 end
 
-local STEP_W, LEVEL_W = 22, 40
-local STEPPER_H = 24
-local steppers = {}
+local NOTE_H = 30
 
-local function PaintSteppers()
-    local text = CastAheadSaves and ("+" .. CastAheadSaves.ViewLevel()) or ""
-    for _, level in ipairs(steppers) do level:SetText(text) end
-end
-
-local function Stepper(host, y)
+local function EpNote(host, y)
     if not CastAheadSaves then return 0 end
-    local function Step(label, delta, x)
-        local b = CastAheadWindow.Button(host, label, STEP_W)
-        b:SetPoint("TOPLEFT", host, "TOPLEFT", x, -y)
-        b:SetScript("OnClick", function() CastAheadSaves.SetViewLevel(CastAheadSaves.ViewLevel() + delta) end)
-    end
-    Step("-", -1, 0)
-    local level = host:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    level:SetSize(LEVEL_W, 20)
-    level:SetPoint("TOPLEFT", host, "TOPLEFT", STEP_W + COLUMN_GAP, -y)
-    Step("+", 1, STEP_W + LEVEL_W + COLUMN_GAP * 2)
-    steppers[#steppers + 1] = level
-    return STEPPER_H
+    local note = host:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    note:SetPoint("TOPLEFT", host, "TOPLEFT", 4, -y)
+    note:SetPoint("TOPRIGHT", host, "TOPRIGHT", -4, -y)
+    note:SetHeight(NOTE_H)
+    note:SetJustifyH("LEFT")
+    note:SetJustifyV("TOP")
+    note:SetText(CastAheadSaves.EP_NOTE)
+    return NOTE_H
 end
 
 local RESTART = "Restart the game to finish the Cast Ahead update - defensive calls are off until then."
@@ -127,14 +114,11 @@ local function RefreshGuide()
         guideText:SetText(RESTART)
         return
     end
-    local lines = CastAheadSaves and CastAheadSaves.GuideLines and CastAheadSaves.GuideLines(CastAheadWindow.Dungeon()) or {}
-    if #lines == 0 then
-        lines = { CastAheadSaves.ViewRole() and "Nothing in this dungeon calls a save for this role."
-            or "No specialization role - pick a spec to see your guide." }
-    end
-    guideText:SetText(table.concat(lines, "\n"))
+    local text = CastAheadSaves.GuideText(CastAheadWindow.Dungeon())
+        or (CastAheadSaves.ViewRole() and "Nothing in this dungeon calls a save for this role."
+            or "No specialization role - pick a spec to see your guide.")
+    guideText:SetText(text)
     guideHost:SetHeight(guideTop + guideText:GetStringHeight() + 8)
-    PaintSteppers()
     CastAheadWindow.PaintSpecBars()
 end
 
@@ -200,7 +184,6 @@ local function RefreshSaves()
     end
     CastAheadWindow.SetFooter(line)
     CastAheadWindow.SideHint(saveSide, saveTable)
-    PaintSteppers()
     CastAheadWindow.PaintSpecBars()
 end
 
@@ -212,7 +195,7 @@ end
 local function BuildSaves(host)
     savesHost = host
     savesTop = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end)
-    savesTop = savesTop + Stepper(host, savesTop)
+    savesTop = savesTop + EpNote(host, savesTop)
     saveSide, saveTable = CastAheadWindow.SideScroll(host, savesTop)
     saveTable:SetWidth(SAVE_WIDTH)
     local saveHeader = CreateFrame("Frame", nil, saveTable)
@@ -238,7 +221,6 @@ end
 local function BuildGuide(host)
     guideHost = host
     guideTop = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end)
-    guideTop = guideTop + Stepper(host, guideTop)
     guideText = host:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     guideText:SetPoint("TOPLEFT", host, "TOPLEFT", 4, -(guideTop + 4))
     guideText:SetWidth(math.max((host:GetWidth() or 0) - 8, 1))

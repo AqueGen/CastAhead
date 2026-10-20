@@ -3139,37 +3139,18 @@ do
     fire("PLAYER_SPECIALIZATION_CHANGED", "player")
     check(CastAheadSaves.ViewSpecID() == 265, "a real spec change drops the view")
     do
-        local keystone, owned = C_ChallengeMode, C_MythicPlus
-        C_ChallengeMode, C_MythicPlus = nil, nil
-        CastAheadSaves.SetViewLevel(nil)
-        check(CastAheadSaves.ViewLevel() == 20, "no keystone API, the view level is 20")
-        C_ChallengeMode = { GetActiveKeystoneInfo = function() return 17 end }
-        check(CastAheadSaves.ViewLevel() == 17, "the active keystone sets the default view level")
-        C_ChallengeMode = { GetActiveKeystoneInfo = function() return 0 end }
-        C_MythicPlus = { GetOwnedKeystoneLevel = function() return 12 end }
-        check(CastAheadSaves.ViewLevel() == 12, "no active keystone, the owned keystone sets it")
-        C_ChallengeMode = { GetActiveKeystoneInfo = function() return 28 end }
-        check(CastAheadSaves.ViewLevel() == 25, "a keystone above 25 shows as 25")
-        C_ChallengeMode = { GetActiveKeystoneInfo = function() return 0 end }
-        CastAheadSaves.SetViewLevel(1)
-        check(CastAheadSaves.ViewLevel() == 10, "the view level clamps to 10")
-        C_ChallengeMode = { GetActiveKeystoneInfo = function() return 7 end }
-        CastAheadSaves.SetViewLevel(nil)
-        check(CastAheadSaves.ViewLevel() == 10, "a keystone below 10 shows as 10")
-        C_ChallengeMode = { GetActiveKeystoneInfo = function() return 0 end }
-        CastAheadSaves.SetViewLevel(30)
-        check(CastAheadSaves.ViewLevel() == 25, "the view level clamps to 25")
-        CastAheadSaves.SetViewLevel(17)
         CastAheadDefensives.spells[806].ep = { DAMAGER = 120, TANK = 26 }
         local zapRow
         for _, r in ipairs(CastAheadSaves.ViewRows(9000)) do if r.id == 806 then zapRow = r end end
         check(zapRow and zapRow.ep == 120, "a row carries the damage of the viewed role at +20")
-        check(CastAheadSaves.GuideLines(9000)[2]:find("; about 90% HP at +17", 1, true), "the guide line gives the damage at the view level")
+        check(CastAheadSaves.GuideLines(9000)[2]:find("; about 120% HP at +20", 1, true), "the guide line gives the damage at +20")
+        check(CastAheadSaves.GuideText(9000):find("^" .. CastAheadSaves.EP_NOTE:gsub("%p", "%%%0") .. "\n\n"),
+            "the guide text opens with the damage note")
+        check(not CastAheadSaves.ViewLevel and not CastAheadSaves.SetViewLevel and not CastAheadMatch.AtLevel,
+            "no view level is left")
         check(select(2, table.concat(CastAheadSaves.GuideLines(9000), "\n"):gsub("%% HP at %+", "")) == 1,
             "only the row with a damage figure has a damage clause")
         CastAheadDefensives.spells[806].ep = nil
-        CastAheadSaves.SetViewLevel(nil)
-        C_ChallengeMode, C_MythicPlus = keystone, owned
     end
     local savedUnitClass, savedForClass = UnitClass, GetSpecializationInfoForClassID
     UnitClass = function() return "Warlock", "WARLOCK", 9 end
@@ -4142,6 +4123,7 @@ end
 do
     local sized = 0
     local made, scripts, panelsShown = {}, {}, {}
+    local pageTexts, buttonTexts = {}, {}
     local savedCreate, savedShowPanel = CreateFrame, CastAheadOptions.ShowPanel
     CastAheadOptions.ShowPanel = function(_, name) panelsShown[#panelsShown + 1] = name end
     CreateFrame = function(kind, name, ...)
@@ -4153,6 +4135,14 @@ do
             scripts[self][script] = fn
         end
         made[#made + 1] = f
+        local createText = f.CreateFontString
+        f.CreateFontString = function(...)
+            local fs = createText(...)
+            local setText = fs.SetText
+            fs.SetText = function(self, t) setText(self, t) pageTexts[#pageTexts + 1] = t end
+            return fs
+        end
+        f.SetText = function(_, t) buttonTexts[#buttonTexts + 1] = t end
         if name == "CastAheadMainWindow" then
             f.SetSize = function(self, w, h) sized = sized + 1 self.w, self.h = w, h end
             f.GetWidth = function(self) return self.w or 0 end
@@ -4167,7 +4157,17 @@ do
     check(f and f.w == 600 and f.h == 420, "a saved size below the minimum opens at the minimum")
     local before = sized
     CastAheadUI.ShowTab("General")
+    local textsBefore, buttonsBefore = #pageTexts, #buttonTexts
     CastAheadUI.ShowTab("Saves")
+    local noteShown, steppers = false, false
+    for i = textsBefore + 1, #pageTexts do
+        if pageTexts[i] == CastAheadSaves.EP_NOTE then noteShown = true end
+    end
+    for i = buttonsBefore + 1, #buttonTexts do
+        if buttonTexts[i] == "-" or buttonTexts[i] == "+" then steppers = true end
+    end
+    check(noteShown, "the Saves page shows the damage note")
+    check(not steppers, "the Saves page has no level stepper buttons")
     CastAheadUI.ShowTab("Guide")
     local clicked = false
     for _, b in ipairs(made) do

@@ -73,26 +73,6 @@ function S.ViewSpecID()
     return own
 end
 
-local viewLevel
-
-local function ClampLevel(level) return math.max(10, math.min(25, level)) end
-
-local function KeystoneLevel()
-    local ok, level = pcall(C_ChallengeMode and C_ChallengeMode.GetActiveKeystoneInfo or error)
-    if ok and type(level) == "number" and level > 0 then return level end
-    ok, level = pcall(C_MythicPlus and C_MythicPlus.GetOwnedKeystoneLevel or error)
-    if ok and type(level) == "number" and level > 0 then return level end
-end
-
-function S.ViewLevel()
-    return viewLevel or ClampLevel(KeystoneLevel() or 20)
-end
-
-function S.SetViewLevel(level)
-    viewLevel = level and ClampLevel(level) or nil
-    if CastAheadUI and CastAheadUI.RefreshSaves then CastAheadUI.RefreshSaves() end
-end
-
 function S.ViewRole()
     local spec = S.ViewSpecID()
     if spec and spec == S.SpecID() then
@@ -400,13 +380,17 @@ local function GuideLine(r)
         r.mob or "?", Heard(r.trigger), press)
     local wins = r.wins and M.ADVICE[r.wins]
     if wins then line = line .. string.format(" (%s comes first)", wins.say) end
-    if r.ep then
-        local level = S.ViewLevel()
-        line = line .. string.format("; about %d%% HP at +%d", M.AtLevel(r.ep, level), level)
-    end
+    if r.ep then line = line .. string.format("; about %d%% HP at +20", r.ep) end
     local cadence = Cadence(r)
     if cadence then line = line .. ". Casts " .. cadence end
     return line
+end
+
+S.EP_NOTE = "Damage is the median whole hit on your role (with its DoT, pulses and stacks) at +20, the level calls are judged at."
+
+function S.GuideText(instanceID)
+    local lines = S.GuideLines(instanceID)
+    if #lines > 0 then return S.EP_NOTE .. "\n\n" .. table.concat(lines, "\n") end
 end
 
 function S.GuideLines(instanceID)
