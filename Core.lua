@@ -26,11 +26,6 @@ local H_STEP = 68        -- fallback sideways step, before any label is measured
 local LABEL_GAP = 8      -- clear space between one icon's label and the next
 local ICON_GAP = 4       -- ... and the floor, when both labels are short
 local DEMO_PER_PLATE = 3 -- calls the test drive puts on each nameplate
-local TEST_KEY_CALLS = {
-    TANK = { "TANK" },
-    DAMAGER = { "KICK" },
-    HEALER = { "DISPEL", "POISON", "CURSE", "MAGIC", "DISEASE" },
-}
 local DEMO_PLATES = 4    -- ... and how many nameplates it uses at all
 local COMBAT_POLL_BATCH = 8      -- nameplates re-checked per tick
 local PREDICTION_MATCH_WINDOW = 4.0  -- how far off a predicted cast may start
@@ -2909,9 +2904,9 @@ function CastAheadCore.Test(instanceID, list)
         return
     end
     -- One row per distinct call across every dungeon (this one's rows first),
-    -- so every voice line can be heard; the role's own calls go first. Only
-    -- the per-spell mute applies: the role and Important filters would hide
-    -- exactly the calls this character never gets.
+    -- so every voice line can be heard. Only the per-spell mute applies: the
+    -- role and Important filters would hide exactly the calls this character
+    -- never gets.
     local pools = { list or rows }
     if not list then
         local ids = {}
@@ -2921,26 +2916,15 @@ function CastAheadCore.Test(instanceID, list)
             if CastAheadData[k] ~= rows then pools[#pools + 1] = CastAheadData[k] end
         end
     end
-    local role = CastAheadMatch.PlayerRole()
-    if not role and GetSpecialization and GetSpecializationRole then
-        local spec = GetSpecialization()
-        role = spec and GetSpecializationRole(spec) or nil
-    end
-    local keyLabels = {}
-    for _, key in ipairs(TEST_KEY_CALLS[role] or {}) do
-        keyLabels[CastAheadMatch.ADVICE[key].label] = true
-    end
     local picked, seen = {}, {}
-    for pass = 1, list and 1 or 2 do
-        for p = 1, #pools do
-            for i = 1, #pools[p] do
-                local row = pools[p][i]
-                local advice = CastAheadMatch.Advice(row)
-                if advice and (list or (not seen[advice.label] and (pass == 2 or keyLabels[advice.label])))
-                    and not (CastAheadUI and CastAheadUI.IsDisabled and CastAheadUI.IsDisabled(row.spell)) then
-                    seen[advice.label] = true
-                    picked[#picked + 1] = row
-                end
+    for p = 1, #pools do
+        for i = 1, #pools[p] do
+            local row = pools[p][i]
+            local advice = CastAheadMatch.Advice(row)
+            if advice and (list or not seen[advice.label])
+                and not (CastAheadUI and CastAheadUI.IsDisabled and CastAheadUI.IsDisabled(row.spell)) then
+                seen[advice.label] = true
+                picked[#picked + 1] = row
             end
         end
     end

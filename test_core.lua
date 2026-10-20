@@ -1840,12 +1840,6 @@ do
         if got[i].duration - got[i - 1].duration < CastAheadConfig.Lead() + 3 - 0.01 then spaced = false end
     end
     check(spaced, "the test drive's calls go out one after another, never together")
-    check(spellLabel[got[1].spellID] == "KICK", "a damage dealer's own call goes first")
-    got = Drive("TANK")
-    check(spellLabel[got[1].spellID] == "TANKBUSTER", "a tank's own call goes first")
-    got = Drive(nil)
-    check(spellLabel[got[1].spellID] == spellLabel[CastAheadData[1877][1].spell],
-        "without a role the data order is kept")
     CastAheadData[1878] = nil
 end
 -- With a hostile plate on screen the demo icons hang off it, not off the
