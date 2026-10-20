@@ -26,6 +26,11 @@ local H_STEP = 68        -- fallback sideways step, before any label is measured
 local LABEL_GAP = 8      -- clear space between one icon's label and the next
 local ICON_GAP = 4       -- ... and the floor, when both labels are short
 local DEMO_PER_PLATE = 3 -- calls the test drive puts on each nameplate
+local TEST_KEY_CALLS = {
+    TANK = { "TANK" },
+    DAMAGER = { "KICK" },
+    HEALER = { "DISPEL", "POISON", "CURSE", "MAGIC", "DISEASE" },
+}
 local DEMO_PLATES = 4    -- ... and how many nameplates it uses at all
 local COMBAT_POLL_BATCH = 8      -- nameplates re-checked per tick
 local PREDICTION_MATCH_WINDOW = 4.0  -- how far off a predicted cast may start
@@ -2903,17 +2908,40 @@ function CastAheadCore.Test(instanceID, list)
         print("|cff33ff99Cast Ahead|r no dungeon data to test with")
         return
     end
-    -- One row per distinct call, the way a pull mixes them; the current
-    -- filters apply, so the test previews exactly what a run would show.
+    -- One row per distinct call across every dungeon (this one's rows first),
+    -- so every voice line can be heard; the role's own calls go first. Only
+    -- the per-spell mute applies: the role and Important filters would hide
+    -- exactly the calls this character never gets.
+    local pools = { list or rows }
+    if not list then
+        local ids = {}
+        for k in pairs(CastAheadData) do ids[#ids + 1] = k end
+        table.sort(ids)
+        for _, k in ipairs(ids) do
+            if CastAheadData[k] ~= rows then pools[#pools + 1] = CastAheadData[k] end
+        end
+    end
+    local role = CastAheadMatch.PlayerRole()
+    if not role and GetSpecialization and GetSpecializationRole then
+        local spec = GetSpecialization()
+        role = spec and GetSpecializationRole(spec) or nil
+    end
+    local keyLabels = {}
+    for _, key in ipairs(TEST_KEY_CALLS[role] or {}) do
+        keyLabels[CastAheadMatch.ADVICE[key].label] = true
+    end
     local picked, seen = {}, {}
-    for i = 1, #(list or rows) do
-        local row = (list or rows)[i]
-        local advice = CastAheadMatch.Advice(row)
-        local important = list or not ImportantOnly() or CastAheadMatch.Important(row)
-        if advice and important and (list or (#picked < 4 and not seen[advice.label]))
-            and not (CastAheadUI and CastAheadUI.IsDisabled and CastAheadUI.IsDisabled(row.spell)) then
-            seen[advice.label] = true
-            picked[#picked + 1] = row
+    for pass = 1, list and 1 or 2 do
+        for p = 1, #pools do
+            for i = 1, #pools[p] do
+                local row = pools[p][i]
+                local advice = CastAheadMatch.Advice(row)
+                if advice and (list or (not seen[advice.label] and (pass == 2 or keyLabels[advice.label])))
+                    and not (CastAheadUI and CastAheadUI.IsDisabled and CastAheadUI.IsDisabled(row.spell)) then
+                    seen[advice.label] = true
+                    picked[#picked + 1] = row
+                end
+            end
         end
     end
     if #picked == 0 then
@@ -2933,7 +2961,8 @@ function CastAheadCore.Test(instanceID, list)
     end
     demo = { frame = CreateFrame("Frame"), entries = {}, state = { bars = {} } }
     -- One call at a time: the one counting down and the one going out.
-    local gap = list and (CastAheadConfig.Lead() + 3) or nil
+    local spacing = CastAheadConfig.Lead() + 3
+    local gap = list and spacing or nil
     if list then demo.shown = 2 end
     local now = GetTime()
     -- Several calls per plate, always: one icon per plate tells the player
@@ -2951,8 +2980,7 @@ function CastAheadCore.Test(instanceID, list)
         slots[unit or 0] = (slots[unit or 0] or 0) + 1
         local e = {
             row = row, candidates = { row },
-            endAt = gap and (now + 2 + (i - 1) * gap)
-                or (now + 2 + i * (CastAheadConfig.Lead() + 2) / math.max(1, math.ceil(total / 4))),
+            endAt = now + 2 + (i - 1) * spacing,
             track = {},
             unit = unit, slot = slots[unit or 0],
             hidden = (gap and i > 1) or nil,
