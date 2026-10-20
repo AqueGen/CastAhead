@@ -49,6 +49,7 @@ end
 
 function CastAheadUI.RefreshTabs()
     CastAheadWindow.SetMenuShown("Development", CastAheadConfig.Dev())
+    CastAheadWindow.SetMenuShown("Defensives", CastAheadConfig.DungeonSaves())
     CastAheadWindow.SetMenuShown("Bursts", CastAheadConfig.Get("burstCalls") == true)
 end
 

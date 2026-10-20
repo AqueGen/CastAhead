@@ -4199,6 +4199,34 @@ do
     CastAheadDB.burstCalls = nil
     CastAheadUI.RefreshTabs()
     check(CastAheadWindow.Current() == "General", "burst windows switched off while open show General")
+    do
+        local W = CastAheadWindow
+        local group, shown = W.Page("Defensives")
+        check(group == "Dungeon", "Defensives sits in the Dungeon group")
+        group = W.Page("Bursts")
+        check(group == "Raid", "Bursts sits in the Raid group")
+        local hasExperimental
+        for _, g in ipairs(W.GROUPS) do
+            if g == "Experimental" then hasExperimental = true end
+        end
+        check(not hasExperimental, "there is no Experimental group")
+        CastAheadDB.saveCalls, CastAheadDB.burstCalls = nil, nil
+        CastAheadUI.RefreshTabs()
+        _, shown = W.Page("Defensives")
+        check(shown == false, "Defensives is hidden while dungeon calls are off")
+        _, shown = W.Page("Bursts")
+        check(shown == false, "the Raid group has no shown page while bursts are off")
+        _, shown = W.Page("Guide")
+        check(shown == true, "Guide stays shown with dungeon calls off")
+        CastAheadDB.saveCalls = true
+        CastAheadUI.RefreshTabs()
+        _, shown = W.Page("Defensives")
+        check(shown == true, "Defensives is shown while dungeon calls are on")
+        CastAheadUI.ShowTab("Defensives")
+        CastAheadDB.saveCalls = nil
+        CastAheadUI.RefreshTabs()
+        check(CastAheadWindow.Current() == "Guide", "dungeon calls switched off while Defensives is open show Guide")
+    end
     CastAheadDB.burstCalls = true
     CastAheadUI.ShowTab("Bursts")
     CastAhead_Toggle()

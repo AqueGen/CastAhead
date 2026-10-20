@@ -503,6 +503,7 @@ function BuildGeneral(panel)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", features, "TOPLEFT", 10, -26 }, function()
         SaveRefresh()
         CastAheadOptions.RefreshDefensives()
+        if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
     end)
     local raid = BuildSwitch(panel, "raidSaves", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, function(on)
         SaveRefresh()
@@ -1463,11 +1464,12 @@ end
 
 BUILDERS = { General = BuildGeneral, Sounds = BuildSounds, Defensives = BuildDefensives, Bursts = BuildBursts,
              Development = BuildDevelopment, Report = BuildReport }
-local MENU_GROUPS = { Bursts = "Experimental", Report = "Feedback" }
+local MENU_GROUPS = { Defensives = "Dungeon", Bursts = "Raid", Report = "Feedback" }
 
 for _, name in ipairs(CastAheadOptions.TABS) do
     local host
     CastAheadWindow.Register(name, MENU_GROUPS[name] or "Settings",
         function(h) host = h end,
-        function() CastAheadOptions.ShowPanel(host, name) end)
+        function() CastAheadOptions.ShowPanel(host, name) end,
+        nil, name == "Defensives")
 end
