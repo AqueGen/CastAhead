@@ -625,16 +625,8 @@ elseif ChatEdit_InsertLink then
     hooksecurefunc("ChatEdit_InsertLink", InsertLink)
 end
 
-local function BuildButtonList(panel, store, key, titles, hint, emptyText)
-    local title = titles[key]
+local function BuildButtonList(panel, store, key, title, emptyText)
     local group = BuildGroup(panel, title, ListHeight(LIST_MIN_ROWS))
-    if hint then
-        local line = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        line:SetPoint("TOPLEFT", group.title, "BOTTOMLEFT", 0, -3)
-        line:SetWidth(COL_W - 20)
-        line:SetJustifyH("LEFT")
-        line:SetText("|cffaaaaaa" .. hint .. "|r")
-    end
 
     local function Remove(i)
         local list = {}
@@ -866,13 +858,12 @@ function BuildDefensives(panel)
     })
 
     local store = CastAheadSaves.Store
-    local titles = { def = "Defensive" }
-    local lists = { BuildButtonList(panel, store, "def", titles, nil, "Empty - no defensive call") }
-    CastAheadWindow.SpecBar(lists[1], 0, -SPEC_BAR_PAD, RefreshAll, function()
-        return (panel:GetRight() or 0) - (lists[1]:GetLeft() or 0)
+    local list = BuildButtonList(panel, store, "def", "Defensive", "Empty - no defensive call")
+    CastAheadWindow.SpecBar(list, 0, -SPEC_BAR_PAD, RefreshAll, function()
+        return (panel:GetRight() or 0) - (list:GetLeft() or 0)
     end)
     panel:HookScript("OnSizeChanged", CastAheadWindow.PaintSpecBars)
-    for _, list in ipairs(lists) do list.flowPad = SPEC_BAR_PAD end
+    list.flowPad = SPEC_BAR_PAD
     table.insert(refreshers, CastAheadWindow.PaintSpecBars)
 
     local reset = CastAheadWindow.Button(panel, "Reset to default", 110)
@@ -908,7 +899,7 @@ function BuildDefensives(panel)
         caveat.SetShown(on)
         group:SetHeight(on and DEFENSIVES_H or DEFENSIVES_OFF_H)
         note:SetShown(on and not shipped)
-        for _, list in ipairs(lists) do list:SetShown(on and shipped) end
+        list:SetShown(on and shipped)
         reset:SetShown(on and shipped)
         panel:Relayout()
     end
