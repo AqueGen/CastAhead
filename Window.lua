@@ -61,6 +61,71 @@ function W.Button(parent, text, width, primary)
     return b
 end
 
+local NOTICE_W, NOTICE_PAD, NOTICE_ICON = 360, 14, 18
+local NOTICE_TEXT = "Defensive calls are now off by default, so they were switched off once for everyone, in dungeons and in raids.\n\nTurn them on in General - Features."
+local notice
+
+local function BuildNotice()
+    notice = CreateFrame("Frame", "CastAheadUpdateNotice", UIParent, "BackdropTemplate")
+    notice:SetBackdrop(FLAT)
+    notice:SetBackdropColor(unpack(T.bg))
+    notice:SetBackdropBorderColor(unpack(T.border))
+    notice:SetFrameStrata("FULLSCREEN_DIALOG")
+    notice:SetPoint("CENTER")
+    notice:SetMovable(true)
+    notice:EnableMouse(true)
+    notice:SetClampedToScreen(true)
+    notice:RegisterForDrag("LeftButton")
+    notice:SetScript("OnDragStart", notice.StartMoving)
+    notice:SetScript("OnDragStop", notice.StopMovingOrSizing)
+    table.insert(UISpecialFrames, "CastAheadUpdateNotice")
+
+    local bar = CreateFrame("Frame", nil, notice)
+    bar:SetPoint("TOPLEFT", notice, "TOPLEFT", 1, -1)
+    bar:SetPoint("TOPRIGHT", notice, "TOPRIGHT", -1, -1)
+    bar:SetHeight(TITLE_H)
+    local barBg = bar:CreateTexture(nil, "BACKGROUND")
+    barBg:SetAllPoints()
+    barBg:SetColorTexture(unpack(T.panel))
+    local line = bar:CreateTexture(nil, "ARTWORK")
+    line:SetPoint("TOPLEFT", bar, "BOTTOMLEFT", 0, 0)
+    line:SetPoint("TOPRIGHT", bar, "BOTTOMRIGHT", 0, 0)
+    line:SetHeight(1)
+    line:SetColorTexture(unpack(T.line))
+    local icon = bar:CreateTexture(nil, "OVERLAY")
+    icon:SetSize(NOTICE_ICON, NOTICE_ICON)
+    icon:SetPoint("LEFT", bar, "LEFT", NOTICE_PAD, 0)
+    icon:SetTexture("Interface\\Icons\\Spell_Holy_MindVision")
+    local title = bar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("LEFT", icon, "RIGHT", PAD, 0)
+    title:SetTextColor(unpack(T.gold))
+    title:SetText("Cast Ahead update")
+
+    notice.body = notice:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    notice.body:SetPoint("TOPLEFT", bar, "BOTTOMLEFT", NOTICE_PAD, -NOTICE_PAD)
+    notice.body:SetWidth(NOTICE_W - 2 * NOTICE_PAD)
+    notice.body:SetJustifyH("LEFT")
+    notice.body:SetTextColor(unpack(T.text))
+    notice.body:SetText(NOTICE_TEXT)
+
+    notice.close = W.Button(notice, "Close", 80, false)
+    notice.close:SetPoint("BOTTOMRIGHT", notice, "BOTTOMRIGHT", -NOTICE_PAD, NOTICE_PAD)
+    notice.close:SetScript("OnClick", function() notice:Hide() end)
+    notice.open = W.Button(notice, "Open settings", 110, true)
+    notice.open:SetPoint("RIGHT", notice.close, "LEFT", -PAD, 0)
+    notice.open:SetScript("OnClick", function()
+        notice:Hide()
+        CastAheadUI.ShowTab("General")
+    end)
+
+    notice:SetSize(NOTICE_W, TITLE_H + 1 + 3 * NOTICE_PAD + ENTRY_H + math.ceil(notice.body:GetStringHeight()))
+end
+
+function W.ShowUpdateNotice()
+    if not notice then BuildNotice() end
+    notice:Show()
+end
+
 local SPEC_W, SPEC_MIN_W, SPEC_GAP, SPEC_BAR_H, CLASS_W, MAX_SPECS = 150, 60, 4, 28, 150, 4
 local specBars = {}
 

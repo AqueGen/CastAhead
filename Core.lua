@@ -2146,21 +2146,6 @@ local function StopCast(unit, channel)
     end
 end
 
-if StaticPopupDialogs then
-    StaticPopupDialogs.CASTAHEAD_UPDATE_NOTICE = {
-        text = "Cast Ahead update\n\nDefensive calls are now off by default, so they were switched off once for everyone, in dungeons and in raids.\n\nTurn them on in General - Features.",
-        button1 = "Open settings",
-        button2 = "Close",
-        OnAccept = function()
-            if CastAheadUI and CastAheadUI.ShowTab then CastAheadUI.ShowTab("General") end
-        end,
-        timeout = 0,
-        whileDead = true,
-        hideOnEscape = true,
-        preferredIndex = 3,
-    }
-end
-
 frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     if unit == "player" and (event == "UNIT_SPELLCAST_SUCCEEDED" or event == "UNIT_SPELLCAST_START") then
         ProbeAnchor(arg3)
@@ -2204,7 +2189,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         if CastAheadDB and CastAheadDB.saveCallsNotice then
             print("|cff33ff99Cast Ahead:|r defensive calls are now off by default. Turn them on in /ca - General - Features.")
             CastAheadDB.saveCallsNotice = nil
-            if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_UPDATE_NOTICE") end
+            if CastAheadUI and CastAheadUI.ShowUpdateNotice then CastAheadUI.ShowUpdateNotice() end
         end
         return
     end
