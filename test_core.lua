@@ -1791,6 +1791,57 @@ CastAheadCore.Test(1877)
 check(VisibleBars() > 0, string.format("the test drive draws demo bars, got %d", VisibleBars()))
 CastAheadCore.Test(1877)
 check(VisibleBars() == 0, string.format("stopping the test drive hides them, got %d", VisibleBars()))
+-- Every distinct call is played once, across all dungeons and whatever the
+-- role: a damage dealer still hears the tank buster, one voice at a time.
+do
+    CastAheadData[1878] = { name = "Other",
+        { spell = 720, npc = 20, mob = "Charger", name = "Charge", cast = 2.0, prio = "FRONTAL" },
+        { spell = 721, npc = 21, mob = "Twin", name = "Charge2", cast = 2.0, prio = "FRONTAL" },
+    }
+    local labels, spellLabel = {}, {}
+    for _, dungeon in pairs(CastAheadData) do
+        for _, row in ipairs(dungeon) do
+            local advice = CastAheadMatch.Advice(row)
+            if advice then
+                spellLabel[row.spell] = advice.label
+                labels[advice.label] = true
+            end
+        end
+    end
+    local distinct = 0
+    for _ in pairs(labels) do distinct = distinct + 1 end
+    local savedRole, savedAdd = CastAheadMatch.PlayerRole, C_EncounterTimeline.AddScriptEvent
+    local function Drive(role)
+        local got = {}
+        CastAheadMatch.PlayerRole = function() return role end
+        C_EncounterTimeline.AddScriptEvent = function(request)
+            got[#got + 1] = request
+            return savedAdd(request)
+        end
+        CastAheadCore.Test(1877)
+        CastAheadCore.Test(1877)
+        C_EncounterTimeline.AddScriptEvent = savedAdd
+        CastAheadMatch.PlayerRole = savedRole
+        return got
+    end
+    local got = Drive("DAMAGER")
+    local seenLabel, dupes = {}, 0
+    for _, request in ipairs(got) do
+        local label = spellLabel[request.spellID]
+        if seenLabel[label] then dupes = dupes + 1 end
+        seenLabel[label] = true
+    end
+    check(#got == distinct and dupes == 0,
+        string.format("the test drive plays each distinct call once, got %d of %d", #got, distinct))
+    check(seenLabel.TANKBUSTER, "a damage dealer's test drive still includes the tank buster")
+    check(seenLabel.FRONT, "the test drive reaches calls of other dungeons")
+    local spaced = true
+    for i = 2, #got do
+        if got[i].duration - got[i - 1].duration < CastAheadConfig.Lead() + 3 - 0.01 then spaced = false end
+    end
+    check(spaced, "the test drive's calls go out one after another, never together")
+    CastAheadData[1878] = nil
+end
 -- With a hostile plate on screen the demo icons hang off it, not off the
 -- screen centre - found by unit token, since nameplate addons replace the
 -- frames GetNamePlates() returns.
