@@ -13,7 +13,7 @@ local TABLE_TOP = WIDGET_HEIGHT + 6
 local COLUMN_GAP = 4
 local THIN_EVIDENCE = 5      -- fewer samples than this and the row is dimmed
 
-local host, rows, rowParent, headers, headerStrip, tableFrame, sideScroll
+local host, rows, rowParent, headers, headerStrip, tableFrame, sideScroll, listButton
 local sortKey, sortDescending, searchText
 
 local function IsDisabled(spellID)
@@ -520,6 +520,22 @@ local function Build(page)
         Refresh()
     end)
 
+    listButton = CastAheadWindow.Button(host, "Play list", 80, false)
+    listButton:SetPoint("LEFT", search, "RIGHT", 8, 0)
+    listButton:SetScript("OnClick", function()
+        if CastAheadCore and CastAheadCore.Test then
+            CastAheadCore.Test(CastAheadWindow.Dungeon(), SortedRows())
+        end
+    end)
+    listButton:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Play list", 1, 1, 1)
+        GameTooltip:AddLine("Play every cast in the table, top to bottom in its current order, one at a time: the countdown, the call, the voice and the sound each one is set to. Click again to stop.", nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    listButton:SetScript("OnLeave", GameTooltip_Hide)
+    CastAheadUI.RefreshTest()
+
     sideScroll, tableFrame = CastAheadWindow.SideScroll(host, TABLE_TOP)
 
     headerStrip = CreateFrame("Frame", nil, tableFrame)
@@ -538,6 +554,10 @@ local function Build(page)
     headers, rows = {}, {}
     if sortDescending == nil then sortDescending = true end
     RebuildTable()
+end
+
+function CastAheadUI.RefreshPlayList(running)
+    if listButton then listButton:SetText(running and "Stop" or "Play list") end
 end
 
 CastAheadWindow.Register("Casts", "Dungeon", Build, Refresh)
