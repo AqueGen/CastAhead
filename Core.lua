@@ -2146,6 +2146,9 @@ local function StopCast(unit, channel)
     end
 end
 
+local NOTICE_DELAY = 2
+local noticePending
+
 frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     if unit == "player" and (event == "UNIT_SPELLCAST_SUCCEEDED" or event == "UNIT_SPELLCAST_START") then
         ProbeAnchor(arg3)
@@ -2189,11 +2192,19 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         if CastAheadDB and CastAheadDB.saveCallsNotice then
             print("|cff33ff99Cast Ahead:|r defensive calls are now off by default. Turn them on in /ca - General - Features.")
             CastAheadDB.saveCallsNotice = nil
-            if CastAheadUI and CastAheadUI.ShowUpdateNotice then CastAheadUI.ShowUpdateNotice() end
+            noticePending = true
         end
         return
     end
     if event == "PLAYER_ENTERING_WORLD" then
+        if noticePending then
+            noticePending = nil
+            local function Show()
+                if CastAheadUI and CastAheadUI.ShowUpdateNotice then CastAheadUI.ShowUpdateNotice() end
+            end
+            -- Shown straight at login the notice was gone by the time the world appeared.
+            if C_Timer then C_Timer.After(NOTICE_DELAY, Show) else Show() end
+        end
         ProbeRestore()
         if CastAheadRecorder then
             CastAheadRecorder.Restore()

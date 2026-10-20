@@ -577,6 +577,13 @@ do
     CastAheadDB = { schema = 5, saveCallsNotice = true }
     fire("PLAYER_LOGIN")
     fire("PLAYER_LOGIN")
+    check(shows == 0, "the notice waits for the world to load")
+    local savedTimer, delays = C_Timer, {}
+    C_Timer = { After = function(delay, fn) delays[#delays + 1] = delay fn() end }
+    fire("PLAYER_ENTERING_WORLD")
+    fire("PLAYER_ENTERING_WORLD")
+    C_Timer = savedTimer
+    check(#delays == 1 and delays[1] > 0, "the notice is shown once, a moment after the world loads")
     print = realPrint
     check(#lines == 1 and lines[1]:find("Cast Ahead:|r defensive calls are now off by default. Turn them on in /ca - General - Features.", 1, true)
         and CastAheadDB.saveCallsNotice == nil, "the notice prints once and clears")
