@@ -12,6 +12,7 @@ W.THEME = {
     selected = { 0.165, 0.192, 0.251, 1 },
 }
 W.MIN_W, W.MIN_H = 600, 420
+W.ICON = "Interface\\AddOns\\CastAhead\\Media\\icon"
 
 local T = W.THEME
 local DEFAULT_W, DEFAULT_H = 1200, 640
@@ -95,7 +96,7 @@ local function BuildNotice()
     local icon = bar:CreateTexture(nil, "OVERLAY")
     icon:SetSize(NOTICE_ICON, NOTICE_ICON)
     icon:SetPoint("LEFT", bar, "LEFT", NOTICE_PAD, 0)
-    icon:SetTexture("Interface\\Icons\\Spell_Holy_MindVision")
+    icon:SetTexture(W.ICON)
     local title = bar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("LEFT", icon, "RIGHT", PAD, 0)
     title:SetTextColor(unpack(T.gold))

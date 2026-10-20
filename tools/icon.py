@@ -8,6 +8,8 @@ slate, no text, because text dies at thumbnail size.
 selection pinned to the top left: a larger image comes out cropped unless
 the author drags the handles.
 """
+import os
+
 from PIL import Image, ImageDraw, ImageFilter
 
 S = 512      # drawn large, downsampled at the end so the curves stay smooth
@@ -67,3 +69,9 @@ ground = Image.new("RGB", (OUT_SIZE, OUT_SIZE), BG)
 ground.paste(small, (0, 0), small)
 ground.save(out)
 print(out)
+
+# The in-game texture: 64x64 power of two, keeps the tile's transparent corners.
+os.makedirs(os.path.join(os.path.dirname(__file__), "..", "Media"), exist_ok=True)
+tga = os.path.join(os.path.dirname(__file__), "..", "Media", "icon.tga")
+img.resize((64, 64), Image.LANCZOS).save(tga)
+print(tga)
