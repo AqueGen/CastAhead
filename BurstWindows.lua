@@ -12,7 +12,6 @@ CastAheadBurstWindows = {
     [2126] = {
         [8] = { name = "Galvazzt",
             { release = 3.9, pull = true }, -- 13 specs, 47 fights
-            { release = 128.1, group = true }, -- 6 specs, 24 fights
         },
     },
     [2127] = {
@@ -22,24 +21,19 @@ CastAheadBurstWindows = {
     [2139] = {
         [8] = { name = "The Golden Serpent",
             { release = 5.3, pull = true }, -- 15 specs, 61 fights
-            { release = 126.5, group = true }, -- 8 specs, 33 fights
         },
     },
     [2140] = {
         [8] = { name = "The Council of Tribes",
             { release = 6.5, pull = true }, -- 12 specs, 51 fights
-            { release = 70.7, group = true }, -- 7 specs, 27 fights
-            { release = 136.9, group = true }, -- 6 specs, 24 fights
         },
     },
     [2142] = {
         [8] = { name = "Mchimba the Embalmer",
-            { release = 72.6, group = true }, -- 6 specs, 21 fights
         },
     },
     [2143] = {
         [8] = { name = "King Dazar",
-            { release = 135.3, group = true }, -- 6 specs, 23 fights
         },
     },
     [2606] = {
@@ -63,8 +57,6 @@ CastAheadBurstWindows = {
     [3102] = {
         [8] = { name = "Zaen Bladesorrow",
             { release = 5.3, pull = true }, -- 21 specs, 100 fights
-            { release = 97.2, group = true }, -- 7 specs, 25 fights
-            { release = 130.8, group = true }, -- 11 specs, 37 fights
         },
     },
     [3103] = {
@@ -72,7 +64,6 @@ CastAheadBurstWindows = {
             { release = 6.4, pull = true }, -- 6 specs, 19 fights
             { release = 41.6, target = "Burning Steps" }, -- 33 specs, 165 fights
             { release = 98.8, target = "Burning Steps" }, -- 33 specs, 165 fights
-            { release = 134.1, group = true }, -- 6 specs, 21 fights
             { release = 155.9, target = "Burning Steps" }, -- 33 specs, 164 fights
         },
     },
@@ -84,14 +75,11 @@ CastAheadBurstWindows = {
     [3199] = {
         [8] = { name = "Lightblossom Trinity",
             { release = 4.7, pull = true }, -- 9 specs, 33 fights
-            { release = 71.2, group = true }, -- 6 specs, 23 fights
         },
     },
     [3200] = {
         [8] = { name = "Ikuzz the Light Hunter",
             { release = 4.7, pull = true }, -- 8 specs, 29 fights
-            { release = 70.6, group = true }, -- 6 specs, 21 fights
-            { release = 129.7, group = true }, -- 7 specs, 27 fights
         },
     },
     [3201] = {
@@ -106,13 +94,11 @@ CastAheadBurstWindows = {
     [3207] = {
         [8] = { name = "The Hoardmonger",
             { release = 5.2, pull = true }, -- 18 specs, 86 fights
-            { release = 130.4, group = true }, -- 7 specs, 30 fights
         },
     },
     [3208] = {
         [8] = { name = "Sentinel of Winter",
             { release = 5.2, pull = true }, -- 14 specs, 56 fights
-            { release = 134.5, group = true }, -- 6 specs, 22 fights
         },
     },
     [3209] = {
@@ -138,117 +124,70 @@ CastAheadBurstWindows = {
     [3379] = {
         [14] = { name = "Nymrissa",
             { release = 3.1, pull = true }, -- 21 specs, 162 fights
-            { release = 129.8, group = true }, -- 10 specs, 65 fights
         },
         [15] = { name = "Nymrissa",
             { release = 2.9, pull = true }, -- 22 specs, 207 fights
-            { release = 129.1, group = true }, -- 10 specs, 93 fights
-            { release = 185.9, group = true }, -- 9 specs, 64 fights
         },
         [16] = { name = "Nymrissa",
             { release = 3.0, pull = true }, -- 20 specs, 181 fights
-            { release = 94.8, group = true }, -- 7 specs, 47 fights
-            { release = 126.0, group = true }, -- 9 specs, 81 fights
-            { release = 185.8, group = true }, -- 6 specs, 40 fights
-            { release = 252.2, group = true }, -- 7 specs, 60 fights
-            { release = 282.4, group = true }, -- 6 specs, 33 fights
         },
     },
     [3420] = {
         [14] = { name = "Sszorak",
             { release = 3.2, pull = true }, -- 21 specs, 164 fights
-            { release = 96.6, group = true }, -- 6 specs, 38 fights
-            { release = 127.7, group = true }, -- 10 specs, 72 fights
         },
         [15] = { name = "Sszorak",
             { release = 3.6, pull = true }, -- 23 specs, 216 fights
-            { release = 125.4, group = true }, -- 15 specs, 139 fights
-            { release = 189.6, group = true }, -- 9 specs, 81 fights
-            { release = 249.4, group = true }, -- 10 specs, 74 fights
         },
         [16] = { name = "Sszorak",
             { release = 2.1, pull = true }, -- 21 specs, 195 fights
-            { release = 100.9, group = true }, -- 9 specs, 65 fights
-            { release = 123.8, group = true }, -- 10 specs, 86 fights
-            { release = 191.5, group = true }, -- 7 specs, 52 fights
-            { release = 244.5, group = true }, -- 6 specs, 42 fights
             { release = 23.5, role = "HEALER" }, -- 3 specs, 15 fights
         },
     },
     [3421] = {
         [14] = { name = "Twin Fangs",
             { release = 3.2, pull = true }, -- 22 specs, 183 fights
-            { release = 66.1, group = true }, -- 6 specs, 51 fights
-            { release = 125.3, group = true }, -- 7 specs, 43 fights
-            { release = 192.3, group = true }, -- 10 specs, 68 fights
         },
         [15] = { name = "Twin Fangs",
             { release = 3.0, pull = true }, -- 23 specs, 214 fights
-            { release = 62.7, group = true }, -- 6 specs, 69 fights
-            { release = 93.2, group = true }, -- 7 specs, 56 fights
-            { release = 128.4, group = true }, -- 14 specs, 127 fights
-            { release = 191.3, group = true }, -- 8 specs, 75 fights
-            { release = 247.1, group = true }, -- 9 specs, 77 fights
-            { release = 277.0, group = true }, -- 6 specs, 36 fights
         },
         [16] = { name = "Twin Fangs",
             { release = 2.9, pull = true }, -- 21 specs, 192 fights
-            { release = 96.7, group = true }, -- 9 specs, 68 fights
-            { release = 124.4, group = true }, -- 8 specs, 74 fights
-            { release = 192.0, group = true }, -- 8 specs, 72 fights
-            { release = 252.7, group = true }, -- 9 specs, 83 fights
-            { release = 315.9, group = true }, -- 10 specs, 84 fights
-            { release = 368.9, group = true }, -- 7 specs, 38 fights
         },
     },
     [3429] = {
         [14] = { name = "Coiled Altar",
             { release = 3.1, pull = true }, -- 22 specs, 191 fights
-            { release = 186.0, group = true }, -- 6 specs, 33 fights
         },
         [15] = { name = "Coiled Altar",
             { release = 3.9, pull = true }, -- 23 specs, 197 fights
         },
         [16] = { name = "Coiled Altar",
             { release = 3.0, pull = true }, -- 19 specs, 171 fights
-            { release = 123.2, group = true }, -- 7 specs, 54 fights
-            { release = 187.9, group = true }, -- 9 specs, 65 fights
-            { release = 248.9, group = true }, -- 7 specs, 51 fights
         },
     },
     [3445] = {
         [14] = { name = "Entombed Sentinels",
             { release = 3.5, pull = true }, -- 22 specs, 170 fights
-            { release = 128.5, group = true }, -- 11 specs, 73 fights
         },
         [15] = { name = "Entombed Sentinels",
             { release = 3.3, pull = true }, -- 23 specs, 202 fights
-            { release = 67.0, group = true }, -- 7 specs, 71 fights
-            { release = 128.1, group = true }, -- 14 specs, 111 fights
-            { release = 189.1, group = true }, -- 8 specs, 70 fights
         },
         [16] = { name = "Entombed Sentinels",
             { release = 3.2, pull = true }, -- 22 specs, 197 fights
-            { release = 64.8, group = true }, -- 6 specs, 60 fights
-            { release = 129.0, group = true }, -- 12 specs, 104 fights
-            { release = 190.9, group = true }, -- 8 specs, 76 fights
             { release = 275.8 }, -- 3 specs, 24 fights
         },
     },
     [3455] = {
         [14] = { name = "Vashnik",
             { release = 2.9, pull = true }, -- 22 specs, 170 fights
-            { release = 128.0, group = true }, -- 11 specs, 67 fights
         },
         [15] = { name = "Vashnik",
             { release = 2.7, pull = true }, -- 19 specs, 160 fights
-            { release = 127.1, group = true }, -- 8 specs, 75 fights
-            { release = 192.1, group = true }, -- 16 specs, 130 fights
         },
         [16] = { name = "Vashnik",
             { release = 2.7, pull = true }, -- 16 specs, 131 fights
             { release = 108.4 }, -- 4 specs, 45 fights
-            { release = 125.6, group = true }, -- 9 specs, 71 fights
             { release = 192.3 }, -- 5 specs, 57 fights
             { release = 276.4 }, -- 7 specs, 75 fights
             { release = 361.9 }, -- 3 specs, 33 fights
@@ -272,39 +211,25 @@ CastAheadBurstWindows = {
     [3470] = {
         [14] = { name = "Nek'zali",
             { release = 2.9, pull = true }, -- 21 specs, 162 fights
-            { release = 128.3, group = true }, -- 9 specs, 57 fights
         },
         [15] = { name = "Nek'zali",
             { release = 2.8, pull = true }, -- 22 specs, 204 fights
-            { release = 94.4, group = true }, -- 8 specs, 58 fights
-            { release = 126.1, group = true }, -- 7 specs, 53 fights
-            { release = 186.8, group = true }, -- 8 specs, 58 fights
-            { release = 254.6, group = true }, -- 6 specs, 31 fights
         },
         [16] = { name = "Nek'zali",
             { release = 3.0, pull = true }, -- 22 specs, 211 fights
-            { release = 96.2, group = true }, -- 6 specs, 48 fights
-            { release = 128.7, group = true }, -- 12 specs, 102 fights
-            { release = 189.5, group = true }, -- 7 specs, 66 fights
-            { release = 250.8, group = true }, -- 11 specs, 83 fights
         },
     },
     [3492] = {
         [14] = { name = "Ula'tek",
             { release = 2.8, pull = true }, -- 22 specs, 192 fights
-            { release = 66.0, group = true }, -- 6 specs, 56 fights
             { release = 136.5, target = "Venomous Heart" }, -- 33 specs, 277 fights
-            { release = 277.3, group = true }, -- 8 specs, 44 fights
         },
         [15] = { name = "Ula'tek",
             { release = 4.3, pull = true }, -- 23 specs, 160 fights
-            { release = 69.5, group = true }, -- 6 specs, 56 fights
             { release = 135.5, target = "Venomous Heart" }, -- 33 specs, 238 fights
             { release = 284.5, target = "Venomous Heart" }, -- 33 specs, 238 fights
             { release = 366.3 }, -- 8 specs, 59 fights
-            { release = 407.2, group = true }, -- 7 specs, 33 fights
             { release = 439.2 }, -- 5 specs, 29 fights
-            { release = 527.1, group = true }, -- 6 specs, 26 fights
             { release = 573.7, target = "Venomous Heart" }, -- 33 specs, 148 fights
         },
         [16] = { name = "Ula'tek",
@@ -312,8 +237,6 @@ CastAheadBurstWindows = {
             { release = 145.5, target = "Venomous Heart" }, -- 30 specs, 232 fights
             { release = 294.5, target = "Venomous Heart" }, -- 30 specs, 232 fights
             { release = 376.6 }, -- 3 specs, 35 fights
-            { release = 418.0, group = true }, -- 6 specs, 35 fights
-            { release = 450.2, group = true }, -- 6 specs, 60 fights
             { release = 583.7, target = "Venomous Heart" }, -- 30 specs, 229 fights
             { release = 108.1, role = "HEALER" }, -- 3 specs, 15 fights
             { release = 337.1, role = "HEALER" }, -- 3 specs, 22 fights
@@ -325,38 +248,20 @@ CastAheadBurstWindows = {
         },
         [15] = { name = "Lost Explorers",
             { release = 4.3, pull = true }, -- 23 specs, 217 fights
-            { release = 66.8, group = true }, -- 7 specs, 82 fights
-            { release = 94.8, group = true }, -- 9 specs, 68 fights
-            { release = 127.9, group = true }, -- 11 specs, 108 fights
-            { release = 189.3, group = true }, -- 8 specs, 50 fights
         },
         [16] = { name = "Lost Explorers",
             { release = 3.7, pull = true }, -- 23 specs, 217 fights
-            { release = 65.4, group = true }, -- 6 specs, 75 fights
-            { release = 96.3, group = true }, -- 6 specs, 44 fights
-            { release = 128.4, group = true }, -- 12 specs, 115 fights
-            { release = 191.5, group = true }, -- 7 specs, 72 fights
-            { release = 254.2, group = true }, -- 7 specs, 65 fights
         },
     },
     [3513] = {
         [14] = { name = "Kith'ix",
             { release = 3.6, pull = true }, -- 22 specs, 186 fights
-            { release = 66.3, group = true }, -- 7 specs, 60 fights
-            { release = 98.7, group = true }, -- 6 specs, 35 fights
-            { release = 132.2, group = true }, -- 7 specs, 46 fights
         },
         [15] = { name = "Kith'ix",
             { release = 2.8, pull = true }, -- 22 specs, 179 fights
-            { release = 63.3, group = true }, -- 6 specs, 63 fights
-            { release = 96.0, group = true }, -- 7 specs, 54 fights
-            { release = 123.5, group = true }, -- 7 specs, 50 fights
-            { release = 190.9, group = true }, -- 8 specs, 57 fights
         },
         [16] = { name = "Kith'ix",
             { release = 3.0, pull = true }, -- 18 specs, 161 fights
-            { release = 125.9, group = true }, -- 13 specs, 111 fights
-            { release = 188.8, group = true }, -- 7 specs, 55 fights
             { release = 261.5 }, -- 3 specs, 20 fights
         },
     },

@@ -942,7 +942,7 @@ local burstDifficulty = 15
 
 function BuildBursts(panel)
     local Paint
-    local caveat = Caveat(panel, "the phases and group moments come from top-player logs and may not match your group.", "burst")
+    local caveat = Caveat(panel, "the phases come from top-player logs and may not match your group.", "burst")
     panel.flowTop = function() return 6 + caveat.Place(COL_X, 6, math.max(panel:GetWidth() - 2 * COL_X, 1)) end
     local guide = BuildGroup(panel, "Guide", 120, true)
     local buttons = {}
