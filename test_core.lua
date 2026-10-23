@@ -4959,14 +4959,14 @@ do
     CastAheadBurstWindows = {
         [3492] = { [16] = { name = "Ula'tek", { release = 294.5, target = "Venomous Heart" },
             { release = 145.5, target = "Venomous Heart" }, { release = 108.1, role = "HEALER" } } },
-        [3455] = { [16] = { name = "Vashnik", { release = 128.4 }, { release = 3.2, pull = true } } },
+        [3455] = { [16] = { name = "Vashnik", note = "Hold windows.", { release = 128.4 }, { release = 3.2, pull = true } } },
         [3470] = { [16] = { name = "Nek'zali" } },
         [3101] = { [8] = { name = "Kystia Manaheart", { event = 610, target = "Light Infusion" } } } }
     check(B.Clock(197) == "3:17" and B.Clock(59.6) == "1:00", "burst guide: clock formats m:ss")
     local text = Guide(16)
     check(text == "Nek'zali\n  no shared moment - burst on the pull, then on cooldown\n\n"
         .. "Ula'tek\n  1:48 burst (healers)\n  2:26 Venomous Heart\n  4:55 Venomous Heart\n\n"
-        .. "Vashnik\n  0:03 on the pull\n  2:08 burst",
+        .. "Vashnik\n  Hold windows.\n  0:03 on the pull\n  2:08 burst",
         "burst guide: every boss by name, windows by time, healer windows marked, got " .. text)
     check(B.GuideLines(16)[1] == "|cffffd100Nek'zali|r", "burst guide: the boss name is a gold heading")
     text = Guide(8)

@@ -260,6 +260,7 @@ function B.GuideLines(difficultyID)
         table.sort(sorted, function(a, b) return (a.release or -1) < (b.release or -1) end)
         if #lines > 0 then lines[#lines + 1] = "" end
         lines[#lines + 1] = GOLD .. (list.name or "?") .. "|r"
+        if list.note then lines[#lines + 1] = "  " .. GREY .. list.note .. "|r" end
         for _, w in ipairs(sorted) do lines[#lines + 1] = WindowLine(w) end
         if #sorted == 0 then lines[#lines + 1] = "  " .. GREY .. "no shared moment - burst on the pull, then on cooldown|r" end
     end
