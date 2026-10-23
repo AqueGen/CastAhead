@@ -48,9 +48,10 @@ end
 
 function CastAheadUI.RefreshTabs()
     CastAheadWindow.SetMenuShown("Development", CastAheadConfig.Dev())
-    CastAheadWindow.SetMenuShown("Defensives", CastAheadConfig.DungeonSaves())
-    CastAheadWindow.SetMenuShown("Bursts", CastAheadConfig.BurstCalls())
-    CastAheadWindow.SetMenuShown("RaidDefensives", CastAheadConfig.RaidSaves())
+    local raid = CastAheadConfig.RaidSaves() or CastAheadConfig.BurstCalls()
+    CastAheadWindow.SetMenuShown("Defensives", CastAheadConfig.DungeonSaves() or CastAheadConfig.RaidSaves())
+    CastAheadWindow.SetMenuShown("RaidGuide", raid)
+    CastAheadWindow.SetMenuShown("RaidSaves", raid)
 end
 
 -- Opens the window if it is closed, then selects a page. Used by the slash
