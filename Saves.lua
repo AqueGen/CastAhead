@@ -406,6 +406,32 @@ function S.GuideLines(instanceID)
     return lines
 end
 
+-- The raid debuffs that call the viewed role on a difficulty, grouped by boss name.
+function S.RaidGuideLines(difficultyID)
+    local role, bosses, names = S.ViewRole(), {}, {}
+    if not role then return {} end
+    for id, entry in pairs(CastAheadRaidDefensives or {}) do
+        local row = entry[difficultyID]
+        if row and row[role] then
+            local advice = M.AuraAdvice({ [role] = true, dispel = entry.dispel, raid = true }) or M.ADVICE.DEFENSIVE
+            local when = (row.delay or 0) > 0 and string.format("about %d s after it lands", row.delay) or "as it lands"
+            local boss = entry.boss or "?"
+            if not bosses[boss] then bosses[boss], names[#names + 1] = {}, boss end
+            table.insert(bosses[boss], string.format("- %s: %s %s; about %d%% HP",
+                Link("spell", id, Icon(SpellTexture(id)) .. (entry.name or SpellName(id))), advice.say, when, row.ep or 0))
+        end
+    end
+    table.sort(names)
+    local lines = {}
+    for _, boss in ipairs(names) do
+        if #lines > 0 then lines[#lines + 1] = "" end
+        lines[#lines + 1] = "Boss: " .. boss
+        table.sort(bosses[boss])
+        for _, line in ipairs(bosses[boss]) do lines[#lines + 1] = line end
+    end
+    return lines
+end
+
 local SOUND_ROOT = "Interface\\AddOns\\CastAhead\\Sounds\\en\\"
 local auraIDs = {}
 local auraPending = false

@@ -44,7 +44,7 @@ end
 
 -- Forward declarations: Build calls these, and Lua resolves a local by
 -- what it holds at call time, so they must exist as upvalues before it runs.
-local BuildGeneral, BuildSounds, BuildDefensives, BuildBursts, BuildDevelopment, BuildReport
+local BuildGeneral, BuildSounds, BuildDefensives, BuildBursts, BuildRaidDefensives, BuildDevelopment, BuildReport
 -- Widgets are painted once, when a panel is first built, but storage can
 -- change behind their back: the /ca anchor|grow|offset|center slash commands
 -- and the Move button all write it. Every widget that displays stored state
@@ -937,22 +937,21 @@ function BuildDefensives(panel)
 end
 
 local BURST_DIFFICULTIES = { { 14, "Normal" }, { 15, "Heroic" }, { 16, "Mythic" }, { 8, "Keys" } }
+local RAID_DIFFICULTIES = { { 15, "Heroic" }, { 16, "Mythic" } }
 local GUIDE_COL_W, GUIDE_COL_GAP = 300, 24
-local burstDifficulty = 15
+local burstGuide
 
-function BuildBursts(panel)
-    local Paint
-    local caveat = Caveat(panel, "the phases come from top-player logs and may not match your group.", "burst")
-    panel.flowTop = function() return 6 + caveat.Place(COL_X, 6, math.max(panel:GetWidth() - 2 * COL_X, 1)) end
+-- A difficulty-picked guide in columns: linesFor(difficultyID) gives lines, "" between bosses.
+local function GuideGroup(panel, difficulties, selected, linesFor, empty)
     local guide = BuildGroup(panel, "Guide", 120, true)
-    local buttons = {}
-    for i, d in ipairs(BURST_DIFFICULTIES) do
+    local buttons, columns, blocks = {}, {}, {}
+    local g = {}
+    for i, d in ipairs(difficulties) do
         local b = CastAheadWindow.Button(guide, d[2], 56)
         b:SetPoint("TOPLEFT", guide, "TOPLEFT", 8 + (i - 1) * 59, -24)
-        b:SetScript("OnClick", function() burstDifficulty = d[1] Paint() end)
+        b:SetScript("OnClick", function() selected = d[1] g.Paint() end)
         buttons[i] = b
     end
-    local columns, blocks = {}, {}
     local function Column(i)
         if columns[i] then return columns[i] end
         local text = guide:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -987,7 +986,7 @@ function BuildBursts(panel)
         end
         guide:SetHeight(64 + tallest)
     end
-    panel.flowBottom = function(y)
+    function g.Place(y)
         local width = math.max(panel:GetWidth() - 2 * COL_X, COL_W)
         guide:ClearAllPoints()
         guide:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -((y or 0) + COL_GAP))
@@ -995,12 +994,13 @@ function BuildBursts(panel)
         LayoutGuide(width)
         return guide:GetHeight() + COL_GAP
     end
-    Paint = function()
-        for i, d in ipairs(BURST_DIFFICULTIES) do
-            buttons[i]:SetBackdropColor(unpack(d[1] == burstDifficulty and T.selected or T.panel))
+    function g.Selected() return selected end
+    function g.Paint()
+        for i, d in ipairs(difficulties) do
+            buttons[i]:SetBackdropColor(unpack(d[1] == selected and T.selected or T.panel))
         end
-        local lines = CastAheadBurst and CastAheadBurst.GuideLines(burstDifficulty) or {}
-        if #lines == 0 then lines = { "|cffaaaaaaNo burst windows on this difficulty.|r" } end
+        local lines = linesFor(selected)
+        if #lines == 0 then lines = { "|cffaaaaaa" .. empty .. "|r" } end
         wipe(blocks)
         local block = {}
         for _, line in ipairs(lines) do
@@ -1013,7 +1013,29 @@ function BuildBursts(panel)
         blocks[#blocks + 1] = block
         panel:Relayout()
     end
-    table.insert(refreshers, Paint)
+    return g
+end
+
+function BuildBursts(panel)
+    local caveat = Caveat(panel, "the phases come from top-player logs and may not match your group.", "burst")
+    panel.flowTop = function() return 6 + caveat.Place(COL_X, 6, math.max(panel:GetWidth() - 2 * COL_X, 1)) end
+    burstGuide = GuideGroup(panel, BURST_DIFFICULTIES, 15,
+        function(d) return CastAheadBurst and CastAheadBurst.GuideLines(d) or {} end, "No burst windows on this difficulty.")
+    panel.flowBottom = burstGuide.Place
+    table.insert(refreshers, burstGuide.Paint)
+end
+
+function BuildRaidDefensives(panel)
+    BuildDefensives(panel)
+    local guide = GuideGroup(panel, RAID_DIFFICULTIES, 15,
+        function(d) return CastAheadSaves and CastAheadSaves.RaidGuideLines(d) or {} end,
+        "Nothing on this difficulty calls a defensive for your role.")
+    local list = panel.flowBottom
+    panel.flowBottom = function(y)
+        local h = list(y)
+        return h + guide.Place(y + h)
+    end
+    table.insert(refreshers, guide.Paint)
 end
 
 local REPORT_KINDS = {
@@ -1061,7 +1083,7 @@ function CastAheadOptions.ReportText(key)
     local dungeon = pick.dungeon or CastAheadWindow.Dungeon and CastAheadWindow.Dungeon()
     if kind.key == "burst" then
         for _, d in ipairs(BURST_DIFFICULTIES) do
-            if d[1] == (pick.boss and pick.boss.diff or burstDifficulty) then
+            if d[1] == (pick.boss and pick.boss.diff or (burstGuide and burstGuide.Selected() or 15)) then
                 lines[#lines + 1] = pick.boss and string.format("Boss: %s (%s, encounter %d)", pick.boss.name, d[2], pick.boss.id)
                     or "Burst guide: " .. d[2]
             end
@@ -1480,7 +1502,7 @@ function BuildSounds(panel)
 end
 
 BUILDERS = { General = BuildGeneral, Sounds = BuildSounds, Defensives = BuildDefensives, Bursts = BuildBursts,
-             RaidDefensives = BuildDefensives, Development = BuildDevelopment, Report = BuildReport }
+             RaidDefensives = BuildRaidDefensives, Development = BuildDevelopment, Report = BuildReport }
 local MENU_GROUPS = { Defensives = "Dungeon", Bursts = "Raid", RaidDefensives = "Raid", Report = "Feedback" }
 local MENU_LABELS = { RaidDefensives = "Defensives" }
 

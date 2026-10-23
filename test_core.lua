@@ -3203,6 +3203,23 @@ do
     kind = "party"
     CastAheadSaves.Refresh()
     check(reg[373693] and not reg[1305963], "outside a raid the raid rows stay off and the dungeon rows play")
+
+    CastAheadRaidDefensives[1290814][15].DAMAGER = true
+    local guide = CastAheadSaves.RaidGuideLines(15)
+    check(#guide == 8 and guide[1] == "Boss: Sszorak" and guide[2]:find("Venomous Surge", 1, true)
+        and guide[2]:find("defensive about 3 s after it lands", 1, true) and guide[2]:find("about 105% HP", 1, true)
+        and guide[3] == "" and guide[4] == "Boss: Twin Fangs" and guide[5]:find("about 2 s after it lands", 1, true)
+        and guide[7] == "Boss: Ula'tek" and guide[8]:find("defensive as it lands", 1, true),
+        "raid guide: bosses by name, the role's debuffs with the call and the damage, got " .. table.concat(guide, " | "))
+    local mythic = CastAheadSaves.RaidGuideLines(16)
+    check(#mythic == 2 and mythic[2]:find("Mythic Only", 1, true), "raid guide: Mythic lists only its own rows")
+    role = "TANK"
+    guide = CastAheadSaves.RaidGuideLines(15)
+    check(#guide == 2 and guide[2]:find("Mother's Wrath", 1, true), "raid guide: a tank sees only rows flagged for tanks")
+    role = "HEALER"
+    check(CastAheadSaves.RaidGuideLines(15)[5]:find("dispel magic about 2 s after it lands", 1, true),
+        "raid guide: a healer who can remove it sees the dispel")
+    role = "DAMAGER"
     GetInstanceInfo, CastAheadRaidDefensives = savedInfo, savedRaid
     IsPlayerSpell = savedIsPlayerSpell
     C_UnitAuras.AddAuraSound, C_UnitAuras.RemoveAuraSound = nil, nil
