@@ -241,27 +241,41 @@ local function WindowLine(w)
         return string.format("  %s %s- on the boss warning|r", w.target or "Boss event", GREY)
     end
     if w.pull then return string.format("  %s %son the pull|r", B.Clock(w.release), GREY) end
-    local line = string.format("  %s %s", B.Clock(w.release), w.target or (w.group and "group burst" or "burst"))
+    local line = string.format("  %s %s", B.Clock(w.release), w.target or "burst")
     return w.role == "HEALER" and (line .. " " .. GREY .. "(healers)|r") or line
+end
+
+-- One boss on one difficulty: its note, then its windows by time.
+function B.BossLines(list)
+    local sorted, lines = {}, {}
+    for i, w in ipairs(list) do sorted[i] = w end
+    table.sort(sorted, function(a, b) return (a.release or -1) < (b.release or -1) end)
+    if list.note then lines[#lines + 1] = "  " .. GREY .. list.note .. "|r" end
+    for _, w in ipairs(sorted) do lines[#lines + 1] = WindowLine(w) end
+    if #sorted == 0 then lines[#lines + 1] = "  " .. GREY .. "no shared moment - burst on the pull, then on cooldown|r" end
+    return lines
+end
+
+-- The bosses on a difficulty (a dungeon's own when one is named), sorted by name.
+function B.Bosses(difficultyID, dungeon)
+    local bosses = {}
+    for encounterID, byDifficulty in pairs(CastAheadBurstWindows or {}) do
+        local list = byDifficulty[difficultyID]
+        if list and (not dungeon or list.dungeon == dungeon) then
+            bosses[#bosses + 1] = { encounter = encounterID, name = list.name or "?", list = list }
+        end
+    end
+    table.sort(bosses, function(a, b) return a.name < b.name end)
+    return bosses
 end
 
 -- Every window on the difficulty, the healers' own marked: the guide is the same for every spec.
 function B.GuideLines(difficultyID)
-    local bosses = {}
-    for _, byDifficulty in pairs(CastAheadBurstWindows or {}) do
-        local list = byDifficulty[difficultyID]
-        if list then bosses[#bosses + 1] = list end
-    end
-    table.sort(bosses, function(a, b) return (a.name or "") < (b.name or "") end)
     local lines = {}
-    for _, list in ipairs(bosses) do
-        local sorted = {}
-        for i, w in ipairs(list) do sorted[i] = w end
-        table.sort(sorted, function(a, b) return (a.release or -1) < (b.release or -1) end)
+    for _, boss in ipairs(B.Bosses(difficultyID)) do
         if #lines > 0 then lines[#lines + 1] = "" end
-        lines[#lines + 1] = GOLD .. (list.name or "?") .. "|r"
-        for _, w in ipairs(sorted) do lines[#lines + 1] = WindowLine(w) end
-        if #sorted == 0 then lines[#lines + 1] = "  " .. GREY .. "no shared moment - burst on the pull, then on cooldown|r" end
+        lines[#lines + 1] = GOLD .. boss.name .. "|r"
+        for _, line in ipairs(B.BossLines(boss.list)) do lines[#lines + 1] = line end
     end
     return lines
 end

@@ -3159,6 +3159,120 @@ do
     knowsDispel, role = true, "DAMAGER"
     fire("PLAYER_SPECIALIZATION_CHANGED", "player")
     check(files[#files]:match("Sounds\\en\\DEFENSIVE%.ogg$"), "a damage dealer with a magic dispel still hears the defensive")
+
+    local savedInfo, savedRaid = GetInstanceInfo, CastAheadRaidDefensives
+    local kind, difficulty = "raid", 15
+    GetInstanceInfo = function() return "r", kind, difficulty, "", 0, 0, false, 2900 end
+    CastAheadDefensives = { spells = { [373693] = { DAMAGER = true, aura = true } }, alias = {} }
+    CastAheadRaidDefensives = {
+        [1305963] = { name = "Venomous Surge", boss = "Sszorak", encounter = 3420,
+                      [15] = { DAMAGER = true, HEALER = true, delay = 3, ep = { DAMAGER = 105, HEALER = 105 } } },
+        [1300000] = { name = "Mythic Only", boss = "Sszorak", encounter = 3420, [16] = { DAMAGER = true, delay = 1, ep = { DAMAGER = 120 } } },
+        [1298367] = { name = "Mother's Wrath", boss = "Ula'tek", encounter = 3492,
+                      [15] = { TANK = true, DAMAGER = true, delay = 0, ep = { TANK = 150, DAMAGER = 135 } } },
+        [1290814] = { name = "Coiling Ichor", boss = "Twin Fangs", encounter = 3421, dispel = "Magic",
+                      [15] = { HEALER = true, delay = 2, ep = { HEALER = 134, DAMAGER = 134 } } },
+    }
+    local reg = {}
+    C_UnitAuras.AddAuraSound = function(trigger, info) reg[info.spellID] = info.soundFileName return info.spellID end
+    C_UnitAuras.RemoveAuraSound = function(id) reg[id] = nil end
+    role = "DAMAGER"
+    CastAheadSaves.Refresh()
+    check(next(reg) == nil, "raid calls need the raid switches, not the dungeon one")
+    CastAheadDB.raidMode, CastAheadDB.raidSaves = true, true
+    CastAheadSaves.Refresh()
+    check(reg[1305963] and reg[1305963]:match("Sounds\\en\\DEFENSIVE_d3%.ogg$") and not reg[373693] and not reg[1300000],
+        "raid Heroic: the debuff plays the padded clip, dungeon rows and Mythic-only rows stay off")
+    difficulty = 16
+    fire("PLAYER_DIFFICULTY_CHANGED")
+    check(reg[1300000] and reg[1300000]:match("DEFENSIVE_d1%.ogg$") and not reg[1305963], "a difficulty change swaps the raid rows")
+    difficulty, role = 15, "TANK"
+    CastAheadSaves.Refresh()
+    check(reg[1298367] and reg[1298367]:match("Sounds\\en\\DEFENSIVE%.ogg$") and not reg[1305963],
+        "a tank hears a raid row flagged for tanks and damage dealers")
+    role = "HEALER"
+    fire("SPELLS_CHANGED")
+    check(reg[1290814] and reg[1290814]:match("Sounds\\en\\MAGIC%.ogg$"), "a healer who can remove the magic hears the dispel right away")
+    role = "DAMAGER"
+    LibStub = function() return { Fetch = function(_, _, name) return name == "Path" and "custom/path.ogg" or nil end } end
+    CastAheadDB.sounds = { DEFENSIVE = "Path" }
+    CastAheadSaves.Refresh()
+    check(reg[1305963]:match("DEFENSIVE_d3%.ogg$") and reg[1298367] == "custom/path.ogg",
+        "a picked sound plays on an undelayed raid row, never in place of a delayed clip")
+    CastAheadConfig.SetEnabled("voice", false)
+    CastAheadSaves.Refresh()
+    check(reg[1305963] == "custom/path.ogg", "voice off: a delayed row plays the picked sound at once rather than nothing")
+    CastAheadConfig.SetEnabled("voice", true)
+    LibStub, CastAheadDB.sounds = nil, nil
+    kind = "party"
+    CastAheadSaves.Refresh()
+    check(reg[373693] and not reg[1305963], "outside a raid the raid rows stay off and the dungeon rows play")
+
+    local savedBurst = CastAheadBurstWindows
+    CastAheadBurstWindows = { [3420] = { [15] = { name = "Sszorak", note = "Dig In.", { release = 111 } },
+                                         [14] = { name = "Sszorak" } },
+                              [3445] = { [15] = { name = "Entombed Sentinels" } } }
+    CastAheadRaidDefensives[1290814][15].DAMAGER = true
+    CastAheadRaidDefensives[1305963].skip = { [16] = { other = { reason = "late", ep = 120, at = 14 } } }
+    CastAheadRaidDefensives[1311111] = { name = "Light Hit", boss = "Sszorak", encounter = 3420,
+                                         skip = { [15] = { other = { reason = "survivable", ep = 70 } } } }
+    CastAheadRaidDefensives[1300000][16].heroic = true
+    local function Text(d) return table.concat(CastAheadSaves.RaidGuideLines(d), "\n") end
+    local text = Text(15)
+    check(text:find("Boss: Entombed Sentinels\n|cff8fb8ff  Defensive|r\n|cffaaaaaa- nothing calls a defensive for your role|r", 1, true)
+        and text:find("Boss: Sszorak\n|cff8fb8ff  Defensive|r\n- |Hspell:1305963|hVenomous Surge|h: defensive about 3 s after it lands; about 105% HP", 1, true)
+        and text:find("|cffaaaaaa- |Hspell:1311111|hLight Hit|h: no call - about 70% HP, survivable|r", 1, true)
+        and text:find("Boss: Twin Fangs\n", 1, true) and text:find("Boss: Ula'tek\n", 1, true)
+        and text:find("defensive as it lands; about 135% HP", 1, true) and not text:find("Burst", 1, true),
+        "raid guide: every boss, the role's calls then the grey skips, no Burst section while bursts are off, got " .. text)
+    CastAheadBurstWindows[3421] = { [15] = { name = "Twin Fangs" } }
+    CastAheadRaidDefensives[1290814].boss = "The Twin Fangs"
+    CastAheadDB.raidSaves = nil
+    CastAheadDB.burstCalls = true
+    check(Text(15):find("Boss: The Twin Fangs\n", 1, true) and not Text(15):find("Boss: Twin Fangs\n", 1, true),
+        "raid guide: a boss keeps one heading whichever sections are shown")
+    CastAheadRaidDefensives[1290814].boss = "Twin Fangs"
+    CastAheadBurstWindows[3421] = nil
+    CastAheadDB.raidSaves = true
+    text = Text(15)
+    check(text:find("|cff8fb8ff  Burst|r\n  |cffaaaaaaDig In.|r\n  1:51 burst", 1, true)
+        and text:find("Boss: Ula'tek\n.-|cff8fb8ff  Burst|r\n|cffaaaaaa  burst on the pull, then on cooldown|r"),
+        "raid guide: the Burst section has the note and the windows, a boss with no burst data says so, got " .. text)
+    CastAheadDB.raidSaves = nil
+    text = Text(15)
+    check(not text:find("Defensive", 1, true) and text:find("Burst", 1, true), "raid guide: raid defensive calls off hide the Defensive section")
+    CastAheadDB.burstCalls = nil
+    check(CastAheadSaves.RaidGuideText(15):find("are off", 1, true), "raid guide: with both off it says the calls are off")
+    CastAheadDB.raidSaves = true
+    check(CastAheadSaves.RaidGuideText(15):find("^|cffaaaaaaDebuff calls and burst phases come from top%-player logs"),
+        "raid guide: the caveat opens the guide")
+    check(Text(14):find("Boss: Sszorak\n|cff8fb8ff  Defensive|r\n|cffaaaaaa- no defensive data for Normal|r", 1, true),
+        "raid guide: Normal has no defensive data")
+    text = Text(16)
+    check(text:find("Mythic Only", 1, true) and text:find("judged on Heroic", 1, true)
+        and text:find("Venomous Surge|h: no call - the deadly part comes 14 s after it lands, too late for a call", 1, true),
+        "raid guide: Mythic shows its own call, the borrowed verdict and the late skip, got " .. text)
+    local rows = CastAheadSaves.ViewRaidRows(15)
+    check(#rows == 3 and rows[1].id == 1305963 and rows[1].lead == 3 and rows[1].ep == 105 and rows[1].trigger.debuff
+        and rows[1].boss == "Sszorak" and rows[3].id == 1298367 and rows[3].lead == 0,
+        "raid saves: the role's rows by boss, with the delay as lead and the role's damage")
+    role = "TANK"
+    text = Text(15)
+    check(text:find("Mother's Wrath|h: defensive as it lands; about 150% HP", 1, true) and not text:find("Venomous Surge", 1, true),
+        "raid guide: a tank sees the tank rows with the tanks' damage")
+    role = "HEALER"
+    check(Text(15):find("Coiling Ichor|h: dispel magic as it lands", 1, true),
+        "raid guide: a healer who can remove it sees the dispel, right away")
+    local savedInfoByID = GetSpecializationInfoByID
+    GetSpecializationInfoByID = function(id) return id, "Resto", "", 0, "HEALER" end
+    CastAheadSaves.SetViewSpec(105)
+    check(Text(15):find("defensive about 2 s after it lands (dispel magic instead if your spec removes it)", 1, true),
+        "raid guide: another healer spec is told the dispel depends on the spec")
+    CastAheadSaves.SetViewSpec(nil)
+    CastAheadBurstWindows = savedBurst
+    GetSpecializationInfoByID = savedInfoByID
+    role = "DAMAGER"
+    GetInstanceInfo, CastAheadRaidDefensives = savedInfo, savedRaid
     IsPlayerSpell = savedIsPlayerSpell
     C_UnitAuras.AddAuraSound, C_UnitAuras.RemoveAuraSound = nil, nil
     C_ChatInfo, InCombatLockdown, Enum.UnitAuraSoundTrigger = nil, nil, nil
@@ -3232,14 +3346,34 @@ do
     local text = table.concat(guide, "\n")
     check(guide[1] == "Boss: Abe" and text:find("\nBoss: Boss A\n", 1, true) and text:find("\nTrash\n", 1, true),
         "the guide groups bosses by name, then trash")
-    check(guide[2]:find("Zap|h from Abe (boss timer): defensive - |Hspell:104773|h|T2001:16|t Unending Resolve|h", 1, true) and guide[2]:find("(interrupt comes first)", 1, true),
+    check(not text:find("Burst", 1, true), "the dungeon guide has no Burst section while burst windows are off")
+    do
+        local savedBurst, raidMode, bursts = CastAheadBurstWindows, CastAheadDB.raidMode, CastAheadDB.burstCalls
+        CastAheadBurstWindows = { [1] = { [8] = { name = "Abe", dungeon = "Fixture", note = "Phase." } },
+                                  [2] = { [8] = { name = "Zed", dungeon = "Fixture" } },
+                                  [3] = { [8] = { name = "Elsewhere", dungeon = "Other" } } }
+        local without = table.concat(CastAheadSaves.GuideLines(9000), "\n")
+        check(without:find("Boss: Zed\n|cff8fb8ff  Defensive|r\n|cffaaaaaa- nothing calls a defensive for your role|r", 1, true)
+            and not without:find("Burst", 1, true),
+            "with burst windows off the dungeon guide still lists every boss of the dungeon, got " .. without)
+        CastAheadDB.raidMode, CastAheadDB.burstCalls = true, true
+        check(CastAheadSaves.GuideText(9000):find("Burst phases come from top-player logs", 1, true),
+            "the dungeon guide carries the burst caveat while bursts are shown")
+        local with = table.concat(CastAheadSaves.GuideLines(9000), "\n")
+        check(with:find("Boss: Abe\n.-|cff8fb8ff  Burst|r\n  |cffaaaaaaPhase.|r")
+            and with:find("Boss: Zed\n|cff8fb8ff  Defensive|r\n|cffaaaaaa- nothing calls a defensive for your role|r\n|cff8fb8ff  Burst|r", 1, true)
+            and not with:find("Elsewhere", 1, true) and not with:find("Trash\n|cff8fb8ff", 1, true),
+            "the dungeon guide adds each of its bosses' burst lines, lists a boss with only burst data, keeps trash plain, got " .. with)
+        CastAheadBurstWindows, CastAheadDB.raidMode, CastAheadDB.burstCalls = savedBurst, raidMode, bursts
+    end
+    check(guide[3]:find("Zap|h from Abe (boss timer): defensive - |Hspell:104773|h|T2001:16|t Unending Resolve|h", 1, true) and guide[3]:find("(interrupt comes first)", 1, true),
         "a guide line names the hit, the mob, how it is heard, the call, the first button and what wins")
     check(text:find("Burn|h from ground effect (debuff on you): defensive", 1, true), "a debuff-only hit says it lands on you")
-    check(guide[2]:find("defensive - |Hspell:104773|h|T2001:16|t Unending Resolve|h", 1, true), "a button carries its icon inside a link")
+    check(guide[3]:find("defensive - |Hspell:104773|h|T2001:16|t Unending Resolve|h", 1, true), "a button carries its icon inside a link")
     check(text:find("|Hitem:5512|h|T9512:16|t", 1, true), "an item in the bags links to the item")
     local textureSaved = C_Spell.GetSpellTexture
     C_Spell.GetSpellTexture = function(id) return id == 806 and 4242 or textureSaved(id) end
-    check(CastAheadSaves.GuideLines(9000)[2]:find("^%- |Hspell:806|h|T4242:16|t Zap|h from Abe"), "a hit carries its spell icon in front of its name, both inside its link")
+    check(CastAheadSaves.GuideLines(9000)[3]:find("^%- |Hspell:806|h|T4242:16|t Zap|h from Abe"), "a hit carries its spell icon in front of its name, both inside its link")
     C_Spell.GetSpellTexture = textureSaved
     check(text:find("Bolt|h from Caster (cast): defensive", 1, true) and text:find("Casts about 12s after the pull, then every 20s", 1, true),
         "a cast with one cooldown gives its first cast and its period")
@@ -3297,7 +3431,7 @@ do
         local zapRow
         for _, r in ipairs(CastAheadSaves.ViewRows(9000)) do if r.id == 806 then zapRow = r end end
         check(zapRow and zapRow.ep == 120, "a row carries the damage of the viewed role at +20")
-        check(CastAheadSaves.GuideLines(9000)[2]:find("; about 120% HP at +20", 1, true), "the guide line gives the damage at +20")
+        check(CastAheadSaves.GuideLines(9000)[3]:find("; about 120% HP at +20", 1, true), "the guide line gives the damage at +20")
         check(CastAheadSaves.GuideText(9000):find("^" .. CastAheadSaves.EP_NOTE:gsub("%p", "%%%0") .. "\n\n"),
             "the guide text opens with the damage note")
         check(not CastAheadSaves.ViewLevel and not CastAheadSaves.SetViewLevel and not CastAheadMatch.AtLevel,
@@ -4214,23 +4348,14 @@ do
     CastAheadDB = {}
     CastAheadBurstWindows = { [3492] = { [15] = { name = "Ula'tek", { release = 145.5, target = "Venomous Heart" } } } }
     local host = CreateFrame("Frame")
-    local ok, err = pcall(CastAheadOptions.ShowPanel, host, "Bursts")
-    check(ok, "the Bursts page builds headless " .. tostring(err))
+    local ok, err
     ok, err = pcall(CastAheadOptions.ShowPanel, host, "Defensives")
     check(ok, "the Defensives page builds headless " .. tostring(err))
     ok, err = pcall(CastAheadOptions.ShowPanel, host, "Report")
     check(ok, "the Report page builds headless " .. tostring(err))
-    local guide, lists
-    for _, fs in ipairs(texts) do
-        local v = tostring(rawget(fs, "value"))
-        if v:find("Venomous Heart", 1, true) then guide = v end
-    end
-    for _, f in ipairs(made) do
-        local title = rawget(f, "title") and rawget(f.title, "value")
-        if title == "Full burst" or title == "Mini burst" then lists = true end
-    end
-    check(guide and guide:find("Ula'tek", 1, true), "the Bursts page shows the guide for Heroic, got " .. tostring(guide))
-    check(not lists, "the Bursts page has no button lists")
+    local tabs = table.concat(CastAheadOptions.TABS, " ")
+    check(not tabs:find("Bursts", 1, true) and not tabs:find("RaidDefensives", 1, true),
+        "there are no Bursts and no Raid Defensives settings pages, got " .. tabs)
 
     local wanted = { Features = true, ["Defensive calls in dungeons"] = true,
         ["Raid (experimental)"] = true, ["Defensive calls in raids"] = true, ["Burst windows"] = true,
@@ -4298,36 +4423,6 @@ do
         local boss, note = Frame("Boss calls from DBM / BigWigs"), OffNote()
         check(boss and boss.shown == case[2], "Defensives boss switch visibility, " .. case[3])
         check(note and note.shown == not case[2], "Defensives off note visibility, " .. case[3])
-    end
-
-    do
-        local savedSpec, savedSpecInfo, savedButtons = GetSpecialization, GetSpecializationInfo, CastAheadSaveButtons
-        GetSpecialization, GetSpecializationInfo = function() return 1 end, function() return 71 end
-        CastAheadSaveButtons = { [71] = { def = { 871 } } }
-        CastAheadDB = { saveCalls = true, raidMode = true, raidSaves = true }
-        CastAheadSaves.Store.SetList("def", { 871, 118038 })
-        CastAheadOptions.ShowPanel(host, "Defensives")
-        local mark = { made = #made, texts = #texts }
-        mark.built, mark.why = pcall(CastAheadOptions.ShowPanel, CreateFrame("Frame"), "RaidDefensives")
-        check(mark.built, "the raid Defensives page builds headless on its own host " .. tostring(mark.why))
-        local function Find(list, from, to, match)
-            for i = from, to do
-                if match(list[i]) then return list[i] end
-            end
-        end
-        local function Row871(fs) return rawget(fs, "value") == "871" end
-        local function RemoveButton(f) return rawget(f, "buttonText") == "X" and rawget(f, "onClick") ~= nil end
-        local dungeonRow, raidRow = Find(texts, 1, mark.texts, Row871), Find(texts, mark.texts + 1, #texts, Row871)
-        check(dungeonRow and raidRow, "both Defensives pages show the shared list")
-        mark.remove = Find(made, mark.made + 1, #made, RemoveButton)
-        if mark.remove then mark.remove.onClick(mark.remove) end
-        check(mark.remove and dungeonRow and rawget(dungeonRow, "value") == "118038",
-            "removing a row on the raid page shows on the dungeon page, got " .. tostring(dungeonRow and rawget(dungeonRow, "value")))
-        mark.remove = Find(made, 1, mark.made, RemoveButton)
-        if mark.remove then mark.remove.onClick(mark.remove) end
-        check(mark.remove and raidRow and rawget(raidRow, "value") ~= "118038",
-            "removing a row on the dungeon page shows on the raid page, got " .. tostring(raidRow and rawget(raidRow, "value")))
-        GetSpecialization, GetSpecializationInfo, CastAheadSaveButtons = savedSpec, savedSpecInfo, savedButtons
     end
 
     CastAheadDB = {}
@@ -4434,75 +4529,59 @@ do
     check(panelsShown[#panelsShown] == "General", "each settings page shows its own panel")
     check(sized == before, "switching pages, dungeons and Development mode never resizes the window")
     CastAheadDB.raidMode, CastAheadDB.burstCalls = true, true
-    CastAheadUI.ShowTab("Bursts")
-    check(CastAheadWindow.Current() == "Bursts", "burst windows switched on show the Bursts page")
+    CastAheadUI.ShowTab("RaidGuide")
+    check(CastAheadWindow.Current() == "RaidGuide", "burst windows switched on show the Raid Guide")
     CastAheadDB.burstCalls = nil
     CastAheadUI.RefreshTabs()
-    check(CastAheadWindow.Current() == "General", "burst windows switched off while open show General")
+    check(CastAheadWindow.Current() == "General", "the raid features switched off while the Raid Guide is open show General")
     do
         local W = CastAheadWindow
-        local group, shown = W.Page("Defensives")
-        check(group == "Dungeon", "Defensives sits in the Dungeon group")
-        group = W.Page("Bursts")
-        check(group == "Raid", "Bursts sits in the Raid group")
+        local function Shown(name) return select(2, W.Page(name)) end
+        check(W.Page("Defensives") == "Settings", "Defensives sits in the Settings group")
+        check(W.Page("RaidGuide") == "Raid" and W.Page("RaidSaves") == "Raid", "Guide and Saves sit in the Raid group")
+        check(W.Page("Bursts") == nil and W.Page("RaidDefensives") == nil, "there is no Bursts or Raid Defensives page")
         local hasExperimental
         for _, g in ipairs(W.GROUPS) do
             if g == "Experimental" then hasExperimental = true end
         end
         check(not hasExperimental, "there is no Experimental group")
-        CastAheadDB.saveCalls, CastAheadDB.burstCalls = nil, nil
+        CastAheadDB.saveCalls, CastAheadDB.burstCalls, CastAheadDB.raidSaves = nil, nil, nil
         CastAheadUI.RefreshTabs()
-        _, shown = W.Page("Defensives")
-        check(shown == false, "Defensives is hidden while dungeon calls are off")
-        _, shown = W.Page("Bursts")
-        check(shown == false, "the Raid group has no shown page while bursts are off")
-        _, shown = W.Page("Guide")
-        check(shown == true, "Guide stays shown with dungeon calls off")
+        check(Shown("Defensives") == false, "Defensives is hidden while dungeon and raid calls are off")
+        check(Shown("RaidGuide") == false and Shown("RaidSaves") == false, "the Raid group is hidden while its features are off")
+        check(Shown("Guide") == true, "the dungeon Guide stays shown with dungeon calls off")
         CastAheadDB.saveCalls = true
         CastAheadUI.RefreshTabs()
-        _, shown = W.Page("Defensives")
-        check(shown == true, "Defensives is shown while dungeon calls are on")
+        check(Shown("Defensives") == true, "Defensives is shown while dungeon calls are on")
         CastAheadUI.ShowTab("Defensives")
         CastAheadDB.saveCalls = nil
         CastAheadUI.RefreshTabs()
-        check(CastAheadWindow.Current() == "Guide", "dungeon calls switched off while Defensives is open show Guide")
-    end
-    do
-        local W = CastAheadWindow
-        local function Shown(name) return select(2, W.Page(name)) end
+        check(CastAheadWindow.Current() == "General", "calls switched off while Defensives is open show General")
         CastAheadDB.raidMode, CastAheadDB.raidSaves, CastAheadDB.burstCalls = nil, true, true
         CastAheadUI.RefreshTabs()
-        check(Shown("Bursts") == false and Shown("RaidDefensives") == false,
-            "the Raid group is hidden while the raid switch is off, whatever its children hold")
+        check(Shown("RaidGuide") == false and Shown("Defensives") == false,
+            "the raid switch off hides the Raid group and the raid half of Defensives, whatever its children hold")
         CastAheadDB.raidMode, CastAheadDB.burstCalls = true, nil
         CastAheadUI.RefreshTabs()
-        check(W.Page("RaidDefensives") == "Raid" and Shown("RaidDefensives") == true and Shown("Bursts") == false,
-            "raid defensive calls on show Raid - Defensives without Bursts")
+        check(Shown("RaidGuide") and Shown("RaidSaves") and Shown("Defensives"),
+            "raid defensive calls on show the Raid group and Defensives")
         CastAheadDB.raidSaves, CastAheadDB.burstCalls = nil, true
         CastAheadUI.RefreshTabs()
-        check(Shown("Bursts") == true and Shown("RaidDefensives") == false, "burst windows on show Bursts alone")
-        CastAheadDB.raidSaves, CastAheadDB.burstCalls = true, nil
-        CastAheadUI.ShowTab("RaidDefensives")
-        check(CastAheadWindow.Current() == "RaidDefensives" and panelsShown[#panelsShown] == "RaidDefensives",
-            "Raid - Defensives opens its own panel")
+        check(Shown("RaidGuide") and not Shown("Defensives"), "burst windows alone show the Raid group, not Defensives")
         local labels, raw = 0, 0
         for _, t in ipairs(buttonTexts) do
-            if t == "Defensives" then labels = labels + 1 end
-            if t == "RaidDefensives" then raw = raw + 1 end
+            if t == "Guide" then labels = labels + 1 end
+            if t == "RaidGuide" then raw = raw + 1 end
         end
-        check(labels >= 2 and raw == 0, "both menu entries read Defensives, got " .. labels .. " and " .. raw .. " raw names")
-        CastAheadDB.raidMode = nil
+        check(labels >= 2 and raw == 0, "both Guide entries read Guide, got " .. labels .. " and " .. raw .. " raw names")
+        CastAheadDB.window.page = "Bursts"
+        f:Hide()
+        CastAhead_Toggle()
+        check(CastAheadWindow.Current() == "RaidGuide", "a page saved as Bursts by an older version opens the Raid Guide")
+        CastAhead_Toggle()
+        CastAheadDB.raidMode, CastAheadDB.burstCalls = nil, nil
         CastAheadUI.RefreshTabs()
-        check(CastAheadWindow.Current() == "General", "the raid switch turned off while Raid - Defensives is open shows General")
-        CastAheadDB.raidSaves = nil
     end
-    CastAheadDB.raidMode, CastAheadDB.burstCalls = true, true
-    CastAheadUI.ShowTab("Bursts")
-    CastAhead_Toggle()
-    CastAheadDB.burstCalls = nil
-    CastAhead_Toggle()
-    check(CastAheadWindow.Current() == "General", "a saved Bursts page with bursts off reopens on General")
-    CastAhead_Toggle()
 
     SlashCmdList.CASTAHEAD("sounds")
     check(f:IsShown() and CastAheadWindow.Current() == "Sounds", "/ca sounds opens the Sounds page")
@@ -4599,6 +4678,50 @@ do
     UIParent, CastAheadDB = nil, nil
 end
 
+do
+    local savedData, savedInfo, savedCreate = CastAheadData, GetInstanceInfo, CreateFrame
+    local kind, difficulty = "party", 8
+    GetInstanceInfo = function() return "r", kind, difficulty, "", 0, 0, false, 2900 end
+    CastAheadData = { [1] = { name = "Alpha" } }
+    local made = {}
+    CreateFrame = function(k, name, ...)
+        local f = savedCreate(k, name, ...)
+        local setScript = f.SetScript
+        f.SetScript = function(self, script, fn)
+            setScript(self, script, fn)
+            if script == "OnClick" then rawset(self, "onClick", fn) end
+        end
+        if name == "CastAheadMainWindow" then
+            f.GetWidth = function() return 900 end
+            f.GetHeight = function() return 560 end
+        end
+        made[#made + 1] = f
+        return f
+    end
+    UIParent = { GetWidth = function() return 1920 end, GetHeight = function() return 1080 end }
+    CastAheadDB = {}
+    dofile("Window.lua")
+    local W = CastAheadWindow
+    check(W.RaidDifficulty() == 15, "outside a raid the raid picker starts on Heroic")
+    kind, difficulty = "raid", 16
+    check(W.RaidDifficulty() == 16, "inside a Mythic raid it starts on Mythic")
+    kind, difficulty = "raid", 17
+    check(W.RaidDifficulty() == 15, "a raid difficulty with no data falls back to Heroic")
+    local refreshed = 0
+    W.Register("TestR", "Raid", function() end, function() refreshed = refreshed + 1 end)
+    W.Show("TestR")
+    for _, b in ipairs(made) do
+        if rawget(b, "difficultyID") == 14 then b.onClick(b) end
+    end
+    kind, difficulty = "raid", 16
+    check(W.RaidDifficulty() == 14 and refreshed == 2, "a clicked difficulty stays picked and refreshes the page")
+    for _, b in ipairs(made) do
+        if rawget(b, "difficultyID") == 15 then b.onClick(b) end
+    end
+    CastAheadData, GetInstanceInfo, CreateFrame = savedData, savedInfo, savedCreate
+    UIParent, CastAheadDB = nil, nil
+end
+
 -- Burst windows: "burst soon" five seconds before the phase, "burst now" as it starts, a save call goes first.
 do
     local B, S, A = CastAheadBurst, CastAheadSaves, CastAheadMatch.ADVICE
@@ -4609,7 +4732,7 @@ do
     GetSpecialization = function() return 1 end
     GetSpecializationRole = function() return role end
     CastAheadBurstWindows = { [3492] = { [15] = { { release = 30 } }, [14] = { { release = 3 } },
-        [8] = { { release = 3, pull = true }, { release = 20, group = true } } } }
+        [8] = { { release = 3, pull = true }, { release = 20 } } } }
     CastAheadDB = { raidMode = true, burstCalls = true }
     local function run(seconds)
         for _ = 1, seconds * 2 do
@@ -4642,7 +4765,7 @@ do
     heard = {}
     B.OnEncounter("ENCOUNTER_START", 3492, 8, now)
     run(25)
-    check(Heard() == "SOON,BURST", "burst: the pull moment is silent, a group moment is called, heard " .. Heard())
+    check(Heard() == "SOON,BURST", "burst: the pull moment is silent, a later window is called, heard " .. Heard())
 
     heard = {}
     role = "HEALER"
@@ -4844,8 +4967,8 @@ do
         and sw.raidSaves.label == "Defensive calls in raids" and sw.raidSaves.defaultOff == true
         and sw.burstCalls.label == "Burst windows", "the four feature switches carry their labels and start off")
     check(sw.centerText.defaultOff == nil, "the centre call is not a default-off switch")
-    check(ok and table.concat(CastAheadOptions.TABS, ",") == "General,Sounds,Defensives,Bursts,RaidDefensives,Development,Report",
-        "bursts have their own settings page right after Defensives, Report comes last")
+    check(ok and table.concat(CastAheadOptions.TABS, ",") == "General,Sounds,Defensives,Development,Report",
+        "the settings pages are General, Sounds, Defensives and Development, Report comes last")
     local savedMeta, savedBuild, savedLocale, savedInfo, savedDB = C_AddOns, GetBuildInfo, GetLocale, GetSpecializationInfoByID, CastAheadDB
     local savedSpec, savedSpecInfo = GetSpecialization, GetSpecializationInfo
     GetSpecialization, GetSpecializationInfo = function() return 1 end, function() return 577 end
@@ -4859,8 +4982,9 @@ do
         and save:find("Spec: Havoc Demon Hunter", 1, true) and save:find("Defensive calls: dungeons off, raids off", 1, true)
         and save:find("Anything else about what happened:\n$"), "a defensive report carries version, spec, the switch and ends on its question")
     local burst = CastAheadOptions.ReportText("burst")
-    check(burst:find("Burst guide: Heroic\nBurst windows: on\n", 1, true) and not burst:find("Defensive calls", 1, true),
-        "a burst report carries the guide difficulty and the burst switch instead")
+    check(burst:find("Burst guide: Heroic\nDungeon picked: ", 1, true) and burst:find("\nBurst windows: on\n", 1, true)
+        and not burst:find("Defensive calls", 1, true),
+        "a burst report carries the raid difficulty, the dungeon and the burst switch instead")
     CastAheadDB = { burstCalls = true, raidSaves = true }
     check(CastAheadOptions.ReportText("burst"):find("Burst windows: off\n", 1, true)
         and CastAheadOptions.ReportText("save"):find("raids off", 1, true),
@@ -4897,14 +5021,14 @@ do
     CastAheadBurstWindows = {
         [3492] = { [16] = { name = "Ula'tek", { release = 294.5, target = "Venomous Heart" },
             { release = 145.5, target = "Venomous Heart" }, { release = 108.1, role = "HEALER" } } },
-        [3455] = { [16] = { name = "Vashnik", { release = 128.4, group = true }, { release = 3.2, pull = true } } },
+        [3455] = { [16] = { name = "Vashnik", note = "Hold windows.", { release = 128.4 }, { release = 3.2, pull = true } } },
         [3470] = { [16] = { name = "Nek'zali" } },
         [3101] = { [8] = { name = "Kystia Manaheart", { event = 610, target = "Light Infusion" } } } }
     check(B.Clock(197) == "3:17" and B.Clock(59.6) == "1:00", "burst guide: clock formats m:ss")
     local text = Guide(16)
     check(text == "Nek'zali\n  no shared moment - burst on the pull, then on cooldown\n\n"
         .. "Ula'tek\n  1:48 burst (healers)\n  2:26 Venomous Heart\n  4:55 Venomous Heart\n\n"
-        .. "Vashnik\n  0:03 on the pull\n  2:08 group burst",
+        .. "Vashnik\n  Hold windows.\n  0:03 on the pull\n  2:08 burst",
         "burst guide: every boss by name, windows by time, healer windows marked, got " .. text)
     check(B.GuideLines(16)[1] == "|cffffd100Nek'zali|r", "burst guide: the boss name is a gold heading")
     text = Guide(8)

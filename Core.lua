@@ -2172,6 +2172,10 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         end
         return
     end
+    if event == "PLAYER_DIFFICULTY_CHANGED" then
+        if CastAheadSaves then CastAheadSaves.Refresh() end
+        return
+    end
     if event == "PLAYER_REGEN_ENABLED" or event == "CHALLENGE_MODE_COMPLETED" or event == "ENCOUNTER_END" then
         if CastAheadSaves and CastAheadSaves.AuraPending() then CastAheadSaves.Refresh() end
     end
@@ -2720,6 +2724,7 @@ end)
 
 for _, event in ipairs({
     "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "PLAYER_SPECIALIZATION_CHANGED", "SPELLS_CHANGED",
+    "PLAYER_DIFFICULTY_CHANGED",
     "ENCOUNTER_START", "ENCOUNTER_END", "CHALLENGE_MODE_START", "CHALLENGE_MODE_COMPLETED",
     "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "BAG_UPDATE_DELAYED",
     "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH",

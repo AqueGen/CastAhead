@@ -25,10 +25,15 @@ local SCALE_MIN, SCALE_MAX, SCALE_DEFAULT = 75, 150, 100
 local SIDE_HINT = "Shift + mouse wheel scrolls sideways"
 local FLAT = { bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 }
 
-local frame, titleBar, titleAnchor, scaleDrop, menu, content, grid, scroll, footerText, footerHint
+local RAID_DIFFICULTIES = { { 14, "Normal" }, { 15, "Heroic" }, { 16, "Mythic" } }
+local RAID_DEFAULT = 15
+-- Pages from older versions, so a saved page name still opens something.
+local MOVED = { Bursts = "RaidGuide", RaidDefensives = "RaidGuide" }
+
+local frame, titleBar, titleAnchor, scaleDrop, menu, content, grid, raidGrid, scroll, footerText, footerHint
 local sizing = false
-local pages, order, headers, dungeonButtons = {}, {}, {}, {}
-local current, dungeon, picked
+local pages, order, headers, dungeonButtons, raidButtons = {}, {}, {}, {}, {}
+local current, dungeon, picked, raidDifficulty, raidPicked
 
 local function Saved()
     CastAheadDB = CastAheadDB or {}
@@ -232,7 +237,23 @@ function W.Dungeon()
     return dungeon
 end
 
+function W.RaidDifficulty()
+    if not raidPicked then
+        local _, kind, difficulty = GetInstanceInfo()
+        raidDifficulty = RAID_DEFAULT
+        for _, d in ipairs(RAID_DIFFICULTIES) do
+            if kind == "raid" and difficulty == d[1] then raidDifficulty = difficulty end
+        end
+    end
+    return raidDifficulty
+end
+
 local function PaintDungeons()
+    for _, b in ipairs(raidButtons) do
+        local on = b.difficultyID == raidDifficulty
+        b:SetBackdropColor(unpack(on and T.selected or T.panel))
+        b.label:SetTextColor(unpack(on and T.gold or T.text))
+    end
     for _, b in ipairs(dungeonButtons) do
         local on = b.instanceID == dungeon
         b:SetBackdropColor(unpack(on and T.selected or T.panel))
@@ -242,11 +263,13 @@ end
 
 local function LayoutGrid(width)
     local w = (width - (PER_ROW - 1) * GAP) / PER_ROW
-    for i, b in ipairs(dungeonButtons) do
-        b:SetWidth(w)
-        b:ClearAllPoints()
-        b:SetPoint("TOPLEFT", grid, "TOPLEFT", ((i - 1) % PER_ROW) * (w + GAP),
-            -math.floor((i - 1) / PER_ROW) * (ENTRY_H + GAP))
+    for _, set in ipairs({ { dungeonButtons, grid }, { raidButtons, raidGrid } }) do
+        for i, b in ipairs(set[1]) do
+            b:SetWidth(w)
+            b:ClearAllPoints()
+            b:SetPoint("TOPLEFT", set[2], "TOPLEFT", ((i - 1) % PER_ROW) * (w + GAP),
+                -math.floor((i - 1) / PER_ROW) * (ENTRY_H + GAP))
+        end
     end
 end
 
@@ -426,6 +449,21 @@ local function Build()
         end)
         dungeonButtons[i] = b
     end
+    raidGrid = CreateFrame("Frame", nil, content)
+    raidGrid:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
+    raidGrid:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, 0)
+    raidGrid:SetHeight(ENTRY_H)
+    for i, d in ipairs(RAID_DIFFICULTIES) do
+        local b = W.Button(raidGrid, d[2], 1, false)
+        b.difficultyID = d[1]
+        b:SetScript("OnClick", function(self)
+            raidDifficulty, raidPicked = self.difficultyID, true
+            PaintDungeons()
+            local page = pages[current]
+            if page then page.refresh() end
+        end)
+        raidButtons[i] = b
+    end
     content:SetScript("OnSizeChanged", function(_, width)
         if not sizing then LayoutGrid(width) end
     end)
@@ -507,17 +545,19 @@ function W.Show(name)
     if not frame then Build() end
     frame:Show()
     current = name
-    local dungeonPage = page.group == "Dungeon" and not page.ownBar
-    grid:SetShown(dungeonPage)
+    local bar = not page.ownBar and (page.group == "Dungeon" and grid or page.group == "Raid" and raidGrid) or nil
+    grid:SetShown(bar == grid)
+    raidGrid:SetShown(bar == raidGrid)
     scroll:ClearAllPoints()
-    if dungeonPage then
-        scroll:SetPoint("TOPLEFT", grid, "BOTTOMLEFT", 0, -PAD)
+    if bar then
+        scroll:SetPoint("TOPLEFT", bar, "BOTTOMLEFT", 0, -PAD)
     else
         scroll:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
     end
     scroll:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", -SCROLLBAR_W, 0)
     LayoutGrid(content:GetWidth() or 0)
     W.Dungeon()
+    W.RaidDifficulty()
     PaintDungeons()
     for _, p in ipairs(order) do
         if p.host and p ~= page then p.host:Hide() end
@@ -542,7 +582,7 @@ local function FirstShown(group)
     for _, p in ipairs(order) do
         if p.group == group and p.shown then return p.name end
     end
-    if group == "Raid" then return FirstShown("Settings") end
+    if group ~= "Settings" then return FirstShown("Settings") end
 end
 
 function W.Toggle()
@@ -550,7 +590,8 @@ function W.Toggle()
         frame:Hide()
         return
     end
-    local saved = pages[CastAheadDB and CastAheadDB.window and CastAheadDB.window.page]
+    local savedName = CastAheadDB and CastAheadDB.window and CastAheadDB.window.page
+    local saved = pages[MOVED[savedName] or savedName]
     local name = saved and (saved.shown and saved.name or FirstShown(saved.group))
         or current or FirstShown("Settings")
     if name then W.Show(name) end

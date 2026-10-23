@@ -24,6 +24,7 @@ Data.lua
 Priority.lua
 SaveButtons.lua
 Defensives.lua
+RaidDefensives.lua
 BossCadence.lua
 BurstWindows.lua
 Traits.lua
