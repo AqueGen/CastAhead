@@ -1032,7 +1032,7 @@ function BuildRaidDefensives(panel)
         "Nothing on this difficulty calls a defensive for your role.")
     local list = panel.flowBottom
     panel.flowBottom = function(y)
-        local h = list(y)
+        local h = list and list(y) or 0
         return h + guide.Place(y + h)
     end
     table.insert(refreshers, guide.Paint)

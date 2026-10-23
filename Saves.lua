@@ -410,15 +410,22 @@ end
 function S.RaidGuideLines(difficultyID)
     local role, bosses, names = S.ViewRole(), {}, {}
     if not role then return {} end
+    -- Which dispels a spec knows is only known for the one being played.
+    local own = S.ViewSpecID() == S.SpecID()
     for id, entry in pairs(CastAheadRaidDefensives or {}) do
         local row = entry[difficultyID]
         if row and row[role] then
-            local advice = M.AuraAdvice({ [role] = true, dispel = entry.dispel, raid = true }) or M.ADVICE.DEFENSIVE
-            local when = (row.delay or 0) > 0 and string.format("about %d s after it lands", row.delay) or "as it lands"
+            local advice = own and M.AuraAdvice({ [role] = true, dispel = entry.dispel, raid = true }) or M.ADVICE.DEFENSIVE
+            local delay = M.IsSave(advice) and row.delay or 0
+            local when = delay > 0 and string.format("about %d s after it lands", delay) or "as it lands"
+            if not own and role == "HEALER" and entry.dispel then
+                when = when .. string.format(" (dispel %s instead if your spec removes it)", entry.dispel:lower())
+            end
             local boss = entry.boss or "?"
             if not bosses[boss] then bosses[boss], names[#names + 1] = {}, boss end
             table.insert(bosses[boss], string.format("- %s: %s %s; about %d%% HP",
-                Link("spell", id, Icon(SpellTexture(id)) .. (entry.name or SpellName(id))), advice.say, when, row.ep or 0))
+                Link("spell", id, Icon(SpellTexture(id)) .. (entry.name or SpellName(id))), advice.say, when,
+                row.ep and row.ep[role] or 0))
         end
     end
     table.sort(names)
@@ -486,9 +493,10 @@ local function RegisterAuraSounds()
     local voice = CastAheadConfig.Enabled("voice")
     for spellID, row in pairs(AuraRows()) do
         local advice = M.AuraAdvice(row, CastAheadPriority and CastAheadPriority[spellID])
-        local delay = row.delay or 0
-        local file = advice and (delay == 0 and PickedFile(advice)
-            or voice and SOUND_ROOT .. advice.file .. (delay > 0 and "_d" .. delay or "") .. ".ogg")
+        -- The delay times a defensive; a dispel is best right away.
+        local delay = advice and M.IsSave(advice) and row.delay or 0
+        local picked = advice and (delay == 0 or not voice) and PickedFile(advice)
+        local file = advice and (picked or voice and SOUND_ROOT .. advice.file .. (delay > 0 and "_d" .. delay or "") .. ".ogg")
         if file then
             local ok, id = pcall(C_UnitAuras.AddAuraSound, Enum.UnitAuraSoundTrigger.Added, {
                 unitToken = "player", spellID = spellID, soundFileName = file, outputChannel = CastAheadConfig.SoundChannel() })

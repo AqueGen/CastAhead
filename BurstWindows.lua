@@ -224,7 +224,7 @@ CastAheadBurstWindows = {
             { release = 2.8, pull = true }, -- 22 specs, 192 fights
             { release = 136.5, target = "Venomous Heart" }, -- 33 specs, 277 fights
         },
-        [15] = { name = "Ula'tek", note = "Venomous Heart about 2:16, 4:45 and 9:34, 20 s each, about x4.5: the strongest raid window. Called.",
+        [15] = { name = "Ula'tek", note = "Venomous Heart about 2:16, 4:45 and 9:34, 20 s each, about x4.5: the strongest raid window. Called, plus 6:06 and 7:19 where top players hold their burst.",
             { release = 4.3, pull = true }, -- 23 specs, 160 fights
             { release = 135.5, target = "Venomous Heart" }, -- 33 specs, 238 fights
             { release = 284.5, target = "Venomous Heart" }, -- 33 specs, 238 fights

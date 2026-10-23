@@ -3166,12 +3166,12 @@ do
     CastAheadDefensives = { spells = { [373693] = { DAMAGER = true, aura = true } }, alias = {} }
     CastAheadRaidDefensives = {
         [1305963] = { name = "Venomous Surge", boss = "Sszorak", encounter = 3420,
-                      [15] = { DAMAGER = true, HEALER = true, delay = 3, ep = 105 } },
-        [1300000] = { name = "Mythic Only", boss = "Sszorak", encounter = 3420, [16] = { DAMAGER = true, delay = 1, ep = 120 } },
+                      [15] = { DAMAGER = true, HEALER = true, delay = 3, ep = { DAMAGER = 105, HEALER = 105 } } },
+        [1300000] = { name = "Mythic Only", boss = "Sszorak", encounter = 3420, [16] = { DAMAGER = true, delay = 1, ep = { DAMAGER = 120 } } },
         [1298367] = { name = "Mother's Wrath", boss = "Ula'tek", encounter = 3492,
-                      [15] = { TANK = true, DAMAGER = true, delay = 0, ep = 135 } },
+                      [15] = { TANK = true, DAMAGER = true, delay = 0, ep = { TANK = 150, DAMAGER = 135 } } },
         [1290814] = { name = "Coiling Ichor", boss = "Twin Fangs", encounter = 3421, dispel = "Magic",
-                      [15] = { HEALER = true, delay = 2, ep = 134 } },
+                      [15] = { HEALER = true, delay = 2, ep = { HEALER = 134, DAMAGER = 134 } } },
     }
     local reg = {}
     C_UnitAuras.AddAuraSound = function(trigger, info) reg[info.spellID] = info.soundFileName return info.spellID end
@@ -3192,13 +3192,17 @@ do
         "a tank hears a raid row flagged for tanks and damage dealers")
     role = "HEALER"
     fire("SPELLS_CHANGED")
-    check(reg[1290814] and reg[1290814]:match("MAGIC_d2%.ogg$"), "a healer who can remove the magic hears the padded dispel")
+    check(reg[1290814] and reg[1290814]:match("Sounds\\en\\MAGIC%.ogg$"), "a healer who can remove the magic hears the dispel right away")
     role = "DAMAGER"
     LibStub = function() return { Fetch = function(_, _, name) return name == "Path" and "custom/path.ogg" or nil end } end
     CastAheadDB.sounds = { DEFENSIVE = "Path" }
     CastAheadSaves.Refresh()
     check(reg[1305963]:match("DEFENSIVE_d3%.ogg$") and reg[1298367] == "custom/path.ogg",
         "a picked sound plays on an undelayed raid row, never in place of a delayed clip")
+    CastAheadConfig.SetEnabled("voice", false)
+    CastAheadSaves.Refresh()
+    check(reg[1305963] == "custom/path.ogg", "voice off: a delayed row plays the picked sound at once rather than nothing")
+    CastAheadConfig.SetEnabled("voice", true)
     LibStub, CastAheadDB.sounds = nil, nil
     kind = "party"
     CastAheadSaves.Refresh()
@@ -3209,16 +3213,24 @@ do
     check(#guide == 8 and guide[1] == "Boss: Sszorak" and guide[2]:find("Venomous Surge", 1, true)
         and guide[2]:find("defensive about 3 s after it lands", 1, true) and guide[2]:find("about 105% HP", 1, true)
         and guide[3] == "" and guide[4] == "Boss: Twin Fangs" and guide[5]:find("about 2 s after it lands", 1, true)
-        and guide[7] == "Boss: Ula'tek" and guide[8]:find("defensive as it lands", 1, true),
+        and guide[7] == "Boss: Ula'tek" and guide[8]:find("defensive as it lands; about 135% HP", 1, true),
         "raid guide: bosses by name, the role's debuffs with the call and the damage, got " .. table.concat(guide, " | "))
     local mythic = CastAheadSaves.RaidGuideLines(16)
     check(#mythic == 2 and mythic[2]:find("Mythic Only", 1, true), "raid guide: Mythic lists only its own rows")
     role = "TANK"
     guide = CastAheadSaves.RaidGuideLines(15)
-    check(#guide == 2 and guide[2]:find("Mother's Wrath", 1, true), "raid guide: a tank sees only rows flagged for tanks")
+    check(#guide == 2 and guide[2]:find("Mother's Wrath", 1, true) and guide[2]:find("about 150% HP", 1, true),
+        "raid guide: a tank sees only rows flagged for tanks, with the tanks' damage")
     role = "HEALER"
-    check(CastAheadSaves.RaidGuideLines(15)[5]:find("dispel magic about 2 s after it lands", 1, true),
-        "raid guide: a healer who can remove it sees the dispel")
+    check(CastAheadSaves.RaidGuideLines(15)[5]:find("dispel magic as it lands", 1, true),
+        "raid guide: a healer who can remove it sees the dispel, right away")
+    local savedInfoByID = GetSpecializationInfoByID
+    GetSpecializationInfoByID = function(id) return id, "Resto", "", 0, "HEALER" end
+    CastAheadSaves.SetViewSpec(105)
+    check(CastAheadSaves.RaidGuideLines(15)[5]:find("defensive about 2 s after it lands (dispel magic instead if your spec removes it)", 1, true),
+        "raid guide: another healer spec is told the dispel depends on the spec")
+    CastAheadSaves.SetViewSpec(nil)
+    GetSpecializationInfoByID = savedInfoByID
     role = "DAMAGER"
     GetInstanceInfo, CastAheadRaidDefensives = savedInfo, savedRaid
     IsPlayerSpell = savedIsPlayerSpell
