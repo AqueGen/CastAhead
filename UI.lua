@@ -1,5 +1,5 @@
 local testButton
-local DUNGEON_PAGES = { Casts = true, Saves = true, Guide = true }
+local DUNGEON_PAGES = { Casts = true, Saves = true, Guide = true, RaidGuide = true, RaidSaves = true }
 
 -- Stored as nil when on, false when off, so a fresh profile defaults to on.
 local function SetOption(key, enabled)

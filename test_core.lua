@@ -3225,7 +3225,15 @@ do
         and text:find("Boss: Twin Fangs\n", 1, true) and text:find("Boss: Ula'tek\n", 1, true)
         and text:find("defensive as it lands; about 135% HP", 1, true) and not text:find("Burst", 1, true),
         "raid guide: every boss, the role's calls then the grey skips, no Burst section while bursts are off, got " .. text)
+    CastAheadBurstWindows[3421] = { [15] = { name = "Twin Fangs" } }
+    CastAheadRaidDefensives[1290814].boss = "The Twin Fangs"
+    CastAheadDB.raidSaves = nil
     CastAheadDB.burstCalls = true
+    check(Text(15):find("Boss: The Twin Fangs\n", 1, true) and not Text(15):find("Boss: Twin Fangs\n", 1, true),
+        "raid guide: a boss keeps one heading whichever sections are shown")
+    CastAheadRaidDefensives[1290814].boss = "Twin Fangs"
+    CastAheadBurstWindows[3421] = nil
+    CastAheadDB.raidSaves = true
     text = Text(15)
     check(text:find("|cff8fb8ff  Burst|r\n  |cffaaaaaaDig In.|r\n  1:51 burst", 1, true)
         and text:find("Boss: Ula'tek\n.-|cff8fb8ff  Burst|r\n|cffaaaaaa  burst on the pull, then on cooldown|r"),
@@ -3344,7 +3352,13 @@ do
         CastAheadBurstWindows = { [1] = { [8] = { name = "Abe", dungeon = "Fixture", note = "Phase." } },
                                   [2] = { [8] = { name = "Zed", dungeon = "Fixture" } },
                                   [3] = { [8] = { name = "Elsewhere", dungeon = "Other" } } }
+        local without = table.concat(CastAheadSaves.GuideLines(9000), "\n")
+        check(without:find("Boss: Zed\n|cff8fb8ff  Defensive|r\n|cffaaaaaa- nothing calls a defensive for your role|r", 1, true)
+            and not without:find("Burst", 1, true),
+            "with burst windows off the dungeon guide still lists every boss of the dungeon, got " .. without)
         CastAheadDB.raidMode, CastAheadDB.burstCalls = true, true
+        check(CastAheadSaves.GuideText(9000):find("Burst phases come from top-player logs", 1, true),
+            "the dungeon guide carries the burst caveat while bursts are shown")
         local with = table.concat(CastAheadSaves.GuideLines(9000), "\n")
         check(with:find("Boss: Abe\n.-|cff8fb8ff  Burst|r\n  |cffaaaaaaPhase.|r")
             and with:find("Boss: Zed\n|cff8fb8ff  Defensive|r\n|cffaaaaaa- nothing calls a defensive for your role|r\n|cff8fb8ff  Burst|r", 1, true)
@@ -4968,8 +4982,9 @@ do
         and save:find("Spec: Havoc Demon Hunter", 1, true) and save:find("Defensive calls: dungeons off, raids off", 1, true)
         and save:find("Anything else about what happened:\n$"), "a defensive report carries version, spec, the switch and ends on its question")
     local burst = CastAheadOptions.ReportText("burst")
-    check(burst:find("Burst guide: Heroic\nBurst windows: on\n", 1, true) and not burst:find("Defensive calls", 1, true),
-        "a burst report carries the guide difficulty and the burst switch instead")
+    check(burst:find("Burst guide: Heroic\nDungeon picked: ", 1, true) and burst:find("\nBurst windows: on\n", 1, true)
+        and not burst:find("Defensive calls", 1, true),
+        "a burst report carries the raid difficulty, the dungeon and the burst switch instead")
     CastAheadDB = { burstCalls = true, raidSaves = true }
     check(CastAheadOptions.ReportText("burst"):find("Burst windows: off\n", 1, true)
         and CastAheadOptions.ReportText("save"):find("raids off", 1, true),

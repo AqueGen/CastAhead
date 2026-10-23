@@ -91,7 +91,7 @@ end
 
 local NOTE_H = 30
 
-local function EpNote(host, y)
+local function EpNote(host, y, text)
     if not CastAheadSaves then return 0 end
     local note = host:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     note:SetPoint("TOPLEFT", host, "TOPLEFT", 4, -y)
@@ -99,14 +99,15 @@ local function EpNote(host, y)
     note:SetHeight(NOTE_H)
     note:SetJustifyH("LEFT")
     note:SetJustifyV("TOP")
-    note:SetText(CastAheadSaves.EP_NOTE)
+    note:SetText(text or CastAheadSaves.EP_NOTE)
     return NOTE_H
 end
 
 local RESTART = "Restart the game to finish the Cast Ahead update - defensive calls are off until then."
 
 -- One Saves page: a table of the save rows for the picked place (a dungeon, or a raid difficulty).
-local function SavesPage(rowsFor, callsOn, offText)
+-- headers renames columns and note replaces the damage note where the dungeon wording does not fit.
+local function SavesPage(rowsFor, callsOn, offText, headers, note)
     local host, rows, parent, side, tbl, top = nil, {}, nil, nil, nil, 0
     local function Refresh()
         if not (host and host:IsVisible()) then return end
@@ -175,7 +176,7 @@ local function SavesPage(rowsFor, callsOn, offText)
     local function Build(h)
         host = h
         top = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end)
-        top = top + EpNote(host, top)
+        top = top + EpNote(host, top, note)
         side, tbl = CastAheadWindow.SideScroll(host, top)
         tbl:SetWidth(SAVE_WIDTH)
         local header = CreateFrame("Frame", nil, tbl)
@@ -185,7 +186,7 @@ local function SavesPage(rowsFor, callsOn, offText)
             local label = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             label:SetSize(column.width, HEADER_HEIGHT)
             label:SetPoint("TOPLEFT", header, "TOPLEFT", column.x, 0)
-            label:SetText("|cffaaaaaa" .. column.header .. "|r")
+            label:SetText("|cffaaaaaa" .. (headers and headers[column.key] or column.header) .. "|r")
         end
         local rule = header:CreateTexture(nil, "ARTWORK")
         rule:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -1)
@@ -247,7 +248,8 @@ local BuildSaves, RefreshSaves = SavesPage(function()
 end, function() return CastAheadConfig.DungeonSaves() end, OFF)
 local BuildRaidSaves, RefreshRaidSaves = SavesPage(function()
     return CastAheadSaves.ViewRaidRows and CastAheadSaves.ViewRaidRows(CastAheadWindow.RaidDifficulty()) or {}
-end, function() return CastAheadConfig.RaidSaves() end, RAID_OFF)
+end, function() return CastAheadConfig.RaidSaves() end, RAID_OFF, { lead = "After it lands", ep = "Damage" },
+    "Damage is the worst 8 seconds while the debuff is on the carrier, in top-player fights. A call comes that long after the debuff lands.")
 
 function CastAheadUI.RefreshSaves()
     RefreshSaves()

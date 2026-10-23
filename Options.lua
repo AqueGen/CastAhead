@@ -987,6 +987,9 @@ function CastAheadOptions.ReportText(key)
                     or "Burst guide: " .. d[2]
             end
         end
+        if not pick.boss then
+            lines[#lines + 1] = "Dungeon picked: " .. (dungeon and CastAheadData[dungeon] and CastAheadData[dungeon].name or "?")
+        end
         lines[#lines + 1] = "Burst windows: " .. OnOff(CastAheadConfig.BurstCalls())
     elseif kind.key ~= "idea" then
         lines[#lines + 1] = "Dungeon picked: " .. (dungeon and CastAheadData[dungeon] and CastAheadData[dungeon].name or "?")
