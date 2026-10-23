@@ -423,9 +423,9 @@ function S.RaidGuideLines(difficultyID)
             end
             local boss = entry.boss or "?"
             if not bosses[boss] then bosses[boss], names[#names + 1] = {}, boss end
-            table.insert(bosses[boss], string.format("- %s: %s %s; about %d%% HP",
+            table.insert(bosses[boss], string.format("- %s: %s %s; about %d%% HP%s",
                 Link("spell", id, Icon(SpellTexture(id)) .. (entry.name or SpellName(id))), advice.say, when,
-                row.ep and row.ep[role] or 0))
+                row.ep and row.ep[role] or 0, row.heroic and " (top players rarely take it here, judged on Heroic)" or ""))
         end
     end
     table.sort(names)

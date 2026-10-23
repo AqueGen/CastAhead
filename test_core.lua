@@ -3215,8 +3215,10 @@ do
         and guide[3] == "" and guide[4] == "Boss: Twin Fangs" and guide[5]:find("about 2 s after it lands", 1, true)
         and guide[7] == "Boss: Ula'tek" and guide[8]:find("defensive as it lands; about 135% HP", 1, true),
         "raid guide: bosses by name, the role's debuffs with the call and the damage, got " .. table.concat(guide, " | "))
+    CastAheadRaidDefensives[1300000][16].heroic = true
     local mythic = CastAheadSaves.RaidGuideLines(16)
-    check(#mythic == 2 and mythic[2]:find("Mythic Only", 1, true), "raid guide: Mythic lists only its own rows")
+    check(#mythic == 2 and mythic[2]:find("Mythic Only", 1, true) and mythic[2]:find("judged on Heroic", 1, true),
+        "raid guide: Mythic lists only its own rows, a borrowed verdict says so")
     role = "TANK"
     guide = CastAheadSaves.RaidGuideLines(15)
     check(#guide == 2 and guide[2]:find("Mother's Wrath", 1, true) and guide[2]:find("about 150% HP", 1, true),
