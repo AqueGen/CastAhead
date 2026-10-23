@@ -3159,6 +3159,51 @@ do
     knowsDispel, role = true, "DAMAGER"
     fire("PLAYER_SPECIALIZATION_CHANGED", "player")
     check(files[#files]:match("Sounds\\en\\DEFENSIVE%.ogg$"), "a damage dealer with a magic dispel still hears the defensive")
+
+    local savedInfo, savedRaid = GetInstanceInfo, CastAheadRaidDefensives
+    local kind, difficulty = "raid", 15
+    GetInstanceInfo = function() return "r", kind, difficulty, "", 0, 0, false, 2900 end
+    CastAheadDefensives = { spells = { [373693] = { DAMAGER = true, aura = true } }, alias = {} }
+    CastAheadRaidDefensives = {
+        [1305963] = { name = "Venomous Surge", boss = "Sszorak", encounter = 3420,
+                      [15] = { DAMAGER = true, HEALER = true, delay = 3, ep = 105 } },
+        [1300000] = { name = "Mythic Only", boss = "Sszorak", encounter = 3420, [16] = { DAMAGER = true, delay = 1, ep = 120 } },
+        [1298367] = { name = "Mother's Wrath", boss = "Ula'tek", encounter = 3492,
+                      [15] = { TANK = true, DAMAGER = true, delay = 0, ep = 135 } },
+        [1290814] = { name = "Coiling Ichor", boss = "Twin Fangs", encounter = 3421, dispel = "Magic",
+                      [15] = { HEALER = true, delay = 2, ep = 134 } },
+    }
+    local reg = {}
+    C_UnitAuras.AddAuraSound = function(trigger, info) reg[info.spellID] = info.soundFileName return info.spellID end
+    C_UnitAuras.RemoveAuraSound = function(id) reg[id] = nil end
+    role = "DAMAGER"
+    CastAheadSaves.Refresh()
+    check(next(reg) == nil, "raid calls need the raid switches, not the dungeon one")
+    CastAheadDB.raidMode, CastAheadDB.raidSaves = true, true
+    CastAheadSaves.Refresh()
+    check(reg[1305963] and reg[1305963]:match("Sounds\\en\\DEFENSIVE_d3%.ogg$") and not reg[373693] and not reg[1300000],
+        "raid Heroic: the debuff plays the padded clip, dungeon rows and Mythic-only rows stay off")
+    difficulty = 16
+    fire("PLAYER_DIFFICULTY_CHANGED")
+    check(reg[1300000] and reg[1300000]:match("DEFENSIVE_d1%.ogg$") and not reg[1305963], "a difficulty change swaps the raid rows")
+    difficulty, role = 15, "TANK"
+    CastAheadSaves.Refresh()
+    check(reg[1298367] and reg[1298367]:match("Sounds\\en\\DEFENSIVE%.ogg$") and not reg[1305963],
+        "a tank hears a raid row flagged for tanks and damage dealers")
+    role = "HEALER"
+    fire("SPELLS_CHANGED")
+    check(reg[1290814] and reg[1290814]:match("MAGIC_d2%.ogg$"), "a healer who can remove the magic hears the padded dispel")
+    role = "DAMAGER"
+    LibStub = function() return { Fetch = function(_, _, name) return name == "Path" and "custom/path.ogg" or nil end } end
+    CastAheadDB.sounds = { DEFENSIVE = "Path" }
+    CastAheadSaves.Refresh()
+    check(reg[1305963]:match("DEFENSIVE_d3%.ogg$") and reg[1298367] == "custom/path.ogg",
+        "a picked sound plays on an undelayed raid row, never in place of a delayed clip")
+    LibStub, CastAheadDB.sounds = nil, nil
+    kind = "party"
+    CastAheadSaves.Refresh()
+    check(reg[373693] and not reg[1305963], "outside a raid the raid rows stay off and the dungeon rows play")
+    GetInstanceInfo, CastAheadRaidDefensives = savedInfo, savedRaid
     IsPlayerSpell = savedIsPlayerSpell
     C_UnitAuras.AddAuraSound, C_UnitAuras.RemoveAuraSound = nil, nil
     C_ChatInfo, InCombatLockdown, Enum.UnitAuraSoundTrigger = nil, nil, nil

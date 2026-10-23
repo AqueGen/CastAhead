@@ -429,6 +429,28 @@ local function PickedFile(advice)
     return type(sound) == "string" and sound or nil
 end
 
+-- In a raid only the current difficulty's raid debuffs, elsewhere the dungeon aura rows.
+-- A raid row's delay is silence at the start of its clip: the aura sound plays when the
+-- debuff lands, and that is the only moment the game lets an addon hook a private aura.
+local function AuraRows()
+    local _, kind, difficulty = GetInstanceInfo()
+    local rows = {}
+    if kind == "raid" then
+        for spellID, entry in pairs(CastAheadRaidDefensives or {}) do
+            local row = entry[difficulty]
+            if row then
+                rows[spellID] = { TANK = row.TANK, DAMAGER = row.DAMAGER, HEALER = row.HEALER,
+                                  delay = row.delay, dispel = entry.dispel, raid = true }
+            end
+        end
+    else
+        for spellID, row in pairs(CastAheadDefensives and CastAheadDefensives.spells or {}) do
+            if row.aura then rows[spellID] = row end
+        end
+    end
+    return rows
+end
+
 local function RegisterAuraSounds()
     if not (C_UnitAuras and C_UnitAuras.AddAuraSound and Enum and Enum.UnitAuraSoundTrigger) then return end
     if Blocked() then auraPending = true return end
@@ -436,9 +458,11 @@ local function RegisterAuraSounds()
     ClearAuraSounds()
     if not (CastAheadConfig.SaveCalls() and CastAheadConfig.Enabled("sound")) then return end
     local voice = CastAheadConfig.Enabled("voice")
-    for spellID, row in pairs(CastAheadDefensives and CastAheadDefensives.spells or {}) do
-        local advice = row.aura and M.AuraAdvice(row, CastAheadPriority and CastAheadPriority[spellID])
-        local file = advice and (PickedFile(advice) or voice and SOUND_ROOT .. advice.file .. ".ogg")
+    for spellID, row in pairs(AuraRows()) do
+        local advice = M.AuraAdvice(row, CastAheadPriority and CastAheadPriority[spellID])
+        local delay = row.delay or 0
+        local file = advice and (delay == 0 and PickedFile(advice)
+            or voice and SOUND_ROOT .. advice.file .. (delay > 0 and "_d" .. delay or "") .. ".ogg")
         if file then
             local ok, id = pcall(C_UnitAuras.AddAuraSound, Enum.UnitAuraSoundTrigger.Added, {
                 unitToken = "player", spellID = spellID, soundFileName = file, outputChannel = CastAheadConfig.SoundChannel() })

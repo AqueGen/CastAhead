@@ -150,7 +150,7 @@ function M.SaveRow(id)
 end
 
 function M.SaveKey(save, role, prio)
-    if role == "TANK" and prio ~= "TANK" and (save.DAMAGER or save.HEALER) then return nil end
+    if role == "TANK" and not save.raid and prio ~= "TANK" and (save.DAMAGER or save.HEALER) then return nil end
     return save[role] and "DEFENSIVE" or nil
 end
 
