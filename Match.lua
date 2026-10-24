@@ -75,6 +75,7 @@ M.ADVICE = {
     -- nobody has to learn what it means. The voice still says the whole
     -- instruction, which is what a spoken line has room for.
     SWITCH  = { label = "SWAP", say = "switch target", r = 0.85, g = 0.85, b = 0.85 },
+    ADDS    ={ label = "ADDS", say = "adds incoming", r = 0.95, g = 0.70, b = 0.45 },
     ALERT   = { label = "WATCH", say = "danger", r = 1.00, g = 1.00, b = 1.00 },
 }
 -- Each verdict knows its own key: the voice clip on disk is named after it

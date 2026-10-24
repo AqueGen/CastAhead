@@ -1248,7 +1248,7 @@ function BuildReport(panel)
 end
 
 local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
-    "POISON", "CURSE", "MAGIC", "DISEASE", "BLEED", "SOOTHE", "PURGE", "SWITCH", "ALERT",
+    "POISON", "CURSE", "MAGIC", "DISEASE", "BLEED", "SOOTHE", "PURGE", "SWITCH", "ADDS", "ALERT",
     "DEFENSIVE", "SOON", "BURST" }
 local SOUND_ROW_H = 26
 
