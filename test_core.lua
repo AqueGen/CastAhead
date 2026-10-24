@@ -150,6 +150,7 @@ local function StubRegion()
     r.SetTexture = function(_, tex) r.textureValue = tex end
     r.Show = function() r.shown = true end
     r.Hide = function() r.shown = false end
+    r.SetShown = function(_, on) r.shown = on and true or false end
     setmetatable(r, { __index = function() return function() return r end end })
     return r
 end
@@ -1315,13 +1316,13 @@ advance(9)                         -- t0+12
 castFor(4.5)                       -- spell 101's first cast; cd 18 -> next at t0+30
 advance(3.5)                       -- t0+20: spell 100 goes overdue on this frame
 advance(0.1)                       -- t0+20.1: 101 has ~10s left, or ~4s if 12s was adopted
-local tenLeft = false
+local tenLeft, tilde = false, false
 for i = 1, #allFrames do
     local f = allFrames[i]
-    -- "~10": the fixture row is thin on samples, so the time is an estimate.
-    if f.shown and (f.timeValue == "10" or f.timeValue == "~10") then tenLeft = true end
+    if f.shown and f.timeValue == "10" then tenLeft, tilde = true, f.tilde.shown end
 end
 check(tenLeft, "the sibling keeps its tabled 18s cooldown, not the 12s anchor gap")
+check(tilde, "a projected sibling's time is an estimate: the tilde shows beside it")
 reset()
 
 -- A first cast projected from the mob's kit reaches the timeline once its

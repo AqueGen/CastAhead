@@ -827,6 +827,20 @@ end
 -- from it rather than from the constant: the countdown, the advice under it
 -- and the alert ring all keep their proportions at any size.
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+-- Friz Quadrata draws "~" at cap height (centre 0.68 em, digits 0.35 em) and
+-- 0.7 em wide, so it gets its own string: dropped to the digits, pair centred.
+local TILDE_DROP, TILDE_HALF = 0.335, 0.35
+
+local function PlaceTime(bar)
+    bar.time:SetPoint("CENTER", bar, "CENTER", bar._approx and bar._timeSize * TILDE_HALF or 0, 0)
+end
+
+local function SetApprox(bar, on)
+    if bar._approx == on then return end
+    bar._approx = on
+    bar.tilde:SetShown(on)
+    PlaceTime(bar)
+end
 
 local function ApplyBarSize(bar)
     local size = CastAheadConfig.IconSize()
@@ -849,7 +863,11 @@ local function ApplyBarSize(bar)
     bar:SetSize(size, size)
     bar.glow:SetPoint("TOPLEFT", -size * 0.42, size * 0.42)
     bar.glow:SetPoint("BOTTOMRIGHT", size * 0.42, -size * 0.42)
-    bar.time:SetFont(FONT, math.max(7, math.floor(14 * scale * timeScale + 0.5)), "OUTLINE")
+    bar._timeSize = math.max(7, math.floor(14 * scale * timeScale + 0.5))
+    bar.time:SetFont(FONT, bar._timeSize, "OUTLINE")
+    bar.tilde:SetFont(FONT, bar._timeSize, "OUTLINE")
+    bar.tilde:SetPoint("RIGHT", bar.time, "LEFT", 0, -bar._timeSize * TILDE_DROP)
+    PlaceTime(bar)
     bar.label:SetFont(FONT, math.max(6, math.floor(10 * scale * labelScale + 0.5)), "OUTLINE")
     return size
 end
@@ -908,6 +926,14 @@ local function GetBar(state, index)
     bar.time:SetPoint("CENTER", bar, "CENTER", 0, 0)
     bar.time:SetShadowColor(0, 0, 0, 1)
     bar.time:SetShadowOffset(1, -1)
+
+    bar.tilde = bar:CreateFontString(nil, "OVERLAY")
+    bar.tilde:SetFont(FONT, 14, "OUTLINE")
+    bar.tilde:SetShadowColor(0, 0, 0, 1)
+    bar.tilde:SetShadowOffset(1, -1)
+    bar.tilde:SetTextColor(1, 0.82, 0.4)
+    bar.tilde:SetText("~")
+    bar.tilde:Hide()
 
     -- The advice sits under the icon so a long spell name never widens the row.
     bar.label = bar:CreateFontString(nil, "OVERLAY")
@@ -1273,6 +1299,7 @@ local function PaintBar(bar, entry, interruptible)
         bar.glow:Hide()
     end
     bar.icon:SetVertexColor(1, 1, 1, entry.casting and 1 or (entry.preview and 0.55 or 0.75))
+    if entry.preview or not entry.approximate then SetApprox(bar, false) end
     if entry.preview then
         -- An estimate that has elapsed: the cast is due, so say so instead of
         -- leaving a blank icon.
@@ -2658,6 +2685,7 @@ frame:SetScript("OnUpdate", function()
                         if entry.casting then
                             -- Cast outlasted the length the table predicted, so
                             -- let the stop event decide what happens next.
+                            SetApprox(bar, false)
                             bar.time:SetText("")
                         else
                             -- Due, not gone: mark it and repaint once; the
@@ -2691,12 +2719,13 @@ frame:SetScript("OnUpdate", function()
                         end
                         -- Tenths only in the last few seconds, where they
                         -- matter; whole numbers stay readable at a glance.
+                        SetApprox(bar, entry.approximate and remaining >= ESTIMATE_NOW or false)
                         if entry.approximate and remaining < ESTIMATE_NOW then
                             -- Inside the estimate's own error bars. Printing
                             -- "~1" claims a precision this number never had.
                             bar.time:SetText("|cffffd100!|r")
                         elseif entry.approximate then
-                            bar.time:SetFormattedText("~%d", remaining + 0.5)
+                            bar.time:SetFormattedText("%d", remaining + 0.5)
                         elseif remaining < 5 then
                             bar.time:SetFormattedText("%.1f", remaining)
                         else
