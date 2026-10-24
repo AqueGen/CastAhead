@@ -455,7 +455,7 @@ def classify(scan, spell, rec, tanks):
         return "BLEED", why + "; %d ticks and nothing removes it" % bleeds[0]
 
     if rec["summons"] >= max(1, rec["casts"] // 3):
-        return "SWITCH", why + "; it brings friends"
+        return "ADDS", why + "; it brings friends"
 
     # Payloads that only applied a debuff say nothing about the cast's shape.
     landed = [load for load in loads if load["hits"] > 0]

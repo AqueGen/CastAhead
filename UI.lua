@@ -1,5 +1,5 @@
 local testButton
-local DUNGEON_PAGES = { Casts = true, Saves = true, Guide = true }
+local DUNGEON_PAGES = { Casts = true, Saves = true, Guide = true, RaidGuide = true, RaidSaves = true }
 
 -- Stored as nil when on, false when off, so a fresh profile defaults to on.
 local function SetOption(key, enabled)
@@ -48,9 +48,10 @@ end
 
 function CastAheadUI.RefreshTabs()
     CastAheadWindow.SetMenuShown("Development", CastAheadConfig.Dev())
-    CastAheadWindow.SetMenuShown("Defensives", CastAheadConfig.DungeonSaves())
-    CastAheadWindow.SetMenuShown("Bursts", CastAheadConfig.BurstCalls())
-    CastAheadWindow.SetMenuShown("RaidDefensives", CastAheadConfig.RaidSaves())
+    local raid = CastAheadConfig.RaidSaves() or CastAheadConfig.BurstCalls()
+    CastAheadWindow.SetMenuShown("Defensives", CastAheadConfig.DungeonSaves() or CastAheadConfig.RaidSaves())
+    CastAheadWindow.SetMenuShown("RaidGuide", raid)
+    CastAheadWindow.SetMenuShown("RaidSaves", raid)
 end
 
 -- Opens the window if it is closed, then selects a page. Used by the slash
@@ -77,7 +78,7 @@ function CastAheadWindow.titleButtons(add)
     testButton:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:SetText("Test drive", 1, 1, 1)
-        GameTooltip:AddLine("Play the selected dungeon's calls with nothing pulled - icons on any nameplate in front of you, the centre call, the voice and the sounds. Click again to stop.", nil, nil, nil, true)
+        GameTooltip:AddLine("Play the selected dungeon's calls with nothing pulled, through the outputs switched on in General: icons on any nameplate in front of you, the centre call, the timeline, the voice and the sounds. Click again to stop.", nil, nil, nil, true)
         GameTooltip:Show()
     end)
     testButton:SetScript("OnLeave", GameTooltip_Hide)

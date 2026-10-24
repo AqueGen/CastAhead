@@ -44,6 +44,7 @@ LINES = {
     "DISEASE": "dispel disease",
     "BLEED": "bleed, defensive",
     "SWITCH": "switch target",
+    "ADDS": "adds incoming",
     "ALERT": "danger",
     "DEFENSIVE": "defensive",
     "SOON": "burst soon",

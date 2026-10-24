@@ -2,7 +2,7 @@ local ROW_HEIGHT = 24
 local HEADER_HEIGHT = 18
 local COLUMN_GAP = 4
 local MAX_SAVE_ICONS = 5
-local TRIGGER_WORDS = { { "cast", "cast" }, { "bar", "boss bar" }, { "debuff", "debuff" } }
+local TRIGGER_WORDS = { { "cast", "cast" }, { "bar", "boss timer" }, { "debuff", "debuff" } }
 
 local SAVE_COLUMNS = {
     { key = "buttons", header = "Buttons", width = MAX_SAVE_ICONS * 18 },
@@ -39,9 +39,6 @@ for _, column in ipairs(SAVE_COLUMNS) do
 end
 
 local ROLE_NAMES = { DAMAGER = "Damage", HEALER = "Healer", TANK = "Tank" }
-
-local savesHost, saveRows, saveParent, saveSide, saveTable, guideHost, guideText
-local savesTop, guideTop = 0, 0
 
 local function CreateSaveRow(parent, index)
     local row = CreateFrame("Button", nil, parent)
@@ -94,7 +91,7 @@ end
 
 local NOTE_H = 30
 
-local function EpNote(host, y)
+local function EpNote(host, y, text)
     if not CastAheadSaves then return 0 end
     local note = host:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     note:SetPoint("TOPLEFT", host, "TOPLEFT", 4, -y)
@@ -102,142 +99,166 @@ local function EpNote(host, y)
     note:SetHeight(NOTE_H)
     note:SetJustifyH("LEFT")
     note:SetJustifyV("TOP")
-    note:SetText(CastAheadSaves.EP_NOTE)
+    note:SetText(text or CastAheadSaves.EP_NOTE)
     return NOTE_H
 end
 
 local RESTART = "Restart the game to finish the Cast Ahead update - defensive calls are off until then."
 
-local function RefreshGuide()
-    if not (guideHost and guideHost:IsVisible()) then return end
-    if not CastAheadSaves then
-        guideText:SetText(RESTART)
-        return
-    end
-    local text = CastAheadSaves.GuideText(CastAheadWindow.Dungeon())
-        or (CastAheadSaves.ViewRole() and "Nothing in this dungeon calls a save for this role."
-            or "No specialization role - pick a spec to see your guide.")
-    guideText:SetText(text)
-    guideHost:SetHeight(guideTop + guideText:GetStringHeight() + 8)
-    CastAheadWindow.PaintSpecBars()
-end
-
-local function RefreshSaves()
-    if not (savesHost and savesHost:IsVisible()) then return end
-    if not CastAheadSaves then
-        CastAheadWindow.SetFooter(RESTART)
-        return
-    end
-    local saves = CastAheadSaves and CastAheadSaves.ViewRows and CastAheadSaves.ViewRows(CastAheadWindow.Dungeon()) or {}
-    local items, group = {}, nil
-    for _, s in ipairs(saves) do
-        if s.boss ~= group then
-            group = s.boss
-            items[#items + 1] = { header = s.boss ~= "" and ("Boss: " .. s.boss) or "Trash" }
+-- One Saves page: a table of the save rows for the picked place (a dungeon, or a raid difficulty).
+-- headers renames columns and note replaces the damage note where the dungeon wording does not fit.
+local function SavesPage(rowsFor, callsOn, offText, headers, note)
+    local host, rows, parent, side, tbl, top = nil, {}, nil, nil, nil, 0
+    local function Refresh()
+        if not (host and host:IsVisible()) then return end
+        if not CastAheadSaves then
+            CastAheadWindow.SetFooter(RESTART)
+            return
         end
-        items[#items + 1] = s
-    end
+        local saves = rowsFor()
+        local items, group = {}, nil
+        for _, s in ipairs(saves) do
+            if s.boss ~= group then
+                group = s.boss
+                items[#items + 1] = { header = s.boss ~= "" and ("Boss: " .. s.boss) or "Trash" }
+            end
+            items[#items + 1] = s
+        end
 
-    for i = 1, math.max(#items, #saveRows) do
-        local item = items[i]
-        if item and not saveRows[i] then saveRows[i] = CreateSaveRow(saveParent, i) end
-        local row = saveRows[i]
-        if item then
-            local save = not item.header and item or nil
-            row.save = save
-            row.group:SetText(item.header or "")
-            for _, column in ipairs(SAVE_COLUMNS) do
-                local cell = row.cells[column.key]
-                if cell then cell:SetText(save and column.text(save) or "") end
+        for i = 1, math.max(#items, #rows) do
+            local item = items[i]
+            if item and not rows[i] then rows[i] = CreateSaveRow(parent, i) end
+            local row = rows[i]
+            if item then
+                local save = not item.header and item or nil
+                row.save = save
+                row.group:SetText(item.header or "")
+                for _, column in ipairs(SAVE_COLUMNS) do
+                    local cell = row.cells[column.key]
+                    if cell then cell:SetText(save and column.text(save) or "") end
+                end
+                for j = 1, #row.icons do
+                    local button = save and save.buttons[j]
+                    row.icons[j]:SetTexture(button and button.icon or nil)
+                    row.icons[j]:SetShown(button and button.icon ~= nil or false)
+                    row.icons[j]:SetDesaturated(not (button and button.available))
+                    row.icons[j]:SetAlpha(button and button.available and 1 or 0.4)
+                    row.iconHits[j].entry = button or nil
+                    row.iconHits[j]:SetShown(button ~= nil and button.icon ~= nil)
+                end
+                row:Show()
+            else
+                row.save = nil
+                row:Hide()
             end
-            for j = 1, #row.icons do
-                local button = save and save.buttons[j]
-                row.icons[j]:SetTexture(button and button.icon or nil)
-                row.icons[j]:SetShown(button and button.icon ~= nil or false)
-                row.icons[j]:SetDesaturated(not (button and button.available))
-                row.icons[j]:SetAlpha(button and button.available and 1 or 0.4)
-                row.iconHits[j].entry = button or nil
-                row.iconHits[j]:SetShown(button ~= nil and button.icon ~= nil)
-            end
-            row:Show()
+        end
+        local rowsHeight = math.max(#items, 1) * ROW_HEIGHT
+        parent:SetHeight(rowsHeight)
+        tbl:SetHeight(HEADER_HEIGHT + 4 + rowsHeight)
+        side:SetHeight(HEADER_HEIGHT + 4 + rowsHeight)
+        host:SetHeight(top + HEADER_HEIGHT + 4 + rowsHeight)
+
+        local S = CastAheadSaves
+        local role, own = S.ViewRole(), S.ViewSpecID() == S.SpecID()
+        local line
+        if not callsOn() then
+            line = offText
+        elseif not role then
+            line = "No specialization role - pick a spec to see your saves."
         else
-            row.save = nil
-            row:Hide()
+            line = "Role: " .. (ROLE_NAMES[role] or role) .. (own and "." or " - another spec's list, cooldowns not shown.")
+            if #saves == 0 then line = "Nothing here calls a defensive for this role. " .. line end
         end
+        CastAheadWindow.SetFooter(line)
+        CastAheadWindow.SideHint(side, tbl)
+        CastAheadWindow.PaintSpecBars()
     end
-    local rowsHeight = math.max(#items, 1) * ROW_HEIGHT
-    saveParent:SetHeight(rowsHeight)
-    saveTable:SetHeight(HEADER_HEIGHT + 4 + rowsHeight)
-    saveSide:SetHeight(HEADER_HEIGHT + 4 + rowsHeight)
-    savesHost:SetHeight(savesTop + HEADER_HEIGHT + 4 + rowsHeight)
-
-    local S = CastAheadSaves
-    local role, own = S.ViewRole(), S.ViewSpecID() == S.SpecID()
-    local line
-    if not CastAheadConfig.DungeonSaves() then
-        line = "Defensive calls are off - turn them on in General - Features."
-    elseif not role then
-        line = "No specialization role - pick a spec to see your saves."
-    else
-        line = "Role: " .. (ROLE_NAMES[role] or role) .. (own and "." or " - another spec's list, cooldowns not shown.")
-        if #saves == 0 then line = "Nothing here calls a save for this role. " .. line end
+    local function Build(h)
+        host = h
+        top = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end)
+        top = top + EpNote(host, top, note)
+        side, tbl = CastAheadWindow.SideScroll(host, top)
+        tbl:SetWidth(SAVE_WIDTH)
+        local header = CreateFrame("Frame", nil, tbl)
+        header:SetSize(SAVE_WIDTH, HEADER_HEIGHT)
+        header:SetPoint("TOPLEFT", tbl, "TOPLEFT", 0, 0)
+        for _, column in ipairs(SAVE_COLUMNS) do
+            local label = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            label:SetSize(column.width, HEADER_HEIGHT)
+            label:SetPoint("TOPLEFT", header, "TOPLEFT", column.x, 0)
+            label:SetText("|cffaaaaaa" .. (headers and headers[column.key] or column.header) .. "|r")
+        end
+        local rule = header:CreateTexture(nil, "ARTWORK")
+        rule:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -1)
+        rule:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", 0, -1)
+        rule:SetHeight(1)
+        rule:SetColorTexture(1, 1, 1, 0.25)
+        parent = CreateFrame("Frame", nil, tbl)
+        parent:SetSize(SAVE_WIDTH, 1)
+        parent:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -4)
     end
-    CastAheadWindow.SetFooter(line)
-    CastAheadWindow.SideHint(saveSide, saveTable)
-    CastAheadWindow.PaintSpecBars()
+    return Build, Refresh
 end
+
+-- One Guide page: the text for the picked place, under the class and spec bar.
+local function GuidePage(textFor)
+    local host, text, top = nil, nil, 0
+    local function Refresh()
+        if not (host and host:IsVisible()) then return end
+        text:SetText(CastAheadSaves and textFor() or RESTART)
+        host:SetHeight(top + text:GetStringHeight() + 8)
+        CastAheadWindow.PaintSpecBars()
+    end
+    local function Build(h)
+        host = h
+        top = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end)
+        text = host:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        text:SetPoint("TOPLEFT", host, "TOPLEFT", 4, -(top + 4))
+        text:SetWidth(math.max((host:GetWidth() or 0) - 8, 1))
+        text:SetJustifyH("LEFT")
+        text:SetSpacing(3)
+        host:SetScript("OnSizeChanged", function(_, width)
+            text:SetWidth(width - 8)
+            Refresh()
+        end)
+        host:SetHyperlinksEnabled(true)
+        host:SetScript("OnHyperlinkEnter", function(self, link)
+            GameTooltip:SetOwner(self, "ANCHOR_CURSOR_RIGHT")
+            GameTooltip:SetHyperlink(link)
+            GameTooltip:Show()
+        end)
+        host:SetScript("OnHyperlinkLeave", GameTooltip_Hide)
+    end
+    return Build, Refresh
+end
+
+local OFF = "Defensive calls are off - turn them on in General - Features."
+local RAID_OFF = "Raid defensive calls are off - turn them on in General - Features."
+
+local BuildGuide, RefreshGuide = GuidePage(function()
+    return CastAheadSaves.GuideText(CastAheadWindow.Dungeon())
+        or (CastAheadSaves.ViewRole() and "Nothing in this dungeon calls a defensive for this role."
+            or "No specialization role - pick a spec to see your guide.")
+end)
+local BuildRaidGuide, RefreshRaidGuide = GuidePage(function()
+    return CastAheadSaves.RaidGuideText(CastAheadWindow.RaidDifficulty())
+end)
+local BuildSaves, RefreshSaves = SavesPage(function()
+    return CastAheadSaves.ViewRows and CastAheadSaves.ViewRows(CastAheadWindow.Dungeon()) or {}
+end, function() return CastAheadConfig.DungeonSaves() end, OFF)
+local BuildRaidSaves, RefreshRaidSaves = SavesPage(function()
+    return CastAheadSaves.ViewRaidRows and CastAheadSaves.ViewRaidRows(CastAheadWindow.RaidDifficulty()) or {}
+end, function() return CastAheadConfig.RaidSaves() end, RAID_OFF, { lead = "After it lands", ep = "Damage" },
+    CastAheadSaves and (CastAheadSaves.RAID_EP_NOTE .. " After it lands: seconds from the debuff landing to the call."))
 
 function CastAheadUI.RefreshSaves()
     RefreshSaves()
     RefreshGuide()
-end
-
-local function BuildSaves(host)
-    savesHost = host
-    savesTop = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end)
-    savesTop = savesTop + EpNote(host, savesTop)
-    saveSide, saveTable = CastAheadWindow.SideScroll(host, savesTop)
-    saveTable:SetWidth(SAVE_WIDTH)
-    local saveHeader = CreateFrame("Frame", nil, saveTable)
-    saveHeader:SetSize(SAVE_WIDTH, HEADER_HEIGHT)
-    saveHeader:SetPoint("TOPLEFT", saveTable, "TOPLEFT", 0, 0)
-    for _, column in ipairs(SAVE_COLUMNS) do
-        local label = saveHeader:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        label:SetSize(column.width, HEADER_HEIGHT)
-        label:SetPoint("TOPLEFT", saveHeader, "TOPLEFT", column.x, 0)
-        label:SetText("|cffaaaaaa" .. column.header .. "|r")
-    end
-    local saveRule = saveHeader:CreateTexture(nil, "ARTWORK")
-    saveRule:SetPoint("TOPLEFT", saveHeader, "BOTTOMLEFT", 0, -1)
-    saveRule:SetPoint("TOPRIGHT", saveHeader, "BOTTOMRIGHT", 0, -1)
-    saveRule:SetHeight(1)
-    saveRule:SetColorTexture(1, 1, 1, 0.25)
-    saveParent = CreateFrame("Frame", nil, saveTable)
-    saveParent:SetSize(SAVE_WIDTH, 1)
-    saveParent:SetPoint("TOPLEFT", saveHeader, "BOTTOMLEFT", 0, -4)
-    saveRows = {}
-end
-
-local function BuildGuide(host)
-    guideHost = host
-    guideTop = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end)
-    guideText = host:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    guideText:SetPoint("TOPLEFT", host, "TOPLEFT", 4, -(guideTop + 4))
-    guideText:SetWidth(math.max((host:GetWidth() or 0) - 8, 1))
-    guideText:SetJustifyH("LEFT")
-    guideText:SetSpacing(3)
-    host:SetScript("OnSizeChanged", function(_, width)
-        guideText:SetWidth(width - 8)
-        RefreshGuide()
-    end)
-    host:SetHyperlinksEnabled(true)
-    host:SetScript("OnHyperlinkEnter", function(self, link)
-        GameTooltip:SetOwner(self, "ANCHOR_CURSOR_RIGHT")
-        GameTooltip:SetHyperlink(link)
-        GameTooltip:Show()
-    end)
-    host:SetScript("OnHyperlinkLeave", GameTooltip_Hide)
+    RefreshRaidSaves()
+    RefreshRaidGuide()
 end
 
 CastAheadWindow.Register("Guide", "Dungeon", BuildGuide, RefreshGuide, "Casts")
 CastAheadWindow.Register("Saves", "Dungeon", BuildSaves, RefreshSaves, "Casts")
+CastAheadWindow.Register("RaidGuide", "Raid", BuildRaidGuide, RefreshRaidGuide, nil, nil, "Guide")
+CastAheadWindow.Register("RaidSaves", "Raid", BuildRaidSaves, RefreshRaidSaves, nil, nil, "Saves")

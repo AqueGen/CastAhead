@@ -1,6 +1,6 @@
 CastAheadOptions = {}
 
-CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Bursts", "RaidDefensives", "Development", "Report" }
+CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Development", "Report" }
 local panels = {}
 local T = CastAheadWindow.THEME
 local FLAT = { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 }
@@ -44,7 +44,7 @@ end
 
 -- Forward declarations: Build calls these, and Lua resolves a local by
 -- what it holds at call time, so they must exist as upvalues before it runs.
-local BuildGeneral, BuildSounds, BuildDefensives, BuildBursts, BuildDevelopment, BuildReport
+local BuildGeneral, BuildSounds, BuildDefensives, BuildDevelopment, BuildReport
 -- Widgets are painted once, when a panel is first built, but storage can
 -- change behind their back: the /ca anchor|grow|offset|center slash commands
 -- and the Move button all write it. Every widget that displays stored state
@@ -136,21 +136,21 @@ local SWITCHES = {
     voice = { label = "Voice",
         tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"interrupt\"." },
     fixedSpacing = { label = "Fixed spacing", defaultOff = true,
-        tip = "Step sideways by the icon plus the gap below, whatever the words under the icons measure. Every row packs the same; two wide verdicts side by side may overlap." },
+        tip = "Space the icons evenly: each step is the icon width plus the Gap slider, however long the words under the icons are. Every row looks the same; two long words side by side may overlap." },
     fullLabels = { label = "Full labels", defaultOff = true,
-        tip = "Spell the longest verdicts out under a nameplate icon - BUSTER becomes TANKBUSTER. The icons step sideways by the width of the words under them, so the full words spread the row out; off, every plate's widest word is six characters and the rows pack evenly. The cast table and the spoken call always use the whole word either way." },
+        tip = "Write the long calls out in full under a nameplate icon: TANKBUSTER instead of BUSTER. Unless Fixed spacing is on, longer words push the icons further apart. Off, the longest calls are shortened (BUSTER, DEF, SOON) and the rows stay tight. The cast table and the voice always use the full word." },
     devMode = { label = "Development mode", defaultOff = true,
-        tip = "Adds the Development tab and starts recording everything for improving the addon's data (the Record everything switch there, on by default). Nothing here changes what the addon calls out." },
+        tip = "Adds the Development tab and starts recording data that helps improve the addon (the Record everything switch there, on by default). It does not change what the addon calls out." },
     recordAll = { label = "Record everything",
-        tip = "The game's combat log with advanced logging in every dungeon (off again when you leave, unless you had started it yourself), a journal of each key, and what the game lets an addon read off each enemy cast. Holds 12 keys: when the journal fills up it asks you to reload so it reaches the disk, then you copy it off and clear it on this tab. No names of people are recorded." },
+        tip = "Records the game's combat log with advanced logging in every dungeon (it stops when you leave, unless you started it yourself), a journal of each key, and what the game lets an addon read from each enemy cast. The journal holds 12 keys. When it is full it asks you to reload so the data reaches the disk; then copy it off and clear it on this tab. No player names are recorded." },
     saveCalls = { label = "Defensive calls in dungeons", defaultOff = true,
         tip = "In dungeons and the open world, call a defensive ahead of damage that needs one, and show your button for it in the centre. Raids have their own switch." },
     bossAdapter = { label = "Boss calls from DBM / BigWigs",
         tip = "Also call defensives for boss abilities announced by DBM or BigWigs." },
     raidMode = { label = "Raid (experimental)", defaultOff = true,
-        tip = "Master switch for the raid features below. Off, neither runs and the Raid group leaves the menu; each keeps its own setting for when you turn this back on." },
+        tip = "Turns the raid features below on and off together. Off, none of them runs and the Raid section leaves the menu; each keeps its own setting for when you turn this back on." },
     raidSaves = { label = "Defensive calls in raids", defaultOff = true,
-        tip = "In raids, call defensives for boss abilities from DBM or BigWigs timers, so it needs one of them. The defensive table holds dungeon abilities only for now, so raid calls stay rare. Does not need the dungeon switch." },
+        tip = "In raids, call a defensive for a dangerous boss debuff on you, timed to when its damage hits in top-player fights. Does not need the dungeon switch." },
     burstCalls = { label = "Burst windows", defaultOff = true,
         tip = "On bosses with a phase worth bursting into, say \"burst soon\" five seconds before it and \"burst now\" when it starts, with a countdown in the centre block. Healers get their own phases for group-healing cooldowns. On every other boss it stays silent: press on cooldown." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
@@ -456,7 +456,7 @@ function BuildGeneral(panel)
     strataDropdown:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText("Layer", 1, 1, 1)
-        GameTooltip:AddLine("Where the icons draw among other frames. BACKGROUND sits above every nameplate and under the rest of the UI, like a plate does; go higher if you want the icons over your bars and frames, DIALOG or above if a nameplate addon lifts its plates into the UI.", nil, nil, nil, true)
+        GameTooltip:AddLine("Which layer the icons draw on. BACKGROUND sits above nameplates and under the rest of the UI, like a plate. Pick a higher layer to draw over your bars and frames, DIALOG or higher if your nameplate addon raises its plates.", nil, nil, nil, true)
         GameTooltip:Show()
     end)
     strataDropdown:SetScript("OnLeave", GameTooltip_Hide)
@@ -880,8 +880,8 @@ function BuildDefensives(panel)
         width = COL_W - 50,
         caption = function(value)
             return value > 0
-                and string.format("Save early warning: %ds", value)
-                or "Save early warning: off"
+                and string.format("Defensive early warning: %ds", value)
+                or "Defensive early warning: off"
         end,
     })
 
@@ -937,85 +937,6 @@ function BuildDefensives(panel)
 end
 
 local BURST_DIFFICULTIES = { { 14, "Normal" }, { 15, "Heroic" }, { 16, "Mythic" }, { 8, "Keys" } }
-local GUIDE_COL_W, GUIDE_COL_GAP = 300, 24
-local burstDifficulty = 15
-
-function BuildBursts(panel)
-    local Paint
-    local caveat = Caveat(panel, "the phases come from top-player logs and may not match your group.", "burst")
-    panel.flowTop = function() return 6 + caveat.Place(COL_X, 6, math.max(panel:GetWidth() - 2 * COL_X, 1)) end
-    local guide = BuildGroup(panel, "Guide", 120, true)
-    local buttons = {}
-    for i, d in ipairs(BURST_DIFFICULTIES) do
-        local b = CastAheadWindow.Button(guide, d[2], 56)
-        b:SetPoint("TOPLEFT", guide, "TOPLEFT", 8 + (i - 1) * 59, -24)
-        b:SetScript("OnClick", function() burstDifficulty = d[1] Paint() end)
-        buttons[i] = b
-    end
-    local columns, blocks = {}, {}
-    local function Column(i)
-        if columns[i] then return columns[i] end
-        local text = guide:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        text:SetWidth(GUIDE_COL_W)
-        text:SetJustifyH("LEFT")
-        text:SetJustifyV("TOP")
-        text:SetWordWrap(true)
-        text:SetSpacing(3)
-        columns[i] = text
-        return text
-    end
-    local function LayoutGuide(width)
-        local count = math.max(1, math.floor((width - 20 + GUIDE_COL_GAP) / (GUIDE_COL_W + GUIDE_COL_GAP)))
-        local lines, used = {}, {}
-        for c = 1, count do lines[c], used[c] = {}, 0 end
-        for _, block in ipairs(blocks) do
-            local c = 1
-            for k = 2, count do if used[k] < used[c] then c = k end end
-            if #lines[c] > 0 then lines[c][#lines[c] + 1] = "" end
-            for _, line in ipairs(block) do lines[c][#lines[c] + 1] = line end
-            used[c] = used[c] + #block + 1
-        end
-        local tallest = 0
-        for c = 1, math.max(count, #columns) do
-            local text = Column(c)
-            text:SetWidth(math.min(GUIDE_COL_W, width - 20))
-            text:SetShown(c <= count)
-            text:ClearAllPoints()
-            text:SetPoint("TOPLEFT", guide, "TOPLEFT", 10 + (c - 1) * (GUIDE_COL_W + GUIDE_COL_GAP), -54)
-            text:SetText(c <= count and table.concat(lines[c], "\n") or "")
-            if c <= count then tallest = math.max(tallest, text:GetStringHeight()) end
-        end
-        guide:SetHeight(64 + tallest)
-    end
-    panel.flowBottom = function(y)
-        local width = math.max(panel:GetWidth() - 2 * COL_X, COL_W)
-        guide:ClearAllPoints()
-        guide:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -((y or 0) + COL_GAP))
-        guide:SetWidth(width)
-        LayoutGuide(width)
-        return guide:GetHeight() + COL_GAP
-    end
-    Paint = function()
-        for i, d in ipairs(BURST_DIFFICULTIES) do
-            buttons[i]:SetBackdropColor(unpack(d[1] == burstDifficulty and T.selected or T.panel))
-        end
-        local lines = CastAheadBurst and CastAheadBurst.GuideLines(burstDifficulty) or {}
-        if #lines == 0 then lines = { "|cffaaaaaaNo burst windows on this difficulty.|r" } end
-        wipe(blocks)
-        local block = {}
-        for _, line in ipairs(lines) do
-            if line == "" then
-                blocks[#blocks + 1], block = block, {}
-            else
-                block[#block + 1] = line
-            end
-        end
-        blocks[#blocks + 1] = block
-        panel:Relayout()
-    end
-    table.insert(refreshers, Paint)
-end
-
 local REPORT_KINDS = {
     { key = "cast", label = "Wrong trash call", ask = "Anything else about what happened:",
       what = { "Called, but the mob never cast it", "Cast, but Cast Ahead said nothing", "Named the wrong spell",
@@ -1061,10 +982,13 @@ function CastAheadOptions.ReportText(key)
     local dungeon = pick.dungeon or CastAheadWindow.Dungeon and CastAheadWindow.Dungeon()
     if kind.key == "burst" then
         for _, d in ipairs(BURST_DIFFICULTIES) do
-            if d[1] == (pick.boss and pick.boss.diff or burstDifficulty) then
+            if d[1] == (pick.boss and pick.boss.diff or CastAheadWindow.RaidDifficulty()) then
                 lines[#lines + 1] = pick.boss and string.format("Boss: %s (%s, encounter %d)", pick.boss.name, d[2], pick.boss.id)
                     or "Burst guide: " .. d[2]
             end
+        end
+        if not pick.boss then
+            lines[#lines + 1] = "Dungeon picked: " .. (dungeon and CastAheadData[dungeon] and CastAheadData[dungeon].name or "?")
         end
         lines[#lines + 1] = "Burst windows: " .. OnOff(CastAheadConfig.BurstCalls())
     elseif kind.key ~= "idea" then
@@ -1324,7 +1248,7 @@ function BuildReport(panel)
 end
 
 local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
-    "POISON", "CURSE", "MAGIC", "DISEASE", "BLEED", "SOOTHE", "PURGE", "SWITCH", "ALERT",
+    "POISON", "CURSE", "MAGIC", "DISEASE", "BLEED", "SOOTHE", "PURGE", "SWITCH", "ADDS", "ALERT",
     "DEFENSIVE", "SOON", "BURST" }
 local SOUND_ROW_H = 26
 
@@ -1479,15 +1403,14 @@ function BuildSounds(panel)
     end
 end
 
-BUILDERS = { General = BuildGeneral, Sounds = BuildSounds, Defensives = BuildDefensives, Bursts = BuildBursts,
-             RaidDefensives = BuildDefensives, Development = BuildDevelopment, Report = BuildReport }
-local MENU_GROUPS = { Defensives = "Dungeon", Bursts = "Raid", RaidDefensives = "Raid", Report = "Feedback" }
-local MENU_LABELS = { RaidDefensives = "Defensives" }
+BUILDERS = { General = BuildGeneral, Sounds = BuildSounds, Defensives = BuildDefensives, Development = BuildDevelopment,
+             Report = BuildReport }
+local MENU_GROUPS = { Report = "Feedback" }
 
 for _, name in ipairs(CastAheadOptions.TABS) do
     local host
     CastAheadWindow.Register(name, MENU_GROUPS[name] or "Settings",
         function(h) host = h end,
         function() CastAheadOptions.ShowPanel(host, name) end,
-        nil, name == "Defensives", MENU_LABELS[name])
+        nil, name == "Defensives")
 end

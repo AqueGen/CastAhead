@@ -376,34 +376,204 @@ local function GuideLine(r)
     local names = {}
     for _, b in ipairs(r.buttons) do names[#names + 1] = ButtonLink(b) end
     local press = #names > 0 and table.concat(names, ", then ") or "no button in your list"
-    local line = string.format("- %s from %s (%s): defensive - %s", Link("spell", r.id, Icon(SpellTexture(r.id)) .. r.name),
+    local line = string.format("- %s from %s (heard by: %s): defensive - %s", Link("spell", r.id, Icon(SpellTexture(r.id)) .. r.name),
         r.mob or "?", Heard(r.trigger), press)
     local wins = r.wins and M.ADVICE[r.wins]
     if wins then line = line .. string.format(" (%s comes first)", wins.say) end
-    if r.ep then line = line .. string.format("; about %d%% HP at +20", r.ep) end
+    if r.ep then line = line .. string.format(". Takes about %d%% of your health at +20", r.ep) end
     local cadence = Cadence(r)
-    if cadence then line = line .. ". Casts " .. cadence end
+    if cadence then line = line .. ". Comes " .. cadence end
     return line
 end
 
-S.EP_NOTE = "Damage is the median whole hit on your role (with its DoT, pulses and stacks) at +20, the level calls are judged at."
+S.EP_NOTE = "Damage is the share of your health one whole hit takes (its DoT, pulses and stacks included), "
+    .. "typical for your role, at +20, the level calls are judged at."
+S.RAID_EP_NOTE = "Damage is the share of your health taken in the worst 8 seconds while the debuff is on you, in top-player fights."
+
+local GREY, SECTION = "|cffaaaaaa", "|cff8fb8ff"
+local NOTHING = GREY .. "- nothing calls a defensive for your role|r"
+local CALLS_OFF = "Defensive calls and burst windows are off - turn them on in General - Features."
+local RAID_CAVEAT = GREY .. "Debuff calls and burst phases come from top-player logs and may not match your group.|r"
+local BURST_CAVEAT = GREY .. "Burst phases come from top-player logs and may not match your group.|r"
+
+-- A boss block shared by both guides: the heading, its Defensive lines, then its Burst lines.
+local function BossBlock(lines, name, defensive, burst)
+    if #lines > 0 then lines[#lines + 1] = "" end
+    lines[#lines + 1] = "Boss: " .. name
+    if defensive then
+        lines[#lines + 1] = SECTION .. "  Defensive|r"
+        if #defensive == 0 then defensive = { NOTHING } end
+        for _, line in ipairs(defensive) do lines[#lines + 1] = line end
+    end
+    if burst then
+        lines[#lines + 1] = SECTION .. "  Burst|r"
+        for _, line in ipairs(burst) do lines[#lines + 1] = line end
+    end
+end
+
+local function DungeonName(instanceID)
+    local data = CastAheadData and CastAheadData[instanceID]
+    return data and data.name
+end
 
 function S.GuideText(instanceID)
+    if not (CastAheadConfig.DungeonSaves() or CastAheadConfig.BurstCalls()) then return CALLS_OFF end
     local lines = S.GuideLines(instanceID)
-    if #lines > 0 then return S.EP_NOTE .. "\n\n" .. table.concat(lines, "\n") end
+    if #lines > 0 then
+        local head = {}
+        if CastAheadConfig.DungeonSaves() then head[#head + 1] = S.EP_NOTE end
+        if CastAheadConfig.BurstCalls() then head[#head + 1] = BURST_CAVEAT end
+        return table.concat(head, "\n") .. (#head > 0 and "\n\n" or "") .. table.concat(lines, "\n")
+    end
 end
 
 function S.GuideLines(instanceID)
-    local lines, group = {}, nil
-    for _, r in ipairs(S.ViewRows(instanceID)) do
-        if r.boss ~= group then
-            group = r.boss
-            if #lines > 0 then lines[#lines + 1] = "" end
-            lines[#lines + 1] = r.boss ~= "" and ("Boss: " .. r.boss) or "Trash"
+    local defensive = CastAheadConfig.DungeonSaves()
+    local groups, order, trash = {}, {}, {}
+    local function Group(name)
+        if not groups[name] then groups[name], order[#order + 1] = {}, name end
+        return groups[name]
+    end
+    if defensive then
+        for _, r in ipairs(S.ViewRows(instanceID)) do
+            table.insert(r.boss ~= "" and Group(r.boss) or trash, GuideLine(r))
         end
-        lines[#lines + 1] = GuideLine(r)
+    end
+    -- The key burst table lists every boss of the dungeon, windows or not.
+    local bursts, burstOn = {}, CastAheadConfig.BurstCalls()
+    for _, b in ipairs(CastAheadBurst and CastAheadBurst.Bosses and CastAheadBurst.Bosses(8, DungeonName(instanceID)) or {}) do
+        Group(b.name)
+        if burstOn then bursts[b.name] = CastAheadBurst.BossLines(b.list) end
+    end
+    table.sort(order)
+    local lines = {}
+    for _, name in ipairs(order) do BossBlock(lines, name, defensive and groups[name], bursts[name]) end
+    if #trash > 0 then
+        if #lines > 0 then lines[#lines + 1] = "" end
+        lines[#lines + 1] = "Trash"
+        for _, line in ipairs(trash) do lines[#lines + 1] = line end
     end
     return lines
+end
+
+local SKIP = {
+    survivable = function(e) return string.format("takes about %d%% of your health, usually survivable", e.ep or 0) end,
+    dies = function() return "the players who get it die anyway" end,
+    rarely = function() return "top players rarely use a defensive for it" end,
+    late = function(e) return string.format("the deadly part comes %d s after it lands, too late for a call", e.at or 0) end,
+    few = function() return "too few logged cases to judge" end,
+}
+
+local function SpellLink(id, entry)
+    return Link("spell", id, Icon(SpellTexture(id)) .. (entry.name or SpellName(id)))
+end
+
+-- The debuff lines for one raid boss on a difficulty: the role's calls, then what was checked and is not called.
+local function RaidDefensiveLines(entries, difficultyID, role)
+    -- Which dispels a spec knows is only known for the one being played.
+    local own = S.ViewSpecID() == S.SpecID()
+    local calls, skips = {}, {}
+    for _, item in ipairs(entries) do
+        local id, entry = item.id, item.entry
+        local row = entry[difficultyID]
+        if row and row[role] then
+            local advice = own and M.AuraAdvice({ [role] = true, dispel = entry.dispel, raid = true }) or M.ADVICE.DEFENSIVE
+            local delay = M.IsSave(advice) and row.delay or 0
+            local when = delay > 0 and string.format("about %d s after it lands", delay) or "as it lands"
+            if not own and role == "HEALER" and entry.dispel then
+                when = when .. string.format(" (dispel %s instead if your spec removes it)", entry.dispel:lower())
+            end
+            calls[#calls + 1] = string.format("- %s: %s %s - takes about %d%% of your health%s", SpellLink(id, entry),
+                advice.say, when, row.ep and row.ep[role] or 0,
+                row.heroic and " (judged on Heroic: top players rarely get it on this difficulty)" or "")
+        else
+            local skip = entry.skip and entry.skip[difficultyID]
+            local e = skip and skip[role == "TANK" and "tank" or "other"]
+            if e and SKIP[e.reason] then
+                skips[#skips + 1] = string.format("%s- %s: no call - %s|r", GREY, SpellLink(id, entry), SKIP[e.reason](e))
+            end
+        end
+    end
+    table.sort(calls)
+    table.sort(skips)
+    for _, line in ipairs(skips) do calls[#calls + 1] = line end
+    return calls
+end
+
+-- Every raid boss on a difficulty, each with its Defensive and Burst sections.
+function S.RaidGuideLines(difficultyID)
+    local defensive, burst = CastAheadConfig.RaidSaves(), CastAheadConfig.BurstCalls()
+    local role = S.ViewRole()
+    local bosses = {}
+    -- One heading per boss whatever is shown: the defensive table's name when it has the boss.
+    local names = {}
+    for _, entry in pairs(CastAheadRaidDefensives or {}) do
+        if entry.encounter and entry.boss then names[entry.encounter] = entry.boss end
+    end
+    local function Boss(encounterID, name)
+        local b = bosses[encounterID] or { name = names[encounterID] or name, entries = {} }
+        bosses[encounterID] = b
+        return b
+    end
+    -- The burst table lists every boss of the difficulty, windows or not.
+    for _, b in ipairs(CastAheadBurst and CastAheadBurst.Bosses and CastAheadBurst.Bosses(difficultyID) or {}) do
+        local boss = Boss(b.encounter, b.name)
+        if burst then boss.burst = CastAheadBurst.BossLines(b.list) end
+    end
+    if defensive then
+        for id, entry in pairs(CastAheadRaidDefensives or {}) do
+            if entry[difficultyID] or (entry.skip and entry.skip[difficultyID]) then
+                local b = Boss(entry.encounter, entry.boss)
+                b.entries[#b.entries + 1] = { id = id, entry = entry }
+            end
+        end
+    end
+    local list = {}
+    for _, b in pairs(bosses) do list[#list + 1] = b end
+    table.sort(list, function(a, b) return a.name < b.name end)
+    local lines = {}
+    for _, b in ipairs(list) do
+        local def
+        if defensive then
+            def = difficultyID == 14 and { GREY .. "- no defensive data for Normal|r" }
+                or role and RaidDefensiveLines(b.entries, difficultyID, role)
+                or { GREY .. "- no specialization role - pick a spec|r" }
+        end
+        BossBlock(lines, b.name, def, burst and (b.burst or { GREY .. "  burst on the pull, then on cooldown|r" }))
+    end
+    return lines
+end
+
+function S.RaidGuideText(difficultyID)
+    if not (CastAheadConfig.RaidSaves() or CastAheadConfig.BurstCalls()) then return CALLS_OFF end
+    local lines = S.RaidGuideLines(difficultyID)
+    local head = RAID_CAVEAT .. (CastAheadConfig.RaidSaves() and ("\n" .. GREY .. S.RAID_EP_NOTE .. "|r") or "")
+    return head .. "\n\n" .. table.concat(lines, "\n")
+end
+
+-- The Saves table for a raid difficulty: the viewed role's debuff calls in the dungeon rows' shape.
+function S.ViewRaidRows(difficultyID)
+    local out = {}
+    local role, spec = S.ViewRole(), S.ViewSpecID()
+    if not role then return out end
+    local own, buttons = spec == S.SpecID(), nil
+    for id, entry in pairs(CastAheadRaidDefensives or {}) do
+        local row = entry[difficultyID]
+        if row and row[role] then
+            buttons = buttons or ViewButtons(spec)
+            local advice = own and M.AuraAdvice({ [role] = true, dispel = entry.dispel, raid = true })
+            out[#out + 1] = {
+                id = id, name = entry.name or SpellName(id), boss = entry.boss or "?", mob = entry.boss,
+                trigger = { debuff = true },
+                lead = advice and not M.IsSave(advice) and 0 or row.delay,
+                ep = row.ep and row.ep[role],
+                wins = advice and not M.IsSave(advice) and advice.key or nil,
+                buttons = FitsRow(buttons, row),
+            }
+        end
+    end
+    table.sort(out, ViewOrder)
+    return out
 end
 
 local SOUND_ROOT = "Interface\\AddOns\\CastAhead\\Sounds\\en\\"
@@ -429,6 +599,28 @@ local function PickedFile(advice)
     return type(sound) == "string" and sound or nil
 end
 
+-- In a raid only the current difficulty's raid debuffs, elsewhere the dungeon aura rows.
+-- A raid row's delay is silence at the start of its clip: the aura sound plays when the
+-- debuff lands, and that is the only moment the game lets an addon hook a private aura.
+local function AuraRows()
+    local _, kind, difficulty = GetInstanceInfo()
+    local rows = {}
+    if kind == "raid" then
+        for spellID, entry in pairs(CastAheadRaidDefensives or {}) do
+            local row = entry[difficulty]
+            if row then
+                rows[spellID] = { TANK = row.TANK, DAMAGER = row.DAMAGER, HEALER = row.HEALER,
+                                  delay = row.delay, dispel = entry.dispel, raid = true }
+            end
+        end
+    else
+        for spellID, row in pairs(CastAheadDefensives and CastAheadDefensives.spells or {}) do
+            if row.aura then rows[spellID] = row end
+        end
+    end
+    return rows
+end
+
 local function RegisterAuraSounds()
     if not (C_UnitAuras and C_UnitAuras.AddAuraSound and Enum and Enum.UnitAuraSoundTrigger) then return end
     if Blocked() then auraPending = true return end
@@ -436,9 +628,12 @@ local function RegisterAuraSounds()
     ClearAuraSounds()
     if not (CastAheadConfig.SaveCalls() and CastAheadConfig.Enabled("sound")) then return end
     local voice = CastAheadConfig.Enabled("voice")
-    for spellID, row in pairs(CastAheadDefensives and CastAheadDefensives.spells or {}) do
-        local advice = row.aura and M.AuraAdvice(row, CastAheadPriority and CastAheadPriority[spellID])
-        local file = advice and (PickedFile(advice) or voice and SOUND_ROOT .. advice.file .. ".ogg")
+    for spellID, row in pairs(AuraRows()) do
+        local advice = M.AuraAdvice(row, CastAheadPriority and CastAheadPriority[spellID])
+        -- The delay times a defensive; a dispel is best right away.
+        local delay = advice and M.IsSave(advice) and row.delay or 0
+        local picked = advice and (delay == 0 or not voice) and PickedFile(advice)
+        local file = advice and (picked or voice and SOUND_ROOT .. advice.file .. (delay > 0 and "_d" .. delay or "") .. ".ogg")
         if file then
             local ok, id = pcall(C_UnitAuras.AddAuraSound, Enum.UnitAuraSoundTrigger.Added, {
                 unitToken = "player", spellID = spellID, soundFileName = file, outputChannel = CastAheadConfig.SoundChannel() })
