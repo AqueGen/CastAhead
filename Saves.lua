@@ -376,17 +376,19 @@ local function GuideLine(r)
     local names = {}
     for _, b in ipairs(r.buttons) do names[#names + 1] = ButtonLink(b) end
     local press = #names > 0 and table.concat(names, ", then ") or "no button in your list"
-    local line = string.format("- %s from %s (%s): defensive - %s", Link("spell", r.id, Icon(SpellTexture(r.id)) .. r.name),
+    local line = string.format("- %s from %s (heard by: %s): defensive - %s", Link("spell", r.id, Icon(SpellTexture(r.id)) .. r.name),
         r.mob or "?", Heard(r.trigger), press)
     local wins = r.wins and M.ADVICE[r.wins]
     if wins then line = line .. string.format(" (%s comes first)", wins.say) end
-    if r.ep then line = line .. string.format("; about %d%% HP at +20", r.ep) end
+    if r.ep then line = line .. string.format(". Takes about %d%% of your health at +20", r.ep) end
     local cadence = Cadence(r)
-    if cadence then line = line .. ". Casts " .. cadence end
+    if cadence then line = line .. ". Comes " .. cadence end
     return line
 end
 
-S.EP_NOTE = "Damage is the median whole hit on your role (with its DoT, pulses and stacks) at +20, the level calls are judged at."
+S.EP_NOTE = "Damage is the share of your health one whole hit takes (its DoT, pulses and stacks included), "
+    .. "typical for your role, at +20, the level calls are judged at."
+S.RAID_EP_NOTE = "Damage is the share of your health taken in the worst 8 seconds while the debuff is on you, in top-player fights."
 
 local GREY, SECTION = "|cffaaaaaa", "|cff8fb8ff"
 local NOTHING = GREY .. "- nothing calls a defensive for your role|r"
@@ -455,11 +457,11 @@ function S.GuideLines(instanceID)
 end
 
 local SKIP = {
-    survivable = function(e) return string.format("about %d%% HP, survivable", e.ep or 0) end,
-    dies = function() return "carriers die anyway" end,
-    rarely = function() return "top players rarely press" end,
+    survivable = function(e) return string.format("takes about %d%% of your health, usually survivable", e.ep or 0) end,
+    dies = function() return "the players who get it die anyway" end,
+    rarely = function() return "top players rarely use a defensive for it" end,
     late = function(e) return string.format("the deadly part comes %d s after it lands, too late for a call", e.at or 0) end,
-    few = function() return "too few cases" end,
+    few = function() return "too few logged cases to judge" end,
 }
 
 local function SpellLink(id, entry)
@@ -481,8 +483,9 @@ local function RaidDefensiveLines(entries, difficultyID, role)
             if not own and role == "HEALER" and entry.dispel then
                 when = when .. string.format(" (dispel %s instead if your spec removes it)", entry.dispel:lower())
             end
-            calls[#calls + 1] = string.format("- %s: %s %s; about %d%% HP%s", SpellLink(id, entry), advice.say, when,
-                row.ep and row.ep[role] or 0, row.heroic and " (top players rarely take it here, judged on Heroic)" or "")
+            calls[#calls + 1] = string.format("- %s: %s %s - takes about %d%% of your health%s", SpellLink(id, entry),
+                advice.say, when, row.ep and row.ep[role] or 0,
+                row.heroic and " (judged on Heroic: top players rarely get it on this difficulty)" or "")
         else
             local skip = entry.skip and entry.skip[difficultyID]
             local e = skip and skip[role == "TANK" and "tank" or "other"]
@@ -544,7 +547,8 @@ end
 function S.RaidGuideText(difficultyID)
     if not (CastAheadConfig.RaidSaves() or CastAheadConfig.BurstCalls()) then return CALLS_OFF end
     local lines = S.RaidGuideLines(difficultyID)
-    return RAID_CAVEAT .. "\n\n" .. table.concat(lines, "\n")
+    local head = RAID_CAVEAT .. (CastAheadConfig.RaidSaves() and ("\n" .. GREY .. S.RAID_EP_NOTE .. "|r") or "")
+    return head .. "\n\n" .. table.concat(lines, "\n")
 end
 
 -- The Saves table for a raid difficulty: the viewed role's debuff calls in the dungeon rows' shape.

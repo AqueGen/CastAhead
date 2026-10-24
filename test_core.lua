@@ -3221,10 +3221,10 @@ do
     local function Text(d) return table.concat(CastAheadSaves.RaidGuideLines(d), "\n") end
     local text = Text(15)
     check(text:find("Boss: Entombed Sentinels\n|cff8fb8ff  Defensive|r\n|cffaaaaaa- nothing calls a defensive for your role|r", 1, true)
-        and text:find("Boss: Sszorak\n|cff8fb8ff  Defensive|r\n- |Hspell:1305963|hVenomous Surge|h: defensive about 3 s after it lands; about 105% HP", 1, true)
-        and text:find("|cffaaaaaa- |Hspell:1311111|hLight Hit|h: no call - about 70% HP, survivable|r", 1, true)
+        and text:find("Boss: Sszorak\n|cff8fb8ff  Defensive|r\n- |Hspell:1305963|hVenomous Surge|h: defensive about 3 s after it lands - takes about 105% of your health", 1, true)
+        and text:find("|cffaaaaaa- |Hspell:1311111|hLight Hit|h: no call - takes about 70% of your health, usually survivable|r", 1, true)
         and text:find("Boss: Twin Fangs\n", 1, true) and text:find("Boss: Ula'tek\n", 1, true)
-        and text:find("defensive as it lands; about 135% HP", 1, true) and not text:find("Burst", 1, true),
+        and text:find("defensive as it lands - takes about 135% of your health", 1, true) and not text:find("Burst", 1, true),
         "raid guide: every boss, the role's calls then the grey skips, no Burst section while bursts are off, got " .. text)
     CastAheadBurstWindows[3421] = { [15] = { name = "Twin Fangs" } }
     CastAheadRaidDefensives[1290814].boss = "The Twin Fangs"
@@ -3236,7 +3236,7 @@ do
     CastAheadBurstWindows[3421] = nil
     CastAheadDB.raidSaves = true
     text = Text(15)
-    check(text:find("|cff8fb8ff  Burst|r\n  |cffaaaaaaDig In.|r\n  1:51 burst", 1, true)
+    check(text:find("|cff8fb8ff  Burst|r\n  |cffaaaaaaDig In.|r\n  1:51 top players burst here", 1, true)
         and text:find("Boss: Ula'tek\n.-|cff8fb8ff  Burst|r\n|cffaaaaaa  burst on the pull, then on cooldown|r"),
         "raid guide: the Burst section has the note and the windows, a boss with no burst data says so, got " .. text)
     CastAheadDB.raidSaves = nil
@@ -3259,7 +3259,7 @@ do
         "raid saves: the role's rows by boss, with the delay as lead and the role's damage")
     role = "TANK"
     text = Text(15)
-    check(text:find("Mother's Wrath|h: defensive as it lands; about 150% HP", 1, true) and not text:find("Venomous Surge", 1, true),
+    check(text:find("Mother's Wrath|h: defensive as it lands - takes about 150% of your health", 1, true) and not text:find("Venomous Surge", 1, true),
         "raid guide: a tank sees the tank rows with the tanks' damage")
     role = "HEALER"
     check(Text(15):find("Coiling Ichor|h: dispel magic as it lands", 1, true),
@@ -3367,25 +3367,25 @@ do
             "the dungeon guide adds each of its bosses' burst lines, lists a boss with only burst data, keeps trash plain, got " .. with)
         CastAheadBurstWindows, CastAheadDB.raidMode, CastAheadDB.burstCalls = savedBurst, raidMode, bursts
     end
-    check(guide[3]:find("Zap|h from Abe (boss timer): defensive - |Hspell:104773|h|T2001:16|t Unending Resolve|h", 1, true) and guide[3]:find("(interrupt comes first)", 1, true),
+    check(guide[3]:find("Zap|h from Abe (heard by: boss timer): defensive - |Hspell:104773|h|T2001:16|t Unending Resolve|h", 1, true) and guide[3]:find("(interrupt comes first)", 1, true),
         "a guide line names the hit, the mob, how it is heard, the call, the first button and what wins")
-    check(text:find("Burn|h from ground effect (debuff on you): defensive", 1, true), "a debuff-only hit says it lands on you")
+    check(text:find("Burn|h from ground effect (heard by: debuff on you): defensive", 1, true), "a debuff-only hit says it lands on you")
     check(guide[3]:find("defensive - |Hspell:104773|h|T2001:16|t Unending Resolve|h", 1, true), "a button carries its icon inside a link")
     check(text:find("|Hitem:5512|h|T9512:16|t", 1, true), "an item in the bags links to the item")
     local textureSaved = C_Spell.GetSpellTexture
     C_Spell.GetSpellTexture = function(id) return id == 806 and 4242 or textureSaved(id) end
     check(CastAheadSaves.GuideLines(9000)[3]:find("^%- |Hspell:806|h|T4242:16|t Zap|h from Abe"), "a hit carries its spell icon in front of its name, both inside its link")
     C_Spell.GetSpellTexture = textureSaved
-    check(text:find("Bolt|h from Caster (cast): defensive", 1, true) and text:find("Casts about 12s after the pull, then every 20s", 1, true),
+    check(text:find("Bolt|h from Caster (heard by: cast): defensive", 1, true) and text:find("Comes about 12s after the pull, then every 20s", 1, true),
         "a cast with one cooldown gives its first cast and its period")
     check(text:find("9s, 16s, 9s x2, repeating", 1, true), "a cooldown cycle is spelled out, repeats folded")
-    check(not text:find("Burn|h from ground effect %(debuff on you%): defensive[^\n]*every"), "a hit without cast data gets no cadence")
+    check(not text:find("Burn|h from ground effect %(heard by: debuff on you%): defensive[^\n]*every"), "a hit without cast data gets no cadence")
     CastAheadBossCadence = { [801] = { first = 9.6, cd = { 25.0, 40.2, 25.0 }, steady = false }, [806] = { first = 7.0, cd = { 40.0 }, steady = true } }
     text = table.concat(CastAheadSaves.GuideLines(9000), "\n")
-    check(text:find("Slam|h from Boss A %(boss timer%): defensive[^\n]*Casts about 10s after the pull, then 25s, 40s, 25s\n")
-        and text:find("Zap|h from Abe[^\n]*Casts about 7s after the pull, then every 40s"),
+    check(text:find("Slam|h from Boss A %(heard by: boss timer%): defensive[^\n]*Comes about 10s after the pull, then 25s, 40s, 25s\n")
+        and text:find("Zap|h from Abe[^\n]*Comes about 7s after the pull, then every 40s"),
         "a boss hit takes its cadence from the boss table, a sequence without repeating")
-    check(text:find("Magma|h from Pool %(cast%): defensive[^\n]*Casts with gaps of about 9s, 16s, 9s x2, repeating"),
+    check(text:find("Magma|h from Pool %(heard by: cast%): defensive[^\n]*Comes with gaps of about 9s, 16s, 9s x2, repeating"),
         "a cycle without a first cast reads as gaps")
     CastAheadBossCadence = nil
     C_Spell.GetSpellName = nameSaved
@@ -3432,12 +3432,12 @@ do
         local zapRow
         for _, r in ipairs(CastAheadSaves.ViewRows(9000)) do if r.id == 806 then zapRow = r end end
         check(zapRow and zapRow.ep == 120, "a row carries the damage of the viewed role at +20")
-        check(CastAheadSaves.GuideLines(9000)[3]:find("; about 120% HP at +20", 1, true), "the guide line gives the damage at +20")
+        check(CastAheadSaves.GuideLines(9000)[3]:find(". Takes about 120% of your health at +20", 1, true), "the guide line gives the damage at +20")
         check(CastAheadSaves.GuideText(9000):find("^" .. CastAheadSaves.EP_NOTE:gsub("%p", "%%%0") .. "\n\n"),
             "the guide text opens with the damage note")
         check(not CastAheadSaves.ViewLevel and not CastAheadSaves.SetViewLevel and not CastAheadMatch.AtLevel,
             "no view level is left")
-        check(select(2, table.concat(CastAheadSaves.GuideLines(9000), "\n"):gsub("%% HP at %+", "")) == 1,
+        check(select(2, table.concat(CastAheadSaves.GuideLines(9000), "\n"):gsub("%% of your health at %+", "")) == 1,
             "only the row with a damage figure has a damage clause")
         CastAheadDefensives.spells[806].ep = nil
     end
@@ -5027,13 +5027,13 @@ do
         [3101] = { [8] = { name = "Kystia Manaheart", { event = 610, target = "Light Infusion" } } } }
     check(B.Clock(197) == "3:17" and B.Clock(59.6) == "1:00", "burst guide: clock formats m:ss")
     local text = Guide(16)
-    check(text == "Nek'zali\n  no shared moment - burst on the pull, then on cooldown\n\n"
-        .. "Ula'tek\n  1:48 burst (healers)\n  2:26 Venomous Heart\n  4:55 Venomous Heart\n\n"
-        .. "Vashnik\n  Hold windows.\n  0:03 on the pull\n  2:08 burst",
+    check(text == "Nek'zali\n  no burst window - burst on the pull, then on cooldown\n\n"
+        .. "Ula'tek\n  1:48 healers burst here\n  2:26 Venomous Heart\n  4:55 Venomous Heart\n\n"
+        .. "Vashnik\n  Hold windows.\n  0:03 burst on the pull\n  2:08 top players burst here",
         "burst guide: every boss by name, windows by time, healer windows marked, got " .. text)
     check(B.GuideLines(16)[1] == "|cffffd100Nek'zali|r", "burst guide: the boss name is a gold heading")
     text = Guide(8)
-    check(text == "Kystia Manaheart\n  Light Infusion - on the boss warning", "burst guide: a boss-event window names the warning, got " .. text)
+    check(text == "Kystia Manaheart\n  Light Infusion - called on the boss warning", "burst guide: a boss-event window names the warning, got " .. text)
     check(#B.GuideLines(15) == 0, "burst guide: no windows, no lines")
     CastAheadBurstWindows = saved
 end

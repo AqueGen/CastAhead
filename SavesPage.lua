@@ -2,7 +2,7 @@ local ROW_HEIGHT = 24
 local HEADER_HEIGHT = 18
 local COLUMN_GAP = 4
 local MAX_SAVE_ICONS = 5
-local TRIGGER_WORDS = { { "cast", "cast" }, { "bar", "boss bar" }, { "debuff", "debuff" } }
+local TRIGGER_WORDS = { { "cast", "cast" }, { "bar", "boss timer" }, { "debuff", "debuff" } }
 
 local SAVE_COLUMNS = {
     { key = "buttons", header = "Buttons", width = MAX_SAVE_ICONS * 18 },
@@ -167,7 +167,7 @@ local function SavesPage(rowsFor, callsOn, offText, headers, note)
             line = "No specialization role - pick a spec to see your saves."
         else
             line = "Role: " .. (ROLE_NAMES[role] or role) .. (own and "." or " - another spec's list, cooldowns not shown.")
-            if #saves == 0 then line = "Nothing here calls a save for this role. " .. line end
+            if #saves == 0 then line = "Nothing here calls a defensive for this role. " .. line end
         end
         CastAheadWindow.SetFooter(line)
         CastAheadWindow.SideHint(side, tbl)
@@ -237,7 +237,7 @@ local RAID_OFF = "Raid defensive calls are off - turn them on in General - Featu
 
 local BuildGuide, RefreshGuide = GuidePage(function()
     return CastAheadSaves.GuideText(CastAheadWindow.Dungeon())
-        or (CastAheadSaves.ViewRole() and "Nothing in this dungeon calls a save for this role."
+        or (CastAheadSaves.ViewRole() and "Nothing in this dungeon calls a defensive for this role."
             or "No specialization role - pick a spec to see your guide.")
 end)
 local BuildRaidGuide, RefreshRaidGuide = GuidePage(function()
@@ -249,7 +249,7 @@ end, function() return CastAheadConfig.DungeonSaves() end, OFF)
 local BuildRaidSaves, RefreshRaidSaves = SavesPage(function()
     return CastAheadSaves.ViewRaidRows and CastAheadSaves.ViewRaidRows(CastAheadWindow.RaidDifficulty()) or {}
 end, function() return CastAheadConfig.RaidSaves() end, RAID_OFF, { lead = "After it lands", ep = "Damage" },
-    "Damage is the worst 8 seconds while the debuff is on the carrier, in top-player fights. A call comes that long after the debuff lands.")
+    CastAheadSaves and (CastAheadSaves.RAID_EP_NOTE .. " After it lands: seconds from the debuff landing to the call."))
 
 function CastAheadUI.RefreshSaves()
     RefreshSaves()

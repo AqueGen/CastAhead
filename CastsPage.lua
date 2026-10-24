@@ -229,7 +229,7 @@ local HEADER_TIPS = {
     prio = { "Important",
         "Starred casts are the ones worth reacting to. |cffffd100Only important casts|r in the General tab hides everything else." },
     advice = { "What to do",
-        "The call made when this cast starts. Grey means the cast is tracked but has earned no verdict - too rare in the logs, and not starred." },
+        "The call made when this cast starts. Grey means the cast is tracked but has no call: it is rare in the logs and not starred." },
     spell = { "Spell",
         "The cast being tracked. Hover a row for the spell tooltip." },
     sound = { "Sound override",
@@ -241,7 +241,7 @@ local HEADER_TIPS = {
     cast = { "Cast time",
         "How long the cast bar runs. |cffffd100ch|r marks a channel." },
     cd = { "Rotation",
-        "Start-to-start seconds until this cast comes back. Several numbers = a repeating cycle, used in order." },
+        "Seconds from one start of this cast to the next. Several numbers are a repeating cycle, used in order." },
     first = { "Opener",
         "Seconds from the mob entering combat to this cast. This is what predicts the first cast of a pull, before anything has been seen." },
     offset = { "Offset",
@@ -253,7 +253,7 @@ local HEADER_TIPS = {
     dmg = { "Damage",
         "The worst hit as a share of that player's maximum health, averaged over the logs. Healing and utility casts have none." },
     kick = { "Interrupt",
-        "|cff40dd60Green|r means the game lets this cast be interrupted at all; |cff886666grey|r means it does not, whatever anyone tries. The number is how often the group actually landed a kick on it, so |cffffd100-|r on green only means nobody has bothered yet." },
+        "|cff40dd60Green|r means the game lets this cast be interrupted at all; |cff886666grey|r means it does not, whatever anyone tries. The number is how often the group actually landed a kick on it, so |cffffd100-|r on green only means no kick on it is logged yet." },
     cc = { "Stopped another way",
         "How often the cast started and never finished without an interrupt being logged - a stun, a knock, a fear. This is the column that says \"you cannot kick it, but you can stop it\". |cffffd100-|r means nobody in our logs ever stopped it, which is not proof that it cannot be stopped." },
 }
@@ -386,14 +386,14 @@ local function CreateRow(parent, index)
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine(string.format("%s (npc %d)", e.mob or "?", e.npc or 0), 0.6, 0.6, 1)
         GameTooltip:AddLine(string.format("%d observations in the logs", e.n or 0), 0.7, 0.7, 0.7)
-        GameTooltip:AddLine(string.format("Interrupted in %d%% of attempts, stopped otherwise in %d%%",
+        GameTooltip:AddLine(string.format("Interrupted: %d%% of casts. Stopped another way: %d%%.",
             (e.kick or 0) * 100, (e.cc or 0) * 100), 0.7, 0.7, 0.7)
         if e.dmg then
-            GameTooltip:AddLine(string.format("Hits %.0f player(s) for %d%% of max health incoming (absorbs included)",
+            GameTooltip:AddLine(string.format("Hits about %.0f player(s); the worst hit takes %d%% of max health (absorbs included)",
                 e.hits or 1, e.dmg * 100), 0.7, 0.7, 0.7)
         end
         if (e.n or 0) < THIN_EVIDENCE then
-            GameTooltip:AddLine("Thin evidence - run this dungeon more and regenerate", 1, 0.5, 0.2)
+            GameTooltip:AddLine("Few casts seen - its timings are a rough estimate", 1, 0.5, 0.2)
         end
         GameTooltip:Show()
     end)

@@ -238,11 +238,12 @@ local GREY, GOLD = "|cffaaaaaa", "|cffffd100"
 
 local function WindowLine(w)
     if w.event then
-        return string.format("  %s %s- on the boss warning|r", w.target or "Boss event", GREY)
+        return string.format("  %s %s- called on the boss warning|r", w.target or "Boss event", GREY)
     end
-    if w.pull then return string.format("  %s %son the pull|r", B.Clock(w.release), GREY) end
-    local line = string.format("  %s %s", B.Clock(w.release), w.target or "burst")
-    return w.role == "HEALER" and (line .. " " .. GREY .. "(healers)|r") or line
+    if w.pull then return string.format("  %s %sburst on the pull|r", B.Clock(w.release), GREY) end
+    local what = w.target or (w.role == "HEALER" and "healers burst here") or "top players burst here"
+    if w.target and w.role == "HEALER" then what = what .. " " .. GREY .. "(healers)|r" end
+    return string.format("  %s %s", B.Clock(w.release), what)
 end
 
 -- One boss on one difficulty: its note, then its windows by time.
@@ -252,7 +253,7 @@ function B.BossLines(list)
     table.sort(sorted, function(a, b) return (a.release or -1) < (b.release or -1) end)
     if list.note then lines[#lines + 1] = "  " .. GREY .. list.note .. "|r" end
     for _, w in ipairs(sorted) do lines[#lines + 1] = WindowLine(w) end
-    if #sorted == 0 then lines[#lines + 1] = "  " .. GREY .. "no shared moment - burst on the pull, then on cooldown|r" end
+    if #sorted == 0 then lines[#lines + 1] = "  " .. GREY .. "no burst window - burst on the pull, then on cooldown|r" end
     return lines
 end
 

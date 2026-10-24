@@ -136,21 +136,21 @@ local SWITCHES = {
     voice = { label = "Voice",
         tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"interrupt\"." },
     fixedSpacing = { label = "Fixed spacing", defaultOff = true,
-        tip = "Step sideways by the icon plus the gap below, whatever the words under the icons measure. Every row packs the same; two wide verdicts side by side may overlap." },
+        tip = "Space the icons evenly: each step is the icon width plus the Gap slider, however long the words under the icons are. Every row looks the same; two long words side by side may overlap." },
     fullLabels = { label = "Full labels", defaultOff = true,
-        tip = "Spell the longest verdicts out under a nameplate icon - BUSTER becomes TANKBUSTER. The icons step sideways by the width of the words under them, so the full words spread the row out; off, every plate's widest word is six characters and the rows pack evenly. The cast table and the spoken call always use the whole word either way." },
+        tip = "Write the long calls out in full under a nameplate icon: TANKBUSTER instead of BUSTER. Unless Fixed spacing is on, longer words push the icons further apart. Off, the longest calls are shortened (BUSTER, DEF, SOON) and the rows stay tight. The cast table and the voice always use the full word." },
     devMode = { label = "Development mode", defaultOff = true,
-        tip = "Adds the Development tab and starts recording everything for improving the addon's data (the Record everything switch there, on by default). Nothing here changes what the addon calls out." },
+        tip = "Adds the Development tab and starts recording data that helps improve the addon (the Record everything switch there, on by default). It does not change what the addon calls out." },
     recordAll = { label = "Record everything",
-        tip = "The game's combat log with advanced logging in every dungeon (off again when you leave, unless you had started it yourself), a journal of each key, and what the game lets an addon read off each enemy cast. Holds 12 keys: when the journal fills up it asks you to reload so it reaches the disk, then you copy it off and clear it on this tab. No names of people are recorded." },
+        tip = "Records the game's combat log with advanced logging in every dungeon (it stops when you leave, unless you started it yourself), a journal of each key, and what the game lets an addon read from each enemy cast. The journal holds 12 keys. When it is full it asks you to reload so the data reaches the disk; then copy it off and clear it on this tab. No player names are recorded." },
     saveCalls = { label = "Defensive calls in dungeons", defaultOff = true,
         tip = "In dungeons and the open world, call a defensive ahead of damage that needs one, and show your button for it in the centre. Raids have their own switch." },
     bossAdapter = { label = "Boss calls from DBM / BigWigs",
         tip = "Also call defensives for boss abilities announced by DBM or BigWigs." },
     raidMode = { label = "Raid (experimental)", defaultOff = true,
-        tip = "Master switch for the raid features below. Off, neither runs and the Raid group leaves the menu; each keeps its own setting for when you turn this back on." },
+        tip = "Turns the raid features below on and off together. Off, none of them runs and the Raid section leaves the menu; each keeps its own setting for when you turn this back on." },
     raidSaves = { label = "Defensive calls in raids", defaultOff = true,
-        tip = "In raids, call defensives for boss abilities from DBM or BigWigs timers, so it needs one of them. The defensive table holds dungeon abilities only for now, so raid calls stay rare. Does not need the dungeon switch." },
+        tip = "In raids, call a defensive for a dangerous boss debuff on you, timed to when its damage hits in top-player fights. Does not need the dungeon switch." },
     burstCalls = { label = "Burst windows", defaultOff = true,
         tip = "On bosses with a phase worth bursting into, say \"burst soon\" five seconds before it and \"burst now\" when it starts, with a countdown in the centre block. Healers get their own phases for group-healing cooldowns. On every other boss it stays silent: press on cooldown." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
@@ -456,7 +456,7 @@ function BuildGeneral(panel)
     strataDropdown:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText("Layer", 1, 1, 1)
-        GameTooltip:AddLine("Where the icons draw among other frames. BACKGROUND sits above every nameplate and under the rest of the UI, like a plate does; go higher if you want the icons over your bars and frames, DIALOG or above if a nameplate addon lifts its plates into the UI.", nil, nil, nil, true)
+        GameTooltip:AddLine("Which layer the icons draw on. BACKGROUND sits above nameplates and under the rest of the UI, like a plate. Pick a higher layer to draw over your bars and frames, DIALOG or higher if your nameplate addon raises its plates.", nil, nil, nil, true)
         GameTooltip:Show()
     end)
     strataDropdown:SetScript("OnLeave", GameTooltip_Hide)
@@ -880,8 +880,8 @@ function BuildDefensives(panel)
         width = COL_W - 50,
         caption = function(value)
             return value > 0
-                and string.format("Save early warning: %ds", value)
-                or "Save early warning: off"
+                and string.format("Defensive early warning: %ds", value)
+                or "Defensive early warning: off"
         end,
     })
 
