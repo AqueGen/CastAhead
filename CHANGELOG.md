@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.20.0](https://github.com/AqueGen/CastAhead/compare/v0.19.1...v0.20.0) (2026-10-24)
+
+
+### Features
+
+* a healer who can remove the debuff hears the dispel instead of the defensive ([#82](https://github.com/AqueGen/CastAhead/issues/82)) ([249deb3](https://github.com/AqueGen/CastAhead/commit/249deb371e185aa153a1f1c72ef6ade988967013))
+* Play list on the Casts page ([#79](https://github.com/AqueGen/CastAhead/issues/79)) ([f397882](https://github.com/AqueGen/CastAhead/commit/f39788205dc876da61e87d24cc291e17e26e3be7))
+* raid debuff defensive calls, one Guide and Saves for dungeons and raids ([#84](https://github.com/AqueGen/CastAhead/issues/84)) ([7f33287](https://github.com/AqueGen/CastAhead/commit/7f332873c8a0035944378b38c7867c3daf8b9577))
+
+
+### Bug Fixes
+
+* burst calls only on boss phases, not on the cooldown grid ([#83](https://github.com/AqueGen/CastAhead/issues/83)) ([4cd896d](https://github.com/AqueGen/CastAhead/commit/4cd896d64ff931ca9045f584851148e794851e46))
+
 ## [0.19.1](https://github.com/AqueGen/CastAhead/compare/v0.19.0...v0.19.1) (2026-10-20)
 
 
