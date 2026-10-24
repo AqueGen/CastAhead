@@ -2900,8 +2900,9 @@ local function DemoLayout()
 end
 
 local function DemoAnchor(e, i)
+    local on = CastAheadConfig.Enabled("nameplates")
     if e.unit and AnchorBar(e.unit, e.bar, e.slot) then
-        e.bar:Show()
+        e.bar:SetShown(on)
         return
     end
     -- No plate (or it went away): park the icon mid-screen instead.
@@ -2917,7 +2918,7 @@ local function DemoAnchor(e, i)
             (i - 1) * step - ((demo.shown or #demo.entries) - 1) * step / 2, -160)
     end
 
-    e.bar:Show()
+    e.bar:SetShown(on)
 end
 
 -- With `list` (the table's rows, in its order) every one of them is played
@@ -3007,7 +3008,7 @@ function CastAheadCore.Test(instanceID, list)
         e.bar = GetBar(demo.state, i)
         PaintBar(e.bar, e)
         DemoAnchor(e, i)
-        e.bar:SetShown(not gap or i == 1)
+        e.bar:SetShown((not gap or i == 1) and CastAheadConfig.Enabled("nameplates"))
         if CastAheadTimeline and not gap then
             CastAheadTimeline.Sync(e.track, e.endAt, row,
                 CastAheadMatch.Advice(row), true)

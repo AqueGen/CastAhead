@@ -165,6 +165,9 @@ CreateFrame = function(kind)
         self.shown = true
     end
     f.Hide = function(self) self.shown = false end
+    f.SetShown = function(self, on)
+        if on then self:Show() else self:Hide() end
+    end
     f.IsShown = function(self) return self.shown end
     f.SetScript = function(_, script, fn)
         -- Core registers more than one event frame (the main one, plus a small
@@ -1792,6 +1795,13 @@ CastAheadCore.Test(1877)
 check(VisibleBars() > 0, string.format("the test drive draws demo bars, got %d", VisibleBars()))
 CastAheadCore.Test(1877)
 check(VisibleBars() == 0, string.format("stopping the test drive hides them, got %d", VisibleBars()))
+CastAheadDB = { nameplates = false }
+CastAheadCore.Test(1877)
+advance(0.1)
+check(CastAheadCore.Testing() and VisibleBars() == 0,
+    string.format("with nameplate icons off the test drive draws none, got %d", VisibleBars()))
+CastAheadCore.Test(1877)
+CastAheadDB = nil
 -- Every distinct call is played once, across all dungeons and whatever the
 -- role: a damage dealer still hears the tank buster, one voice at a time.
 do
