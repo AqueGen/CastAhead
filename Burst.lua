@@ -241,7 +241,7 @@ local function WindowLine(w)
         return string.format("  %s %s- on the boss warning|r", w.target or "Boss event", GREY)
     end
     if w.pull then return string.format("  %s %son the pull|r", B.Clock(w.release), GREY) end
-    local line = string.format("  %s %s", B.Clock(w.release), w.target or (w.group and "group burst" or "burst"))
+    local line = string.format("  %s %s", B.Clock(w.release), w.target or "burst")
     return w.role == "HEALER" and (line .. " " .. GREY .. "(healers)|r") or line
 end
 
