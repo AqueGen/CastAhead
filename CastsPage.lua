@@ -139,7 +139,7 @@ local COLUMNS = {
       sort = function(e) return e.cc or 0 end },
     -- Inherit ticked: the category's alert (Sounds tab), shown greyed. Unticked:
     -- the player's own pick for this one cast, ahead of the category's.
-    { key = "sound", dev = true, header = "Sound override", width = 12 + 22 + 110,
+    { key = "sound", header = "Sound override", width = 12 + 22 + 110,
       text = function(e) return CastAheadMatch.Advice(e) and "" or "|cff555555-|r" end,
       sort = function(e) return SpellSound(e) or "" end },
 }
