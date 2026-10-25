@@ -5295,20 +5295,31 @@ do
 end
 
 do
-    local gap = CastAheadCore.BAR_GAP
-    local function even(v) return math.floor(v / 2 + 0.5) * 2 end
-    local side, off, nx, ny = CastAheadSetup.Snap(-90, 0, 110, 45)
-    check(side == "left" and off == even(90 - 55 - gap) and math.abs(nx) <= 1 and ny == 0, "snap: left")
-    side, off, nx, ny = CastAheadSetup.Snap(0, 60, 110, 45)
-    check(side == "top" and off == even(60 - 22.5 - gap) and nx == 0 and ny == 0, "snap: top")
-    side = CastAheadSetup.Snap(-80, 50, 110, 45)
-    check(side == "topleft", "snap: corner")
-    side, off, nx, ny = CastAheadSetup.Snap(5, 3, 110, 45)
+    local W, H, SIZE, LABEL = 110, 45, 32, 11
+    local function snap(dx, dy) return CastAheadSetup.Snap(dx, dy, W, H, SIZE, LABEL) end
+    local function placed(side, off, nx, ny)
+        local spec = CastAheadAnchors[side]
+        local gap = CastAheadCore.BAR_GAP + off
+        local x = spec.dx * (W / 2 + gap) + nx + spec.dx * SIZE / 2
+        local y = spec.dy * (H / 2 + gap + (spec.dy > 0 and LABEL or 0)) + ny + spec.dy * SIZE / 2
+        return x, y
+    end
+    local side, off, nx, ny = snap(-90, 0)
+    check(side == "left" and off == 14 and nx == 1 and ny == 0, "snap: left")
+    check(snap(0, 60) == "top", "snap: top")
+    check(snap(-80, 50) == "topleft", "snap: corner")
+    side, off, nx, ny = snap(5, 3)
     check(side == "center" and off == 0 and nx == 5 and ny == 3, "snap: inside is center")
-    side, off, nx, ny = CastAheadSetup.Snap(-500, 0, 110, 45)
+    side, off, nx, ny = snap(-500, 0)
     check(side == "left" and off == 120 and nx == -100, "snap: overflow goes to nudgeX, clamped")
-    side, off, nx, ny = CastAheadSetup.Snap(-90, 300, 110, 45)
-    check(side == "topleft" and ny == 100, "snap: nudgeY clamped")
+    side, off, nx, ny = snap(-90, 300)
+    check(side == "topleft" and off == 14 and nx == 1 and ny == 100, "snap: nudgeY clamped")
+    for _, p in ipairs({ { -90, 0 }, { 90, 0 }, { 0, 60 }, { 0, -60 }, { -80, 50 }, { 80, -50 },
+            { 5, 3 }, { -200, 10 }, { 130, 70 } }) do
+        local x, y = placed(snap(p[1], p[2]))
+        check(math.abs(x - p[1]) <= 1 and math.abs(y - p[2]) <= 1,
+            "snap: round trip " .. p[1] .. "," .. p[2] .. " -> " .. x .. "," .. y)
+    end
 end
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
