@@ -18,7 +18,7 @@ local HINT = "Change the numbers here; the icons and the centre call show the re
 local TIMELINE_NOTE = "Move it in the game's Edit Mode: Esc > Edit Mode."
 local RESET_KEYS = { "anchor", "grow", "offsetX", "nudgeX", "nudgeY", "iconSize", "labelScale", "timeScale",
                      "iconGap", "fixedSpacing", "strata", "centerX", "centerY", "centerScale", "centerTextScale" }
-local PANEL_W, PAD, ROW_H, LABEL_W = 300, 12, 24, 84
+local PANEL_W, PAD, ROW_H, LABEL_W = 310, 12, 24, 92
 local HALF_SCREEN_FALLBACK = 1000
 local GUESS = "Sample size is a guess until a real nameplate is seen."
 local PLATE_STRATA = "BACKGROUND"
@@ -378,6 +378,7 @@ local function BuildBody(W, T)
     local icons
     icons, panel.iconsTitle, panel.iconsContent = Box("nameplates", "Nameplate icons", panel.guess)
     panel.iconsBox = icons
+    y = 8
     panel.side, panel.grow = O.BuildPlacement(content, { "TOPLEFT", content, "TOPLEFT", 4, -y })
     y = y + 84
     Number("offsetX", "Distance (px)")
