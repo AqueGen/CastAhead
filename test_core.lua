@@ -1881,8 +1881,8 @@ check(CastAheadDB and CastAheadDB.anchor == "center",
     "/ca anchor center sets the anchor rather than being read as /ca center")
 SlashCmdList.CASTAHEAD("anchor left")
 check(CastAheadDB.anchor == nil, "anchoring back to the default clears the stored value")
-SlashCmdList.CASTAHEAD("center -200")
-check(CastAheadDB.centerY == -200, "/ca center still moves the centre call")
+SlashCmdList.CASTAHEAD("center -90")
+check(CastAheadCore.CENTER_Y + CastAheadDB.centerY == -90, "/ca center takes the number from the screen centre, like the panel")
 CastAheadDB = nil
 do
     local realPrint, said = print, nil
