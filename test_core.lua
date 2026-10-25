@@ -4617,7 +4617,7 @@ do
             AddLine = function(_, t) tips[#tips + 1] = t end,
         }, { __index = function() return function() end end })
         setup.handlers.OnEnter(setup)
-        check(table.concat(tips, "|") == "Size and position|Set the size and position of the nameplate icons and the centre call, with a live preview.",
+        check(table.concat(tips, "|") == "Size and position|Set the size and position of the nameplate icons and the centre call, with a live preview.|Best done near training dummies, so the icons show on real nameplates.",
             "the button's tooltip says what it does, got " .. table.concat(tips, "|"))
         tips = {}
         setup.handlers.OnClick(setup)
@@ -4627,7 +4627,7 @@ do
         check(setup.enabled == false and setup.motionWhileDisabled == true,
             "Size and position is disabled in combat and keeps its tooltip")
         setup.handlers.OnEnter(setup)
-        check(table.concat(tips, "|") == "Size and position|Set the size and position of the nameplate icons and the centre call, with a live preview.|Not available in combat.",
+        check(table.concat(tips, "|") == "Size and position|Set the size and position of the nameplate icons and the centre call, with a live preview.|Best done near training dummies, so the icons show on real nameplates.|Not available in combat.",
             "the disabled button says why, got " .. table.concat(tips, "|"))
         inCombat = false
         setup.handlers.OnEvent(setup, "PLAYER_REGEN_ENABLED")
