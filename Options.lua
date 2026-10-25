@@ -110,6 +110,11 @@ local function Redraw()
     if CastAheadCore and CastAheadCore.Reapply then CastAheadCore.Reapply() end
 end
 
+local function OutputChanged()
+    Redraw()
+    if CastAheadSetup and CastAheadSetup.OutputsChanged then CastAheadSetup.OutputsChanged() end
+end
+
 local function SaveRefresh()
     if CastAheadSaves then CastAheadSaves.Refresh() end
 end
@@ -383,7 +388,7 @@ function BuildGeneral(panel)
     local role = BuildSwitch(panel, "roleFilter",
         { "TOPLEFT", important, "BOTTOMLEFT", 0, -4 })
     local timeline = BuildSwitch(panel, "timeline",
-        { "TOPLEFT", role, "BOTTOMLEFT", 0, -4 })
+        { "TOPLEFT", role, "BOTTOMLEFT", 0, -4 }, OutputChanged)
     BuildSlider(panel, {
         key = "leadSeconds",
         default = CastAheadConfig.LEAD_DEFAULT,
@@ -402,11 +407,11 @@ function BuildGeneral(panel)
     BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 }, RedrawAndSaves)
 
     local plates = BuildGroup(panel, "Nameplate icons", 100)
-    local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 })
+    local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 }, OutputChanged)
     BuildSwitch(panel, "fullLabels", { "TOPLEFT", platesOn, "BOTTOMLEFT", 0, -4 })
 
     local centre = BuildGroup(panel, "Centre call", 70)
-    BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 })
+    BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 }, OutputChanged)
 
     local features = BuildGroup(panel, "Features", 166)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", features, "TOPLEFT", 10, -26 }, function()

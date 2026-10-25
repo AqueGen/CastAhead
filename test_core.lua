@@ -17,6 +17,7 @@ end
 
 local now = 1000
 GetTime = function() return now end
+ResetCursor = function() end
 
 local combat, hostile, dead = {}, {}, {}
 UnitAffectingCombat = function(unit) return combat[unit] == true end
@@ -4565,6 +4566,25 @@ do
             "children switched on stay disabled while the raid switch is off")
         CastAheadDB = {}
     end
+    do
+        local realChanged, changed = CastAheadSetup.OutputsChanged, 0
+        CastAheadSetup.OutputsChanged = function() changed = changed + 1 end
+        local pairsOf = { { "Show icons on nameplates", "nameplates" }, { "Show the centre call", "centerText" },
+                          { "Feed the Blizzard timeline", "timeline" } }
+        for _, p in ipairs(pairsOf) do
+            local box = Frame(p[1])
+            box.GetChecked = function() return false end
+            box.SetChecked = function(self, v) self.checkedValue = v end
+            box.handlers.OnClick(box)
+            check(CastAheadDB[p[2]] == false, "General: " .. p[1] .. " writes " .. p[2])
+            CastAheadDB[p[2]] = nil
+            CastAheadOptions.Refresh()
+            check(box.checkedValue == true, "General: " .. p[1] .. " follows the setting after a refresh")
+        end
+        check(changed == 3, "General: each output switch tells the setup mode, got " .. changed)
+        CastAheadSetup.OutputsChanged = realChanged
+        CastAheadDB = {}
+    end
     (function()
         local setup, move
         for _, b in ipairs(made) do
@@ -5457,6 +5477,15 @@ do
     check(side == "center" and off == 0 and nx == 5 and ny == 3, "snap: inside is center")
     side, off, nx, ny = snap(-500, 0)
     check(side == "left" and off == 120 and nx == -100, "snap: overflow goes to nudgeX, clamped")
+    side, off, nx, ny = snap(-74, 0)
+    check(side == "left" and off == -2 and nx == 1 and ny == 0,
+        "snap: a drop between the plate edge and the gap gives a negative distance, got " .. tostring(off) .. "/" .. tostring(nx))
+    side, off, nx, ny = snap(-300, 0)
+    check(off == 120 and nx == -100, "snap: far out still stops at 120")
+    side, off, nx, ny = snap(-20, 0)
+    check(side == "center" and off == 0, "snap: inside the plate keeps distance 0")
+    side, off, nx, ny = snap(-45, 54)
+    check(side == "top" and off == -2 and math.abs(ny) <= 100,"snap: a drop just above the plate gives a negative distance too")
     side, off, nx, ny = snap(-90, 300)
     check(side == "topleft" and off == 14 and nx == 1 and ny == 100, "snap: nudgeY clamped")
     local savedDB = CastAheadDB
@@ -5480,7 +5509,7 @@ do
         end
     end
     for _, p in ipairs({ { -90, 0 }, { 90, 0 }, { 0, 60 }, { 0, -60 }, { -80, 50 }, { 80, -50 },
-            { 5, 3 }, { -200, 10 }, { 130, 70 } }) do
+            { 5, 3 }, { -200, 10 }, { 130, 70 }, { -74, 0 }, { -66, 4 }, { 74, -10 } }) do
         side, off, nx, ny = snap(p[1], p[2])
         CastAheadConfig.Set("anchor", side)
         CastAheadConfig.Set("offsetX", off)
@@ -5603,6 +5632,65 @@ end
     check(barsOn(onUnit) == 0, "setup: a removed plate releases its sample row")
     fireAll("NAME_PLATE_UNIT_ADDED", unit)
     check(barsOn(onUnit) == 3, "setup: an added hostile plate gets a sample row")
+
+    do
+        local plateBox, centreBox, timelineBox = panel.iconsTitle, panel.centreTitle, panel.timelineSwitch
+        local function flip(box, on)
+            box.GetChecked = function() return on end
+            box.handlers.OnClick(box)
+        end
+        local O = CastAheadOptions
+        local refreshes, realRefresh = 0, O.Refresh
+        O.Refresh = function(...) refreshes = refreshes + 1 return realRefresh(...) end
+        local alpha = {}
+        local function watch(name, widget)
+            widget.SetAlpha = function(_, a) alpha[name] = a end
+        end
+        watch("size", panel.fields.iconSize.box)
+        watch("sizeLabel", panel.fields.iconSize.label)
+        watch("plus", panel.fields.iconSize.plus)
+        watch("layer", panel.layer)
+        watch("centre", panel.fields.centerScale.box)
+
+        flip(plateBox, false)
+        check(CastAheadDB.nameplates == false and barsOn(onUnit) == 0, "switch: Nameplate icons off hides the sample rows at once")
+        check(alpha.size and alpha.size < 1 and alpha.sizeLabel < 1 and alpha.plus < 1 and alpha.layer < 1
+            and alpha.centre == nil, "switch: only the icons block dims while its switch is off")
+        check(sampleLines() == 3 and liveEvents() - live0 == 3, "switch: the other two outputs stay up")
+        check(refreshes > 0, "switch: the panel refreshes General's widgets")
+        flip(plateBox, true)
+        check(CastAheadDB.nameplates == nil and barsOn(onUnit) == 3 and alpha.size == 1 and alpha.layer == 1,
+            "switch: Nameplate icons on brings the rows and the full look back")
+
+        flip(centreBox, false)
+        check(CastAheadDB.centerText == false and sampleLines() == 0 and alpha.centre < 1,
+            "switch: Centre call off hides the centre sample and dims its block")
+        check(barsOn(onUnit) == 3 and alpha.size == 1, "switch: the icons are untouched by the centre switch")
+        flip(centreBox, true)
+        check(CastAheadDB.centerText == nil and sampleLines() == 3 and alpha.centre == 1,
+            "switch: Centre call on brings the centre sample back")
+
+        flip(timelineBox, false)
+        check(CastAheadDB.timeline == false and liveEvents() == live0, "switch: Blizzard timeline off cancels the sample entries")
+        flip(timelineBox, true)
+        check(CastAheadDB.timeline == nil and liveEvents() - live0 == 3, "switch: Blizzard timeline on feeds the samples again")
+
+        for _, box in ipairs({ plateBox, centreBox, timelineBox }) do
+            box.SetChecked = function(self, v) self.checkedValue = v end
+        end
+        CastAheadDB.nameplates, CastAheadDB.centerText, CastAheadDB.timeline = false, false, false
+        O.Refresh()
+        check(plateBox.checkedValue == false and centreBox.checkedValue == false and timelineBox.checkedValue == false,
+            "switch: a change made on General shows in the panel after a refresh")
+        S.OutputsChanged()
+        check(barsOn(onUnit) == 0 and sampleLines() == 0 and liveEvents() == live0,
+            "switch: a change made on General takes effect in the open mode")
+        CastAheadDB.nameplates, CastAheadDB.centerText, CastAheadDB.timeline = nil, nil, nil
+        S.OutputsChanged()
+        check(barsOn(onUnit) == 3 and sampleLines() == 3 and liveEvents() - live0 == 3 and alpha.size == 1,
+            "switch: and switching them back on there restores the mode")
+        O.Refresh = realRefresh
+    end
 
     local sized
     S.plate.SetSize = function(_, w, h) sized = { w, h } end
@@ -5856,6 +5944,7 @@ end
         S.Select("row")
         S.Refresh()
         check(panel.fields.nudgeX.box.value == "5" and panel.fields.nudgeY.box.value == "-5", "panel: the numbers show the stored nudges")
+        S.plate.GetCenter = function() return 500, 300 end
         grip.handlers.OnDragStart(grip)
         check(barsOn(onSample) == 0, "setup: the dragged row leaves the sample plate")
         placeFirstIcon(410, 300)
@@ -5979,7 +6068,16 @@ end
         local HINT = "Drag the icons or the centre call, or type exact numbers."
         local realPopup, popup = StaticPopup_Show, nil
         StaticPopup_Show = function(name) popup = name end
-        local function click(f) f.handlers.OnClick(f) end
+        local function down(f) f.handlers.OnMouseDown(f, "LeftButton") end
+        local function up(f) f.handlers.OnMouseUp(f, "LeftButton") end
+        local function click(f)
+            if f.handlers.OnMouseDown then
+                down(f)
+                up(f)
+            else
+                f.handlers.OnClick(f)
+            end
+        end
         reset()
         hostile[unit] = true
         CastAheadDB = { centerText = true }
@@ -5988,8 +6086,9 @@ end
         S.Enter()
         check(panel.hint and panel.hint.value == HINT, "panel: the hint reads exactly, got " .. tostring(panel.hint and panel.hint.value))
         check(panel.outputs == nil and panel.more == nil and panel.moreBody == nil, "panel: no output switches and no More section")
-        check(panel.iconsTitle and panel.iconsTitle.value == "Nameplate icons" and panel.centreTitle
-            and panel.centreTitle.value == "Centre call", "panel: the two blocks are titled")
+        check(panel.iconsTitle and panel.iconsTitle.text.value == "Nameplate icons" and panel.centreTitle
+            and panel.centreTitle.text.value == "Centre call" and panel.timelineSwitch
+            and panel.timelineSwitch.text.value == "Blizzard timeline", "panel: the block titles and the timeline row are switches")
         local f = panel.fields or {}
         local LABELS = { offsetX = "Distance", nudgeX = "X", nudgeY = "Y", iconSize = "Icon", labelScale = "Label",
                          timeScale = "Countdown", iconGap = "Gap", centerX = "X", centerY = "Y", centerScale = "Size",
@@ -6032,8 +6131,13 @@ end
         click(f.offsetX.plus)
         check(CastAheadDB.offsetX == 2 and f.offsetX.box.value == "2", "panel: + on Distance moves the row out 2")
         click(f.offsetX.minus)
+        check(CastAheadDB.offsetX == 0, "panel: - on Distance comes back to 0")
         click(f.offsetX.minus)
-        check(CastAheadDB.offsetX == 0, "panel: Distance stops at 0")
+        check(CastAheadDB.offsetX == -2 and f.offsetX.box.value == "-2", "panel: - on Distance from 0 goes negative")
+        typeInto("offsetX", "-10")
+        check(CastAheadDB.offsetX == -10 and f.offsetX.box.value == "-10", "panel: a typed distance can be -10")
+        typeInto("offsetX", "-500")
+        check(CastAheadDB.offsetX == -120, "panel: a typed distance stops at -120")
         typeInto("offsetX", "500")
         check(CastAheadDB.offsetX == 120, "panel: a typed distance stops at 120")
 
@@ -6096,6 +6200,84 @@ end
         local nx = CastAheadDB.nudgeX
         S.Nudge(1, 0)
         check(CastAheadDB.nudgeX == nx + 1 and CastAheadDB.centerX == 12, "panel: typing centre numbers leaves the arrows on the row")
+
+        local function tick(seconds)
+            local steps = math.floor(seconds / 0.01 + 0.5)
+            for _ = 1, steps do
+                now = now + 0.01
+                panel.handlers.OnUpdate(panel)
+            end
+        end
+        local plus, minus = f.nudgeX.plus, f.nudgeX.minus
+        CastAheadDB.nudgeX = 0
+        down(plus)
+        check(CastAheadDB.nudgeX == 1 and f.nudgeX.box.value == "1", "hold: one step on press")
+        tick(0.38)
+        check(CastAheadDB.nudgeX == 1, "hold: no repeat before 0.4 s")
+        tick(0.04)
+        check(CastAheadDB.nudgeX == 2, "hold: the first repeat comes at 0.4 s, got " .. tostring(CastAheadDB.nudgeX))
+        local at = CastAheadDB.nudgeX
+        tick(0.5)
+        local early = CastAheadDB.nudgeX - at
+        tick(2)
+        at = CastAheadDB.nudgeX
+        tick(0.5)
+        local late = CastAheadDB.nudgeX - at
+        check(early >= 3 and early <= 5 and late >= 14 and late > 2 * early,
+            "hold: repeats speed up, " .. early .. " steps early and " .. late .. " late in 0.5 s")
+        up(plus)
+        at = CastAheadDB.nudgeX
+        tick(1)
+        check(CastAheadDB.nudgeX == at, "hold: release stops the repeat")
+
+        CastAheadDB.nudgeX = 0
+        down(plus)
+        tick(0.6)
+        plus.handlers.OnLeave(plus)
+        at = CastAheadDB.nudgeX
+        tick(1)
+        check(at > 1 and CastAheadDB.nudgeX == at, "hold: leaving the button stops the repeat")
+
+        CastAheadDB.nudgeX = 98
+        down(plus)
+        tick(1.5)
+        check(CastAheadDB.nudgeX == 100 and f.nudgeX.box.value == "100", "hold: a held button stops changing at the limit")
+        up(plus)
+        CastAheadDB.nudgeX = -98
+        down(minus)
+        tick(1.5)
+        check(CastAheadDB.nudgeX == -100, "hold: - stops at the lower limit")
+        up(minus)
+
+        CastAheadDB.offsetX = 0
+        down(f.offsetX.minus)
+        tick(1)
+        check(CastAheadDB.offsetX < -2, "hold: Distance repeats below zero, got " .. tostring(CastAheadDB.offsetX))
+        up(f.offsetX.minus)
+
+        CastAheadDB.nudgeX = 0
+        down(plus)
+        S.Leave()
+        S.Enter()
+        tick(1)
+        check(CastAheadDB.nudgeX == 1, "hold: leaving the mode stops the repeat")
+        CastAheadDB.nudgeX = 0
+        down(plus)
+        panel.handlers.OnHide(panel)
+        S.Enter()
+        tick(1)
+        check(CastAheadDB.nudgeX == 1, "hold: hiding the panel stops the repeat")
+        CastAheadDB.nudgeX = 0
+        down(plus)
+        fireAll("PLAYER_REGEN_DISABLED")
+        S.Enter()
+        tick(1)
+        check(CastAheadDB.nudgeX == 1, "hold: combat stops the repeat")
+        local drivers = 0
+        for _, key in ipairs({ "nudgeX", "iconSize", "centerX" }) do
+            if f[key].plus.handlers.OnUpdate or f[key].minus.handlers.OnUpdate then drivers = drivers + 1 end
+        end
+        check(drivers == 0, "hold: the buttons have no OnUpdate of their own, the panel drives them")
 
         CastAheadDB.plateSize = nil
         S.Leave()
@@ -6285,6 +6467,46 @@ end)();
     check(not S.plate.shown and barsOn(S.plate) == 0 and select(2, S.EditablePlate()) == "nameplate4",
         "edit: the sample plate hides as soon as a hostile plate appears")
 
+    S.plate.GetCenter = function() return 500, 400 end
+    local realCenter = plates.nameplate4.GetCenter
+    plates.nameplate4.GetCenter = function() return nil end
+    S.grip.handlers.OnDragStart(S.grip)
+    check(rowBar(plates.nameplate4, 1) ~= nil, "edit: a plate with no readable rect does not start a drag")
+    plates.nameplate4.GetCenter = realCenter
+
+    plates.nameplate4.up = false
+    panel.handlers.OnUpdate(panel)
+    check(S.plate.shown and barsOn(S.plate) == 3 and select(2, S.EditablePlate()) == "sample"
+        and S.grip._a and S.grip._a._plate == S.plate, "edit: every plate hidden but none removed, the sample plate comes back")
+    plates.nameplate4.up = true
+    now = now + 0.5
+    panel.handlers.OnUpdate(panel)
+    check(not S.plate.shown and barsOn(S.plate) == 0 and select(2, S.EditablePlate()) == "nameplate4"
+        and S.grip._a and S.grip._a._plate == plates.nameplate4, "edit: a plate shown again takes the row back")
+
+    S.grip.handlers.OnDragStart(S.grip)
+    check(rowBar(plates.nameplate4, 1) == nil, "edit: the drag is under way")
+    removePlate("nameplate4")
+    S.grip.handlers.OnDragStart(S.grip)
+    check(S.plate.shown and rowBar(S.plate, 1) == nil and barsOn(S.plate) == 0,
+        "edit: a drag restarts on the sample row after its plate went away mid-drag")
+    S.grip.handlers.OnDragStop(S.grip)
+    check(barsOn(S.plate) == 3, "edit: the sample row is back after that drag")
+    addPlate("nameplate4", 600, 300)
+    fireAll("NAME_PLATE_UNIT_ADDED", "nameplate4")
+
+    S.grip.handlers.OnDragStart(S.grip)
+    plates.nameplate4.up = false
+    panel.handlers.OnUpdate(panel)
+    S.grip.handlers.OnDragStart(S.grip)
+    check(rowBar(S.plate, 1) == nil and S.plate.shown, "edit: a plate hidden mid-drag cancels the drag, the next one starts")
+    S.grip.handlers.OnDragStop(S.grip)
+    plates.nameplate4.up = true
+    now = now + 0.5
+    panel.handlers.OnUpdate(panel)
+    check(select(2, S.EditablePlate()) == "nameplate4" and S.grip._a and S.grip._a._plate == plates.nameplate4,
+        "edit: back on the plate after the cancelled drag")
+
     local realPrint, printed = print, {}
     print = function(text) printed[#printed + 1] = text end
     CastAheadCore.Debug()
@@ -6316,20 +6538,23 @@ end)();
     panel.handlers.OnUpdate(panel)
     check(S.centerLabel.value == "Drag to move" and S.centerLabel.shown and panel.shown, "hover: Drag to move shows above the centre block")
 
-    local passed
-    S.catcher.SetPassThroughButtons = function(_, ...) passed = { ... } end
+    S.Select("row")
+    center.handlers.OnEnter(center)
+    local paint
+    S.centerBox.lines[1].SetColorTexture = function(_, r, g, b) paint = { r, g, b } end
+    local resetsBefore = resets
     S.Leave()
+    check(resets == resetsBefore + 1 and paint and paint[1] == 1 and paint[2] == 0.82 and paint[3] == 0,
+        "hover: leaving the mode resets the cursor and the outline colour")
+    S.centerBox.lines[1].SetColorTexture = nil
     check(not S.grip.shown and not panel.shown, "hover: the labels go with the mode")
-    check(not S.catcher.shown, "catcher: hidden after Leave")
+    check(S.catcher == nil, "camera: no full-screen mouse catcher, the left button turns the camera")
     S.Enter()
-    check(S.catcher.shown and passed and passed[1] == "RightButton" and #passed == 1,
-        "catcher: shown in the mode, the right button passes through")
     panel.handlers.OnKeyDown(panel, "ESCAPE")
-    check(not S.Active() and not S.catcher.shown, "catcher: hidden after Esc")
+    check(not S.Active(), "setup: Esc leaves the mode")
     S.Enter()
     fireAll("PLAYER_REGEN_DISABLED")
-    check(not S.catcher.shown, "catcher: hidden after combat starts")
-    S.catcher.SetPassThroughButtons = nil
+    check(not S.Active(), "setup: combat leaves the mode")
 
     removePlate("nameplate4")
     panel.RegisterEvent, panel.UnregisterEvent = nil, nil

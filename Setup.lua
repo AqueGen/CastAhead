@@ -38,7 +38,7 @@ function CastAheadSetup.Snap(dx, dy, w, h, size, labelH)
     end
     local offset = 0
     if out then
-        offset = math.max(0, math.min(OFFSET_MAX, math.floor((out - gap) / 2 + 0.5) * 2))
+        offset = Within(math.floor((out - gap) / 2 + 0.5) * 2, -OFFSET_MAX, OFFSET_MAX)
     end
 
     local reach = out and (gap + offset) or 0
@@ -64,6 +64,10 @@ local PLATE_LABEL = "Sample nameplate - stand near enemies or training dummies t
 local PLATE_RED = { 0.75, 0.10, 0.10, 0.9 }
 local GOLD, WHITE = { 1, 0.82, 0, 1 }, { 1, 1, 1, 1 }
 local DRAG_LABEL = "Drag to move"
+local HOLD_DELAY, REPEAT_SLOW, REPEAT_FAST, REPEAT_RAMP = 0.4, 0.12, 0.03, 2
+local DIM_ALPHA = 0.4
+local SWITCH_H = 24
+local RECHECK = 0.25
 
 local active = false
 local rows = {}
@@ -75,6 +79,10 @@ local dragging = false
 local editKey, editFrame = "sample", nil
 local readoutUntil
 local centerBox
+local hold
+local recheckAt = 0
+local lit = {}
+local blocks = { nameplates = {}, centerText = {} }
 
 local panel = CreateFrame("Frame", PANEL_NAME, UIParent, "BackdropTemplate")
 panel:SetWidth(PANEL_W)
@@ -144,14 +152,6 @@ local function Highlight(box, on)
     for _, line in ipairs(box.lines) do line:SetColorTexture(unpack(on and WHITE or GOLD)) end
 end
 
-local catcher = CreateFrame("Frame", nil, UIParent)
-catcher:SetAllPoints()
-catcher:SetFrameStrata("BACKGROUND")
-catcher:SetFrameLevel(0)
-catcher:EnableMouse(true)
-catcher:Hide()
-CastAheadSetup.catcher = catcher
-
 local grip = CreateFrame("Frame", nil, UIParent)
 grip:SetFrameStrata("HIGH")
 grip:EnableMouse(true)
@@ -207,9 +207,22 @@ local function ShowRow(key, frame)
     CastAheadCore.SampleStates[state] = frame
 end
 
+local function CancelDrag()
+    if not dragging then return end
+    dragging = false
+    ghost:StopMovingOrSizing()
+    ghost:Hide()
+    local state = rows[editKey]
+    if state then
+        CastAheadCore.SampleStates[state] = editFrame
+        CastAheadCore.Reapply()
+    end
+end
+
 local function HideRow(key)
     local state = rows[key]
     if not state then return end
+    if key == editKey then CancelDrag() end
     CastAheadCore.SampleStates[state] = nil
     CastAheadCore.HideSampleRow(state)
     rows[key] = nil
@@ -304,15 +317,20 @@ function CastAheadSetup.EditablePlate()
     return CastAheadSetup.plate, "sample"
 end
 
+local function HasShownPlateRow()
+    for key in pairs(rows) do
+        if key ~= "sample" and Shown(C_NamePlate.GetNamePlateForUnit(key)) then return true end
+    end
+    return false
+end
+
 local function SyncSample()
     local plate = SamplePlate()
     SizePlate()
-    for key in pairs(rows) do
-        if key ~= "sample" then
-            HideRow("sample")
-            plate:Hide()
-            return
-        end
+    if HasShownPlateRow() then
+        HideRow("sample")
+        plate:Hide()
+        return
     end
     plate:Show()
     ShowRow("sample", plate)
@@ -357,7 +375,7 @@ end
 
 local C = CastAheadConfig
 local FIELDS = {
-    offsetX = Ranged("offsetX", 0, 0, OFFSET_MAX, 2),
+    offsetX = Ranged("offsetX", 0, -OFFSET_MAX, OFFSET_MAX, 2),
     nudgeX = Ranged("nudgeX", 0, -C.NUDGE_MAX, C.NUDGE_MAX, 1),
     nudgeY = Ranged("nudgeY", 0, -C.NUDGE_MAX, C.NUDGE_MAX, 1),
     iconSize = Ranged("iconSize", C.ICON_DEFAULT, C.ICON_MIN, C.ICON_MAX, 1),
@@ -387,6 +405,13 @@ local TARGETS = {
 local function Refresh()
     if not panel.fields then return end
     for key, field in pairs(panel.fields) do field.box:SetText(tostring(Round(FIELDS[key].read()))) end
+    for key, widgets in pairs(blocks) do
+        local on = CastAheadConfig.Enabled(key)
+        if lit[key] ~= on then
+            lit[key] = on
+            for _, widget in ipairs(widgets) do widget:SetAlpha(on and 1 or DIM_ALPHA) end
+        end
+    end
     CastAheadOptions.Refresh()
 end
 CastAheadSetup.Refresh = Refresh
@@ -399,6 +424,27 @@ end
 local function SetField(key, value)
     FIELDS[key].write(value)
     Apply(key)
+end
+
+local function Step(key, dir)
+    SetField(key, FIELDS[key].read() + dir * FIELDS[key].step)
+end
+
+local function StopHold()
+    hold = nil
+end
+
+local function StartHold(key, dir)
+    Step(key, dir)
+    local from = GetTime() + HOLD_DELAY
+    hold = { key = key, dir = dir, at = from, from = from }
+end
+
+local function TickHold(now)
+    if not hold or now < hold.at then return end
+    Step(hold.key, hold.dir)
+    local ramp = math.min(1, (now - hold.from) / REPEAT_RAMP)
+    hold.at = now + REPEAT_SLOW + (REPEAT_FAST - REPEAT_SLOW) * ramp
 end
 
 function CastAheadSetup.Select(which)
@@ -432,7 +478,7 @@ local function StartRow()
     local state = rows[editKey]
     if dragging or not state then return end
     local x, y, w, h = Rect(editKey, editFrame)
-    if not w then w, h = CastAheadCore.PlateSize() end
+    if not (x and y and w) then return end
     ghost:SetSize(w, h)
     ghost:ClearAllPoints()
     ghost:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x, y)
@@ -510,13 +556,25 @@ local function CancelTimeline()
     for _, track in pairs(tracks) do CastAheadTimeline.Cancel(track) end
 end
 
+local function Outputs()
+    CastAheadCore.Reapply()
+    CastAheadCore.ShowCenterSample(true)
+    CastAheadSetup.Select(selected)
+    if CastAheadConfig.Enabled("timeline") then FeedTimeline(GetTime()) else CancelTimeline() end
+    Refresh()
+end
+
+function CastAheadSetup.OutputsChanged()
+    if active then Outputs() end
+end
+
 local function Layout()
     local guess = panel.guess
     guess:SetShown(select(3, CastAheadCore.PlateSize()) == "guess")
     local body = panel.body
     body:ClearAllPoints()
     body:SetPoint("TOPLEFT", guess:IsShown() and guess or panel.hint, "BOTTOMLEFT", 0, -10)
-    local h = 2 * PAD + panel.hint:GetStringHeight() + 10 + panel.bodyHeight + 8 + ROW_H
+    local h = 2 * PAD + panel.hint:GetStringHeight() + 10 + panel.bodyHeight + 8 + SWITCH_H + ROW_H
     if guess:IsShown() then h = h + guess:GetStringHeight() + 4 end
     if panel.note:IsShown() then h = h + panel.note:GetStringHeight() + 8 end
     panel:SetHeight(h)
@@ -525,12 +583,16 @@ end
 local function BuildBody(body, W, T)
     local O = CastAheadOptions
     local y = 0
-    local function Title(text)
-        local title = body:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        title:SetPoint("TOPLEFT", body, "TOPLEFT", 0, -y)
-        title:SetTextColor(unpack(T.gold))
-        title:SetText(text)
-        y = y + 18
+    local group
+    local function Track(widget)
+        group[#group + 1] = widget
+        return widget
+    end
+    local function Title(key, text)
+        group = blocks[key]
+        local title = O.BuildSwitch(body, key, { "TOPLEFT", body, "TOPLEFT", 0, -y }, Outputs, text)
+        title.text:SetTextColor(unpack(T.gold))
+        y = y + SWITCH_H
         return title
     end
     local function Label(text)
@@ -541,8 +603,8 @@ local function BuildBody(body, W, T)
     end
     local function Number(key, text)
         local field = FIELDS[key]
-        local label = Label(text)
-        local box = CreateFrame("EditBox", nil, body, "InputBoxTemplate")
+        local label = Track(Label(text))
+        local box = Track(CreateFrame("EditBox", nil, body, "InputBoxTemplate"))
         box:SetSize(48, 20)
         box:SetPoint("TOPLEFT", body, "TOPLEFT", LABEL_W, -y)
         box:SetAutoFocus(false)
@@ -559,20 +621,29 @@ local function BuildBody(body, W, T)
             Refresh()
             self:ClearFocus()
         end)
-        local minus = W.Button(body, "-", 20)
+        local function Hold(button, dir)
+            button:SetScript("OnMouseDown", function(_, which)
+                if which == "LeftButton" then StartHold(key, dir) end
+            end)
+            button:SetScript("OnMouseUp", StopHold)
+            button:SetScript("OnLeave", StopHold)
+        end
+        local minus = Track(W.Button(body, "-", 20))
         minus:SetPoint("LEFT", box, "RIGHT", 6, 0)
-        minus:SetScript("OnClick", function() SetField(key, field.read() - field.step) end)
-        local plus = W.Button(body, "+", 20)
+        Hold(minus, -1)
+        local plus = Track(W.Button(body, "+", 20))
         plus:SetPoint("LEFT", minus, "RIGHT", 2, 0)
-        plus:SetScript("OnClick", function() SetField(key, field.read() + field.step) end)
+        Hold(plus, 1)
         local row = { label = label, box = box, minus = minus, plus = plus }
         panel.fields[key] = row
         y = y + ROW_H
         return row
     end
 
-    panel.iconsTitle = Title("Nameplate icons")
+    panel.iconsTitle = Title("nameplates", "Nameplate icons")
     panel.side, panel.grow = O.BuildPlacement(body, { "TOPLEFT", body, "TOPLEFT", 4, -y })
+    Track(panel.side)
+    Track(panel.grow)
     y = y + 84
     Number("offsetX", "Distance")
     Number("nudgeX", "X")
@@ -580,18 +651,18 @@ local function BuildBody(body, W, T)
     Number("iconSize", "Icon")
     Number("labelScale", "Label")
     Number("timeScale", "Countdown")
-    panel.fixedSpacing = O.BuildSwitch(body, "fixedSpacing", { "TOPLEFT", body, "TOPLEFT", 0, -y })
+    panel.fixedSpacing = Track(O.BuildSwitch(body, "fixedSpacing", { "TOPLEFT", body, "TOPLEFT", 0, -y }))
     y = y + 26
     Number("iconGap", "Gap")
-    Label("Layer")
-    panel.layer = O.BuildStrata(body, { "TOPLEFT", body, "TOPLEFT", LABEL_W, -y + 2 })
+    Track(Label("Layer"))
+    panel.layer = Track(O.BuildStrata(body, { "TOPLEFT", body, "TOPLEFT", LABEL_W, -y + 2 }))
     y = y + 38
 
-    panel.centreTitle = Title("Centre call")
+    panel.centreTitle = Title("centerText", "Centre call")
     for _, axis in ipairs({ { "centerX", "X", "Center X" }, { "centerY", "Y", "Center Y" } }) do
         local key = axis[1]
         local row = Number(key, axis[2])
-        row.center = W.Button(body, axis[3], 64)
+        row.center = Track(W.Button(body, axis[3], 64))
         row.center:SetPoint("LEFT", row.plus, "RIGHT", 8, 0)
         row.center:SetScript("OnClick", function() SetField(key, 0) end)
     end
@@ -637,8 +708,10 @@ local function Build()
     local done = W.Button(panel, "Done", 60, true)
     done:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -PAD, PAD)
     done:SetScript("OnClick", function() CastAheadSetup.Leave() end)
+    local timelineSwitch = CastAheadOptions.BuildSwitch(panel, "timeline",
+        { "BOTTOMLEFT", timeline, "TOPLEFT", 0, 4 }, Outputs, "Blizzard timeline")
     local note = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    note:SetPoint("BOTTOMLEFT", timeline, "TOPLEFT", 0, 8)
+    note:SetPoint("BOTTOMLEFT", timelineSwitch, "TOPLEFT", 0, 4)
     note:SetWidth(PANEL_W - 2 * PAD)
     note:SetJustifyH("LEFT")
     note:SetText(TIMELINE_NOTE)
@@ -648,6 +721,7 @@ local function Build()
         Layout()
     end)
     panel.timeline, panel.reset, panel.done, panel.note = timeline, reset, done, note
+    panel.timelineSwitch = timelineSwitch
 end
 
 StaticPopupDialogs.CASTAHEAD_SETUP_RESET = {
@@ -686,8 +760,6 @@ function CastAheadSetup.Enter()
     if window then window:Hide() end
     active = true
     editKey, editFrame = "sample", nil
-    if catcher.SetPassThroughButtons then catcher:SetPassThroughButtons("RightButton") end
-    catcher:Show()
     Rechoose()
     CastAheadCore.Reapply()
     CastAheadCore.ShowCenterSample(true)
@@ -713,7 +785,10 @@ function CastAheadSetup.Leave()
     if not InCombatLockdown() then panel:SetPropagateKeyboardInput(true) end
     panel:EnableKeyboard(false)
     HookCenter():EnableMouseWheel(false)
-    catcher:Hide()
+    hold = nil
+    ResetCursor()
+    Highlight(grip.box, false)
+    Highlight(centerBox, false)
     grip:Hide()
     grip._a, grip._b = nil, nil
     editKey, editFrame = "sample", nil
@@ -779,7 +854,14 @@ panel:SetScript("OnKeyUp", function(self, key)
 end)
 panel:SetScript("OnUpdate", function()
     local now = GetTime()
-    if editKey ~= "sample" and not Shown(editFrame) then Rechoose() end
+    TickHold(now)
+    if editKey ~= "sample" and not Shown(editFrame) then
+        CancelDrag()
+        Rechoose()
+    elseif now >= recheckAt then
+        recheckAt = now + RECHECK
+        if (editKey == "sample") == HasShownPlateRow() then Rechoose() end
+    end
     PlaceGrip()
     if CastAheadSetup.centerLabel then CastAheadSetup.centerLabel:SetShown(CastAheadCore.CenterFrame():IsShown()) end
     local x, y = CastAheadCore.CenterDragOffset()
