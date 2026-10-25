@@ -310,6 +310,7 @@ dofile("CastsPage.lua")
 dofile("SavesPage.lua")
 dofile("UI.lua")
 dofile("Core.lua")
+dofile("Setup.lua")
 dofile("Recorder.lua")
 dofile("ReportWindow.lua")
 
@@ -5291,6 +5292,23 @@ do
     check(framesMade == before, "sample row: hidden bars return to the pool")
     CastAheadCore.HideSampleRow(full)
     CastAheadDB = savedDB
+end
+
+do
+    local gap = CastAheadCore.BAR_GAP
+    local function even(v) return math.floor(v / 2 + 0.5) * 2 end
+    local side, off, nx, ny = CastAheadSetup.Snap(-90, 0, 110, 45)
+    check(side == "left" and off == even(90 - 55 - gap) and math.abs(nx) <= 1 and ny == 0, "snap: left")
+    side, off, nx, ny = CastAheadSetup.Snap(0, 60, 110, 45)
+    check(side == "top" and off == even(60 - 22.5 - gap) and nx == 0 and ny == 0, "snap: top")
+    side = CastAheadSetup.Snap(-80, 50, 110, 45)
+    check(side == "topleft", "snap: corner")
+    side, off, nx, ny = CastAheadSetup.Snap(5, 3, 110, 45)
+    check(side == "center" and off == 0 and nx == 5 and ny == 3, "snap: inside is center")
+    side, off, nx, ny = CastAheadSetup.Snap(-500, 0, 110, 45)
+    check(side == "left" and off == 120 and nx == -100, "snap: overflow goes to nudgeX, clamped")
+    side, off, nx, ny = CastAheadSetup.Snap(-90, 300, 110, 45)
+    check(side == "topleft" and ny == 100, "snap: nudgeY clamped")
 end
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))

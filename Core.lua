@@ -2793,6 +2793,7 @@ end
 -- the dungeon table load, are plates being tracked, what level did we read, and
 -- how far identification got on each one.
 CastAheadCore = {}
+CastAheadCore.BAR_GAP = BAR_GAP
 CastAheadCore.Announce = PlayAdviceSound
 CastAheadCore.AdviceFile = AdviceFile
 CastAheadCore.ReapplyData = function() extrasMerged = false; MergeCuration() end
