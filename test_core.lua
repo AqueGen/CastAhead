@@ -5298,13 +5298,6 @@ end
 do
     local W, H, SIZE, LABEL = 110, 45, 32, 11
     local function snap(dx, dy) return CastAheadSetup.Snap(dx, dy, W, H, SIZE, LABEL) end
-    local function placed(side, off, nx, ny)
-        local spec = CastAheadAnchors[side]
-        local gap = CastAheadCore.BAR_GAP + off
-        local x = spec.dx * (W / 2 + gap) + nx + spec.dx * SIZE / 2
-        local y = spec.dy * (H / 2 + gap + (spec.dy > 0 and LABEL or 0)) + ny + spec.dy * SIZE / 2
-        return x, y
-    end
     local side, off, nx, ny = snap(-90, 0)
     check(side == "left" and off == 14 and nx == 1 and ny == 0, "snap: left")
     check(snap(0, 60) == "top", "snap: top")
@@ -5315,12 +5308,50 @@ do
     check(side == "left" and off == 120 and nx == -100, "snap: overflow goes to nudgeX, clamped")
     side, off, nx, ny = snap(-90, 300)
     check(side == "topleft" and off == 14 and nx == 1 and ny == 100, "snap: nudgeY clamped")
+    local savedDB = CastAheadDB
+    CastAheadDB = { iconSize = SIZE }
+    local function sign(point)
+        return point:find("LEFT") and -1 or point:find("RIGHT") and 1 or 0,
+            point:find("TOP") and 1 or point:find("BOTTOM") and -1 or 0
+    end
+    local frame = {}
+    local warm = {}
+    CastAheadCore.ShowSampleRow(warm, frame)
+    CastAheadCore.HideSampleRow(warm)
+    for i = 1, #allFrames do
+        local f = allFrames[i]
+        if IsBar(f) then
+            f.realSetPoint = f.SetPoint
+            f.SetPoint = function(self, ...)
+                self.args = { ... }
+                return self.realSetPoint(self, ...)
+            end
+        end
+    end
     for _, p in ipairs({ { -90, 0 }, { 90, 0 }, { 0, 60 }, { 0, -60 }, { -80, 50 }, { 80, -50 },
             { 5, 3 }, { -200, 10 }, { 130, 70 } }) do
-        local x, y = placed(snap(p[1], p[2]))
-        check(math.abs(x - p[1]) <= 1 and math.abs(y - p[2]) <= 1,
-            "snap: round trip " .. p[1] .. "," .. p[2] .. " -> " .. x .. "," .. y)
+        side, off, nx, ny = snap(p[1], p[2])
+        CastAheadConfig.Set("anchor", side)
+        CastAheadConfig.Set("offsetX", off)
+        CastAheadConfig.Set("nudgeX", nx)
+        CastAheadConfig.Set("nudgeY", ny)
+        local state = {}
+        CastAheadCore.ShowSampleRow(state, frame)
+        local bar = state.bars[1]
+        local point, anchor, relative, x, y = unpack(bar.args)
+        local px, py = sign(point)
+        local rx, ry = sign(relative)
+        local cx = rx * W / 2 + x - px * bar._size / 2
+        local cy = ry * H / 2 + y - py * bar._size / 2
+        check(anchor == frame and bar._size == SIZE and math.abs(cx - p[1]) <= 1 and math.abs(cy - p[2]) <= 1,
+            "snap: round trip through the real anchor " .. p[1] .. "," .. p[2] .. " -> " .. cx .. "," .. cy)
+        CastAheadCore.HideSampleRow(state)
     end
+    for i = 1, #allFrames do
+        local f = allFrames[i]
+        if f.realSetPoint then f.SetPoint, f.realSetPoint, f.args = f.realSetPoint, nil, nil end
+    end
+    CastAheadDB = savedDB
 end
 
 -- A function, not a block: the main chunk is at Lua 5.1's 200-local limit.
@@ -5496,16 +5527,23 @@ end
 
     do
         local realAdd, expiry = C_EncounterTimeline.AddScriptEvent, {}
+        local realCancel, cut = C_EncounterTimeline.CancelScriptEvent, 0
         C_EncounterTimeline.AddScriptEvent = function(request)
             local id = realAdd(request)
             expiry[id] = now + request.duration
             return id
+        end
+        C_EncounterTimeline.CancelScriptEvent = function(id)
+            if expiry[id] and expiry[id] > now then cut = cut + 1 end
+            return realCancel(id)
         end
         S.Enter()
         for _ = 1, 100 do
             now = now + 1
             panel.handlers.OnUpdate(panel)
         end
+        check(cut == 0, "setup: a timeline sample reaches its time before it is fed again, cut " .. cut)
+        C_EncounterTimeline.CancelScriptEvent = realCancel
         local alive = 0
         for id in pairs(timeline.live) do
             if expiry[id] and expiry[id] > now then alive = alive + 1 end
@@ -5553,6 +5591,124 @@ end
     check(not IconShown(100), "setup: live bars give way to the sample row while the mode is open")
     S.Leave()
     check(IconShown(100), "setup: live bars come back on leaving")
+
+    do
+        local realUIParent, realShift = UIParent, IsShiftKeyDown
+        UIParent = { GetCenter = function() return 500, 400 end, GetEffectiveScale = function() return 1 end }
+        local shift = false
+        IsShiftKeyDown = function() return shift end
+        local keyboard, propagate
+        panel.EnableKeyboard = function(_, on) keyboard = on end
+        panel.SetPropagateKeyboardInput = function(_, on) propagate = on end
+
+        local x, y, sx, sy = S.SnapAxis(5, -200)
+        check(x == 0 and y == -200 and sx == true and sy == false, "setup: SnapAxis puts x within 8 on the axis")
+        x, y, sx, sy = S.SnapAxis(9, 7)
+        check(x == 9 and y == 0 and sx == false and sy == true, "setup: SnapAxis leaves 9 alone, snaps y 7")
+
+        CastAheadDB.plateSize = { 110, 45 }
+        local base = shownSet()
+        S.Enter()
+        local grip, center = S.grip, CastAheadCore.CenterFrame()
+        check(keyboard == true, "setup: entering takes the keyboard")
+        check(grip.box.shown and not S.centerBox.shown, "setup: the row is selected on entry")
+        center.handlers.OnMouseDown(center, "LeftButton")
+        check(S.centerBox.shown and not grip.box.shown, "setup: a click on the centre selects it")
+        grip.handlers.OnMouseDown(grip, "LeftButton")
+        check(grip.box.shown and not S.centerBox.shown, "setup: a click on the row selects it")
+
+        local function placeFirstIcon(ix, iy)
+            for i = 1, #allFrames do
+                local f = allFrames[i]
+                if IsBar(f) and f._index == 1 then f.GetCenter = function() return ix, iy end end
+            end
+            S.plate.GetCenter = function() return 500, 300 end
+        end
+        CastAheadDB.anchor, CastAheadDB.grow, CastAheadDB.offsetX = "top", "right", 40
+        CastAheadDB.nudgeX, CastAheadDB.nudgeY = 5, -5
+        grip.handlers.OnDragStart(grip)
+        check(barsOn(onSample) == 0, "setup: the dragged row leaves the sample plate")
+        placeFirstIcon(410, 300)
+        grip.handlers.OnDragStop(grip)
+        local _, wantOffset = S.Snap(-90, 0, 110, 45, 26, 11)
+        check(CastAheadDB.anchor == nil and CastAheadDB.grow == nil, "setup: a drop left of the plate stores left and auto growth")
+        check(CastAheadDB.offsetX == wantOffset and wantOffset == 16, "setup: the drop stores the distance out, got " .. tostring(CastAheadDB.offsetX))
+        check(CastAheadDB.nudgeX == 0 and CastAheadDB.nudgeY == 0, "setup: the drop clears the nudges")
+        check(barsOn(onSample) == 3, "setup: the dropped row is back on the sample plate")
+
+        S.Nudge(1, 0)
+        check(CastAheadDB.nudgeX == 1, "setup: Nudge moves the row right")
+        S.Nudge(0, -10)
+        check(CastAheadDB.nudgeY == -10, "setup: Nudge moves the row down")
+        CastAheadDB.nudgeX, CastAheadDB.nudgeY = 99, -95
+        S.Nudge(10, -10)
+        check(CastAheadDB.nudgeX == 100 and CastAheadDB.nudgeY == -100, "setup: row nudges stop at 100")
+        CastAheadDB.nudgeX, CastAheadDB.nudgeY = 0, 0
+        panel.handlers.OnKeyDown(panel, "UP")
+        check(propagate == false and CastAheadDB.nudgeY == 1, "setup: the up arrow is kept and moves the row 1")
+        shift = true
+        panel.handlers.OnKeyDown(panel, "LEFT")
+        check(CastAheadDB.nudgeX == -10, "setup: Shift+left moves the row 10")
+        shift = false
+        panel.handlers.OnKeyDown(panel, "W")
+        check(propagate == true and CastAheadDB.nudgeX == -10 and CastAheadDB.nudgeY == 1,
+            "setup: other keys pass through and move nothing")
+
+        CastAheadDB.iconSize = nil
+        S.Resize(1)
+        check(CastAheadDB.iconSize == 27, "setup: Resize grows the icons 1 px")
+        CastAheadDB.iconSize = 64
+        S.Resize(1)
+        check(CastAheadDB.iconSize == 64, "setup: icons stop at 64")
+        CastAheadDB.iconSize = 26
+        shift = true
+        grip.handlers.OnMouseWheel(grip, -1)
+        shift = false
+        check(CastAheadDB.iconSize == 21, "setup: Shift+wheel shrinks the icons 5 px")
+
+        S.Select("center")
+        CastAheadDB.centerX, CastAheadDB.centerY = 0, 0
+        S.Nudge(1, 0)
+        S.Nudge(0, -10)
+        check(CastAheadDB.centerX == 1 and CastAheadDB.centerY == -10, "setup: Nudge moves the centre call")
+        CastAheadDB.centerScale = 100
+        S.Resize(-1)
+        check(CastAheadDB.centerScale == 95, "setup: Resize shrinks the centre call 5%")
+        center.handlers.OnMouseWheel(center, 1)
+        check(CastAheadDB.centerScale == 100, "setup: the wheel over the centre grows it 5%")
+
+        center.GetScale = function() return 1 end
+        center.GetHeight = function() return 132 end
+        center.GetCenter = function() return 506, 400 + 3 - 44 end
+        center.handlers.OnDragStart(center)
+        center.handlers.OnDragStop(center)
+        check(CastAheadDB.centerX == 0 and CastAheadCore.CENTER_Y + CastAheadDB.centerY == 0,
+            "setup: a centre drop 6, 3 from the screen centre snaps onto both axes, got "
+            .. tostring(CastAheadDB.centerX) .. "," .. tostring(CastAheadCore.CENTER_Y + CastAheadDB.centerY))
+
+        local realDrop, dropped = S.DropRow, 0
+        S.DropRow = function() dropped = dropped + 1 return realDrop() end
+        grip.handlers.OnDragStart(grip)
+        placeFirstIcon(500, 360)
+        S.Leave()
+        check(dropped == 1 and CastAheadDB.anchor == "top", "setup: leaving during a row drag saves the drop")
+        check(keyboard == false, "setup: leaving releases the keyboard")
+        check(newlyShown(base) == 0, "setup: nothing left after a drag, got " .. newlyShown(base))
+        S.DropRow = realDrop
+
+        S.Enter()
+        center.GetCenter = function() return 520, 400 - 40 - 44 end
+        center.handlers.OnDragStart(center)
+        fireAll("PLAYER_REGEN_DISABLED")
+        check(not S.Active() and CastAheadDB.centerX == 20 and CastAheadCore.CENTER_Y + CastAheadDB.centerY == -40,
+            "setup: combat during a centre drag saves the drop")
+
+        for i = 1, #allFrames do allFrames[i].GetCenter = nil end
+        center.GetScale, center.GetHeight = nil, nil
+        panel.EnableKeyboard, panel.SetPropagateKeyboardInput = nil, nil
+        CastAheadDB.plateSize = nil
+        UIParent, IsShiftKeyDown = realUIParent, realShift
+    end
 
     reset()
     panel.RegisterEvent, panel.UnregisterEvent = nil, nil

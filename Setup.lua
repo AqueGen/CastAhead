@@ -1,9 +1,21 @@
 CastAheadSetup = {}
 
 local OFFSET_MAX = 120
+local SNAP_AXIS = 8
+local READOUT_SECONDS = 1.5
+local ARROWS = { UP = { 0, 1 }, DOWN = { 0, -1 }, LEFT = { -1, 0 }, RIGHT = { 1, 0 } }
 
 local function Clamp(v, limit)
     return math.max(-limit, math.min(limit, math.floor(v + 0.5)))
+end
+
+local function Within(v, low, high)
+    return math.max(low, math.min(high, v))
+end
+
+function CastAheadSetup.SnapAxis(x, y)
+    local snapX, snapY = math.abs(x) <= SNAP_AXIS, math.abs(y) <= SNAP_AXIS
+    return snapX and 0 or x, snapY and 0 or y, snapX, snapY
 end
 
 function CastAheadSetup.Snap(dx, dy, w, h, size, labelH)
@@ -40,13 +52,16 @@ local PANEL_NAME = "CastAheadSetupPanel"
 local EVENTS = { "PLAYER_REGEN_DISABLED", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED",
                  "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" }
 local TIMELINE_LEAD = 5
-local REFEED_BELOW = 3
 
 local active = false
 local rows = {}
 local tracks = {}
 local page
 local refeedAt = 0
+local selected = "row"
+local dragging = false
+local readoutUntil
+local centerBox
 
 local panel = CreateFrame("Frame", PANEL_NAME, UIParent)
 panel:SetSize(280, 120)
@@ -61,6 +76,54 @@ panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
 panel:Hide()
 table.insert(UISpecialFrames, PANEL_NAME)
 CastAheadSetup.panel = panel
+
+local readout = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+readout:Hide()
+
+local function Guide(vertical)
+    local line = panel:CreateTexture(nil, "OVERLAY")
+    line:SetColorTexture(1, 0.82, 0, 0.8)
+    if vertical then
+        line:SetWidth(1)
+        line:SetPoint("TOP", UIParent, "TOP")
+        line:SetPoint("BOTTOM", UIParent, "BOTTOM")
+    else
+        line:SetHeight(1)
+        line:SetPoint("LEFT", UIParent, "LEFT")
+        line:SetPoint("RIGHT", UIParent, "RIGHT")
+    end
+    line:Hide()
+    return line
+end
+local guideX, guideY = Guide(true), Guide(false)
+
+local function Outline(parent, target)
+    local box = CreateFrame("Frame", nil, parent)
+    box:SetAllPoints(target or parent)
+    for i, edge in ipairs({ { "TOPLEFT", "TOPRIGHT" }, { "BOTTOMLEFT", "BOTTOMRIGHT" },
+                            { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
+        local line = box:CreateTexture(nil, "OVERLAY")
+        line:SetColorTexture(1, 0.82, 0, 1)
+        line:SetPoint(edge[1])
+        line:SetPoint(edge[2])
+        if i <= 2 then line:SetHeight(1) else line:SetWidth(1) end
+    end
+    box:Hide()
+    return box
+end
+
+local grip = CreateFrame("Frame", nil, UIParent)
+grip:SetFrameStrata("HIGH")
+grip:EnableMouse(true)
+grip:EnableMouseWheel(true)
+grip:RegisterForDrag("LeftButton")
+grip.box = Outline(grip)
+grip:Hide()
+CastAheadSetup.grip = grip
+
+local ghost = CreateFrame("Frame", nil, UIParent)
+ghost:SetMovable(true)
+ghost:Hide()
 
 local function SamplePlate()
     local plate = CastAheadSetup.plate
@@ -117,13 +180,134 @@ local function FeedTimeline(now)
     for i, sample in ipairs(CastAheadCore.SAMPLE_ROW) do
         local track = tracks[i] or {}
         tracks[i] = track
-        local row = (not track.timelineTargetAt or track.timelineTargetAt - now < REFEED_BELOW)
+        local row = (not track.timelineTargetAt or now >= track.timelineTargetAt)
             and CastAheadCore.SampleDataRow(sample.key)
         if row then
             CastAheadTimeline.Sync(track, now + TIMELINE_LEAD + sample.time, row,
                 CastAheadMatch.ADVICE[sample.key], true)
         end
     end
+end
+
+local function PlaceGrip()
+    local bars = rows.sample and rows.sample.bars
+    local first = bars and bars[1]
+    local shown = first and first:IsShown() or false
+    grip:SetShown(shown)
+    if not shown then return end
+    local db = CastAheadDB or {}
+    local spec = CastAheadAnchors[db.anchor or "left"] or CastAheadAnchors.left
+    local grow = CastAheadGrowth[db.grow] and db.grow or spec.grow
+    local back = grow == "left" or grow == "up"
+    local a, b = back and bars[#bars] or first, back and first or bars[#bars]
+    if grip._a == a and grip._b == b then return end
+    grip._a, grip._b = a, b
+    grip:ClearAllPoints()
+    grip:SetPoint("TOPLEFT", a, "TOPLEFT", -2, 2)
+    grip:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 2, -2)
+end
+
+local function ShowReadout(target, text)
+    readout:ClearAllPoints()
+    readout:SetPoint("BOTTOMLEFT", target, "TOPRIGHT", 4, 4)
+    readout:SetText(text)
+    readout:Show()
+    readoutUntil = GetTime() + READOUT_SECONDS
+end
+
+function CastAheadSetup.Select(which)
+    selected = which
+    grip.box:SetShown(which == "row")
+    if centerBox then centerBox:SetShown(which == "center" and CastAheadCore.CenterFrame():IsShown()) end
+end
+
+function CastAheadSetup.Nudge(dx, dy)
+    local C = CastAheadConfig
+    if selected == "center" then
+        C.Set("centerX", (tonumber(C.Get("centerX")) or 0) + dx)
+        C.Set("centerY", (tonumber(C.Get("centerY")) or 0) + dy)
+        CastAheadCore.ResizeCenter()
+    else
+        C.Set("nudgeX", Clamp(C.NudgeX() + dx, C.NUDGE_MAX))
+        C.Set("nudgeY", Clamp(C.NudgeY() + dy, C.NUDGE_MAX))
+        CastAheadCore.Reapply()
+    end
+end
+
+function CastAheadSetup.Resize(notches)
+    local C = CastAheadConfig
+    if selected == "center" then
+        local scale = Within(C.Number("centerScale", C.CENTER_DEFAULT, C.CENTER_MIN, C.CENTER_MAX) + 5 * notches,
+            C.CENTER_MIN, C.CENTER_MAX)
+        C.Set("centerScale", scale)
+        CastAheadCore.ResizeCenter()
+        ShowReadout(CastAheadCore.CenterFrame(), scale .. "%")
+    else
+        local size = Within(C.IconSize() + notches, C.ICON_MIN, C.ICON_MAX)
+        C.Set("iconSize", size)
+        CastAheadCore.Reapply()
+        ShowReadout(grip, size .. " px")
+    end
+end
+
+local function Wheel(which, delta)
+    CastAheadSetup.Select(which)
+    CastAheadSetup.Resize(delta * ((which == "row" and IsShiftKeyDown()) and 5 or 1))
+end
+
+local function StartRow()
+    local state, plate = rows.sample, CastAheadSetup.plate
+    if dragging or not state then return end
+    ghost:SetSize(CastAheadCore.PlateSize())
+    ghost:ClearAllPoints()
+    local x, y = plate:GetCenter()
+    ghost:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x, y)
+    ghost:Show()
+    CastAheadCore.SampleStates[state] = ghost
+    CastAheadCore.ShowSampleRow(state, ghost)
+    ghost:StartMoving()
+    dragging = true
+end
+
+function CastAheadSetup.DropRow()
+    if not dragging then return end
+    dragging = false
+    ghost:StopMovingOrSizing()
+    local state, plate = rows.sample, CastAheadSetup.plate
+    local bar = state.bars[1]
+    local bx, by = bar:GetCenter()
+    local px, py = plate:GetCenter()
+    ghost:Hide()
+    CastAheadCore.SampleStates[state] = plate
+    if not (bx and px) then
+        CastAheadCore.Reapply()
+        return
+    end
+    local w, h = CastAheadCore.PlateSize()
+    local side, offset, nudgeX, nudgeY = CastAheadSetup.Snap(bx - px, by - py, w, h, bar._size,
+        math.max(bar.label:GetStringHeight() or 0, CastAheadCore.LABEL_HEIGHT))
+    local C = CastAheadConfig
+    C.Set("offsetX", offset)
+    C.Set("nudgeX", nudgeX)
+    C.Set("nudgeY", nudgeY)
+    CastAheadUI.SetAnchor(side)
+    CastAheadUI.SetGrowth("auto")
+end
+
+grip:SetScript("OnMouseDown", function() CastAheadSetup.Select("row") end)
+grip:SetScript("OnMouseWheel", function(_, delta) Wheel("row", delta) end)
+grip:SetScript("OnDragStart", StartRow)
+grip:SetScript("OnDragStop", function() CastAheadSetup.DropRow() end)
+
+local function HookCenter()
+    local f = CastAheadCore.CenterFrame()
+    if not centerBox then
+        centerBox = Outline(UIParent, f)
+        CastAheadSetup.centerBox = centerBox
+        f:SetScript("OnMouseDown", function() if active then CastAheadSetup.Select("center") end end)
+        f:SetScript("OnMouseWheel", function(_, delta) if active then Wheel("center", delta) end end)
+    end
+    return f
 end
 
 function CastAheadSetup.Active()
@@ -145,15 +329,31 @@ function CastAheadSetup.Enter()
     ShowRow("sample", plate)
     CastAheadCore.Reapply()
     CastAheadCore.ShowCenterSample(true)
+    HookCenter():EnableMouseWheel(true)
     FeedTimeline(GetTime())
     for _, event in ipairs(EVENTS) do panel:RegisterEvent(event) end
+    panel:EnableKeyboard(true)
     panel:Show()
+    PlaceGrip()
+    CastAheadSetup.Select("row")
     return true
 end
 
 function CastAheadSetup.Leave()
     if not active then return end
+    CastAheadSetup.DropRow()
+    CastAheadCore.DropCenter()
     active = false
+    panel:EnableKeyboard(false)
+    HookCenter():EnableMouseWheel(false)
+    grip:Hide()
+    grip._a, grip._b = nil, nil
+    grip.box:Hide()
+    centerBox:Hide()
+    readout:Hide()
+    readoutUntil = nil
+    guideX:Hide()
+    guideY:Hide()
     for _, event in ipairs(EVENTS) do panel:UnregisterEvent(event) end
     for key in pairs(rows) do HideRow(key) end
     CastAheadSetup.plate:Hide()
@@ -188,8 +388,26 @@ panel:SetScript("OnEvent", function(_, event, unit)
         CastAheadCore.Reapply()
     end
 end)
+panel:SetScript("OnKeyDown", function(self, key)
+    local dir = ARROWS[key]
+    self:SetPropagateKeyboardInput(not dir)
+    if dir then
+        local step = IsShiftKeyDown() and 10 or 1
+        CastAheadSetup.Nudge(dir[1] * step, dir[2] * step)
+    end
+end)
 panel:SetScript("OnUpdate", function()
     local now = GetTime()
+    PlaceGrip()
+    local x, y = CastAheadCore.CenterDragOffset()
+    local snapX, snapY
+    if x then snapX, snapY = select(3, CastAheadSetup.SnapAxis(x, y)) end
+    guideX:SetShown(snapX or false)
+    guideY:SetShown(snapY or false)
+    if readoutUntil and now >= readoutUntil then
+        readout:Hide()
+        readoutUntil = nil
+    end
     if now < refeedAt then return end
     refeedAt = now + 1
     FeedTimeline(now)

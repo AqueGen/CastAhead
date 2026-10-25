@@ -2482,27 +2482,42 @@ local function CenterFrame()
     center:SetMovable(true)
     center:RegisterForDrag("LeftButton")
     center:SetScript("OnDragStart", function(self)
-        if centerUnlocked or centerSample then self:StartMoving() end
-    end)
-    center:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        -- Back to offsets from the screen centre, so the saved position
-        -- survives resolution and scale changes the way an anchor would.
-        local cx, cy = self:GetCenter()
-        local ux, uy = UIParent:GetCenter()
-        if cx and ux then
-            CastAheadDB = CastAheadDB or {}
-            -- GetCenter reports in the frame's own scale, UIParent's in its
-            -- own, so the block's side is converted before the subtraction.
-            local scale = self:GetScale()
-            CastAheadDB.centerX = math.floor(cx * scale - ux + 0.5)
-            CastAheadDB.centerY = math.floor(cy * scale - uy
-                + (self:GetHeight() / 2 - CENTER_LINE_H / 2) * scale - CENTER_Y + 0.5)
-            self._x = nil          -- force the anchor to be re-applied
+        if centerUnlocked or centerSample then
+            self.dragging = true
+            self:StartMoving()
         end
     end)
+    center:SetScript("OnDragStop", function() CastAheadCore.DropCenter() end)
     center:Hide()
     return center
+end
+
+-- Where the block being dragged sits now, from the screen centre: x, and y
+-- of the first line counted from the screen centre (CENTER_Y + centerY).
+local function CenterDragOffset()
+    if not (center and center.dragging) then return end
+    -- Back to offsets from the screen centre, so the saved position
+    -- survives resolution and scale changes the way an anchor would.
+    local cx, cy = center:GetCenter()
+    local ux, uy = UIParent:GetCenter()
+    if not (cx and ux) then return end
+    -- GetCenter reports in the frame's own scale, UIParent's in its
+    -- own, so the block's side is converted before the subtraction.
+    local scale = center:GetScale()
+    return math.floor(cx * scale - ux + 0.5),
+        math.floor(cy * scale - uy + (center:GetHeight() / 2 - CENTER_LINE_H / 2) * scale + 0.5)
+end
+
+local function DropCenter()
+    if not (center and center.dragging) then return end
+    center:StopMovingOrSizing()
+    local x, y = CenterDragOffset()
+    center.dragging = nil
+    if not x then return end
+    if CastAheadSetup then x, y = CastAheadSetup.SnapAxis(x, y) end
+    CastAheadDB = CastAheadDB or {}
+    CastAheadDB.centerX, CastAheadDB.centerY = x, y - CENTER_Y
+    center._x = nil          -- force the anchor to be re-applied
 end
 
 local function PlaceCenter(f)
@@ -2833,6 +2848,11 @@ end
 -- how far identification got on each one.
 CastAheadCore = {}
 CastAheadCore.BAR_GAP = BAR_GAP
+CastAheadCore.LABEL_HEIGHT = LABEL_HEIGHT
+CastAheadCore.CENTER_Y = CENTER_Y
+CastAheadCore.CenterFrame = CenterFrame
+CastAheadCore.CenterDragOffset = CenterDragOffset
+CastAheadCore.DropCenter = DropCenter
 CastAheadCore.Announce = PlayAdviceSound
 CastAheadCore.AdviceFile = AdviceFile
 CastAheadCore.ReapplyData = function() extrasMerged = false; MergeCuration() end
