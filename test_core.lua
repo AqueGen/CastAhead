@@ -151,6 +151,8 @@ local function StubRegion()
     r.Show = function() r.shown = true end
     r.Hide = function() r.shown = false end
     r.SetShown = function(_, on) r.shown = on and true or false end
+    r.IsShown = function() return r.shown end
+    r.GetTexture = function() return r.textureValue end
     setmetatable(r, { __index = function() return function() return r end end })
     return r
 end
@@ -190,6 +192,7 @@ CreateFrame = function(kind, _, parent)
         -- Record into separate fields: Core assigns the font strings to
         -- bar.text / bar.time, so writing there would overwrite them.
         fs.SetText = function(self, text) f.labelValue, self.value = text, text end
+        fs.GetText = function(self) return self.value end
         fs.SetFormattedText = function(_, fmt, ...) f.timeValue = string.format(fmt, ...) end
         -- The layout steps the icons sideways by the width of the advice under
         -- them, so a stub that answers with a table (the catch-all below) turns
@@ -212,10 +215,13 @@ CreateFrame = function(kind, _, parent)
         return fs
     end
     f.GetParent = function(self) return self.parent end
-    f.SetPoint = function(self, _, anchor, _, x, y)
+    f.SetPoint = function(self, ...)
+        local _, anchor, _, x, y = ...
         lastAnchor = anchor
         self.x, self.y = x, y            -- offsets, for the layout cases
+        self.points = { ... }
     end
+    f.GetPoint = function(self) return unpack(self.points or {}) end
     f.SetTexture = function(self, tex) self.texture = tex end
     f.SetParent = function(self, p) self.parent = p end
     f.SetFrameStrata = function(self, strata) self.strata = strata end
@@ -2192,7 +2198,13 @@ local wide = { { label = { GetStringWidth = function() return 80 end }, _size = 
                { label = { GetStringWidth = function() return 80 end }, _size = 26 } }
 CastAheadDB = {}
 CastAheadCore.SpreadBars(wide, 2)
-check(wide[2]._hOffset == 88, string.format("labels keep half of each other apart by default, got %s", tostring(wide[2]._hOffset)))
+check(wide[2]._hOffset == 82, string.format("labels keep half of each other apart by default, got %s", tostring(wide[2]._hOffset)))
+do
+    local mixed = { { label = { GetStringWidth = function() return 60 end }, _size = 26 },
+                    { label = { GetStringWidth = function() return 40 end }, _size = 26 } }
+    CastAheadCore.SpreadBars(mixed, 2)
+    check(mixed[2]._hOffset == 52, string.format("two labelled neighbours leave 2 px between their labels, got %s", tostring(mixed[2]._hOffset)))
+end
 CastAheadDB = { fixedSpacing = true, iconGap = 10 }
 CastAheadCore.SpreadBars(wide, 2)
 check(wide[2]._hOffset == 36, string.format("fixed spacing steps by icon plus gap, got %s", tostring(wide[2]._hOffset)))
@@ -5467,6 +5479,7 @@ end
     local W = CastAheadWindow
     local savedFrame, savedCurrent, savedShow = W.Frame, W.Current, W.Show
     local winShown, shownPage = true, nil
+    hostile.nameplate2 = nil
     local win = { IsShown = function() return winShown end, Hide = function() winShown = false end }
     W.Frame = function() return win end
     W.Current = function() return "General" end
@@ -5545,8 +5558,8 @@ end
     check(S.Enter() == true and S.Active(), "setup: enter out of combat")
     check(not CastAheadCore.Testing(), "setup: entering stops the test drive")
     check(not winShown, "setup: the window steps aside")
-    check(S.plate and S.plate.shown, "setup: the sample plate is shown")
-    check(barsOn(onSample) == 3, "setup: three sample bars on the sample plate, got " .. barsOn(onSample))
+    check(S.plate and not S.plate.shown, "setup: no sample plate while a hostile plate is up")
+    check(barsOn(onSample) == 0, "setup: no sample bars while a hostile plate is up, got " .. barsOn(onSample))
     check(barsOn(onUnit) == 3, "setup: three sample bars on a hostile plate, got " .. barsOn(onUnit))
     check(sampleLines() == 3, "setup: the centre block shows three sample lines, got " .. sampleLines())
     check(timeline.added - added0 == 3, "setup: three sample timeline entries, got " .. (timeline.added - added0))
@@ -5688,7 +5701,9 @@ end
     end
 
     do
+        hostile[unit] = nil
         S.Enter()
+        hostile[unit] = true
         local icons, sample = {}, nil
         for i = 1, #allFrames do
             local f = allFrames[i]
@@ -5772,6 +5787,7 @@ end
     check(IconShown(100), "setup: live bars come back on leaving")
 
     do
+        reset()
         local realUIParent, realShift = UIParent, IsShiftKeyDown
         UIParent = { GetCenter = function() return 500, 400 end, GetEffectiveScale = function() return 1 end }
         local shift = false
@@ -5955,7 +5971,7 @@ end
         check(CastAheadDB.nameplates == false and barsOn(onSample) == 0 and barsOn(onUnit) == 0,
             "panel: Nameplate icons off hides the sample rows")
         toggle("nameplates", true)
-        check(barsOn(onSample) == 3 and barsOn(onUnit) == 3, "panel: Nameplate icons on shows them again")
+        check(barsOn(onSample) == 0 and barsOn(onUnit) == 3, "panel: Nameplate icons on shows them again")
 
         local n = panel.numbers
         CastAheadDB.iconSize = nil
@@ -6186,6 +6202,185 @@ end
     panel.RegisterEvent, panel.UnregisterEvent = nil, nil
     W.Frame, W.Current, W.Show = savedFrame, savedCurrent, savedShow
     CastAheadDB, InCombatLockdown = savedDB, savedLock
+end)();
+
+(function()
+    local S = CastAheadSetup
+    local W = CastAheadWindow
+    local saved = { CastAheadDB, InCombatLockdown, UIParent, W.Frame, W.Current, W.Show,
+                    C_NamePlate.GetNamePlateForUnit, UnitIsUnit, SetCursor, ResetCursor }
+    reset()
+    CastAheadDB = { centerText = true }
+    InCombatLockdown = function() return false end
+    W.Frame, W.Current, W.Show = function() return nil end, function() return nil end, function() end
+    UIParent = { GetCenter = function() return 500, 400 end, GetEffectiveScale = function() return 1 end }
+    local panel = S.panel
+    local registered = {}
+    panel.RegisterEvent = function(_, e) registered[e] = true end
+    panel.UnregisterEvent = function(_, e) registered[e] = nil end
+    local function fireAll(event, ...)
+        fire(event, ...)
+        if registered[event] then panel.handlers.OnEvent(panel, event, ...) end
+    end
+    local plates, target = {}, nil
+    local function addPlate(u, x, y, scale)
+        local p = { unit = u, ux = x, uy = y, scale = scale or 1, up = true }
+        p.IsShown = function() return p.up end
+        p.GetCenter = function() return p.ux / p.scale, p.uy / p.scale end
+        p.GetWidth = function() return 100 end
+        p.GetHeight = function() return 10 end
+        p.GetEffectiveScale = function() return p.scale end
+        plates[u], hostile[u] = p, true
+        return p
+    end
+    local function removePlate(u)
+        plates[u], hostile[u] = nil, nil
+        fireAll("NAME_PLATE_UNIT_REMOVED", u)
+    end
+    C_NamePlate.GetNamePlateForUnit = function(u)
+        if u == "target" then return target and plates[target] end
+        return plates[u]
+    end
+    UnitIsUnit = function(a, b)
+        if a == "target" then a = target end
+        if b == "target" then b = target end
+        return a ~= nil and a == b
+    end
+    local function setTarget(u)
+        target, hostile.target = u, u and true or nil
+        fireAll("PLAYER_TARGET_CHANGED")
+    end
+    local function rowBar(frame, index)
+        for i = 1, #allFrames do
+            local f = allFrames[i]
+            if f.shown and IsBar(f) and f._plate == frame and f._index == index then return f end
+        end
+    end
+    local function barsOn(frame)
+        local n = 0
+        for i = 1, #allFrames do
+            local f = allFrames[i]
+            if f.shown and IsBar(f) and f._plate == frame then n = n + 1 end
+        end
+        return n
+    end
+
+    addPlate("nameplate2", 500, 700)
+    addPlate("nameplate3", 530, 420, 1.5)
+    S.Enter()
+    local frame, key = S.EditablePlate()
+    check(key == "nameplate3" and frame == plates.nameplate3, "edit: without a target the plate nearest the centre is editable, got " .. tostring(key))
+    check(S.grip.shown and S.grip._a and S.grip._a._plate == plates.nameplate3, "edit: the grip sits on the nearest plate's row")
+    check(not S.plate.shown and barsOn(S.plate) == 0, "edit: no sample plate while a hostile plate has a row")
+
+    setTarget("nameplate2")
+    frame, key = S.EditablePlate()
+    check(key == "nameplate2" and frame == plates.nameplate2, "edit: the target's plate wins over the nearest, got " .. tostring(key))
+    check(S.grip._a and S.grip._a._plate == plates.nameplate2, "edit: a target change moves the grip to the target's row")
+    setTarget(nil)
+    check(S.grip._a and S.grip._a._plate == plates.nameplate3, "edit: clearing the target goes back to the nearest plate")
+
+    S.grip.handlers.OnDragStart(S.grip)
+    local first
+    for i = 1, #allFrames do
+        local f = allFrames[i]
+        if f.shown and IsBar(f) and f._index == 1 and f._plate and f._plate ~= plates.nameplate2 and f._plate ~= plates.nameplate3 then first = f end
+    end
+    local ghost = first and first._plate
+    local gp = ghost and ghost.points or {}
+    check(gp[1] == "CENTER" and gp[3] == "BOTTOMLEFT" and gp[4] == 530 and gp[5] == 420,
+        "edit: the drag starts on the editable plate's centre in UIParent units, got " .. tostring(gp[4]) .. "," .. tostring(gp[5]))
+    setTarget("nameplate2")
+    local dropX, dropY = 530 - 120, 420 + 4
+    first.GetCenter = function() return dropX, dropY end
+    S.grip.handlers.OnDragStop(S.grip)
+    first.GetCenter = nil
+    local side, offset, nx, ny = S.Snap(dropX - 530, dropY - 420, 150, 15, first._size, CastAheadCore.LABEL_HEIGHT)
+    check(CastAheadConfig.Get("anchor") == nil and side == "left" and CastAheadDB.offsetX == offset
+        and CastAheadDB.nudgeX == nx and CastAheadDB.nudgeY == ny,
+        "edit: the drop is snapped against the plate it started on, got " .. tostring(CastAheadDB.offsetX) .. "/" .. tostring(CastAheadDB.nudgeY))
+    local bar = rowBar(plates.nameplate3, 1)
+    local point, rel, relPoint, x, y = unpack(bar and bar.points or {})
+    local function sign(p)
+        return p:find("LEFT") and -1 or p:find("RIGHT") and 1 or 0, p:find("TOP") and 1 or p:find("BOTTOM") and -1 or 0
+    end
+    local px, py = sign(point or "")
+    local rx, ry = sign(relPoint or "")
+    local cx = 530 + rx * 75 + (x or 0) - px * bar._size / 2
+    local cy = 420 + ry * 7.5 + (y or 0) - py * bar._size / 2
+    check(rel == plates.nameplate3 and math.abs(cx - dropX) <= 1 and math.abs(cy - dropY) <= 1,
+        "edit: the real anchor puts the first icon back at the drop, got " .. cx .. "," .. cy)
+    check(S.grip._a and S.grip._a._plate == plates.nameplate2, "edit: the target changed during the drag is taken after the drop")
+
+    plates.nameplate2.up = false
+    panel.handlers.OnUpdate(panel)
+    check(select(2, S.EditablePlate()) == "nameplate3" and S.grip._a._plate == plates.nameplate3,
+        "edit: a hidden editable plate hands the row to the next plate")
+    plates.nameplate2.up = true
+    setTarget(nil)
+
+    removePlate("nameplate2")
+    removePlate("nameplate3")
+    check(S.plate.shown and barsOn(S.plate) == 3 and select(2, S.EditablePlate()) == "sample",
+        "edit: the sample plate comes back when the last hostile plate goes")
+    check(S.grip._a and S.grip._a._plate == S.plate, "edit: the grip moves to the sample row")
+    check(S.plate.label and S.plate.label.value == "Sample nameplate - stand near enemies or training dummies to edit on real ones",
+        "edit: the sample plate says it is a stand-in, got " .. tostring(S.plate.label and S.plate.label.value))
+    addPlate("nameplate4", 600, 300)
+    fireAll("NAME_PLATE_UNIT_ADDED", "nameplate4")
+    check(not S.plate.shown and barsOn(S.plate) == 0 and select(2, S.EditablePlate()) == "nameplate4",
+        "edit: the sample plate hides as soon as a hostile plate appears")
+
+    local realPrint, printed = print, {}
+    print = function(text) printed[#printed + 1] = text end
+    CastAheadCore.Debug()
+    print = realPrint
+    local editLine, barLines = false, 0
+    for _, line in ipairs(printed) do
+        if line:find("setup: editable nameplate4", 1, true) then editLine = true end
+        if line:find("setup bar %d: shown=true size=%d+ icon=%d+") and line:find("point=", 1, true) then barLines = barLines + 1 end
+    end
+    check(editLine and barLines == 3, "debug: the setup section lists the editable plate and its three bars, got "
+        .. tostring(editLine) .. "/" .. barLines)
+
+    local cursor, resets = nil, 0
+    SetCursor = function(c) cursor = c end
+    ResetCursor = function() resets = resets + 1 end
+    S.Select("center")
+    S.grip.handlers.OnEnter(S.grip)
+    check(cursor == "UI_MOVE_CURSOR" and S.grip.box.shown, "hover: the row shows the move cursor and its outline")
+    S.grip.handlers.OnLeave(S.grip)
+    check(resets == 1 and not S.grip.box.shown, "hover: leaving the row resets the cursor and the outline")
+    local center = CastAheadCore.CenterFrame()
+    cursor = nil
+    S.Select("row")
+    center.handlers.OnEnter(center)
+    check(cursor == "UI_MOVE_CURSOR" and S.centerBox.shown, "hover: the centre block shows the move cursor and its outline")
+    center.handlers.OnLeave(center)
+    check(resets == 2 and not S.centerBox.shown, "hover: leaving the centre block resets the cursor")
+    check(S.gripLabel.value == "Drag to move" and S.grip.shown, "hover: Drag to move shows above the row")
+    panel.handlers.OnUpdate(panel)
+    check(S.centerLabel.value == "Drag to move" and S.centerLabel.shown and panel.shown, "hover: Drag to move shows above the centre block")
+
+    local passed
+    S.catcher.SetPassThroughButtons = function(_, ...) passed = { ... } end
+    S.Leave()
+    check(not S.grip.shown and not panel.shown, "hover: the labels go with the mode")
+    check(not S.catcher.shown, "catcher: hidden after Leave")
+    S.Enter()
+    check(S.catcher.shown and passed and passed[1] == "RightButton" and #passed == 1,
+        "catcher: shown in the mode, the right button passes through")
+    panel.handlers.OnKeyDown(panel, "ESCAPE")
+    check(not S.Active() and not S.catcher.shown, "catcher: hidden after Esc")
+    S.Enter()
+    fireAll("PLAYER_REGEN_DISABLED")
+    check(not S.catcher.shown, "catcher: hidden after combat starts")
+    S.catcher.SetPassThroughButtons = nil
+
+    removePlate("nameplate4")
+    panel.RegisterEvent, panel.UnregisterEvent = nil, nil
+    CastAheadDB, InCombatLockdown, UIParent, W.Frame, W.Current, W.Show,
+        C_NamePlate.GetNamePlateForUnit, UnitIsUnit, SetCursor, ResetCursor = unpack(saved, 1, 10)
 end)()
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))

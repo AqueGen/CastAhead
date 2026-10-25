@@ -23,7 +23,7 @@ local BAR_GAP = 6        -- distance from the plate's left edge
 local LABEL_HEIGHT = 11  -- one line of advice under the icon; two are measured
 local BAR_SPACING = 5    -- gap between one row's label and the next icon
 local H_STEP = 68        -- fallback sideways step, before any label is measured
-local LABEL_GAP = 8      -- clear space between one icon's label and the next
+local LABEL_GAP = 2      -- clear space between one icon's label and the next
 local ICON_GAP = 4       -- ... and the floor, when both labels are short
 local DEMO_PER_PLATE = 3 -- calls the test drive puts on each nameplate
 local DEMO_PLATES = 4    -- ... and how many nameplates it uses at all
@@ -2910,6 +2910,7 @@ CastAheadCore.IsHostileNameplate = IsHostileNameplate
 CastAheadCore.ShowCenterSample = ShowCenterSample
 CastAheadCore.SampleDataRow = SampleDataRow
 CastAheadCore.RememberPlateSize = RememberPlateSize
+CastAheadCore.MeasurePlate = MeasurePlate
 
 function CastAheadCore.PlateSize()
     local size = CastAheadDB and CastAheadDB.plateSize
@@ -3617,6 +3618,7 @@ function CastAheadCore.Debug()
     else
         say("clip: PlaySoundFile missing")
     end
+    if CastAheadSetup and CastAheadSetup.Active() then CastAheadSetup.Debug(say) end
 end
 
 -- Called by the options window when an output toggle changes, so bars and
