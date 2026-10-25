@@ -2492,8 +2492,6 @@ local function CenterFrame()
     return center
 end
 
--- Where the block being dragged sits now, from the screen centre: x, and y
--- of the first line counted from the screen centre (CENTER_Y + centerY).
 local function CenterDragOffset()
     if not (center and center.dragging) then return end
     -- Back to offsets from the screen centre, so the saved position
@@ -2506,18 +2504,6 @@ local function CenterDragOffset()
     local scale = center:GetScale()
     return math.floor(cx * scale - ux + 0.5),
         math.floor(cy * scale - uy + (center:GetHeight() / 2 - CENTER_LINE_H / 2) * scale + 0.5)
-end
-
-local function DropCenter()
-    if not (center and center.dragging) then return end
-    center:StopMovingOrSizing()
-    local x, y = CenterDragOffset()
-    center.dragging = nil
-    if not x then return end
-    if CastAheadSetup then x, y = CastAheadSetup.SnapAxis(x, y) end
-    CastAheadDB = CastAheadDB or {}
-    CastAheadDB.centerX, CastAheadDB.centerY = x, y - CENTER_Y
-    center._x = nil          -- force the anchor to be re-applied
 end
 
 local function PlaceCenter(f)
@@ -2544,6 +2530,19 @@ local function PlaceCenter(f)
         -- where it was dragged when the size changes.
         f:SetPoint("TOP", UIParent, "CENTER", x / scale, y / scale + CENTER_LINE_H / 2)
     end
+end
+
+local function DropCenter()
+    if not (center and center.dragging) then return end
+    center:StopMovingOrSizing()
+    local x, y = CenterDragOffset()
+    center.dragging = nil
+    if not x then return end
+    if CastAheadSetup and CastAheadSetup.Active() then x, y = CastAheadSetup.SnapAxis(x, y) end
+    CastAheadDB = CastAheadDB or {}
+    CastAheadDB.centerX, CastAheadDB.centerY = x, y - CENTER_Y
+    center._x = nil          -- force the anchor to be re-applied
+    PlaceCenter(center)
 end
 
 -- /ca move (or the window's Move button): show the block with a sample

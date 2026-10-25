@@ -79,16 +79,29 @@ CastAheadSetup.panel = panel
 
 local readout = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 readout:Hide()
+CastAheadSetup.readout = readout
+
+local thinLines = {}
+local function Thin(line, vertical)
+    line.vertical = vertical
+    thinLines[#thinLines + 1] = line
+end
+
+local function SizeThinLines()
+    for _, line in ipairs(thinLines) do
+        local size = PixelUtil and PixelUtil.ConvertPixelsToUIForRegion(1, line) or 1
+        if line.vertical then line:SetWidth(size) else line:SetHeight(size) end
+    end
+end
 
 local function Guide(vertical)
     local line = panel:CreateTexture(nil, "OVERLAY")
     line:SetColorTexture(1, 0.82, 0, 0.8)
+    Thin(line, vertical)
     if vertical then
-        line:SetWidth(1)
         line:SetPoint("TOP", UIParent, "TOP")
         line:SetPoint("BOTTOM", UIParent, "BOTTOM")
     else
-        line:SetHeight(1)
         line:SetPoint("LEFT", UIParent, "LEFT")
         line:SetPoint("RIGHT", UIParent, "RIGHT")
     end
@@ -106,7 +119,7 @@ local function Outline(parent, target)
         line:SetColorTexture(1, 0.82, 0, 1)
         line:SetPoint(edge[1])
         line:SetPoint(edge[2])
-        if i <= 2 then line:SetHeight(1) else line:SetWidth(1) end
+        Thin(line, i > 2)
     end
     box:Hide()
     return box
@@ -330,6 +343,7 @@ function CastAheadSetup.Enter()
     CastAheadCore.Reapply()
     CastAheadCore.ShowCenterSample(true)
     HookCenter():EnableMouseWheel(true)
+    SizeThinLines()
     FeedTimeline(GetTime())
     for _, event in ipairs(EVENTS) do panel:RegisterEvent(event) end
     panel:EnableKeyboard(true)
@@ -344,6 +358,7 @@ function CastAheadSetup.Leave()
     CastAheadSetup.DropRow()
     CastAheadCore.DropCenter()
     active = false
+    if not InCombatLockdown() then panel:SetPropagateKeyboardInput(true) end
     panel:EnableKeyboard(false)
     HookCenter():EnableMouseWheel(false)
     grip:Hide()
@@ -385,6 +400,7 @@ panel:SetScript("OnEvent", function(_, event, unit)
             end
         end
         SizePlate()
+        SizeThinLines()
         CastAheadCore.Reapply()
     end
 end)
@@ -395,6 +411,9 @@ panel:SetScript("OnKeyDown", function(self, key)
         local step = IsShiftKeyDown() and 10 or 1
         CastAheadSetup.Nudge(dir[1] * step, dir[2] * step)
     end
+end)
+panel:SetScript("OnKeyUp", function(self, key)
+    self:SetPropagateKeyboardInput(not ARROWS[key])
 end)
 panel:SetScript("OnUpdate", function()
     local now = GetTime()

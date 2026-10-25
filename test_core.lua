@@ -5653,6 +5653,12 @@ end
         panel.handlers.OnKeyDown(panel, "W")
         check(propagate == true and CastAheadDB.nudgeX == -10 and CastAheadDB.nudgeY == 1,
             "setup: other keys pass through and move nothing")
+        panel.handlers.OnKeyDown(panel, "UP")
+        panel.handlers.OnKeyUp(panel, "UP")
+        check(propagate == false, "setup: an arrow's key-up is kept")
+        panel.handlers.OnKeyUp(panel, "W")
+        check(propagate == true, "setup: a key-up after an arrow press passes through")
+        CastAheadDB.nudgeY = 1
 
         CastAheadDB.iconSize = nil
         S.Resize(1)
@@ -5676,6 +5682,18 @@ end
         check(CastAheadDB.centerScale == 95, "setup: Resize shrinks the centre call 5%")
         center.handlers.OnMouseWheel(center, 1)
         check(CastAheadDB.centerScale == 100, "setup: the wheel over the centre grows it 5%")
+        S.Select("row")
+        center.handlers.OnMouseWheel(center, -1)
+        check(S.centerBox.shown and not grip.box.shown and CastAheadDB.centerScale == 95,
+            "setup: the wheel over the unselected centre selects it, then resizes it")
+        check(S.readout.shown and panel.labelValue == "95%", "setup: the readout shows the new size, got " .. tostring(panel.labelValue))
+        now = now + 1.4
+        panel.handlers.OnUpdate(panel)
+        check(S.readout.shown, "setup: the readout stays up for 1.5 s")
+        now = now + 0.2
+        panel.handlers.OnUpdate(panel)
+        check(not S.readout.shown, "setup: the readout hides 1.5 s after the last change")
+        CastAheadDB.centerScale = 100
 
         center.GetScale = function() return 1 end
         center.GetHeight = function() return 132 end
@@ -5685,6 +5703,8 @@ end
         check(CastAheadDB.centerX == 0 and CastAheadCore.CENTER_Y + CastAheadDB.centerY == 0,
             "setup: a centre drop 6, 3 from the screen centre snaps onto both axes, got "
             .. tostring(CastAheadDB.centerX) .. "," .. tostring(CastAheadCore.CENTER_Y + CastAheadDB.centerY))
+        check(center.x == 0 and center.y == 22, "setup: the dropped centre block is placed on the snapped spot, got "
+            .. tostring(center.x) .. "," .. tostring(center.y))
 
         local realDrop, dropped = S.DropRow, 0
         S.DropRow = function() dropped = dropped + 1 return realDrop() end
@@ -5702,6 +5722,18 @@ end
         fireAll("PLAYER_REGEN_DISABLED")
         check(not S.Active() and CastAheadDB.centerX == 20 and CastAheadCore.CENTER_Y + CastAheadDB.centerY == -40,
             "setup: combat during a centre drag saves the drop")
+
+        local realPrint = print
+        print = function() end
+        CastAheadCore.MoveCenter()
+        center.GetCenter = function() return 506, 400 + 3 - 44 end
+        center.handlers.OnDragStart(center)
+        center.handlers.OnDragStop(center)
+        CastAheadCore.MoveCenter()
+        print = realPrint
+        check(CastAheadDB.centerX == 6 and CastAheadCore.CENTER_Y + CastAheadDB.centerY == 3,
+            "setup: a /ca move drop is not snapped, got " .. tostring(CastAheadDB.centerX) .. ","
+            .. tostring(CastAheadCore.CENTER_Y + CastAheadDB.centerY))
 
         for i = 1, #allFrames do allFrames[i].GetCenter = nil end
         center.GetScale, center.GetHeight = nil, nil
