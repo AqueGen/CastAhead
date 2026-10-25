@@ -1445,6 +1445,20 @@ function SpellTrack(state, row, except)
     end
 end
 
+-- The latest real cast start of this length on the plate. A projected track is
+-- not a cast: when one wins PickTrack, an ambiguous track may still hold the
+-- plate's previous cast, and without it a repeat cast is judged as an opener.
+local function LastRealStart(state, duration, channel)
+    local last
+    for _, track in pairs(state.tracks) do
+        if not track.projected and track.lastStartAt and SameLength(track, duration, channel)
+            and (not last or track.lastStartAt > last) then
+            last = track.lastStartAt
+        end
+    end
+    return last
+end
+
 local function PickTrack(state, duration, channel, claimed, startAt)
     if claimed and state.tracks[claimed.slot] == claimed and SameLength(claimed, duration, channel) then
         return claimed
@@ -1796,6 +1810,7 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
     -- a cast of its own, so nothing below may read it as an interval - doing so
     -- adopted an engage-to-first-cast delay as the spell's cooldown.
     local previousCast = (not track.projected) and track.lastStartAt or nil
+    local lastSeen = previousCast or (track.projected and LastRealStart(state, duration, channel)) or nil
     -- A spell the player switched off mid-pull may still sit on a track from
     -- before; it is re-identified like anything else, and drops out there.
     if candidates and #candidates == 1 and CastAheadUI and CastAheadUI.IsDisabled
@@ -1922,8 +1937,8 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
                 Trace(unit, "packs", candidates)
             end
         end
-        if previousCast then
-            candidates = CastAheadMatch.NarrowByInterval(candidates, startAt - previousCast)
+        if lastSeen then
+            candidates = CastAheadMatch.NarrowByInterval(candidates, startAt - lastSeen)
             Trace(unit, "interval", candidates)
         elseif state.engagedAt then
             candidates = CastAheadMatch.NarrowByFirst(candidates, startAt - state.engagedAt)
@@ -1949,8 +1964,8 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
         candidates = CastAheadMatch.NarrowByLevel(candidates, state.level)
         candidates = CastAheadMatch.NarrowByMob(candidates, ResolvedNPCs(state, track))
         candidates = CastAheadMatch.NarrowByFollow(candidates, follow)
-        if previousCast then
-            candidates = CastAheadMatch.NarrowByInterval(candidates, startAt - previousCast)
+        if lastSeen then
+            candidates = CastAheadMatch.NarrowByInterval(candidates, startAt - lastSeen)
         elseif state.engagedAt then
             candidates = CastAheadMatch.NarrowByFirst(candidates, startAt - state.engagedAt)
         end

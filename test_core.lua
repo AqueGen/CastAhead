@@ -1351,6 +1351,30 @@ check(tenLeft, "the sibling keeps its tabled 18s cooldown, not the 12s anchor ga
 check(tilde, "a projected sibling's time is an estimate: the tilde shows beside it")
 reset()
 
+-- Two spells of one creature share a 2.4s cast, so its first cast stays a tie.
+-- A unique cast then names the creature and projects both. The tied spell's
+-- repeat lands on its projection, but it is a repeat: the interval since the
+-- plate's real 2.4s cast decides it, not the opening window from engage.
+table.insert(CastAheadData[1877], { spell = 1401, npc = 14, mob = "Nimbus", name = "Charge", cast = 2.4,
+                          cd = { 8.0 }, first = 3.0, firstN = 20, offset = 6.0, kick = 0, cc = 0 })
+table.insert(CastAheadData[1877], { spell = 1402, npc = 14, mob = "Nimbus", name = "Lightning", cast = 2.4,
+                          cd = { 30.0 }, first = 4.0, firstN = 20, offset = 30.0, kick = 0, cc = 0 })
+table.insert(CastAheadData[1877], { spell = 1403, npc = 14, mob = "Nimbus", name = "Release", cast = 5.3,
+                          cd = { 25.0 }, first = 2.4, firstN = 20, offset = 0.0, kick = 0, cc = 0 })
+do
+    enter()
+    castFor(2.4)                   -- t0: 1401 or 1402, both openings fit
+    castFor(5.3)                   -- t0+2.4: unique, names npc 14 and projects 1401 and 1402
+    advance(0.7)                   -- t0+8.4: one 1401 cooldown on, and on 1401's projection
+    castFor(2.4)
+    local call = CastAheadCore.LastCandidates(unit)
+    check(call and #call == 1 and call[1].spell == 1401, string.format(
+        "a repeat cast on a projected track is matched by its interval, got %s",
+        call and #call == 1 and tostring(call[1].spell) or "no single call"))
+    reset()
+end
+for _ = 1, 3 do table.remove(CastAheadData[1877]) end
+
 -- A first cast projected from the mob's kit reaches the timeline once its
 -- opening is measured well enough, and stays off it while it is not.
 local sibling = CastAheadData[1877][2]
