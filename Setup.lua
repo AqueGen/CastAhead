@@ -413,12 +413,12 @@ local function BuildBody(W, T)
     line, panel.timelineSwitch, panel.timelineContent = Box("timeline", "Blizzard timeline", centre)
     panel.timelineBox = line
     local note = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    note:SetPoint("TOPLEFT", content, "TOPLEFT", 4, 0)
+    note:SetPoint("TOPLEFT", content, "TOPLEFT", 4, -8)
     note:SetWidth(PANEL_W - 2 * PAD - 2 * INNER - 4)
     note:SetJustifyH("LEFT")
     note:SetText(TIMELINE_NOTE)
     panel.note = note
-    y = note:GetStringHeight()
+    y = 8 + note:GetStringHeight()
     Close(line)
 end
 
