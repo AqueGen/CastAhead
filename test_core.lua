@@ -17,6 +17,8 @@ end
 
 local now = 1000
 GetTime = function() return now end
+MouseIsDown = true
+IsMouseButtonDown = function() return MouseIsDown end
 
 local combat, hostile, dead = {}, {}, {}
 UnitAffectingCombat = function(unit) return combat[unit] == true end
@@ -151,13 +153,16 @@ local function StubRegion()
     r.Show = function() r.shown = true end
     r.Hide = function() r.shown = false end
     r.SetShown = function(_, on) r.shown = on and true or false end
+    r.IsShown = function() return r.shown end
+    r.SetAllPoints = function(_, target) r.allPointsTo = target end
+    r.GetTexture = function() return r.textureValue end
     setmetatable(r, { __index = function() return function() return r end end })
     return r
 end
 
 local eventHandler, updateHandler
-CreateFrame = function(kind)
-    local f = { shown = false, texts = {}, kind = kind }
+CreateFrame = function(kind, _, parent)
+    local f = { shown = false, texts = {}, kind = kind, handlers = {}, parent = parent }
     allFrames[#allFrames + 1] = f
     framesMade = framesMade + 1
     f.Show = function(self)
@@ -170,6 +175,7 @@ CreateFrame = function(kind)
     end
     f.IsShown = function(self) return self.shown end
     f.SetScript = function(_, script, fn)
+        f.handlers[script] = fn
         -- Core registers more than one event frame (the main one, plus a small
         -- frame that saves diagnostics on logout). Only the first owns the
         -- event flow; keeping just the last one silently redirected everything.
@@ -179,12 +185,19 @@ CreateFrame = function(kind)
             updateHandler = updateHandler or fn
         end
     end
+    if kind == "EditBox" then
+        f.SetText = function(self, text) self.value = text end
+        f.GetText = function(self) return self.value end
+    end
     f.CreateTexture = StubRegion
     f.CreateFontString = function()
         local fs = StubRegion()
+        f.fontStrings = f.fontStrings or {}
+        table.insert(f.fontStrings, fs)
         -- Record into separate fields: Core assigns the font strings to
         -- bar.text / bar.time, so writing there would overwrite them.
-        fs.SetText = function(_, text) f.labelValue = text end
+        fs.SetText = function(self, text) f.labelValue, self.value = text, text end
+        fs.GetText = function(self) return self.value end
         fs.SetFormattedText = function(_, fmt, ...) f.timeValue = string.format(fmt, ...) end
         -- The layout steps the icons sideways by the width of the advice under
         -- them, so a stub that answers with a table (the catch-all below) turns
@@ -207,12 +220,21 @@ CreateFrame = function(kind)
         return fs
     end
     f.GetParent = function(self) return self.parent end
-    f.SetPoint = function(self, _, anchor, _, x, y)
+    f.SetPoint = function(self, ...)
+        local _, anchor, _, x, y = ...
         lastAnchor = anchor
         self.x, self.y = x, y            -- offsets, for the layout cases
+        self.points = { ... }
     end
+    f.GetPoint = function(self) return unpack(self.points or {}) end
     f.SetTexture = function(self, tex) self.texture = tex end
     f.SetParent = function(self, p) self.parent = p end
+    f.SetFrameStrata = function(self, strata) self.strata = strata end
+    f.GetFrameStrata = function(self) return self.strata end
+    f.EnableMouse = function(self, on) self.mouse = on end
+    f.EnableMouseWheel = function(self, on) self.wheel = on end
+    f.SetFrameLevel = function(self, level) self.level = level end
+    f.GetFrameLevel = function(self) return self.level end
     local barOnly = {
         SetValue = true, SetStatusBarColor = true,
         SetMinMaxValues = true, SetStatusBarTexture = true,
@@ -310,6 +332,7 @@ dofile("CastsPage.lua")
 dofile("SavesPage.lua")
 dofile("UI.lua")
 dofile("Core.lua")
+dofile("Setup.lua")
 dofile("Recorder.lua")
 dofile("ReportWindow.lua")
 
@@ -1472,6 +1495,81 @@ local gap = math.abs(xOf[textures[101]] - xOf[textures[100]])
 check(gap == 30,
     string.format("two short calls sit an icon apart, not a label apart (gap %.0f, expected 30)", gap))
 reset()
+
+do
+    local realPlateFor, realUIParent = C_NamePlate.GetNamePlateForUnit, UIParent
+    UIParent = { GetEffectiveScale = function() return 1 end }
+    CastAheadDB = {}
+    local w, h, guess = CastAheadCore.PlateSize()
+    check(w == 110 and h == 45 and guess == "guess", "plate size: nothing known gives the fixed default, marked as a guess")
+    C_NamePlate.GetNamePlateSize = function() return 140, 30 end
+    w, h, guess = CastAheadCore.PlateSize()
+    check(w == 140 and h == 30 and guess == "guess",
+        "plate size: the game's own size when no plate has been seen, still a guess")
+    C_NamePlate.GetNamePlateForUnit = function(u)
+        local plate = realPlateFor(u)
+        if not plate then return nil end
+        plate.GetWidth = function() return 120 end
+        plate.GetHeight = function() return 12 end
+        plate.GetEffectiveScale = function() return 1.5 end
+        return plate
+    end
+    enter()
+    castFor(3.0)
+    w, h, guess = CastAheadCore.PlateSize()
+    check(w == 180 and h == 18 and guess == nil, "plate size: a shown plate wins, in UIParent units")
+    check(CastAheadDB.plateSize and CastAheadDB.plateSize[1] == 180 and CastAheadDB.plateSize[2] == 18,
+        "plate size: the last real plate is remembered in the profile")
+    reset()
+    C_NamePlate.GetNamePlateForUnit, C_NamePlate.GetNamePlateSize, UIParent = realPlateFor, nil, realUIParent
+end
+
+(function()
+    local realPlateFor, realUIParent = C_NamePlate.GetNamePlateForUnit, UIParent
+    UIParent = { GetEffectiveScale = function() return 1 end }
+    local width, height = 120, 12
+    C_NamePlate.GetNamePlateForUnit = function(u)
+        local plate = realPlateFor(u)
+        if not plate then return nil end
+        plate.GetWidth = function() return width() end
+        plate.GetHeight = function() return height end
+        plate.GetEffectiveScale = function() return 1.5 end
+        return plate
+    end
+    local function size(w, h)
+        width, height = function() return w end, h
+    end
+    CastAheadDB = { leadSeconds = 5 }
+    size(120, 12)
+    enter()
+    check(CastAheadDB.plateSize and CastAheadDB.plateSize[1] == 180,
+        "plate size: a hostile plate is measured once when it is added")
+    CastAheadDB.plateSize = nil
+    castFor(3.0)
+    advance(0.1)
+    check(IconShown(100) and CastAheadDB.plateSize == nil, "plate size: anchoring live bars measures nothing")
+    reset()
+
+    size(0, 0)
+    local ok = pcall(enter)
+    check(ok and CastAheadDB.plateSize == nil, "plate size: a 0x0 plate stores nothing")
+    reset()
+    width = function() error("no width") end
+    ok = pcall(enter)
+    check(ok and CastAheadDB.plateSize == nil, "plate size: a throwing GetWidth stores nothing and breaks nothing")
+    castFor(3.0)
+    check(IconShown(100), "plate size: the plate whose size could not be read still gets its icon")
+    reset()
+    local secret = {}
+    width = function() return secret end
+    issecretvalue = function(v) return v == secret end
+    ok = pcall(enter)
+    issecretvalue = nil
+    check(ok and CastAheadDB.plateSize == nil, "plate size: a Secret width stores nothing")
+    reset()
+    C_NamePlate.GetNamePlateForUnit, UIParent = realPlateFor, realUIParent
+    CastAheadDB = { leadSeconds = 5 }
+end)()
 CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
 -- A cast whose interval is nowhere near the spell's schedule is rejected, and
@@ -1783,8 +1881,17 @@ check(CastAheadDB and CastAheadDB.anchor == "center",
     "/ca anchor center sets the anchor rather than being read as /ca center")
 SlashCmdList.CASTAHEAD("anchor left")
 check(CastAheadDB.anchor == nil, "anchoring back to the default clears the stored value")
-SlashCmdList.CASTAHEAD("center -200")
-check(CastAheadDB.centerY == -200, "/ca center still moves the centre call")
+SlashCmdList.CASTAHEAD("center -90")
+check(CastAheadCore.CENTER_Y + CastAheadDB.centerY == -90, "/ca center takes the number from the screen centre, like the panel")
+CastAheadDB = nil
+do
+    local realPrint, said = print, nil
+    print = function(text) said = text end
+    SlashCmdList.CASTAHEAD("center")
+    print = realPrint
+    check(said and said:find("current -90 px from the screen centre", 1, true),
+        "/ca center names the position from the screen centre, got " .. tostring(said))
+end
 SlashCmdList.CASTAHEAD("grow up")
 check(CastAheadDB.grow == "up", "/ca grow still sets the growth direction")
 CastAheadDB = nil
@@ -2107,7 +2214,13 @@ local wide = { { label = { GetStringWidth = function() return 80 end }, _size = 
                { label = { GetStringWidth = function() return 80 end }, _size = 26 } }
 CastAheadDB = {}
 CastAheadCore.SpreadBars(wide, 2)
-check(wide[2]._hOffset == 88, string.format("labels keep half of each other apart by default, got %s", tostring(wide[2]._hOffset)))
+check(wide[2]._hOffset == 82, string.format("labels keep half of each other apart by default, got %s", tostring(wide[2]._hOffset)))
+do
+    local mixed = { { label = { GetStringWidth = function() return 60 end }, _size = 26 },
+                    { label = { GetStringWidth = function() return 40 end }, _size = 26 } }
+    CastAheadCore.SpreadBars(mixed, 2)
+    check(mixed[2]._hOffset == 52, string.format("two labelled neighbours leave 2 px between their labels, got %s", tostring(mixed[2]._hOffset)))
+end
 CastAheadDB = { fixedSpacing = true, iconGap = 10 }
 CastAheadCore.SpreadBars(wide, 2)
 check(wide[2]._hOffset == 36, string.format("fixed spacing steps by icon plus gap, got %s", tostring(wide[2]._hOffset)))
@@ -4323,11 +4436,13 @@ end
 do
     local savedCreate, savedDB, savedWindows = CreateFrame, CastAheadDB, CastAheadBurstWindows
     local savedSlider = MinimalSliderWithSteppersMixin
+    InCombatLockdown = function() return false end
     MinimalSliderWithSteppersMixin = savedSlider or { Label = { Min = 1, Max = 2 }, Event = { OnValueChanged = 1 } }
     local made, texts = {}, {}
     CreateFrame = function(kind, name, parent, ...)
         local f = savedCreate(kind, name, parent, ...)
         made[#made + 1] = f
+        f.template = ...
         local createText = f.CreateFontString
         f.CreateFontString = function(...)
             local fs = createText(...)
@@ -4360,8 +4475,22 @@ do
     CastAheadBurstWindows = { [3492] = { [15] = { name = "Ula'tek", { release = 145.5, target = "Venomous Heart" } } } }
     local host = CreateFrame("Frame")
     local ok, err
+    local realSpecBar, onPick = CastAheadWindow.SpecBar, nil
+    CastAheadWindow.SpecBar = function(parent, x, y, pick, ...)
+        onPick = pick
+        return realSpecBar(parent, x, y, pick, ...)
+    end
     ok, err = pcall(CastAheadOptions.ShowPanel, host, "Defensives")
+    CastAheadWindow.SpecBar = realSpecBar
     check(ok, "the Defensives page builds headless " .. tostring(err))
+    do
+        local store, reads = CastAheadSaves.Store, 0
+        local realEdit = store.EditList
+        store.EditList = function(...) reads = reads + 1 return realEdit(...) end
+        if type(onPick) == "function" then onPick() end
+        store.EditList = realEdit
+        check(type(onPick) == "function" and reads > 0, "picking a spec in the Defensives bar repaints the list")
+    end
     ok, err = pcall(CastAheadOptions.ShowPanel, host, "Report")
     check(ok, "the Report page builds headless " .. tostring(err))
     local tabs = table.concat(CastAheadOptions.TABS, " ")
@@ -4380,12 +4509,43 @@ do
         return table.concat(seen, " | ")
     end
     check(Labels(1) == "", "the Defensives page has no defensive calls switch")
-    local before = #texts
+    local before, madeBefore = #texts, #made
     ok, err = pcall(CastAheadOptions.ShowPanel, host, "General")
     check(ok, "the General page builds headless " .. tostring(err))
     check(Labels(before + 1) == "Features | Defensive calls in dungeons | Raid (experimental)"
         .. " | Defensive calls in raids | Burst windows | Advanced | Development mode",
         "General lists the feature switches in their group, the raid ones under the raid switch, then Advanced")
+    do
+        local shown, found, sliders, dropdowns = {}, {}, 0, 0
+        for i = before + 1, #texts do
+            local v = rawget(texts[i], "value")
+            if type(v) == "string" then shown[#shown + 1] = v end
+        end
+        for i = madeBefore + 1, #made do
+            if made[i].template == "MinimalSliderWithSteppersTemplate" then sliders = sliders + 1 end
+            if made[i].template == "WowStyle1DropdownTemplate" then dropdowns = dropdowns + 1 end
+        end
+        local page = "|" .. table.concat(shown, "|") .. "|"
+        for _, gone in ipairs({ "Position around the plate", "|Grow|", "Distance from the plate", "Nudge sideways",
+            "Nudge up or down", "|Icon size|", "Icon: ", "Label: ", "Countdown: ", "|Fixed spacing|", "Gap: ", "Layer",
+            "Size: ", "Text: " }) do
+            if page:find(gone, 1, true) then found[#found + 1] = gone end
+        end
+        check(#found == 0, "General builds no size or position control, found " .. table.concat(found, ","))
+        check(sliders == 1 and dropdowns == 0, "General keeps only the early-warning slider and no dropdown, got "
+            .. sliders .. "/" .. dropdowns)
+        check(page:find("|Show icons on nameplates|", 1, true) and page:find("|Full labels|", 1, true)
+            and page:find("|Show the centre call|", 1, true), "General keeps the nameplate and centre call switches")
+        local heights = {}
+        for _, g in ipairs(made) do
+            local title = rawget(g, "title")
+            local v = title and rawget(title, "value")
+            if v == "Nameplate icons" or v == "Centre call" then heights[v] = g.h end
+        end
+        check(heights["Nameplate icons"] == 100 and heights["Centre call"] == 70,
+            "General's icon and centre groups shrink to their switches, got "
+            .. tostring(heights["Nameplate icons"]) .. "/" .. tostring(heights["Centre call"]))
+    end
 
     local function Frame(label)
         for _, f in ipairs(made) do
@@ -4421,6 +4581,64 @@ do
             "children switched on stay disabled while the raid switch is off")
         CastAheadDB = {}
     end
+    do
+        local realChanged, changed = CastAheadSetup.OutputsChanged, 0
+        CastAheadSetup.OutputsChanged = function() changed = changed + 1 end
+        local pairsOf = { { "Show icons on nameplates", "nameplates" }, { "Show the centre call", "centerText" },
+                          { "Feed the Blizzard timeline", "timeline" } }
+        for _, p in ipairs(pairsOf) do
+            local box = Frame(p[1])
+            box.GetChecked = function() return false end
+            box.SetChecked = function(self, v) self.checkedValue = v end
+            box.handlers.OnClick(box)
+            check(CastAheadDB[p[2]] == false, "General: " .. p[1] .. " writes " .. p[2])
+            CastAheadDB[p[2]] = nil
+            CastAheadOptions.Refresh()
+            check(box.checkedValue == true, "General: " .. p[1] .. " follows the setting after a refresh")
+        end
+        check(changed == 3, "General: each output switch tells the setup mode, got " .. changed)
+        CastAheadSetup.OutputsChanged = realChanged
+        CastAheadDB = {}
+    end
+    (function()
+        local setup, move
+        for _, b in ipairs(made) do
+            if rawget(b, "buttonText") == "Size and position" then setup = b end
+            if rawget(b, "buttonText") == "Move it on screen" then move = b end
+        end
+        check(setup and not move, "General has Size and position in place of Move it on screen")
+        if not setup then return end
+        local realEnter, realLock, realTip = CastAheadSetup.Enter, InCombatLockdown, GameTooltip
+        local entered, inCombat, tips = 0, false, {}
+        CastAheadSetup.Enter = function() entered = entered + 1 return true end
+        InCombatLockdown = function() return inCombat end
+        GameTooltip = setmetatable({
+            SetText = function(_, t) tips[#tips + 1] = t end,
+            AddLine = function(_, t) tips[#tips + 1] = t end,
+        }, { __index = function() return function() end end })
+        setup.handlers.OnEnter(setup)
+        check(table.concat(tips, "|") == "Size and position|Set the size and position of the nameplate icons and the centre call, with a live preview.",
+            "the button's tooltip says what it does, got " .. table.concat(tips, "|"))
+        tips = {}
+        setup.handlers.OnClick(setup)
+        check(entered == 1, "Size and position enters the setup mode")
+        inCombat = true
+        CastAheadOptions.ShowPanel(host, "General")
+        check(setup.enabled == false and setup.motionWhileDisabled == true,
+            "Size and position is disabled in combat and keeps its tooltip")
+        setup.handlers.OnEnter(setup)
+        check(table.concat(tips, "|") == "Size and position|Set the size and position of the nameplate icons and the centre call, with a live preview.|Not available in combat.",
+            "the disabled button says why, got " .. table.concat(tips, "|"))
+        inCombat = false
+        setup.handlers.OnEvent(setup, "PLAYER_REGEN_ENABLED")
+        check(setup.enabled == true, "Size and position is enabled again when combat ends")
+        setup.handlers.OnEvent(setup, "PLAYER_REGEN_DISABLED")
+        check(setup.enabled == false, "Size and position is disabled when combat starts, before the lockdown reports it")
+        inCombat = true
+        setup.handlers.OnEvent(setup, "PLAYER_REGEN_ENABLED")
+        check(setup.enabled == true, "Size and position is enabled when combat ends, before the lockdown lifts")
+        CastAheadSetup.Enter, InCombatLockdown, GameTooltip = realEnter, realLock, realTip
+    end)()
     local function OffNote()
         for _, fs in ipairs(texts) do
             local v = rawget(fs, "value")
@@ -4444,6 +4662,7 @@ do
 
     CreateFrame, CastAheadDB, CastAheadBurstWindows = savedCreate, savedDB, savedWindows
     MinimalSliderWithSteppersMixin = savedSlider
+    InCombatLockdown = nil
 end
 
 do
@@ -5222,6 +5441,966 @@ do
 
     CreateFrame, CastAheadDB, C_UnitAuras, C_Secrets = savedCreate, savedDB, savedAuras, nil
 end
+
+do
+    local savedDB = CastAheadDB
+    CastAheadDB = {}
+    local plate = {}
+    local state = {}
+    CastAheadCore.ShowSampleRow(state, plate)
+    local bars = { unpack(state.bars) }
+    local shown = 0
+    for i = 1, #bars do if bars[i].shown then shown = shown + 1 end end
+    check(#bars == 3 and shown == 3, "sample row: three bars shown")
+    check(bars[1].timeValue == "7" and bars[2].timeValue == "3" and bars[3].timeValue == "12",
+        "sample row: times 7, 3, 12")
+    check(bars[1].tilde.shown == true and not bars[2].tilde.shown, "sample row: only the first carries a tilde")
+    check(bars[1].labelValue == "KICK" and bars[2].labelValue == "DODGE" and bars[3].labelValue == "BUSTER",
+        "sample row: short labels")
+    check(not bars[1].glow.shown, "sample row: no glow")
+    check(bars[1].x ~= nil, "sample row: anchored to the frame")
+    CastAheadCore.SampleStates[state] = plate
+    CastAheadConfig.Set("iconSize", 40)
+    CastAheadCore.Reapply()
+    check(bars[1]._size == 40, "sample row: Reapply resizes registered samples")
+    CastAheadCore.SampleStates[state] = nil
+    CastAheadConfig.Set("fullLabels", true)
+    local full = {}
+    CastAheadCore.ShowSampleRow(full, plate)
+    check(full.bars[3].labelValue == "TANKBUSTER", "sample row: full labels")
+    CastAheadCore.HideSampleRow(full)
+    check(#full.bars == 0, "sample row: hide clears the state")
+    CastAheadConfig.Set("nameplates", false)
+    CastAheadCore.ShowSampleRow(full, plate)
+    shown = 0
+    for i = 1, #full.bars do if full.bars[i].shown then shown = shown + 1 end end
+    check(#full.bars == 3 and shown == 0, "sample row: hidden when nameplates are off")
+    CastAheadCore.HideSampleRow(full)
+    CastAheadCore.HideSampleRow(state)
+    check(not bars[1].shown and not bars[2].shown and not bars[3].shown, "sample row: hide leaves nothing shown")
+    local before = framesMade
+    CastAheadCore.ShowSampleRow(full, plate)
+    check(framesMade == before, "sample row: hidden bars return to the pool")
+    CastAheadCore.HideSampleRow(full)
+
+    CastAheadConfig.Set("nameplates", nil)
+    local hiddenPlate = { IsShown = function() return false end }
+    local away = {}
+    CastAheadCore.ShowSampleRow(away, hiddenPlate)
+    shown = 0
+    for i = 1, #away.bars do if away.bars[i].shown then shown = shown + 1 end end
+    check(#away.bars == 3 and shown == 0, "sample row: a hidden frame gets no visible bars, got " .. shown)
+    CastAheadCore.HideSampleRow(away)
+
+    CastAheadCore.Reapply()
+    local advices, realAdvice = 0, CastAheadMatch.Advice
+    CastAheadMatch.Advice = function(...)
+        advices = advices + 1
+        return realAdvice(...)
+    end
+    CastAheadCore.SampleDataRow("TANK")
+    local afterFirst = advices
+    CastAheadCore.SampleDataRow("TANK")
+    CastAheadMatch.Advice = realAdvice
+    check(afterFirst > 0 and advices == afterFirst, "sample row: a second lookup of the same key does not scan again, "
+        .. afterFirst .. "/" .. advices)
+    CastAheadDB = savedDB
+end
+
+-- A function, not a block: the main chunk is at Lua 5.1's 200-local limit.
+(function()
+    local savedDB, savedLock = CastAheadDB, InCombatLockdown
+    local W = CastAheadWindow
+    local savedFrame, savedCurrent, savedShow = W.Frame, W.Current, W.Show
+    local winShown, shownPage = true, nil
+    hostile.nameplate2 = nil
+    local win = { IsShown = function() return winShown end, Hide = function() winShown = false end }
+    W.Frame = function() return win end
+    W.Current = function() return "General" end
+    W.Show = function(name) winShown, shownPage = true, name end
+    local inCombat = false
+    InCombatLockdown = function() return inCombat end
+    CastAheadDB = { centerText = true }
+    local S = CastAheadSetup
+    local panel = S.panel
+    local registered = {}
+    panel.RegisterEvent = function(_, e) registered[e] = true end
+    panel.UnregisterEvent = function(_, e) registered[e] = nil end
+    local function fireAll(event, ...)
+        fire(event, ...)
+        if registered[event] then panel.handlers.OnEvent(panel, event, ...) end
+    end
+    local function shownSet()
+        local s = {}
+        for i = 1, #allFrames do if allFrames[i].shown then s[allFrames[i]] = true end end
+        return s
+    end
+    local function onScreen(f)
+        while f do
+            if rawget(f, "shown") == false then return false end
+            f = rawget(f, "parent")
+        end
+        return true
+    end
+    local function newlyShown(before)
+        local n = 0
+        for i = 1, #allFrames do
+            if onScreen(allFrames[i]) and not before[allFrames[i]] then n = n + 1 end
+        end
+        return n
+    end
+    local SAMPLE_LINES = { ["Interrupt  2.4"] = true, ["Defensive  4.0"] = true, ["Burst now  6.0"] = true }
+    local function sampleLines()
+        local n = 0
+        for i = 1, #allFrames do
+            if allFrames[i].shown and SAMPLE_LINES[allFrames[i].timeValue] then n = n + 1 end
+        end
+        return n
+    end
+    local function liveEvents()
+        local n = 0
+        for _ in pairs(timeline.live) do n = n + 1 end
+        return n
+    end
+    local function barsOn(match)
+        local n = 0
+        for i = 1, #allFrames do
+            local f = allFrames[i]
+            if f.shown and IsBar(f) and f._plate and match(f._plate) then n = n + 1 end
+        end
+        return n
+    end
+    local function onSample(p) return p == S.plate end
+    local function onUnit(p) return p.unit == unit end
+    local function inSpecial()
+        for _, n in ipairs(UISpecialFrames) do if n == "CastAheadSetupPanel" then return true end end
+        return false
+    end
+
+    local before = shownSet()
+    inCombat = true
+    local ok, reason = S.Enter()
+    check(ok == false and reason == "combat", "setup: entering in combat is refused")
+    check(not S.Active() and newlyShown(before) == 0 and winShown, "setup: a refused enter shows nothing")
+    inCombat = false
+
+    hostile[unit] = true
+    local live0 = liveEvents()
+    CastAheadCore.Test(1877)
+    check(CastAheadCore.Testing(), "setup: the test drive runs before entering")
+    local added0 = timeline.added
+    check(S.Enter() == true and S.Active(), "setup: enter out of combat")
+    check(not CastAheadCore.Testing(), "setup: entering stops the test drive")
+    check(not winShown, "setup: the window steps aside")
+    check(S.plate and not S.plate.shown, "setup: no sample plate while a hostile plate is up")
+    check(barsOn(onSample) == 0, "setup: no sample bars while a hostile plate is up, got " .. barsOn(onSample))
+    check(barsOn(onUnit) == 3, "setup: three sample bars on a hostile plate, got " .. barsOn(onUnit))
+    check(sampleLines() == 3, "setup: the centre block shows three sample lines, got " .. sampleLines())
+    check(timeline.added - added0 == 3, "setup: three sample timeline entries, got " .. (timeline.added - added0))
+    check(panel.shown and not inSpecial(), "setup: the panel is shown and is not an Esc frame")
+    check(registered.PLAYER_REGEN_DISABLED and registered.NAME_PLATE_UNIT_ADDED and registered.UI_SCALE_CHANGED,
+        "setup: events registered")
+
+    fireAll("NAME_PLATE_UNIT_REMOVED", unit)
+    check(barsOn(onUnit) == 0, "setup: a removed plate releases its sample row")
+    fireAll("NAME_PLATE_UNIT_ADDED", unit)
+    check(barsOn(onUnit) == 3, "setup: an added hostile plate gets a sample row")
+
+    do
+        local plateBox, centreBox, timelineBox = panel.iconsTitle, panel.centreTitle, panel.timelineSwitch
+        local function flip(box, on)
+            box.GetChecked = function() return on end
+            box.handlers.OnClick(box)
+        end
+        local O = CastAheadOptions
+        local refreshes, realRefresh = 0, O.Refresh
+        O.Refresh = function(...) refreshes = refreshes + 1 return realRefresh(...) end
+        local alpha = {}
+        local function watch(name, widget)
+            widget.SetAlpha = function(_, a) alpha[name] = a end
+        end
+        watch("size", panel.iconsContent)
+        watch("centre", panel.centreContent)
+        local captions = {}
+        for i = 1, #allFrames do
+            for _, fs in ipairs(allFrames[i].fontStrings or {}) do
+                if fs.value == "Side" or fs.value == "Grow" then captions[fs.value] = allFrames[i] end
+            end
+        end
+        check(captions.Side == panel.iconsContent and captions.Grow == panel.iconsContent,
+            "panel: the Side and Grow captions live in the block that dims")
+
+        flip(plateBox, false)
+        check(CastAheadDB.nameplates == false and barsOn(onUnit) == 0, "switch: Nameplate icons off hides the sample rows at once")
+        check(alpha.size and alpha.size < 1 and alpha.centre == nil, "switch: only the icons block dims while its switch is off")
+        check(sampleLines() == 3 and liveEvents() - live0 == 3, "switch: the other two outputs stay up")
+        check(refreshes > 0, "switch: the panel refreshes General's widgets")
+        flip(plateBox, true)
+        check(CastAheadDB.nameplates == nil and barsOn(onUnit) == 3 and alpha.size == 1,
+            "switch: Nameplate icons on brings the rows and the full look back")
+
+        flip(centreBox, false)
+        check(CastAheadDB.centerText == false and sampleLines() == 0 and alpha.centre < 1,
+            "switch: Centre call off hides the centre sample and dims its block")
+        check(barsOn(onUnit) == 3 and alpha.size == 1, "switch: the icons are untouched by the centre switch")
+        flip(centreBox, true)
+        check(CastAheadDB.centerText == nil and sampleLines() == 3 and alpha.centre == 1,
+            "switch: Centre call on brings the centre sample back")
+
+        flip(timelineBox, false)
+        check(CastAheadDB.timeline == false and liveEvents() == live0, "switch: Blizzard timeline off cancels the sample entries")
+        flip(timelineBox, true)
+        check(CastAheadDB.timeline == nil and liveEvents() - live0 == 3, "switch: Blizzard timeline on feeds the samples again")
+
+        for _, box in ipairs({ plateBox, centreBox, timelineBox }) do
+            box.SetChecked = function(self, v) self.checkedValue = v end
+        end
+        CastAheadDB.nameplates, CastAheadDB.centerText, CastAheadDB.timeline = false, false, false
+        O.Refresh()
+        check(plateBox.checkedValue == false and centreBox.checkedValue == false and timelineBox.checkedValue == false,
+            "switch: a change made on General shows in the panel after a refresh")
+        S.OutputsChanged()
+        check(barsOn(onUnit) == 0 and sampleLines() == 0 and liveEvents() == live0,
+            "switch: a change made on General takes effect in the open mode")
+        CastAheadDB.nameplates, CastAheadDB.centerText, CastAheadDB.timeline = nil, nil, nil
+        S.OutputsChanged()
+        check(barsOn(onUnit) == 3 and sampleLines() == 3 and liveEvents() - live0 == 3 and alpha.size == 1,
+            "switch: and switching them back on there restores the mode")
+        O.Refresh = realRefresh
+    end
+
+    local sized
+    S.plate.SetSize = function(_, w, h) sized = { w, h } end
+    CastAheadDB.plateSize = { 150, 20 }
+    fireAll("UI_SCALE_CHANGED")
+    check(sized and sized[1] == 150 and sized[2] == 20, "setup: a UI scale change re-sizes the sample plate")
+    CastAheadDB.plateSize = { 160, 22 }
+    fireAll("DISPLAY_SIZE_CHANGED")
+    check(sized[1] == 160 and sized[2] == 22, "setup: a resolution change re-sizes the sample plate")
+    S.plate.SetSize = nil
+    CastAheadDB.plateSize = nil
+
+    S.Leave()
+    check(not S.Active(), "setup: leave")
+    check(newlyShown(before) == 0, "setup: leaving leaves nothing shown, got " .. newlyShown(before))
+    check(liveEvents() == live0, "setup: leaving cancels the sample timeline entries")
+    check(winShown and shownPage == "General", "setup: the window comes back on its page")
+    check(next(registered) == nil, "setup: leaving unregisters events")
+
+    winShown, shownPage = false, nil
+    S.Enter()
+    S.Leave()
+    check(not winShown and shownPage == nil, "setup: a window closed on entry stays closed")
+
+    S.Enter()
+    fireAll("PLAYER_REGEN_DISABLED")
+    check(not S.Active() and newlyShown(before) == 0, "setup: combat closes the mode")
+
+    S.Enter()
+    CastAheadCore.Test(1877)
+    check(not S.Active() and CastAheadCore.Testing(), "setup: the test drive leaves the mode first")
+    CastAheadCore.Test(1877)
+
+    S.Enter()
+    CastAheadCore.MoveCenter()
+    check(not S.Active(), "setup: /ca move leaves the mode first")
+    local realPrint, printed = print, {}
+    print = function(text) printed[#printed + 1] = text end
+    S.Enter()
+    print = realPrint
+    check(sampleLines() == 3, "setup: entering locks /ca move and shows the sample")
+    check(#printed == 0, "setup: locking /ca move on entry prints nothing, got " .. tostring(printed[1]))
+    local kickIcon, burstIcon
+    for i = 1, #allFrames do
+        local f = allFrames[i]
+        if f.shown and f.timeValue == "Interrupt  2.4" then kickIcon = f.icon.textureValue end
+        if f.shown and f.timeValue == "Burst now  6.0" then burstIcon = f.icon.textureValue end
+    end
+    check(kickIcon == textures[200], "setup: the interrupt sample shows a kick spell's icon, got " .. tostring(kickIcon))
+    check(burstIcon == CastAheadBurst.ICON, "setup: the burst sample shows the burst icon, got " .. tostring(burstIcon))
+    S.Leave()
+    check(newlyShown(before) == 0, "setup: nothing left after /ca move and the mode")
+
+    CastAheadDB.centerText = false
+    S.Enter()
+    check(sampleLines() == 0, "setup: no centre sample with the centre call off")
+    S.Leave()
+    CastAheadDB.centerText = true
+
+    S.Enter()
+    panel.handlers.OnHide(panel)
+    check(not S.Active() and newlyShown(before) == 0, "setup: hiding the panel leaves the mode")
+
+    do
+        local realVisible, popupUp, propagate = StaticPopup_Visible, false, nil
+        StaticPopup_Visible = function(name) return popupUp and name == "CASTAHEAD_SETUP_RESET" end
+        panel.SetPropagateKeyboardInput = function(_, on) propagate = on end
+        _G.CastAheadMainWindow, _G.CastAheadSetupPanel = win, panel
+        table.insert(UISpecialFrames, "CastAheadMainWindow")
+        local function escape()
+            propagate = nil
+            panel.handlers.OnKeyDown(panel, "ESCAPE")
+            if propagate == false then return end
+            for _, name in ipairs(UISpecialFrames) do
+                local f = _G[name]
+                if f and f:IsShown() then
+                    f:Hide()
+                    if f.handlers and f.handlers.OnHide then f.handlers.OnHide(f) end
+                end
+            end
+        end
+        winShown, shownPage = true, nil
+        S.Enter()
+        popupUp = true
+        escape()
+        check(S.Active() and propagate == true, "setup: Esc goes to the Reset question first")
+        popupUp = false
+        escape()
+        check(not S.Active() and propagate == false, "setup: Esc leaves the mode and is kept")
+        check(winShown and shownPage == "General", "setup: after Esc the window opened on entry is back")
+        winShown, shownPage = false, nil
+        S.Enter()
+        winShown = true
+        check(S.Enter() == true and not winShown, "setup: General's button while the mode runs hides a reopened window")
+        S.Leave()
+        check(winShown and shownPage == "General", "setup: and leaving brings that window back on its page")
+        table.remove(UISpecialFrames)
+        _G.CastAheadMainWindow, _G.CastAheadSetupPanel = nil, nil
+        StaticPopup_Visible, panel.SetPropagateKeyboardInput = realVisible, nil
+    end
+
+    S.Enter()
+    CastAheadCore.HideAll()
+    check(not S.Active() and newlyShown(before) == 0, "setup: /ca hide leaves the mode")
+
+    do
+        local realPlateFor = C_NamePlate.GetNamePlateForUnit
+        C_NamePlate.GetNamePlateForUnit = function(u)
+            if u == "nameplate9" then return { unit = u, IsShown = function() return true end } end
+            return realPlateFor(u)
+        end
+        hostile.nameplate9 = false
+        S.Enter()
+        fireAll("NAME_PLATE_UNIT_ADDED", "nameplate9")
+        check(barsOn(function(p) return p.unit == "nameplate9" end) == 0, "setup: a friendly plate gets no sample row")
+        S.Leave()
+        C_NamePlate.GetNamePlateForUnit, hostile.nameplate9 = realPlateFor, nil
+    end
+
+    do
+        local realPlateFor = C_NamePlate.GetNamePlateForUnit
+        C_NamePlate.GetNamePlateForUnit = function(u)
+            if u == "nameplate9" then error("plate scan") end
+            return realPlateFor(u)
+        end
+        hostile.nameplate9 = true
+        winShown = true
+        local ok = pcall(S.Enter)
+        C_NamePlate.GetNamePlateForUnit, hostile.nameplate9 = realPlateFor, nil
+        check(not ok and not S.Active(), "setup: an error in the plate scan leaves the mode closed")
+        check(barsOn(onUnit) == 0 and winShown, "setup: a failed enter leaves no sample row and keeps the window")
+        check(S.Enter() and S.Active(), "setup: entering works again after a failed enter")
+        S.Leave()
+    end
+
+    do
+        hostile[unit] = nil
+        S.Enter()
+        hostile[unit] = true
+        local icons, sample = {}, nil
+        for i = 1, #allFrames do
+            local f = allFrames[i]
+            if f.shown and IsBar(f) and f._plate == S.plate then
+                icons[f._index] = f.icon.textureValue
+                sample = f
+            end
+        end
+        check(icons[1] == textures[200] and icons[2] == textures[300],
+            "setup: the plate sample shows real spell icons, got " .. tostring(icons[1]) .. "," .. tostring(icons[2]))
+        check(S.plate.strata == "BACKGROUND" and sample.strata == CastAheadConfig.Strata() and sample.level == 6200,
+            "setup: the sample plate sits under its icons, got " .. tostring(S.plate.strata) .. "/" .. tostring(sample.strata))
+        S.Leave()
+    end
+
+    do
+        local realAdd, expiry = C_EncounterTimeline.AddScriptEvent, {}
+        local realCancel, cut = C_EncounterTimeline.CancelScriptEvent, 0
+        C_EncounterTimeline.AddScriptEvent = function(request)
+            local id = realAdd(request)
+            expiry[id] = now + request.duration
+            return id
+        end
+        C_EncounterTimeline.CancelScriptEvent = function(id)
+            if expiry[id] and expiry[id] > now then cut = cut + 1 end
+            return realCancel(id)
+        end
+        S.Enter()
+        for _ = 1, 100 do
+            now = now + 1
+            panel.handlers.OnUpdate(panel)
+        end
+        check(cut == 0, "setup: a timeline sample reaches its time before it is fed again, cut " .. cut)
+        C_EncounterTimeline.CancelScriptEvent = realCancel
+        local alive = 0
+        for id in pairs(timeline.live) do
+            if expiry[id] and expiry[id] > now then alive = alive + 1 end
+        end
+        check(alive == 3, "setup: the timeline samples stay while the mode is open, got " .. alive)
+        S.Leave()
+        alive = 0
+        for id in pairs(timeline.live) do if expiry[id] then alive = alive + 1 end end
+        check(alive == 0, "setup: leaving cancels the kept timeline samples, got " .. alive)
+        C_EncounterTimeline.AddScriptEvent = realAdd
+    end
+
+    do
+        local realPlateFor, realUIParent = C_NamePlate.GetNamePlateForUnit, UIParent
+        UIParent = { GetEffectiveScale = function() return 1 end }
+        local scale = 1.5
+        C_NamePlate.GetNamePlateForUnit = function(u)
+            local plate = realPlateFor(u)
+            if not plate then return nil end
+            plate.GetWidth = function() return 120 end
+            plate.GetHeight = function() return 12 end
+            plate.GetEffectiveScale = function() return scale end
+            return plate
+        end
+        local plateSized
+        S.plate.SetSize = function(_, w, h) plateSized = { w, h } end
+        CastAheadDB.plateSize = nil
+        S.Enter()
+        check(plateSized and plateSized[1] == 180 and plateSized[2] == 18,
+            "setup: the sample plate takes the size of a real plate seen on entry")
+        scale = 2
+        fireAll("UI_SCALE_CHANGED")
+        check(plateSized[1] == 240 and plateSized[2] == 24, "setup: the sample plate follows a real plate after a scale change")
+        S.Leave()
+        S.plate.SetSize = nil
+        CastAheadDB.plateSize = nil
+        C_NamePlate.GetNamePlateForUnit, UIParent = realPlateFor, realUIParent
+    end
+    reset()
+
+    enter()
+    castFor(3.0)
+    check(IconShown(100), "setup: a live bar is up before entering")
+    S.Enter()
+    check(not IconShown(100), "setup: live bars give way to the sample row while the mode is open")
+    S.Leave()
+    check(IconShown(100), "setup: live bars come back on leaving")
+
+    do
+        reset()
+        local realUIParent = UIParent
+        UIParent = { GetCenter = function() return 500, 400 end, GetEffectiveScale = function() return 1 end }
+        local keyboard, propagate
+        panel.EnableKeyboard = function(_, on) keyboard = on end
+        panel.SetPropagateKeyboardInput = function(_, on) propagate = on end
+        local function inside(widget, root)
+            while widget do
+                if widget == root then return true end
+                widget = rawget(widget, "parent")
+            end
+            return false
+        end
+
+        CastAheadDB.plateSize = { 110, 45 }
+        CastAheadDB.centerX, CastAheadDB.centerY, CastAheadDB.centerScale = nil, nil, nil
+        local base = shownSet()
+        S.Enter()
+        local center = CastAheadCore.CenterFrame()
+        check(keyboard == true, "setup: entering takes the keyboard")
+        local grabbing = 0
+        for i = 1, #allFrames do
+            local f = allFrames[i]
+            if (f.mouse or f.wheel) and onScreen(f) and not base[f] and not inside(f, panel) then grabbing = grabbing + 1 end
+        end
+        check(grabbing == 0, "setup: nothing the mode shows takes the mouse but the panel, got " .. grabbing)
+        check(S.plate.shown and not S.plate.mouse and not S.plate.handlers.OnDragStart, "setup: the sample plate ignores the mouse")
+        check(center.shown and not center.mouse and not center.wheel, "setup: the centre sample ignores the mouse")
+        center.handlers.OnDragStart(center)
+        check(not center.dragging, "setup: the centre sample cannot be dragged in the mode")
+        check(center.fill.shown and center.fill.allPointsTo == center, "setup: the centre sample shows a fill over the whole block")
+        CastAheadDB.centerText = false
+        CastAheadCore.ShowCenterSample(true)
+        check(not center.fill.shown, "setup: no centre fill while Centre call is off")
+        CastAheadDB.centerText = nil
+        CastAheadCore.ShowCenterSample(true)
+        check(center.fill.shown, "setup: the centre fill is back when Centre call is on")
+
+        check(center._x == 0 and center._y == -90 and center._scale == 0.8,
+            "defaults: a fresh profile puts the centre call at -90 and 80%, got " .. tostring(center._y) .. "/" .. tostring(center._scale))
+        check(panel.fields.centerY.box.value == "-90" and panel.fields.centerScale.box.value == "80",
+            "defaults: the panel shows -90 and 80 on a fresh profile")
+        CastAheadDB.centerY, CastAheadDB.centerScale = 0, 100
+        CastAheadCore.ResizeCenter()
+        S.Refresh()
+        check(center._y == -120 and center._scale == 1 and panel.fields.centerY.box.value == "-120"
+            and panel.fields.centerScale.box.value == "100", "defaults: a stored centre Y and size are kept as they were")
+        CastAheadDB.centerY, CastAheadDB.centerScale = nil, nil
+        check(CastAheadConfig.CenterY() == 30 and CastAheadConfig.CenterScale() == 0.8, "defaults: the accessors answer 30 and 0.8 when unset")
+
+        CastAheadDB.nudgeX, CastAheadDB.nudgeY = 0, 0
+        local kept = {}
+        for _, key in ipairs({ "UP", "DOWN", "LEFT", "RIGHT", "W" }) do
+            propagate = nil
+            panel.handlers.OnKeyDown(panel, key)
+            if propagate ~= true then kept[#kept + 1] = key end
+        end
+        check(#kept == 0 and CastAheadDB.nudgeX == 0 and CastAheadDB.nudgeY == 0,
+            "setup: arrows and other keys pass through and move nothing, kept " .. table.concat(kept, ","))
+        local realLock = InCombatLockdown
+        InCombatLockdown = function() return true end
+        propagate = "untouched"
+        panel.handlers.OnKeyDown(panel, "W")
+        panel.handlers.OnKeyDown(panel, "ESCAPE")
+        InCombatLockdown = realLock
+        check(propagate == "untouched", "setup: a key pressed in combat does not call the restricted propagate setter")
+
+        S.Leave()
+        check(keyboard == false, "setup: leaving releases the keyboard")
+        check(not center.fill.shown, "setup: leaving hides the centre fill")
+        check(newlyShown(base) == 0, "setup: nothing left after the mode, got " .. newlyShown(base))
+
+        local realPrint = print
+        print = function() end
+        CastAheadCore.MoveCenter()
+        check(center.mouse == true and center.shown, "/ca move: outside the mode the block takes the mouse")
+        center.GetScale = function() return 1 end
+        center.GetHeight = function() return 132 end
+        center.GetCenter = function() return 506, 400 + 3 - 44 end
+        center.handlers.OnDragStart(center)
+        check(center.dragging, "/ca move: the block drags")
+        center.handlers.OnDragStop(center)
+        CastAheadCore.MoveCenter()
+        print = realPrint
+        check(CastAheadDB.centerX == 6 and CastAheadCore.CENTER_Y + CastAheadDB.centerY == 3,
+            "/ca move: the drop is saved where it landed, not snapped, got " .. tostring(CastAheadDB.centerX) .. ","
+            .. tostring(CastAheadCore.CENTER_Y + CastAheadDB.centerY))
+        check(not center.mouse and not center.shown, "/ca move: a second /ca move locks and hides the block")
+
+        center.GetCenter, center.GetScale, center.GetHeight = nil, nil, nil
+        panel.EnableKeyboard, panel.SetPropagateKeyboardInput = nil, nil
+        CastAheadDB.plateSize, CastAheadDB.centerX, CastAheadDB.centerY = nil, nil, nil
+        UIParent = realUIParent
+    end
+
+    do
+        local HINT = "Change the numbers here; the icons and the centre call show the result."
+        local realPopup, popup = StaticPopup_Show, nil
+        StaticPopup_Show = function(name) popup = name end
+        local function down(f)
+            MouseIsDown = true
+            f.handlers.OnMouseDown(f, "LeftButton")
+        end
+        local function up(f)
+            MouseIsDown = false
+            f.handlers.OnMouseUp(f, "LeftButton")
+        end
+        local function click(f)
+            if f.handlers.OnMouseDown then
+                down(f)
+                up(f)
+            else
+                f.handlers.OnClick(f)
+            end
+        end
+        reset()
+        hostile[unit] = true
+        CastAheadDB = { centerText = true }
+        local height
+        panel.SetHeight = function(_, h) height = h end
+        S.Enter()
+        check(panel.hint and panel.hint.value == HINT, "panel: the hint reads exactly, got " .. tostring(panel.hint and panel.hint.value))
+        check(panel.iconsTitle and panel.iconsTitle.text.value == "Nameplate icons" and panel.centreTitle
+            and panel.centreTitle.text.value == "Centre call" and panel.timelineSwitch
+            and panel.timelineSwitch.text.value == "Blizzard timeline", "panel: the block titles and the timeline row are switches")
+        local f = panel.fields or {}
+        local LABELS = { offsetX = "Distance (px)", nudgeX = "X (px)", nudgeY = "Y (px)", iconSize = "Icon (px)",
+                         labelScale = "Label (%)", timeScale = "Countdown (%)", iconGap = "Gap (px)",
+                         centerX = "X (px)", centerY = "Y (px)", centerScale = "Size (%)", centerTextScale = "Text (%)" }
+        local missing = {}
+        for key, label in pairs(LABELS) do
+            local row = f[key]
+            if not (row and row.label.value == label and row.box and row.minus and row.plus) then missing[#missing + 1] = key end
+        end
+        table.sort(missing)
+        check(#missing == 0, "panel: every number row is there with its label and -/+, missing " .. table.concat(missing, ","))
+        check(panel.side and panel.grow and panel.layer and panel.fixedSpacing
+            and panel.fixedSpacing.text.value == "Fixed spacing", "panel: Side, Grow, Fixed spacing and Layer are in the icons block")
+        check(f.centerX and f.centerX.center and f.centerY.center and f.nudgeX and not f.nudgeX.center,
+            "panel: only the centre's X and Y carry Center buttons")
+        check(height and height <= 728, "panel: the panel fits under the top-right corner at UI scale 1, got " .. tostring(height))
+        do
+            local function inside(widget, box)
+                while widget do
+                    if widget == box then return true end
+                    widget = rawget(widget, "parent")
+                end
+                return false
+            end
+            local boxes = { panel.iconsBox, panel.centreBox, panel.timelineBox }
+            check(boxes[1] and boxes[2] and boxes[3] and boxes[1] ~= boxes[2] and boxes[2] ~= boxes[3],
+                "panel: three boxes")
+            check(panel.iconsTitle.parent == boxes[1] and panel.centreTitle.parent == boxes[2]
+                and panel.timelineSwitch.parent == boxes[3], "panel: each box's title row is its switch")
+            local home = { offsetX = 1, nudgeX = 1, nudgeY = 1, iconSize = 1, labelScale = 1, timeScale = 1, iconGap = 1,
+                           centerX = 2, centerY = 2, centerScale = 2, centerTextScale = 2 }
+            local stray = {}
+            for key, boxIndex in pairs(home) do
+                local row = panel.fields[key]
+                for _, widget in ipairs({ row.box, row.minus, row.plus, row.center }) do
+                    if not inside(widget, boxes[boxIndex]) then stray[#stray + 1] = key end
+                end
+            end
+            for _, widget in ipairs({ panel.side, panel.grow, panel.layer, panel.fixedSpacing }) do
+                if not inside(widget, boxes[1]) then stray[#stray + 1] = "icons widget" end
+            end
+            check(#stray == 0, "panel: every row sits inside its box, stray " .. table.concat(stray, ","))
+            check(boxes[1].parent == panel and boxes[2].parent == panel and boxes[3].parent == panel
+                and not inside(panel.hint, boxes[1]) and not inside(panel.reset, boxes[1])
+                and panel.reset.parent == panel and panel.done.parent == panel,
+                "panel: the hint and Reset/Done stay outside the boxes")
+            check(boxes[1].points[2] == panel.hint or boxes[1].points[2] == panel.guess,
+                "panel: the first box hangs below the hint")
+            check(boxes[2].points[2] == boxes[1] and boxes[3].points[2] == boxes[2], "panel: the boxes stack in order")
+            check(panel.reset.points[1] == "BOTTOMLEFT" and panel.reset.points[2] == panel and panel.done.points[1] == "BOTTOMRIGHT",
+                "panel: Reset and Done sit at the bottom")
+        end
+
+        local function typeInto(key, text)
+            f[key].box:SetText(text)
+            f[key].box.handlers.OnEnterPressed(f[key].box)
+        end
+        CastAheadDB.iconSize = nil
+        click(f.iconSize.plus)
+        check(CastAheadDB.iconSize == 27 and f.iconSize.box.value == "27", "panel: + on Icon grows the icons 1 px")
+        typeInto("iconSize", "200")
+        check(CastAheadDB.iconSize == 64 and f.iconSize.box.value == "64", "panel: a typed icon size is clamped to 64")
+        typeInto("iconSize", "abc")
+        check(CastAheadDB.iconSize == 64 and f.iconSize.box.value == "64", "panel: a typed word is not taken")
+
+        CastAheadDB.labelScale = nil
+        click(f.labelScale.plus)
+        check(CastAheadDB.labelScale == 101 and f.labelScale.box.value == "101", "panel: + on Label adds 1%")
+        typeInto("labelScale", "999")
+        check(CastAheadDB.labelScale == 200 and f.labelScale.box.value == "200", "panel: a typed label size stops at 200%")
+        typeInto("timeScale", "10")
+        click(f.timeScale.minus)
+        check(CastAheadDB.timeScale == 50, "panel: Countdown stops at 50%")
+
+        CastAheadDB.offsetX = nil
+        click(f.offsetX.plus)
+        check(CastAheadDB.offsetX == 1 and f.offsetX.box.value == "1", "panel: + on Distance moves the row out 1")
+        click(f.offsetX.minus)
+        check(CastAheadDB.offsetX == 0, "panel: - on Distance comes back to 0")
+        click(f.offsetX.minus)
+        check(CastAheadDB.offsetX == -1 and f.offsetX.box.value == "-1", "panel: - on Distance from 0 goes negative")
+        typeInto("offsetX", "-10")
+        check(CastAheadDB.offsetX == -10 and f.offsetX.box.value == "-10", "panel: a typed distance can be -10")
+        typeInto("offsetX", "-500")
+        check(CastAheadDB.offsetX == -120, "panel: a typed distance stops at -120")
+        typeInto("offsetX", "500")
+        check(CastAheadDB.offsetX == 120, "panel: a typed distance stops at 120")
+
+        CastAheadDB.nudgeX = nil
+        click(f.nudgeX.minus)
+        check(CastAheadDB.nudgeX == -1 and f.nudgeX.box.value == "-1", "panel: - on X moves the row left 1")
+        typeInto("nudgeY", "-500")
+        check(CastAheadDB.nudgeY == -100, "panel: a typed Y stops at -100")
+
+        panel.fixedSpacing.GetChecked = function() return true end
+        click(panel.fixedSpacing)
+        check(CastAheadDB.fixedSpacing == true, "panel: Fixed spacing switches on from the panel")
+        CastAheadDB.iconGap = nil
+        click(f.iconGap.plus)
+        check(CastAheadDB.iconGap == 5 and f.iconGap.box.value == "5", "panel: + on Gap adds 1 px")
+        typeInto("iconGap", "99")
+        check(CastAheadDB.iconGap == 40, "panel: a typed gap stops at 40")
+        typeInto("iconGap", "-3")
+        check(CastAheadDB.iconGap == 0, "panel: a typed gap stops at 0")
+        f.iconSize.box:SetText("40")
+        f.iconSize.box.HasFocus = function() return true end
+        click(f.iconGap.plus)
+        check(f.iconSize.box.value == "40" and f.iconGap.box.value == "1", "panel: a refresh leaves the box being typed in alone, got "
+            .. tostring(f.iconSize.box.value))
+        f.iconSize.box.HasFocus = nil
+        S.Refresh()
+        check(f.iconSize.box.value == "64", "panel: a box without focus follows the stored value")
+
+        CastAheadDB.centerX, CastAheadDB.centerY = 37, 50
+        S.Refresh()
+        check(f.centerX.box.value == "37" and f.centerY.box.value == "-70", "panel: the centre's Y is shown from the screen centre, got "
+            .. tostring(f.centerY.box.value))
+        click(f.centerX.center)
+        check(CastAheadDB.centerX == 0 and f.centerX.box.value == "0", "panel: Center X puts the centre on the vertical axis")
+        click(f.centerY.center)
+        check(CastAheadCore.CENTER_Y + CastAheadDB.centerY == 0 and f.centerY.box.value == "0",
+            "panel: Center Y puts the centre on the horizontal axis")
+        typeInto("centerY", "15")
+        check(CastAheadCore.CENTER_Y + CastAheadDB.centerY == 15, "panel: a typed Y is taken from the screen centre")
+        typeInto("centerX", "1e999")
+        typeInto("centerX", "nan")
+        typeInto("centerX", "-1e999")
+        check(CastAheadDB.centerX == 0 and f.centerX.box.value == "0", "panel: inf and nan are not taken, got "
+            .. tostring(CastAheadDB.centerX))
+        local savedParent = UIParent
+        UIParent = { GetWidth = function() return 1920 end, GetHeight = function() return 1080 end }
+        typeInto("centerX", "99999")
+        typeInto("centerY", "-99999")
+        check(CastAheadDB.centerX == 960 and CastAheadCore.CENTER_Y + CastAheadDB.centerY == -540,
+            "panel: typed centre X and Y stop at the screen edge")
+        UIParent = savedParent
+        f.centerX.box:SetText("12")
+        f.centerX.box.handlers.OnEditFocusLost(f.centerX.box)
+        check(CastAheadDB.centerX == 12, "panel: leaving the box applies the typed value")
+        CastAheadDB.centerScale = nil
+        click(f.centerScale.minus)
+        check(CastAheadDB.centerScale == 79 and f.centerScale.box.value == "79", "panel: - on the centre size takes 1% off the 80% default")
+        CastAheadDB.centerTextScale = nil
+        click(f.centerTextScale.plus)
+        check(CastAheadDB.centerTextScale == 101, "panel: + on the centre text adds 1%")
+
+        local function tick(seconds)
+            local steps = math.floor(seconds / 0.01 + 0.5)
+            for _ = 1, steps do
+                now = now + 0.01
+                panel.handlers.OnUpdate(panel)
+            end
+        end
+        local plus, minus = f.nudgeX.plus, f.nudgeX.minus
+        CastAheadDB.nudgeX = 0
+        down(plus)
+        check(CastAheadDB.nudgeX == 1 and f.nudgeX.box.value == "1", "hold: one step on press")
+        tick(0.38)
+        check(CastAheadDB.nudgeX == 1, "hold: no repeat before 0.4 s")
+        tick(0.04)
+        check(CastAheadDB.nudgeX == 2, "hold: the first repeat comes at 0.4 s, got " .. tostring(CastAheadDB.nudgeX))
+        local at = CastAheadDB.nudgeX
+        tick(0.5)
+        local early = CastAheadDB.nudgeX - at
+        tick(2)
+        at = CastAheadDB.nudgeX
+        tick(0.5)
+        local late = CastAheadDB.nudgeX - at
+        check(early >= 3 and early <= 5 and late >= 14 and late > 2 * early,
+            "hold: repeats speed up, " .. early .. " steps early and " .. late .. " late in 0.5 s")
+        up(plus)
+        at = CastAheadDB.nudgeX
+        tick(1)
+        check(CastAheadDB.nudgeX == at, "hold: release stops the repeat")
+
+        CastAheadDB.nudgeX = 0
+        down(plus)
+        tick(0.6)
+        plus.handlers.OnLeave(plus)
+        at = CastAheadDB.nudgeX
+        tick(1)
+        check(at > 1 and CastAheadDB.nudgeX == at, "hold: leaving the button stops the repeat")
+
+        CastAheadDB.nudgeX = 98
+        down(plus)
+        tick(1.5)
+        check(CastAheadDB.nudgeX == 100 and f.nudgeX.box.value == "100", "hold: a held button stops changing at the limit")
+        local reapplied, realReapply = 0, CastAheadCore.Reapply
+        CastAheadCore.Reapply = function(...) reapplied = reapplied + 1 return realReapply(...) end
+        tick(1)
+        CastAheadCore.Reapply = realReapply
+        check(reapplied == 0, "hold: a held button at its limit does no more work, " .. reapplied .. " reapplies")
+        up(plus)
+        CastAheadDB.nudgeX = 0
+        down(plus)
+        MouseIsDown = false
+        tick(1)
+        check(CastAheadDB.nudgeX == 1, "hold: the mouse reported up without OnMouseUp, no further steps, got " .. tostring(CastAheadDB.nudgeX))
+        MouseIsDown = true
+        CastAheadDB.nudgeX = -98
+        down(minus)
+        tick(1.5)
+        check(CastAheadDB.nudgeX == -100, "hold: - stops at the lower limit")
+        up(minus)
+
+        CastAheadDB.offsetX = 0
+        down(f.offsetX.minus)
+        tick(1)
+        check(CastAheadDB.offsetX < -2, "hold: Distance repeats below zero, got " .. tostring(CastAheadDB.offsetX))
+        up(f.offsetX.minus)
+
+        CastAheadDB.nudgeX = 0
+        down(plus)
+        S.Leave()
+        S.Enter()
+        tick(1)
+        check(CastAheadDB.nudgeX == 1, "hold: leaving the mode stops the repeat")
+        CastAheadDB.nudgeX = 0
+        down(plus)
+        panel.handlers.OnHide(panel)
+        S.Enter()
+        tick(1)
+        check(CastAheadDB.nudgeX == 1, "hold: hiding the panel stops the repeat")
+        CastAheadDB.nudgeX = 0
+        down(plus)
+        fireAll("PLAYER_REGEN_DISABLED")
+        S.Enter()
+        tick(1)
+        check(CastAheadDB.nudgeX == 1, "hold: combat stops the repeat")
+        local drivers = 0
+        for _, key in ipairs({ "nudgeX", "iconSize", "centerX" }) do
+            if f[key].plus.handlers.OnUpdate or f[key].minus.handlers.OnUpdate then drivers = drivers + 1 end
+        end
+        check(drivers == 0, "hold: the buttons have no OnUpdate of their own, the panel drives them")
+
+        CastAheadDB.plateSize = nil
+        S.Leave()
+        S.Enter()
+        check(panel.guess.shown and panel.guess.value == "Sample size is a guess until a real nameplate is seen.",
+            "panel: the guess line shows while no real plate was measured")
+        CastAheadDB.plateSize = { 150, 20 }
+        fireAll("UI_SCALE_CHANGED")
+        check(not panel.guess.shown, "panel: the guess line hides once a real plate size is known")
+        CastAheadDB.plateSize = nil
+        C_NamePlate.GetNamePlateSize = function() return 140, 30 end
+        S.Leave()
+        S.Enter()
+        check(panel.guess.shown, "panel: the guess line shows on the game's own plate size too")
+        C_NamePlate.GetNamePlateSize = nil
+
+        click(panel.reset)
+        local dialog = StaticPopupDialogs.CASTAHEAD_SETUP_RESET
+        check(popup == "CASTAHEAD_SETUP_RESET" and dialog and dialog.hideOnEscape
+            and dialog.text == "Put every size and position in this panel back to its default? The on/off switches stay as they are.",
+            "panel: Reset asks first")
+        local KEYS = { "anchor", "grow", "offsetX", "nudgeX", "nudgeY", "iconSize", "labelScale", "timeScale",
+                       "iconGap", "fixedSpacing", "strata", "centerX", "centerY", "centerScale", "centerTextScale" }
+        for _, key in ipairs(KEYS) do CastAheadDB[key] = 40 end
+        CastAheadDB.anchor, CastAheadDB.grow, CastAheadDB.fixedSpacing, CastAheadDB.strata = "top", "up", true, "HIGH"
+        CastAheadDB.timeline, CastAheadDB.fullLabels = false, true
+        dialog.OnAccept()
+        local left = {}
+        for _, key in ipairs(KEYS) do if CastAheadDB[key] ~= nil then left[#left + 1] = key end end
+        check(#left == 0, "panel: Reset clears all fifteen keys, left " .. table.concat(left, ","))
+        check(CastAheadDB.timeline == false and CastAheadDB.fullLabels == true and CastAheadDB.centerText == true,
+            "panel: Reset leaves the switches alone")
+        check(f.iconSize.box.value == "26" and f.iconGap.box.value == "4", "panel: Reset refreshes the numbers")
+        check(f.centerY.box.value == "-90" and f.centerScale.box.value == "80", "panel: Reset puts the centre call back at -90 and 80%")
+        CastAheadDB.timeline, CastAheadDB.fullLabels = nil, nil
+
+        check(panel.note.value == "Move it in the game's Edit Mode: Esc > Edit Mode.",
+            "panel: the timeline box carries one permanent Edit Mode hint")
+
+        click(panel.done)
+        check(not S.Active(), "panel: Done leaves the mode")
+        panel.SetHeight = nil
+        StaticPopup_Show = realPopup
+    end
+
+    do
+        reset()
+        CastAheadDB = { centerText = true }
+        SlashCmdList.CASTAHEAD("setup")
+        check(S.Active(), "/ca setup enters the setup mode")
+        S.Leave()
+    end
+
+    reset()
+    panel.RegisterEvent, panel.UnregisterEvent = nil, nil
+    W.Frame, W.Current, W.Show = savedFrame, savedCurrent, savedShow
+    CastAheadDB, InCombatLockdown = savedDB, savedLock
+end)();
+
+(function()
+    local S = CastAheadSetup
+    local W = CastAheadWindow
+    local saved = { CastAheadDB, InCombatLockdown, UIParent, W.Frame, W.Current, W.Show, C_NamePlate.GetNamePlateForUnit }
+    reset()
+    CastAheadDB = { centerText = true }
+    InCombatLockdown = function() return false end
+    W.Frame, W.Current, W.Show = function() return nil end, function() return nil end, function() end
+    UIParent = { GetCenter = function() return 500, 400 end, GetEffectiveScale = function() return 1 end }
+    local panel = S.panel
+    local registered = {}
+    panel.RegisterEvent = function(_, e) registered[e] = true end
+    panel.UnregisterEvent = function(_, e) registered[e] = nil end
+    local function fireAll(event, ...)
+        fire(event, ...)
+        if registered[event] then panel.handlers.OnEvent(panel, event, ...) end
+    end
+    local plates = {}
+    local function addPlate(u, x, y, scale)
+        local p = { unit = u, ux = x, uy = y, scale = scale or 1, up = true }
+        p.IsShown = function() return p.up end
+        p.GetCenter = function() return p.ux / p.scale, p.uy / p.scale end
+        p.GetWidth = function() return 100 end
+        p.GetHeight = function() return 10 end
+        p.GetEffectiveScale = function() return p.scale end
+        plates[u], hostile[u] = p, true
+        return p
+    end
+    local function removePlate(u)
+        plates[u], hostile[u] = nil, nil
+        fireAll("NAME_PLATE_UNIT_REMOVED", u)
+    end
+    C_NamePlate.GetNamePlateForUnit = function(u) return plates[u] end
+    local function barsOn(frame)
+        local n = 0
+        for i = 1, #allFrames do
+            local f = allFrames[i]
+            if f.shown and IsBar(f) and f._plate == frame then n = n + 1 end
+        end
+        return n
+    end
+
+    addPlate("nameplate2", 500, 700)
+    addPlate("nameplate3", 530, 420, 1.5)
+    S.Enter()
+    check(barsOn(plates.nameplate2) == 3 and barsOn(plates.nameplate3) == 3, "plates: every hostile plate in view shows a sample row")
+    check(not S.plate.shown and barsOn(S.plate) == 0, "plates: no sample plate while a hostile plate has a row")
+    removePlate("nameplate2")
+    removePlate("nameplate3")
+    check(S.plate.shown and barsOn(S.plate) == 3, "plates: the sample plate comes back when the last hostile plate goes")
+    check(S.plate.label and S.plate.label.value == "Sample nameplate - stand near enemies or training dummies to see the icons on real ones",
+        "plates: the sample plate says it is a stand-in, got " .. tostring(S.plate.label and S.plate.label.value))
+    addPlate("nameplate4", 600, 300)
+    fireAll("NAME_PLATE_UNIT_ADDED", "nameplate4")
+    check(not S.plate.shown and barsOn(S.plate) == 0 and barsOn(plates.nameplate4) == 3,
+        "plates: the sample plate hides as soon as a hostile plate appears")
+    plates.nameplate4.up = false
+    now = now + 0.5
+    panel.handlers.OnUpdate(panel)
+    check(S.plate.shown and barsOn(S.plate) == 3, "plates: every plate hidden but none removed, the sample plate comes back")
+    check(barsOn(plates.nameplate4) == 0, "plates: a hidden plate keeps no sample bars, got " .. barsOn(plates.nameplate4))
+
+    local realPrint, printed = print, {}
+    print = function(text) printed[#printed + 1] = text end
+    CastAheadCore.Debug()
+    print = realPrint
+    local rowLine, barLines = false, 0
+    for _, line in ipairs(printed) do
+        if line:find("setup: sample plate row shown", 1, true) then rowLine = true end
+        if line:find("setup bar %d: shown=true size=%d+ icon=%d+") and line:find("point=", 1, true) then barLines = barLines + 1 end
+    end
+    check(rowLine and barLines == 3, "debug: the setup section lists the sample plate's row and its three bars, got "
+        .. tostring(rowLine) .. "/" .. barLines)
+
+    plates.nameplate4.up = true
+    now = now + 0.5
+    panel.handlers.OnUpdate(panel)
+    check(not S.plate.shown and barsOn(S.plate) == 0, "plates: a plate shown again hides the sample plate")
+    check(barsOn(plates.nameplate4) == 3, "plates: a plate shown again gets its sample bars back, got " .. barsOn(plates.nameplate4))
+
+    S.Leave()
+    check(not panel.shown and not S.plate.shown, "setup: the sample plate goes with the mode")
+    S.Enter()
+    panel.handlers.OnKeyDown(panel, "ESCAPE")
+    check(not S.Active(), "setup: Esc leaves the mode")
+    S.Enter()
+    fireAll("PLAYER_REGEN_DISABLED")
+    check(not S.Active(), "setup: combat leaves the mode")
+
+    removePlate("nameplate4")
+    panel.RegisterEvent, panel.UnregisterEvent = nil, nil
+    CastAheadDB, InCombatLockdown, UIParent, W.Frame, W.Current, W.Show, C_NamePlate.GetNamePlateForUnit = unpack(saved, 1, 7)
+end)()
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

@@ -3,7 +3,7 @@ CastAheadOptions = {}
 CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Development", "Report" }
 local panels = {}
 local T = CastAheadWindow.THEME
-local FLAT = { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 }
+local FLAT = CastAheadWindow.FLAT
 local COL_W, COL_GAP, COL_X = 250, 8, 8
 local SLIDER_W = COL_W - 40
 
@@ -47,7 +47,7 @@ end
 local BuildGeneral, BuildSounds, BuildDefensives, BuildDevelopment, BuildReport
 -- Widgets are painted once, when a panel is first built, but storage can
 -- change behind their back: the /ca anchor|grow|offset|center slash commands
--- and the Move button all write it. Every widget that displays stored state
+-- and the setup mode all write it. Every widget that displays stored state
 -- registers a closure here that re-reads it; showing a panel runs the lot.
 local refreshers = {}
 
@@ -100,8 +100,18 @@ local function BuildSlider(panel, spec)
     return slider, label
 end
 
+local function Refresh()
+    for _, refresh in ipairs(refreshers) do refresh() end
+end
+CastAheadOptions.Refresh = Refresh
+
 local function Redraw()
     if CastAheadCore and CastAheadCore.Reapply then CastAheadCore.Reapply() end
+end
+
+local function OutputChanged()
+    Redraw()
+    if CastAheadSetup and CastAheadSetup.OutputsChanged then CastAheadSetup.OutputsChanged() end
 end
 
 local function SaveRefresh()
@@ -136,7 +146,7 @@ local SWITCHES = {
     voice = { label = "Voice",
         tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"interrupt\"." },
     fixedSpacing = { label = "Fixed spacing", defaultOff = true,
-        tip = "Space the icons evenly: each step is the icon width plus the Gap slider, however long the words under the icons are. Every row looks the same; two long words side by side may overlap." },
+        tip = "Space the icons evenly: each step is the icon width plus the Gap, however long the words under the icons are. Every row looks the same; two long words side by side may overlap." },
     fullLabels = { label = "Full labels", defaultOff = true,
         tip = "Write the long calls out in full under a nameplate icon: TANKBUSTER instead of BUSTER. Unless Fixed spacing is on, longer words push the icons further apart. Off, the longest calls are shortened (BUSTER, DEF, SOON) and the rows stay tight. The cast table and the voice always use the full word." },
     devMode = { label = "Development mode", defaultOff = true,
@@ -173,6 +183,7 @@ end
 CastAheadOptions.SetSwitch = SetSwitch
 
 -- `free` keeps the group out of the column flow, for one the caller places itself.
+-- No `title` leaves the heading to the caller, who puts a switch there.
 local function BuildGroup(panel, title, height, free)
     local box = CreateFrame("Frame", nil, panel, "BackdropTemplate")
     box:SetFrameLevel(panel:GetFrameLevel())
@@ -181,21 +192,25 @@ local function BuildGroup(panel, title, height, free)
     box:SetBackdrop(FLAT)
     box:SetBackdropColor(unpack(T.panel))
     box:SetBackdropBorderColor(unpack(T.border))
-    box.title = box:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    box.title:SetPoint("TOPLEFT", box, "TOPLEFT", 10, -8)
-    box.title:SetTextColor(unpack(T.gold))
-    box.title:SetText(title)
+    if title then
+        box.title = box:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        box.title:SetPoint("TOPLEFT", box, "TOPLEFT", 10, -8)
+        box.title:SetTextColor(unpack(T.gold))
+        box.title:SetText(title)
+    end
     return box
 end
+CastAheadOptions.BuildGroup = BuildGroup
 
 -- One switch, placed against whatever the caller anchors it to.
-local function BuildSwitch(panel, key, point, onClick)
+local function BuildSwitch(panel, key, point, onClick, label)
     local option = SWITCHES[key]
+    label = label or option.label
     local box = CreateFrame("CheckButton", nil, panel, "MinimalCheckboxTemplate")
     box:SetPoint(unpack(point))
     box.text = box:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     box.text:SetPoint("LEFT", box, "RIGHT", 2, 0)
-    box.text:SetText(option.label)
+    box.text:SetText(label)
     box:SetHitRectInsets(0, -(box.text:GetStringWidth() + 6), 0, 0)
     box:SetChecked(SwitchOn(key))
     box:SetScript("OnClick", function(self)
@@ -205,7 +220,7 @@ local function BuildSwitch(panel, key, point, onClick)
     end)
     box:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText(option.label, 1, 1, 1)
+        GameTooltip:SetText(label, 1, 1, 1)
         GameTooltip:AddLine(option.tip, nil, nil, nil, true)
         GameTooltip:Show()
     end)
@@ -213,106 +228,12 @@ local function BuildSwitch(panel, key, point, onClick)
     table.insert(refreshers, function() box:SetChecked(SwitchOn(key)) end)
     return box
 end
+CastAheadOptions.BuildSwitch = BuildSwitch
 
--- Sizes and offsets belong to the group that draws with them, so each group
--- resets its own rather than one button clearing settings across the page.
-local function BuildReset(panel, point, keys, after)
-    local reset = CastAheadWindow.Button(panel, "Reset", 70)
-    reset:SetPoint(unpack(point))
-    reset:SetScript("OnClick", function()
-        for _, key in ipairs(keys) do CastAheadConfig.Set(key, nil) end
-        for _, refresh in ipairs(refreshers) do refresh() end
-        if after then after() end
-    end)
-    return reset
-end
-
-local BUILDERS
-
--- Each page is built once, inside the host the main window hands over for
--- it, and stays there. Moving one panel between hosts on every show left it
--- without a rect after its host had been hidden and shown again.
-local function Build(host, name)
-    local panel = CreateFrame("Frame", nil, host)
-    panel:SetPoint("TOPLEFT", host, "TOPLEFT")
-    panel:SetPoint("TOPRIGHT", host, "TOPRIGHT")
-    panel.groups = {}
-    panel.Relayout = function(self)
-        CastAheadOptions.RelayoutGroups(self)
-        if self:IsVisible() then self:GetParent():SetHeight(self:GetHeight()) end
-    end
-    -- Width comes from the anchors and reads 0 until the next layout, so
-    -- the flow has to run again once the panel has its real size.
-    panel:SetScript("OnSizeChanged", function(self, width)
-        if width > 0 then self:Relayout() end
-    end)
-    panels[name] = panel
-    BUILDERS[name](panel)
-    return panel
-end
-
--- Every stateful widget is repainted first: the slash commands write the same
--- storage from outside, so what was drawn last time may be stale.
-function CastAheadOptions.ShowPanel(host, name)
-    local panel = panels[name] or Build(host, name)
-    for _, refresh in ipairs(refreshers) do refresh() end
-    panel:Relayout()
-end
-
-if StaticPopupDialogs then
-    StaticPopupDialogs.CASTAHEAD_RESET_ALL = {
-        text = "Reset every Cast Ahead setting, list and window position to a new install, then reload the UI? Recorded data stays.",
-        button1 = YES or "Yes",
-        button2 = NO or "No",
-        OnAccept = function()
-            CastAheadConfig.ResetAll()
-            ReloadUI()
-        end,
-        timeout = 0,
-        whileDead = true,
-        hideOnEscape = true,
-        preferredIndex = 3,
-    }
-end
-
--- Groups in reading order: what is announced at all first, then the places
--- it is drawn. Each group carries its own on/off switch, so nothing has to be
--- traced across the page.
-function BuildGeneral(panel)
-    -- What is announced ---------------------------------------------------
-    local what = BuildGroup(panel, "What to call out", 204)
-    local important = BuildSwitch(panel, "importantOnly",
-        { "TOPLEFT", what, "TOPLEFT", 10, -26 })
-    local role = BuildSwitch(panel, "roleFilter",
-        { "TOPLEFT", important, "BOTTOMLEFT", 0, -4 })
-    local timeline = BuildSwitch(panel, "timeline",
-        { "TOPLEFT", role, "BOTTOMLEFT", 0, -4 })
-    BuildSlider(panel, {
-        key = "leadSeconds",
-        default = CastAheadConfig.LEAD_DEFAULT,
-        min = 0, max = CastAheadConfig.LEAD_MAX,
-        low = "off", high = CastAheadConfig.LEAD_MAX .. "s",
-        point = { "TOPLEFT", timeline, "BOTTOMLEFT", 6, -12 },
-        caption = function(value)
-            return value > 0
-                and string.format("Early warning: %ds", value)
-                or "Early warning: off"
-        end,
-    })
-
-    -- Sound ---------------------------------------------------------------
-    local audio = BuildGroup(panel, "Sound", 100)
-    local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 }, RedrawAndSaves)
-    BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 }, RedrawAndSaves)
-
-    -- Where the icons go --------------------------------------------------
-    local plates = BuildGroup(panel, "Nameplate icons", 417)
-    local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 })
-    BuildSwitch(panel, "fullLabels", { "TOPLEFT", platesOn, "BOTTOMLEFT", 0, -4 })
-
+local function BuildPlacement(panel, point)
     local anchorLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    anchorLabel:SetPoint("TOPLEFT", plates, "TOPLEFT", 16, -96)
-    anchorLabel:SetText("Position around the plate")
+    anchorLabel:SetPoint(unpack(point))
+    anchorLabel:SetText("Side")
 
     local square = CreateFrame("Frame", nil, panel, "BackdropTemplate")
     square:SetSize(58, 58)
@@ -360,88 +281,14 @@ function BuildGeneral(panel)
         end
     end)
     table.insert(refreshers, function() growDropdown:GenerateMenu() end)
+    return square, growDropdown
+end
+CastAheadOptions.BuildPlacement = BuildPlacement
 
-    local offsetSlider = BuildSlider(panel, {
-        key = "offsetX",
-        default = 0, min = 0, max = 120, step = 2,
-        point = { "TOPLEFT", square, "BOTTOMLEFT", -4, -16 },
-        caption = function(value)
-            return string.format("Distance from the plate: %d px", value)
-        end,
-        after = Redraw,
-    })
-
-    local nudgeXSlider = BuildSlider(panel, {
-        key = "nudgeX",
-        default = 0,
-        min = -CastAheadConfig.NUDGE_MAX, max = CastAheadConfig.NUDGE_MAX, step = 1,
-        point = { "TOPLEFT", offsetSlider, "BOTTOMLEFT", -6, -18 },
-        caption = function(value) return string.format("Nudge sideways: %+d px", value) end,
-        after = Redraw,
-    })
-
-    local nudgeYSlider = BuildSlider(panel, {
-        key = "nudgeY",
-        default = 0,
-        min = -CastAheadConfig.NUDGE_MAX, max = CastAheadConfig.NUDGE_MAX, step = 1,
-        point = { "TOPLEFT", nudgeXSlider, "BOTTOMLEFT", -6, -18 },
-        caption = function(value) return string.format("Nudge up or down: %+d px", value) end,
-        after = Redraw,
-    })
-
-    BuildReset(panel, { "TOPLEFT", nudgeYSlider, "BOTTOMLEFT", -6, -22 },
-        { "anchor", "grow", "offsetX", "nudgeX", "nudgeY" }, Redraw)
-
-    -- How big they are ----------------------------------------------------
-    -- Everything drawn on a nameplate icon in one place: the icon sets the
-    -- size and the two texts on it are a share of that, so changing the icon
-    -- keeps them in proportion.
-    local sizes = BuildGroup(panel, "Icon size", 413)
-
-    local iconSlider = BuildSlider(panel, {
-        key = "iconSize",
-        default = CastAheadConfig.ICON_DEFAULT,
-        min = CastAheadConfig.ICON_MIN, max = CastAheadConfig.ICON_MAX, step = 2,
-        point = { "TOPLEFT", sizes, "TOPLEFT", 16, -26 },
-        caption = function(value) return string.format("Icon: %d px", value) end,
-        after = Redraw,
-    })
-
-    local labelSlider = BuildSlider(panel, {
-        key = "labelScale",
-        default = CastAheadConfig.LABEL_DEFAULT,
-        min = CastAheadConfig.LABEL_MIN, max = CastAheadConfig.LABEL_MAX, step = 5,
-        low = CastAheadConfig.LABEL_MIN .. "%", high = CastAheadConfig.LABEL_MAX .. "%",
-        point = { "TOPLEFT", iconSlider, "BOTTOMLEFT", -6, -18 },
-        caption = function(value) return string.format("Label: %d%% of the icon", value) end,
-        after = Redraw,
-    })
-
-    local timeSlider = BuildSlider(panel, {
-        key = "timeScale",
-        default = CastAheadConfig.TIME_DEFAULT,
-        min = CastAheadConfig.TIME_MIN, max = CastAheadConfig.TIME_MAX, step = 5,
-        low = CastAheadConfig.TIME_MIN .. "%", high = CastAheadConfig.TIME_MAX .. "%",
-        point = { "TOPLEFT", labelSlider, "BOTTOMLEFT", -6, -18 },
-        caption = function(value) return string.format("Countdown: %d%% of the icon", value) end,
-        after = Redraw,
-    })
-
-    local fixedSpacing = BuildSwitch(panel, "fixedSpacing", { "TOPLEFT", timeSlider, "BOTTOMLEFT", -12, -18 })
-    local gapSlider = BuildSlider(panel, {
-        key = "iconGap",
-        default = CastAheadConfig.GAP_DEFAULT, min = 0, max = CastAheadConfig.GAP_MAX, step = 1,
-        point = { "TOPLEFT", fixedSpacing, "BOTTOMLEFT", 6, -4 },
-        caption = function(value) return string.format("Gap: %d px", value) end,
-        after = Redraw,
-    })
-
-    local strataLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    strataLabel:SetPoint("TOPLEFT", gapSlider, "BOTTOMLEFT", -6, -18)
-    strataLabel:SetText("Layer (frame strata)")
+local function BuildStrata(panel, point)
     local strataDropdown = CreateFrame("DropdownButton", nil, panel, "WowStyle1DropdownTemplate")
-    strataDropdown:SetSize(170, 24)
-    strataDropdown:SetPoint("TOPLEFT", strataLabel, "BOTTOMLEFT", 0, -4)
+    strataDropdown:SetSize(150, 24)
+    strataDropdown:SetPoint(unpack(point))
     strataDropdown:SetupMenu(function(_, root)
         for _, name in ipairs(CastAheadConfig.STRATA) do
             root:CreateRadio(name,
@@ -460,47 +307,117 @@ function BuildGeneral(panel)
         GameTooltip:Show()
     end)
     strataDropdown:SetScript("OnLeave", GameTooltip_Hide)
+    return strataDropdown
+end
+CastAheadOptions.BuildStrata = BuildStrata
 
-    BuildReset(panel, { "TOPLEFT", strataDropdown, "BOTTOMLEFT", -6, -14 },
-        { "iconSize", "labelScale", "timeScale", "iconGap", "fixedSpacing", "strata" }, Redraw)
+local BUILDERS
 
-    -- Centre call ---------------------------------------------------------
-    local centre = BuildGroup(panel, "Centre call", 229)
-    BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 })
-
-    local centerScale = function()
-        if CastAheadCore and CastAheadCore.ResizeCenter then CastAheadCore.ResizeCenter() end
+-- Each page is built once, inside the host the main window hands over for
+-- it, and stays there. Moving one panel between hosts on every show left it
+-- without a rect after its host had been hidden and shown again.
+local function Build(host, name)
+    local panel = CreateFrame("Frame", nil, host)
+    panel:SetPoint("TOPLEFT", host, "TOPLEFT")
+    panel:SetPoint("TOPRIGHT", host, "TOPRIGHT")
+    panel.groups = {}
+    panel.Relayout = function(self)
+        CastAheadOptions.RelayoutGroups(self)
+        if self:IsVisible() then self:GetParent():SetHeight(self:GetHeight()) end
     end
-    local centerSlider = BuildSlider(panel, {
-        key = "centerScale",
-        default = CastAheadConfig.CENTER_DEFAULT,
-        min = CastAheadConfig.CENTER_MIN, max = CastAheadConfig.CENTER_MAX, step = 5,
-        low = CastAheadConfig.CENTER_MIN .. "%", high = CastAheadConfig.CENTER_MAX .. "%",
-        point = { "TOPLEFT", centre, "TOPLEFT", 16, -63 },
-        caption = function(value) return string.format("Size: %d%%", value) end,
-        after = centerScale,
-    })
-
-    local centerTextSlider = BuildSlider(panel, {
-        key = "centerTextScale",
-        default = CastAheadConfig.CENTER_TEXT_DEFAULT,
-        min = CastAheadConfig.CENTER_TEXT_MIN, max = CastAheadConfig.CENTER_TEXT_MAX, step = 5,
-        low = CastAheadConfig.CENTER_TEXT_MIN .. "%", high = CastAheadConfig.CENTER_TEXT_MAX .. "%",
-        point = { "TOPLEFT", centerSlider, "BOTTOMLEFT", -6, -18 },
-        caption = function(value) return string.format("Text: %d%% of the block", value) end,
-        after = centerScale,
-    })
-
-    local move = CastAheadWindow.Button(panel, "Move it on screen", 140)
-    move:SetPoint("TOPLEFT", centerTextSlider, "BOTTOMLEFT", -6, -18)
-    move:SetScript("OnClick", function()
-        if CastAheadCore and CastAheadCore.MoveCenter then CastAheadCore.MoveCenter() end
+    -- Width comes from the anchors and reads 0 until the next layout, so
+    -- the flow has to run again once the panel has its real size.
+    panel:SetScript("OnSizeChanged", function(self, width)
+        if width > 0 then self:Relayout() end
     end)
+    panels[name] = panel
+    BUILDERS[name](panel)
+    return panel
+end
 
-    BuildReset(panel, { "LEFT", move, "RIGHT", 6, 0 },
-        { "centerScale", "centerTextScale", "centerX", "centerY" }, centerScale)
+-- Every stateful widget is repainted first: the slash commands write the same
+-- storage from outside, so what was drawn last time may be stale.
+function CastAheadOptions.ShowPanel(host, name)
+    local panel = panels[name] or Build(host, name)
+    Refresh()
+    panel:Relayout()
+end
 
-    -- Features ------------------------------------------------------------
+if StaticPopupDialogs then
+    StaticPopupDialogs.CASTAHEAD_RESET_ALL = {
+        text = "Reset every Cast Ahead setting, list and window position to a new install, then reload the UI? Recorded data stays.",
+        button1 = YES or "Yes",
+        button2 = NO or "No",
+        OnAccept = function()
+            CastAheadConfig.ResetAll()
+            ReloadUI()
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+        preferredIndex = 3,
+    }
+end
+
+-- Groups in reading order: what is announced at all first, then the places
+-- it is drawn. Each group carries its own on/off switch, so nothing has to be
+-- traced across the page.
+function BuildGeneral(panel)
+    local setup = CastAheadWindow.Button(panel, "Size and position", 160, true)
+    setup:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -8)
+    setup:SetMotionScriptsWhileDisabled(true)
+    setup:SetScript("OnClick", function() CastAheadSetup.Enter() end)
+    local function PaintSetup(_, event)
+        local fighting = event == "PLAYER_REGEN_DISABLED" or (event ~= "PLAYER_REGEN_ENABLED" and InCombatLockdown())
+        setup:SetEnabled(not fighting)
+    end
+    setup:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Size and position", 1, 1, 1)
+        GameTooltip:AddLine("Set the size and position of the nameplate icons and the centre call, with a live preview.",
+            nil, nil, nil, true)
+        if InCombatLockdown() then GameTooltip:AddLine("Not available in combat.", 1, 1, 1) end
+        GameTooltip:Show()
+    end)
+    setup:SetScript("OnLeave", GameTooltip_Hide)
+    setup:RegisterEvent("PLAYER_REGEN_DISABLED")
+    setup:RegisterEvent("PLAYER_REGEN_ENABLED")
+    setup:SetScript("OnEvent", PaintSetup)
+    PaintSetup()
+    table.insert(refreshers, PaintSetup)
+    panel.flowTop = 40
+
+    local what = BuildGroup(panel, "What to call out", 204)
+    local important = BuildSwitch(panel, "importantOnly",
+        { "TOPLEFT", what, "TOPLEFT", 10, -26 })
+    local role = BuildSwitch(panel, "roleFilter",
+        { "TOPLEFT", important, "BOTTOMLEFT", 0, -4 })
+    local timeline = BuildSwitch(panel, "timeline",
+        { "TOPLEFT", role, "BOTTOMLEFT", 0, -4 }, OutputChanged)
+    BuildSlider(panel, {
+        key = "leadSeconds",
+        default = CastAheadConfig.LEAD_DEFAULT,
+        min = 0, max = CastAheadConfig.LEAD_MAX,
+        low = "off", high = CastAheadConfig.LEAD_MAX .. "s",
+        point = { "TOPLEFT", timeline, "BOTTOMLEFT", 6, -12 },
+        caption = function(value)
+            return value > 0
+                and string.format("Early warning: %ds", value)
+                or "Early warning: off"
+        end,
+    })
+
+    local audio = BuildGroup(panel, "Sound", 100)
+    local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 }, RedrawAndSaves)
+    BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 }, RedrawAndSaves)
+
+    local plates = BuildGroup(panel, "Nameplate icons", 100)
+    local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 }, OutputChanged)
+    BuildSwitch(panel, "fullLabels", { "TOPLEFT", platesOn, "BOTTOMLEFT", 0, -4 })
+
+    local centre = BuildGroup(panel, "Centre call", 70)
+    BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 }, OutputChanged)
+
     local features = BuildGroup(panel, "Features", 166)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", features, "TOPLEFT", 10, -26 }, function()
         SaveRefresh()
@@ -630,10 +547,6 @@ end
 
 local function ListHeight(rows) return -LIST_TOP + rows * LIST_ROW_H + LIST_FOOT end
 
-local function RefreshAll()
-    for _, refresh in ipairs(refreshers) do refresh() end
-end
-
 local listRefreshers = {}
 function CastAheadOptions.RefreshDefensives()
     for _, refresh in ipairs(listRefreshers) do refresh() end
@@ -660,7 +573,7 @@ local function BuildButtonList(panel, store, key, title, emptyText)
             if j ~= i then list[#list + 1] = e end
         end
         store.SetList(key, list)
-        RefreshAll()
+        Refresh()
     end
 
     local function RowMenu(owner, i)
@@ -704,7 +617,7 @@ local function BuildButtonList(panel, store, key, title, emptyText)
             end
             b:SetScript("OnClick", function()
                 store.Shift(key, i, step)
-                RefreshAll()
+                Refresh()
             end)
             b:SetScript("OnEnter", function(self)
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -741,7 +654,7 @@ local function BuildButtonList(panel, store, key, title, emptyText)
                 local copy = { unpack(store.EditList(key)) }
                 copy[#copy + 1] = type(e) == "table" and { use = e.use } or e
                 store.SetList(key, copy)
-                RefreshAll()
+                Refresh()
             end)
         end
     end)
@@ -762,7 +675,7 @@ local function BuildButtonList(panel, store, key, title, emptyText)
         store.SetList(key, copy)
         box:SetText("")
         box:ClearFocus()
-        RefreshAll()
+        Refresh()
     end
     add:SetScript("OnClick", Submit)
     box:SetScript("OnEnterPressed", Submit)
@@ -887,7 +800,7 @@ function BuildDefensives(panel)
 
     local store = CastAheadSaves.Store
     local list = BuildButtonList(panel, store, "def", "Defensive", "Empty - no defensive call")
-    CastAheadWindow.SpecBar(list, 0, -SPEC_BAR_PAD, RefreshAll, function()
+    CastAheadWindow.SpecBar(list, 0, -SPEC_BAR_PAD, Refresh, function()
         return (panel:GetRight() or 0) - (list:GetLeft() or 0)
     end)
     panel:HookScript("OnSizeChanged", CastAheadWindow.PaintSpecBars)

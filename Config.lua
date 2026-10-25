@@ -33,7 +33,8 @@ C.GAP_DEFAULT, C.GAP_MAX = 4, 40
 -- are for a Plater profile that lifts plates into UIParent (#19).
 C.STRATA = { "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP" }
 C.STRATA_DEFAULT = "BACKGROUND"
-C.CENTER_DEFAULT, C.CENTER_MIN, C.CENTER_MAX = 100, 50, 250
+C.CENTER_DEFAULT, C.CENTER_MIN, C.CENTER_MAX = 80, 50, 250
+C.CENTER_Y_DEFAULT = 30
 -- The advice under an icon is sized from the icon, so one setting keeps them
 -- in proportion. This is the adjustment on top of that, in percent, for a
 -- player who wants tighter rows or larger words than the icon implies.
@@ -99,6 +100,10 @@ end
 -- Percent, so the slider reads the way a player expects.
 function C.CenterScale()
     return C.Number("centerScale", C.CENTER_DEFAULT, C.CENTER_MIN, C.CENTER_MAX) / 100
+end
+
+function C.CenterY()
+    return tonumber(C.Get("centerY")) or C.CENTER_Y_DEFAULT
 end
 
 function C.LabelScale()

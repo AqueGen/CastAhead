@@ -167,6 +167,10 @@ SlashCmdList.CASTAHEAD = function(msg)
         if CastAheadCore and CastAheadCore.MoveCenter then CastAheadCore.MoveCenter() end
         return
     end
+    if word == "setup" then
+        if not CastAheadSetup.Enter() then print("|cff33ff99Cast Ahead|r Not available in combat.") end
+        return
+    end
     if word == "test" then
         if CastAheadCore and CastAheadCore.Test then CastAheadCore.Test(CastAheadWindow.Dungeon()) end
         return
@@ -189,17 +193,15 @@ SlashCmdList.CASTAHEAD = function(msg)
             .. tostring(CastAheadDB and CastAheadDB.offsetX or 0) .. ")")
         return
     end
-    -- /ca center -200: move the centre call up/down (pixels from the
-    -- default spot just below the middle of the screen).
     local centerY = msg:match("^%s*center%s+(-?%d+)")
     if centerY then
         CastAheadDB = CastAheadDB or {}
-        CastAheadDB.centerY = tonumber(centerY)
-        print("|cff33ff99Cast Ahead|r centre call shifted by " .. centerY .. " px")
+        CastAheadDB.centerY = tonumber(centerY) - CastAheadCore.CENTER_Y
+        print("|cff33ff99Cast Ahead|r centre call placed " .. centerY .. " px from the screen centre")
         return
     elseif word == "center" then
         print("|cff33ff99Cast Ahead|r usage: /ca center <pixels>  (current "
-            .. tostring(CastAheadDB and CastAheadDB.centerY or 0) .. ")")
+            .. tostring(CastAheadCore.CENTER_Y + CastAheadConfig.CenterY()) .. " px from the screen centre)")
         return
     end
     local side = msg:match("^%s*anchor%s+(%a+)")

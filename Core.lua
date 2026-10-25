@@ -23,7 +23,7 @@ local BAR_GAP = 6        -- distance from the plate's left edge
 local LABEL_HEIGHT = 11  -- one line of advice under the icon; two are measured
 local BAR_SPACING = 5    -- gap between one row's label and the next icon
 local H_STEP = 68        -- fallback sideways step, before any label is measured
-local LABEL_GAP = 8      -- clear space between one icon's label and the next
+local LABEL_GAP = 2      -- clear space between one icon's label and the next
 local ICON_GAP = 4       -- ... and the floor, when both labels are short
 local DEMO_PER_PLATE = 3 -- calls the test drive puts on each nameplate
 local DEMO_PLATES = 4    -- ... and how many nameplates it uses at all
@@ -842,18 +842,20 @@ local function SetApprox(bar, on)
     PlaceTime(bar)
 end
 
+local function SetBarStrata(bar, strata)
+    if bar._strata == strata then return end
+    bar._strata = strata
+    -- Unfix, set, fix again: a fixed strata also ignores our own SetFrameStrata.
+    if bar.SetFixedFrameStrata then bar:SetFixedFrameStrata(false) end
+    bar:SetFrameStrata(strata)
+    if bar.SetFixedFrameStrata then bar:SetFixedFrameStrata(true) end
+end
+
 local function ApplyBarSize(bar)
     local size = CastAheadConfig.IconSize()
     local labelScale = CastAheadConfig.LabelScale()
     local timeScale = CastAheadConfig.TimeScale()
-    local strata = CastAheadConfig.Strata()
-    if bar._strata ~= strata then
-        bar._strata = strata
-        -- Unfix, set, fix again: a fixed strata also ignores our own SetFrameStrata.
-        if bar.SetFixedFrameStrata then bar:SetFixedFrameStrata(false) end
-        bar:SetFrameStrata(strata)
-        if bar.SetFixedFrameStrata then bar:SetFixedFrameStrata(true) end
-    end
+    SetBarStrata(bar, CastAheadConfig.Strata())
     if bar._size == size and bar._labelScale == labelScale
         and bar._timeScale == timeScale then
         return size
@@ -1001,15 +1003,7 @@ end
 -- Filled by RefreshBar on every repaint, so the spread costs no garbage.
 local spread = {}
 
-local function AnchorBar(unit, bar, index)
-    local plate = C_NamePlate.GetNamePlateForUnit(unit)
-    -- The bar is a child of UIParent, not of the plate, so it does not inherit
-    -- the plate's visibility: a plate that is gone or hidden would otherwise
-    -- leave its icon floating at the last position it had.
-    if not plate or (plate.IsShown and not plate:IsShown()) then
-        bar:Hide()
-        return false
-    end
+local function AnchorToFrame(plate, bar, index)
     -- Bars stay children of UIParent rather than the plate: plates are recycled
     -- and carry their own alpha, scale and frame level, all of which would drag
     -- the bar around with them.
@@ -1064,6 +1058,34 @@ local function AnchorBar(unit, bar, index)
         end
         bar:SetPoint(spec.point, plate, spec.relative, x, y)
     end
+end
+
+local function MeasurePlate(plate)
+    local w, h, scale = plate:GetWidth(), plate:GetHeight(), plate:GetEffectiveScale()
+    if issecretvalue and (issecretvalue(w) or issecretvalue(h) or issecretvalue(scale)) then return end
+    local ratio = scale / UIParent:GetEffectiveScale()
+    return math.floor(w * ratio * 10 + 0.5) / 10, math.floor(h * ratio * 10 + 0.5) / 10
+end
+
+local function RememberPlateSize(plate)
+    if not (plate and plate.GetWidth and plate.GetEffectiveScale and UIParent and CastAheadDB) then return end
+    local ok, w, h = pcall(MeasurePlate, plate)
+    if not (ok and w and w > 0 and h > 0) then return end
+    local size = CastAheadDB.plateSize
+    if not size or size[1] ~= w or size[2] ~= h then CastAheadDB.plateSize = { w, h } end
+end
+
+local function AnchorBar(unit, bar, index)
+    local plate = C_NamePlate.GetNamePlateForUnit(unit)
+    -- The bar is a child of UIParent, not of the plate, so it does not inherit
+    -- the plate's visibility: a plate that is gone or hidden would otherwise
+    -- leave its icon floating at the last position it had.
+    if not plate or (plate.IsShown and not plate:IsShown())
+        or (CastAheadSetup and CastAheadSetup.Active()) then
+        bar:Hide()
+        return false
+    end
+    AnchorToFrame(plate, bar, index)
     return true
 end
 
@@ -2307,6 +2329,9 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         end
         return
     end
+    if event == "NAME_PLATE_UNIT_ADDED" and type(unit) == "string" and IsHostileNameplate(unit) then
+        RememberPlateSize(C_NamePlate.GetNamePlateForUnit(unit))
+    end
     if event == "NAME_PLATE_UNIT_REMOVED" then
         DropUnit(unit, "gone")
         return
@@ -2407,15 +2432,17 @@ end)
 local CENTER_Y = -120
 local center
 local centerUnlocked = false   -- /ca move: the block is being dragged
+local centerSample = false
 local demo          -- the test drive's state, defined with CastAheadCore.Test
 
 -- Where the block sits: offsets from the screen centre, set by dragging it
 -- (/ca move) or by /ca center <px>.
 local function CenterOffset()
     return (CastAheadDB and tonumber(CastAheadDB.centerX) or 0),
-        CENTER_Y + (CastAheadDB and tonumber(CastAheadDB.centerY) or 0)
+        CENTER_Y + CastAheadConfig.CenterY()
 end
 
+local CENTER_STRATA = "HIGH"
 local CENTER_LINES = 3      -- a pack can cast three things at once; more is noise
 local CENTER_LINE_H = 44
 
@@ -2423,7 +2450,7 @@ local function CenterFrame()
     if center then return center end
     center = CreateFrame("Frame", nil, UIParent)
     center:SetSize(360, CENTER_LINE_H * CENTER_LINES)
-    center:SetFrameStrata("HIGH")
+    center:SetFrameStrata(CENTER_STRATA)
     center:EnableMouse(false)
     center.lines = {}
     for i = 1, CENTER_LINES do
@@ -2463,30 +2490,35 @@ local function CenterFrame()
     center.grip:SetAllPoints(center.lines[1])
     center.grip:SetColorTexture(0, 0, 0, 0.5)
     center.grip:Hide()
+    center.fill = center:CreateTexture(nil, "BACKGROUND")
+    center.fill:SetAllPoints(center)
+    center.fill:SetColorTexture(0, 0, 0, 0.35)
+    center.fill:Hide()
     center:SetMovable(true)
     center:RegisterForDrag("LeftButton")
     center:SetScript("OnDragStart", function(self)
-        if centerUnlocked then self:StartMoving() end
-    end)
-    center:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        -- Back to offsets from the screen centre, so the saved position
-        -- survives resolution and scale changes the way an anchor would.
-        local cx, cy = self:GetCenter()
-        local ux, uy = UIParent:GetCenter()
-        if cx and ux then
-            CastAheadDB = CastAheadDB or {}
-            -- GetCenter reports in the frame's own scale, UIParent's in its
-            -- own, so the block's side is converted before the subtraction.
-            local scale = self:GetScale()
-            CastAheadDB.centerX = math.floor(cx * scale - ux + 0.5)
-            CastAheadDB.centerY = math.floor(cy * scale - uy
-                + (self:GetHeight() / 2 - CENTER_LINE_H / 2) * scale - CENTER_Y + 0.5)
-            self._x = nil          -- force the anchor to be re-applied
+        if centerUnlocked then
+            self.dragging = true
+            self:StartMoving()
         end
     end)
+    center:SetScript("OnDragStop", function() CastAheadCore.DropCenter() end)
     center:Hide()
     return center
+end
+
+local function CenterDragOffset()
+    if not (center and center.dragging) then return end
+    -- Back to offsets from the screen centre, so the saved position
+    -- survives resolution and scale changes the way an anchor would.
+    local cx, cy = center:GetCenter()
+    local ux, uy = UIParent:GetCenter()
+    if not (cx and ux) then return end
+    -- GetCenter reports in the frame's own scale, UIParent's in its
+    -- own, so the block's side is converted before the subtraction.
+    local scale = center:GetScale()
+    return math.floor(cx * scale - ux + 0.5),
+        math.floor(cy * scale - uy + (center:GetHeight() / 2 - CENTER_LINE_H / 2) * scale + 0.5)
 end
 
 local function PlaceCenter(f)
@@ -2515,9 +2547,22 @@ local function PlaceCenter(f)
     end
 end
 
--- /ca move (or the window's Move button): show the block with a sample
+local function DropCenter()
+    if not (center and center.dragging) then return end
+    center:StopMovingOrSizing()
+    local x, y = CenterDragOffset()
+    center.dragging = nil
+    if not x then return end
+    CastAheadDB = CastAheadDB or {}
+    CastAheadDB.centerX, CastAheadDB.centerY = x, y - CENTER_Y
+    center._x = nil          -- force the anchor to be re-applied
+    PlaceCenter(center)
+end
+
+-- /ca move: show the block with a sample
 -- line and let it be dragged; call again to lock it in place.
-local function ToggleMoveCenter()
+local function ToggleMoveCenter(quiet)
+    if not centerUnlocked and CastAheadSetup and CastAheadSetup.Active() then CastAheadSetup.Leave() end
     local f = CenterFrame()
     centerUnlocked = not centerUnlocked
     f:EnableMouse(centerUnlocked)
@@ -2537,7 +2582,7 @@ local function ToggleMoveCenter()
     else
         f.grip:Hide()
         f:Hide()
-        print("|cff33ff99Cast Ahead|r call block locked")
+        if not quiet then print("|cff33ff99Cast Ahead|r call block locked") end
     end
 end
 
@@ -2600,15 +2645,7 @@ local function HideCenter()
     center:Hide()
 end
 
-local function UpdateCenter(now)
-    if centerUnlocked then return end     -- being dragged: leave the sample alone
-    local picks = CastAheadConfig.CenterText() and CenterPick(now) or nil
-    if not picks or #picks == 0 then
-        HideCenter()
-        return
-    end
-    local f = CenterFrame()
-    PlaceCenter(f)
+local function PaintCenter(f, picks, now)
     for i = 1, CENTER_LINES do
         local line, pick = f.lines[i], picks[i]
         if pick then
@@ -2644,6 +2681,59 @@ local function UpdateCenter(now)
         end
     end
     f:Show()
+end
+
+local function UpdateCenter(now)
+    if centerUnlocked or centerSample then return end     -- being dragged: leave the sample alone
+    local picks = CastAheadConfig.CenterText() and CenterPick(now) or nil
+    if not picks or #picks == 0 then
+        HideCenter()
+        return
+    end
+    local f = CenterFrame()
+    PlaceCenter(f)
+    PaintCenter(f, picks, now)
+end
+
+local sampleRows = {}
+
+local function SampleDataRow(key)
+    local hit = sampleRows[key]
+    if hit ~= nil then return hit or nil end
+    for _, rows in pairs(CastAheadData) do
+        for _, row in ipairs(rows) do
+            local advice = CastAheadMatch.Advice(row)
+            if advice and advice.key == key then
+                sampleRows[key] = row
+                return row
+            end
+        end
+    end
+    sampleRows[key] = false
+end
+
+local function ShowCenterSample(on)
+    if centerUnlocked then ToggleMoveCenter(true) end
+    centerSample = (on and CastAheadConfig.CenterText()) and true or false
+    if not centerSample then
+        if center then center.fill:Hide() end
+        HideCenter()
+        return false
+    end
+    local f = CenterFrame()
+    f.fill:Show()
+    PlaceCenter(f)
+    local A = CastAheadMatch.ADVICE
+    local defensive = CastAheadSaves and CastAheadSaves.Icons(A.DEFENSIVE, nil)
+    local kick = SampleDataRow("KICK")
+    local now = GetTime()
+    PaintCenter(f, {
+        { advice = A.KICK, endAt = now + 2.4, icons = { kick and SpellIcon(kick.spell) or FALLBACK_ICON } },
+        { advice = A.DEFENSIVE, endAt = now + 4.0,
+          icons = defensive and #defensive > 0 and defensive or { FALLBACK_ICON } },
+        { advice = A.BURST, endAt = now + 6.0, icons = { CastAheadBurst and CastAheadBurst.ICON or FALLBACK_ICON } },
+    }, now)
+    return true
 end
 
 frame:SetScript("OnUpdate", function()
@@ -2779,6 +2869,9 @@ end
 -- the dungeon table load, are plates being tracked, what level did we read, and
 -- how far identification got on each one.
 CastAheadCore = {}
+CastAheadCore.CENTER_Y = CENTER_Y
+CastAheadCore.CenterFrame = CenterFrame
+CastAheadCore.DropCenter = DropCenter
 CastAheadCore.Announce = PlayAdviceSound
 CastAheadCore.AdviceFile = AdviceFile
 CastAheadCore.ReapplyData = function() extrasMerged = false; MergeCuration() end
@@ -2814,6 +2907,21 @@ CastAheadCore.Tuning = tuning
 CastAheadCore.SpreadBars = SpreadBars
 CastAheadCore.Population = function() return killed, exhausted end
 CastAheadCore.MoveCenter = ToggleMoveCenter
+CastAheadCore.IsHostileNameplate = IsHostileNameplate
+CastAheadCore.ShowCenterSample = ShowCenterSample
+CastAheadCore.SampleDataRow = SampleDataRow
+CastAheadCore.RememberPlateSize = RememberPlateSize
+
+function CastAheadCore.PlateSize()
+    local size = CastAheadDB and CastAheadDB.plateSize
+    if size then return size[1], size[2] end
+    if C_NamePlate.GetNamePlateSize then
+        local w, h = C_NamePlate.GetNamePlateSize()
+        return w, h, "guess"
+    end
+    return 110, 45, "guess"
+end
+
 
 -- The window's speaker buttons: hear a call exactly as it would play.
 -- Deliberately ignores the sound/voice mute switches - an explicit click
@@ -2924,6 +3032,7 @@ end
 -- in turn, one call at a time on the first hostile plate around: that is for
 -- hearing each cast's sound rather than judging the layout.
 function CastAheadCore.Test(instanceID, list)
+    if CastAheadSetup and CastAheadSetup.Active() then CastAheadSetup.Leave() end
     if demo then StopTest() return end
     local id = instanceID
     if not (id and CastAheadData[id]) then
@@ -3509,6 +3618,7 @@ function CastAheadCore.Debug()
     else
         say("clip: PlaySoundFile missing")
     end
+    if CastAheadSetup and CastAheadSetup.Active() then CastAheadSetup.Debug(say) end
 end
 
 -- Called by the options window when an output toggle changes, so bars and
@@ -3520,7 +3630,37 @@ function CastAheadCore.ResizeCenter()
     if center then PlaceCenter(center) end
 end
 
+CastAheadCore.SAMPLE_ROW = {
+    { key = "KICK", time = 7, approx = true },
+    { key = "DODGE", time = 3 },
+    { key = "TANK", time = 12 },
+}
+CastAheadCore.SampleStates = {}
+
+function CastAheadCore.ShowSampleRow(state, frame)
+    local row = CastAheadCore.SAMPLE_ROW
+    local on = CastAheadConfig.Enabled("nameplates") and (not frame.IsShown or frame:IsShown())
+    for i = 1, #row do
+        local sample = row[i]
+        local bar = GetBar(state, i)
+        PaintBar(bar, { row = SampleDataRow(sample.key) or { prio = sample.key }, approximate = sample.approx }, nil)
+        SetApprox(bar, sample.approx == true)
+        bar.time:SetFormattedText("%d", sample.time)
+        spread[i] = bar
+    end
+    SpreadBars(spread, #row)
+    for i = 1, #row do
+        AnchorToFrame(frame, state.bars[i], i)
+        state.bars[i]:SetShown(on)
+    end
+end
+
+function CastAheadCore.HideSampleRow(state)
+    ReleaseBars(state)
+end
+
 function CastAheadCore.Reapply()
+    wipe(sampleRows)
     local isDisabled = CastAheadUI and CastAheadUI.IsDisabled
     for unit, state in pairs(plates) do
         for key, track in pairs(state.tracks) do
@@ -3549,11 +3689,15 @@ function CastAheadCore.Reapply()
             end
         end
     end
+    for state, frame in pairs(CastAheadCore.SampleStates) do
+        CastAheadCore.ShowSampleRow(state, frame)
+    end
 end
 
 -- /ca hide: drop everything we draw. If an icon survives this, it is not
 -- ours - which is worth knowing before hunting for a bug in this addon.
 function CastAheadCore.HideAll()
+    if CastAheadSetup and CastAheadSetup.Active() then CastAheadSetup.Leave() end
     StopTest(true)
     HideCenter()
     for unit in pairs(plates) do

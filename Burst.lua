@@ -6,6 +6,7 @@ local SAVE_GAP = 2
 local SOON = 5
 local BURST_SHOWN = 5
 local ICON = "Interface\\Icons\\Spell_Nature_Bloodlust"
+B.ICON = ICON
 local entries = {}
 local pending = {}
 
