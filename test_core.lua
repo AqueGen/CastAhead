@@ -18,6 +18,8 @@ end
 local now = 1000
 GetTime = function() return now end
 ResetCursor = function() end
+MouseIsDown = true
+IsMouseButtonDown = function() return MouseIsDown end
 
 local combat, hostile, dead = {}, {}, {}
 UnitAffectingCombat = function(unit) return combat[unit] == true end
@@ -190,6 +192,8 @@ CreateFrame = function(kind, _, parent)
     f.CreateTexture = StubRegion
     f.CreateFontString = function()
         local fs = StubRegion()
+        f.fontStrings = f.fontStrings or {}
+        table.insert(f.fontStrings, fs)
         -- Record into separate fields: Core assigns the font strings to
         -- bar.text / bar.time, so writing there would overwrite them.
         fs.SetText = function(self, text) f.labelValue, self.value = text, text end
@@ -5646,20 +5650,24 @@ end
         local function watch(name, widget)
             widget.SetAlpha = function(_, a) alpha[name] = a end
         end
-        watch("size", panel.fields.iconSize.box)
-        watch("sizeLabel", panel.fields.iconSize.label)
-        watch("plus", panel.fields.iconSize.plus)
-        watch("layer", panel.layer)
-        watch("centre", panel.fields.centerScale.box)
+        watch("size", panel.iconsContent)
+        watch("centre", panel.centreContent)
+        local captions = {}
+        for i = 1, #allFrames do
+            for _, fs in ipairs(allFrames[i].fontStrings or {}) do
+                if fs.value == "Side" or fs.value == "Grow" then captions[fs.value] = allFrames[i] end
+            end
+        end
+        check(captions.Side == panel.iconsContent and captions.Grow == panel.iconsContent,
+            "panel: the Side and Grow captions live in the block that dims")
 
         flip(plateBox, false)
         check(CastAheadDB.nameplates == false and barsOn(onUnit) == 0, "switch: Nameplate icons off hides the sample rows at once")
-        check(alpha.size and alpha.size < 1 and alpha.sizeLabel < 1 and alpha.plus < 1 and alpha.layer < 1
-            and alpha.centre == nil, "switch: only the icons block dims while its switch is off")
+        check(alpha.size and alpha.size < 1 and alpha.centre == nil, "switch: only the icons block dims while its switch is off")
         check(sampleLines() == 3 and liveEvents() - live0 == 3, "switch: the other two outputs stay up")
         check(refreshes > 0, "switch: the panel refreshes General's widgets")
         flip(plateBox, true)
-        check(CastAheadDB.nameplates == nil and barsOn(onUnit) == 3 and alpha.size == 1 and alpha.layer == 1,
+        check(CastAheadDB.nameplates == nil and barsOn(onUnit) == 3 and alpha.size == 1,
             "switch: Nameplate icons on brings the rows and the full look back")
 
         flip(centreBox, false)
@@ -6068,8 +6076,14 @@ end
         local HINT = "Drag the icons or the centre call, or type exact numbers."
         local realPopup, popup = StaticPopup_Show, nil
         StaticPopup_Show = function(name) popup = name end
-        local function down(f) f.handlers.OnMouseDown(f, "LeftButton") end
-        local function up(f) f.handlers.OnMouseUp(f, "LeftButton") end
+        local function down(f)
+            MouseIsDown = true
+            f.handlers.OnMouseDown(f, "LeftButton")
+        end
+        local function up(f)
+            MouseIsDown = false
+            f.handlers.OnMouseUp(f, "LeftButton")
+        end
         local function click(f)
             if f.handlers.OnMouseDown then
                 down(f)
@@ -6104,7 +6118,43 @@ end
             and panel.fixedSpacing.text.value == "Fixed spacing", "panel: Side, Grow, Fixed spacing and Layer are in the icons block")
         check(f.centerX and f.centerX.center and f.centerY.center and f.nudgeX and not f.nudgeX.center,
             "panel: only the centre's X and Y carry Center buttons")
-        check(height and height <= 640, "panel: the panel fits under the top-right corner at UI scale 1, got " .. tostring(height))
+        check(height and height <= 728, "panel: the panel fits under the top-right corner at UI scale 1, got " .. tostring(height))
+        do
+            local function inside(widget, box)
+                while widget do
+                    if widget == box then return true end
+                    widget = rawget(widget, "parent")
+                end
+                return false
+            end
+            local boxes = { panel.iconsBox, panel.centreBox, panel.timelineBox }
+            check(boxes[1] and boxes[2] and boxes[3] and boxes[1] ~= boxes[2] and boxes[2] ~= boxes[3],
+                "panel: three boxes")
+            check(panel.iconsTitle.parent == boxes[1] and panel.centreTitle.parent == boxes[2]
+                and panel.timelineSwitch.parent == boxes[3], "panel: each box's title row is its switch")
+            local home = { offsetX = 1, nudgeX = 1, nudgeY = 1, iconSize = 1, labelScale = 1, timeScale = 1, iconGap = 1,
+                           centerX = 2, centerY = 2, centerScale = 2, centerTextScale = 2 }
+            local stray = {}
+            for key, boxIndex in pairs(home) do
+                local row = panel.fields[key]
+                for _, widget in ipairs({ row.box, row.minus, row.plus, row.center }) do
+                    if not inside(widget, boxes[boxIndex]) then stray[#stray + 1] = key end
+                end
+            end
+            for _, widget in ipairs({ panel.side, panel.grow, panel.layer, panel.fixedSpacing }) do
+                if not inside(widget, boxes[1]) then stray[#stray + 1] = "icons widget" end
+            end
+            check(#stray == 0, "panel: every row sits inside its box, stray " .. table.concat(stray, ","))
+            check(boxes[1].parent == panel and boxes[2].parent == panel and boxes[3].parent == panel
+                and not inside(panel.hint, boxes[1]) and not inside(panel.reset, boxes[1])
+                and panel.reset.parent == panel and panel.done.parent == panel,
+                "panel: the hint and Reset/Done stay outside the boxes")
+            check(boxes[1].points[2] == panel.hint or boxes[1].points[2] == panel.guess,
+                "panel: the first box hangs below the hint")
+            check(boxes[2].points[2] == boxes[1] and boxes[3].points[2] == boxes[2], "panel: the boxes stack in order")
+            check(panel.reset.points[1] == "BOTTOMLEFT" and panel.reset.points[2] == panel and panel.done.points[1] == "BOTTOMRIGHT",
+                "panel: Reset and Done sit at the bottom")
+        end
 
         local function typeInto(key, text)
             f[key].box:SetText(text)
@@ -6242,7 +6292,18 @@ end
         down(plus)
         tick(1.5)
         check(CastAheadDB.nudgeX == 100 and f.nudgeX.box.value == "100", "hold: a held button stops changing at the limit")
+        local reapplied, realReapply = 0, CastAheadCore.Reapply
+        CastAheadCore.Reapply = function(...) reapplied = reapplied + 1 return realReapply(...) end
+        tick(1)
+        CastAheadCore.Reapply = realReapply
+        check(reapplied == 0, "hold: a held button at its limit does no more work, " .. reapplied .. " reapplies")
         up(plus)
+        CastAheadDB.nudgeX = 0
+        down(plus)
+        MouseIsDown = false
+        tick(1)
+        check(CastAheadDB.nudgeX == 1, "hold: the mouse reported up without OnMouseUp, no further steps, got " .. tostring(CastAheadDB.nudgeX))
+        MouseIsDown = true
         CastAheadDB.nudgeX = -98
         down(minus)
         tick(1.5)
@@ -6312,12 +6373,8 @@ end
         check(f.iconSize.box.value == "26" and f.iconGap.box.value == "4", "panel: Reset refreshes the numbers")
         CastAheadDB.timeline, CastAheadDB.fullLabels = nil, nil
 
-        click(panel.timeline)
-        check(panel.note.shown and panel.note.value == "Move the timeline in the game's Edit Mode: Esc > Edit Mode.",
-            "panel: Timeline... shows the Edit Mode line")
-        S.Leave()
-        S.Enter()
-        check(not panel.note.shown, "panel: the timeline line is collapsed on every Enter")
+        check(panel.timeline == nil and panel.note.value == "Move it in the game's Edit Mode: Esc > Edit Mode.",
+            "panel: the timeline box carries one permanent Edit Mode hint and no Timeline... button")
 
         click(panel.done)
         check(not S.Active(), "panel: Done leaves the mode")

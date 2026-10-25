@@ -53,7 +53,7 @@ local EVENTS = { "PLAYER_REGEN_DISABLED", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_U
                  "PLAYER_TARGET_CHANGED", "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" }
 local TIMELINE_LEAD = 5
 local HINT = "Drag the icons or the centre call, or type exact numbers."
-local TIMELINE_NOTE = "Move the timeline in the game's Edit Mode: Esc > Edit Mode."
+local TIMELINE_NOTE = "Move it in the game's Edit Mode: Esc > Edit Mode."
 local RESET_KEYS = { "anchor", "grow", "offsetX", "nudgeX", "nudgeY", "iconSize", "labelScale", "timeScale",
                      "iconGap", "fixedSpacing", "strata", "centerX", "centerY", "centerScale", "centerTextScale" }
 local PANEL_W, PAD, ROW_H, LABEL_W = 280, 12, 24, 72
@@ -67,6 +67,7 @@ local DRAG_LABEL = "Drag to move"
 local HOLD_DELAY, REPEAT_SLOW, REPEAT_FAST, REPEAT_RAMP = 0.4, 0.12, 0.03, 2
 local DIM_ALPHA = 0.4
 local SWITCH_H = 24
+local INNER, BOX_TOP, BOX_BOTTOM, BOX_GAP = 10, 4, 6, 8
 local RECHECK = 0.25
 
 local active = false
@@ -86,7 +87,7 @@ local blocks = { nameplates = {}, centerText = {} }
 
 local panel = CreateFrame("Frame", PANEL_NAME, UIParent, "BackdropTemplate")
 panel:SetWidth(PANEL_W)
-panel:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -40, -120)
+panel:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -40, -40)
 panel:SetFrameStrata("DIALOG")
 panel:SetClampedToScreen(true)
 panel:SetMovable(true)
@@ -427,7 +428,12 @@ local function SetField(key, value)
 end
 
 local function Step(key, dir)
-    SetField(key, FIELDS[key].read() + dir * FIELDS[key].step)
+    local field = FIELDS[key]
+    local before = field.read()
+    field.write(before + dir * field.step)
+    if field.read() == before then return false end
+    Apply(key)
+    return true
 end
 
 local function StopHold()
@@ -435,14 +441,22 @@ local function StopHold()
 end
 
 local function StartHold(key, dir)
-    Step(key, dir)
+    if not Step(key, dir) then return end
     local from = GetTime() + HOLD_DELAY
     hold = { key = key, dir = dir, at = from, from = from }
 end
 
 local function TickHold(now)
-    if not hold or now < hold.at then return end
-    Step(hold.key, hold.dir)
+    if not hold then return end
+    if not IsMouseButtonDown("LeftButton") then
+        hold = nil
+        return
+    end
+    if now < hold.at then return end
+    if not Step(hold.key, hold.dir) then
+        hold = nil
+        return
+    end
     local ramp = math.min(1, (now - hold.from) / REPEAT_RAMP)
     hold.at = now + REPEAT_SLOW + (REPEAT_FAST - REPEAT_SLOW) * ramp
 end
@@ -571,42 +585,47 @@ end
 local function Layout()
     local guess = panel.guess
     guess:SetShown(select(3, CastAheadCore.PlateSize()) == "guess")
-    local body = panel.body
-    body:ClearAllPoints()
-    body:SetPoint("TOPLEFT", guess:IsShown() and guess or panel.hint, "BOTTOMLEFT", 0, -10)
-    local h = 2 * PAD + panel.hint:GetStringHeight() + 10 + panel.bodyHeight + 8 + SWITCH_H + ROW_H
+    panel.iconsBox:ClearAllPoints()
+    panel.iconsBox:SetPoint("TOPLEFT", guess:IsShown() and guess or panel.hint, "BOTTOMLEFT", 0, -10)
+    local h = 2 * PAD + panel.hint:GetStringHeight() + 10 + 2 * BOX_GAP + 10 + ROW_H
     if guess:IsShown() then h = h + guess:GetStringHeight() + 4 end
-    if panel.note:IsShown() then h = h + panel.note:GetStringHeight() + 8 end
+    for _, box in ipairs({ panel.iconsBox, panel.centreBox, panel.timelineBox }) do h = h + box.height end
     panel:SetHeight(h)
 end
 
-local function BuildBody(body, W, T)
+local function BuildBody(W, T)
     local O = CastAheadOptions
-    local y = 0
-    local group
-    local function Track(widget)
-        group[#group + 1] = widget
-        return widget
-    end
-    local function Title(key, text)
-        group = blocks[key]
-        local title = O.BuildSwitch(body, key, { "TOPLEFT", body, "TOPLEFT", 0, -y }, Outputs, text)
+    local content, y
+    local function Box(key, text, below)
+        local box = O.BuildGroup(panel, nil, 0, true)
+        box:SetWidth(PANEL_W - 2 * PAD)
+        if below then box:SetPoint("TOPLEFT", below, "BOTTOMLEFT", 0, -BOX_GAP) end
+        local title = O.BuildSwitch(box, key, { "TOPLEFT", box, "TOPLEFT", 6, -BOX_TOP }, Outputs, text)
         title.text:SetTextColor(unpack(T.gold))
-        y = y + SWITCH_H
-        return title
+        content = CreateFrame("Frame", nil, box)
+        content:SetPoint("TOPLEFT", box, "TOPLEFT", INNER, -(BOX_TOP + SWITCH_H))
+        content:SetWidth(PANEL_W - 2 * PAD - 2 * INNER)
+        if blocks[key] then blocks[key][1] = content end
+        y = 0
+        return box, title, content
+    end
+    local function Close(box)
+        content:SetHeight(y)
+        box.height = BOX_TOP + SWITCH_H + y + BOX_BOTTOM
+        box:SetHeight(box.height)
     end
     local function Label(text)
-        local label = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        label:SetPoint("LEFT", body, "TOPLEFT", 4, -y - 10)
+        local label = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        label:SetPoint("LEFT", content, "TOPLEFT", 4, -y - 10)
         label:SetText(text)
         return label
     end
     local function Number(key, text)
         local field = FIELDS[key]
-        local label = Track(Label(text))
-        local box = Track(CreateFrame("EditBox", nil, body, "InputBoxTemplate"))
+        local label = Label(text)
+        local box = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
         box:SetSize(48, 20)
-        box:SetPoint("TOPLEFT", body, "TOPLEFT", LABEL_W, -y)
+        box:SetPoint("TOPLEFT", content, "TOPLEFT", LABEL_W, -y)
         box:SetAutoFocus(false)
         local function Commit(self)
             local value = tonumber(self:GetText())
@@ -628,10 +647,10 @@ local function BuildBody(body, W, T)
             button:SetScript("OnMouseUp", StopHold)
             button:SetScript("OnLeave", StopHold)
         end
-        local minus = Track(W.Button(body, "-", 20))
+        local minus = W.Button(content, "-", 20)
         minus:SetPoint("LEFT", box, "RIGHT", 6, 0)
         Hold(minus, -1)
-        local plus = Track(W.Button(body, "+", 20))
+        local plus = W.Button(content, "+", 20)
         plus:SetPoint("LEFT", minus, "RIGHT", 2, 0)
         Hold(plus, 1)
         local row = { label = label, box = box, minus = minus, plus = plus }
@@ -640,10 +659,10 @@ local function BuildBody(body, W, T)
         return row
     end
 
-    panel.iconsTitle = Title("nameplates", "Nameplate icons")
-    panel.side, panel.grow = O.BuildPlacement(body, { "TOPLEFT", body, "TOPLEFT", 4, -y })
-    Track(panel.side)
-    Track(panel.grow)
+    local icons
+    icons, panel.iconsTitle, panel.iconsContent = Box("nameplates", "Nameplate icons", panel.guess)
+    panel.iconsBox = icons
+    panel.side, panel.grow = O.BuildPlacement(content, { "TOPLEFT", content, "TOPLEFT", 4, -y })
     y = y + 84
     Number("offsetX", "Distance")
     Number("nudgeX", "X")
@@ -651,25 +670,39 @@ local function BuildBody(body, W, T)
     Number("iconSize", "Icon")
     Number("labelScale", "Label")
     Number("timeScale", "Countdown")
-    panel.fixedSpacing = Track(O.BuildSwitch(body, "fixedSpacing", { "TOPLEFT", body, "TOPLEFT", 0, -y }))
+    panel.fixedSpacing = O.BuildSwitch(content, "fixedSpacing", { "TOPLEFT", content, "TOPLEFT", 0, -y })
     y = y + 26
     Number("iconGap", "Gap")
-    Track(Label("Layer"))
-    panel.layer = Track(O.BuildStrata(body, { "TOPLEFT", body, "TOPLEFT", LABEL_W, -y + 2 }))
-    y = y + 38
+    Label("Layer")
+    panel.layer = O.BuildStrata(content, { "TOPLEFT", content, "TOPLEFT", LABEL_W, -y + 2 })
+    y = y + 32
+    Close(icons)
 
-    panel.centreTitle = Title("centerText", "Centre call")
+    local centre
+    centre, panel.centreTitle, panel.centreContent = Box("centerText", "Centre call", icons)
+    panel.centreBox = centre
     for _, axis in ipairs({ { "centerX", "X", "Center X" }, { "centerY", "Y", "Center Y" } }) do
         local key = axis[1]
         local row = Number(key, axis[2])
-        row.center = Track(W.Button(body, axis[3], 64))
+        row.center = W.Button(content, axis[3], 64)
         row.center:SetPoint("LEFT", row.plus, "RIGHT", 8, 0)
         row.center:SetScript("OnClick", function() SetField(key, 0) end)
     end
     Number("centerScale", "Size")
     Number("centerTextScale", "Text")
-    body:SetHeight(y)
-    panel.bodyHeight = y
+    Close(centre)
+
+    local line
+    line, panel.timelineSwitch, panel.timelineContent = Box("timeline", "Blizzard timeline", centre)
+    panel.timelineBox = line
+    local note = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    note:SetPoint("TOPLEFT", content, "TOPLEFT", 4, 0)
+    note:SetWidth(PANEL_W - 2 * PAD - 2 * INNER - 4)
+    note:SetJustifyH("LEFT")
+    note:SetText(TIMELINE_NOTE)
+    panel.note = note
+    y = note:GetStringHeight()
+    Close(line)
 end
 
 local function Build()
@@ -692,36 +725,18 @@ local function Build()
     guess:SetText(GUESS)
     panel.guess = guess
 
-    local body = CreateFrame("Frame", nil, panel)
-    body:SetWidth(PANEL_W - 2 * PAD)
-    panel.body = body
     panel.fields = {}
-    BuildBody(body, W, T)
+    BuildBody(W, T)
 
-    local timeline = W.Button(panel, "Timeline...", 80)
-    timeline:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", PAD, PAD)
     local reset = W.Button(panel, "Reset", 60)
-    reset:SetPoint("LEFT", timeline, "RIGHT", 6, 0)
+    reset:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", PAD, PAD)
     reset:SetScript("OnClick", function()
         if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_SETUP_RESET") end
     end)
     local done = W.Button(panel, "Done", 60, true)
     done:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -PAD, PAD)
     done:SetScript("OnClick", function() CastAheadSetup.Leave() end)
-    local timelineSwitch = CastAheadOptions.BuildSwitch(panel, "timeline",
-        { "BOTTOMLEFT", timeline, "TOPLEFT", 0, 4 }, Outputs, "Blizzard timeline")
-    local note = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    note:SetPoint("BOTTOMLEFT", timelineSwitch, "TOPLEFT", 0, 4)
-    note:SetWidth(PANEL_W - 2 * PAD)
-    note:SetJustifyH("LEFT")
-    note:SetText(TIMELINE_NOTE)
-    note:Hide()
-    timeline:SetScript("OnClick", function()
-        note:Show()
-        Layout()
-    end)
-    panel.timeline, panel.reset, panel.done, panel.note = timeline, reset, done, note
-    panel.timelineSwitch = timelineSwitch
+    panel.reset, panel.done = reset, done
 end
 
 StaticPopupDialogs.CASTAHEAD_SETUP_RESET = {
@@ -769,7 +784,6 @@ function CastAheadSetup.Enter()
     for _, event in ipairs(EVENTS) do panel:RegisterEvent(event) end
     panel:EnableKeyboard(true)
     if not panel.fields then Build() end
-    panel.note:Hide()
     Layout()
     panel:Show()
     CastAheadSetup.Select("row")

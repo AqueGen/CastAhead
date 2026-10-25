@@ -184,6 +184,7 @@ end
 CastAheadOptions.SetSwitch = SetSwitch
 
 -- `free` keeps the group out of the column flow, for one the caller places itself.
+-- No `title` leaves the heading to the caller, who puts a switch there.
 local function BuildGroup(panel, title, height, free)
     local box = CreateFrame("Frame", nil, panel, "BackdropTemplate")
     box:SetFrameLevel(panel:GetFrameLevel())
@@ -192,12 +193,15 @@ local function BuildGroup(panel, title, height, free)
     box:SetBackdrop(FLAT)
     box:SetBackdropColor(unpack(T.panel))
     box:SetBackdropBorderColor(unpack(T.border))
-    box.title = box:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    box.title:SetPoint("TOPLEFT", box, "TOPLEFT", 10, -8)
-    box.title:SetTextColor(unpack(T.gold))
-    box.title:SetText(title)
+    if title then
+        box.title = box:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        box.title:SetPoint("TOPLEFT", box, "TOPLEFT", 10, -8)
+        box.title:SetTextColor(unpack(T.gold))
+        box.title:SetText(title)
+    end
     return box
 end
+CastAheadOptions.BuildGroup = BuildGroup
 
 -- One switch, placed against whatever the caller anchors it to.
 local function BuildSwitch(panel, key, point, onClick, label)
