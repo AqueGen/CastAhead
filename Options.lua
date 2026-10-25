@@ -376,6 +376,7 @@ function BuildGeneral(panel)
         GameTooltip:SetText("Size and position", 1, 1, 1)
         GameTooltip:AddLine("Set the size and position of the nameplate icons and the centre call, with a live preview.",
             nil, nil, nil, true)
+        GameTooltip:AddLine("Best done near training dummies, so the icons show on real nameplates.", nil, nil, nil, true)
         if InCombatLockdown() then GameTooltip:AddLine("Not available in combat.", 1, 1, 1) end
         GameTooltip:Show()
     end)
