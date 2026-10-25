@@ -842,18 +842,20 @@ local function SetApprox(bar, on)
     PlaceTime(bar)
 end
 
+local function SetBarStrata(bar, strata)
+    if bar._strata == strata then return end
+    bar._strata = strata
+    -- Unfix, set, fix again: a fixed strata also ignores our own SetFrameStrata.
+    if bar.SetFixedFrameStrata then bar:SetFixedFrameStrata(false) end
+    bar:SetFrameStrata(strata)
+    if bar.SetFixedFrameStrata then bar:SetFixedFrameStrata(true) end
+end
+
 local function ApplyBarSize(bar)
     local size = CastAheadConfig.IconSize()
     local labelScale = CastAheadConfig.LabelScale()
     local timeScale = CastAheadConfig.TimeScale()
-    local strata = CastAheadConfig.Strata()
-    if bar._strata ~= strata then
-        bar._strata = strata
-        -- Unfix, set, fix again: a fixed strata also ignores our own SetFrameStrata.
-        if bar.SetFixedFrameStrata then bar:SetFixedFrameStrata(false) end
-        bar:SetFrameStrata(strata)
-        if bar.SetFixedFrameStrata then bar:SetFixedFrameStrata(true) end
-    end
+    SetBarStrata(bar, CastAheadConfig.Strata())
     if bar._size == size and bar._labelScale == labelScale
         and bar._timeScale == timeScale then
         return size
@@ -1058,11 +1060,17 @@ local function AnchorToFrame(plate, bar, index)
     end
 end
 
+local function MeasurePlate(plate)
+    local w, h, scale = plate:GetWidth(), plate:GetHeight(), plate:GetEffectiveScale()
+    if issecretvalue and (issecretvalue(w) or issecretvalue(h) or issecretvalue(scale)) then return end
+    local ratio = scale / UIParent:GetEffectiveScale()
+    return math.floor(w * ratio * 10 + 0.5) / 10, math.floor(h * ratio * 10 + 0.5) / 10
+end
+
 local function RememberPlateSize(plate)
-    if not (plate.GetWidth and plate.GetEffectiveScale and UIParent and CastAheadDB) then return end
-    local ratio = plate:GetEffectiveScale() / UIParent:GetEffectiveScale()
-    local w = math.floor(plate:GetWidth() * ratio * 10 + 0.5) / 10
-    local h = math.floor(plate:GetHeight() * ratio * 10 + 0.5) / 10
+    if not (plate and plate.GetWidth and plate.GetEffectiveScale and UIParent and CastAheadDB) then return end
+    local ok, w, h = pcall(MeasurePlate, plate)
+    if not (ok and w and w > 0 and h > 0) then return end
     local size = CastAheadDB.plateSize
     if not size or size[1] ~= w or size[2] ~= h then CastAheadDB.plateSize = { w, h } end
 end
@@ -1077,7 +1085,6 @@ local function AnchorBar(unit, bar, index)
         bar:Hide()
         return false
     end
-    RememberPlateSize(plate)
     AnchorToFrame(plate, bar, index)
     return true
 end
@@ -2322,6 +2329,9 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         end
         return
     end
+    if event == "NAME_PLATE_UNIT_ADDED" and type(unit) == "string" and IsHostileNameplate(unit) then
+        RememberPlateSize(C_NamePlate.GetNamePlateForUnit(unit))
+    end
     if event == "NAME_PLATE_UNIT_REMOVED" then
         DropUnit(unit, "gone")
         return
@@ -2432,6 +2442,7 @@ local function CenterOffset()
         CENTER_Y + (CastAheadDB and tonumber(CastAheadDB.centerY) or 0)
 end
 
+local CENTER_STRATA = "HIGH"
 local CENTER_LINES = 3      -- a pack can cast three things at once; more is noise
 local CENTER_LINE_H = 44
 
@@ -2439,7 +2450,7 @@ local function CenterFrame()
     if center then return center end
     center = CreateFrame("Frame", nil, UIParent)
     center:SetSize(360, CENTER_LINE_H * CENTER_LINES)
-    center:SetFrameStrata("HIGH")
+    center:SetFrameStrata(CENTER_STRATA)
     center:EnableMouse(false)
     center.lines = {}
     for i = 1, CENTER_LINES do
@@ -2692,15 +2703,19 @@ local function SampleDataRow(key)
     end
 end
 
-local function ShowCenterSample(on)
+local function ShowCenterSample(on, strata)
     if centerUnlocked then ToggleMoveCenter(true) end
     centerSample = (on and CastAheadConfig.CenterText()) and true or false
     if not centerSample then
-        if center then center:EnableMouse(false) end
+        if center then
+            center:EnableMouse(false)
+            center:SetFrameStrata(CENTER_STRATA)
+        end
         HideCenter()
-        return
+        return false
     end
     local f = CenterFrame()
+    f:SetFrameStrata(strata or CENTER_STRATA)
     f:EnableMouse(true)
     PlaceCenter(f)
     local A = CastAheadMatch.ADVICE
@@ -2713,6 +2728,7 @@ local function ShowCenterSample(on)
           icons = defensive and #defensive > 0 and defensive or { FALLBACK_ICON } },
         { advice = A.BURST, endAt = now + 6.0, icons = { CastAheadBurst and CastAheadBurst.ICON or FALLBACK_ICON } },
     }, now)
+    return true
 end
 
 frame:SetScript("OnUpdate", function()
@@ -2889,6 +2905,7 @@ CastAheadCore.Tuning = tuning
 CastAheadCore.SpreadBars = SpreadBars
 CastAheadCore.Population = function() return killed, exhausted end
 CastAheadCore.MoveCenter = ToggleMoveCenter
+CastAheadCore.CenterUnlocked = function() return centerUnlocked end
 CastAheadCore.IsHostileNameplate = IsHostileNameplate
 CastAheadCore.ShowCenterSample = ShowCenterSample
 CastAheadCore.SampleDataRow = SampleDataRow
@@ -3624,7 +3641,8 @@ function CastAheadCore.ShowSampleRow(state, frame)
     for i = 1, #row do
         local sample = row[i]
         local bar = GetBar(state, i)
-        PaintBar(bar, { row = { prio = sample.key }, approximate = sample.approx }, nil)
+        if state.strata then SetBarStrata(bar, state.strata) end
+        PaintBar(bar, { row = SampleDataRow(sample.key) or { prio = sample.key }, approximate = sample.approx }, nil)
         SetApprox(bar, sample.approx == true)
         bar.time:SetFormattedText("%d", sample.time)
         spread[i] = bar

@@ -62,6 +62,7 @@ local BASE_H, MORE_H = 262, 340
 local HALF_SCREEN_FALLBACK = 1000
 local GUESS = "Sample size is a guess until a real nameplate is seen."
 local PEEK_SECONDS = 2
+local PLATE_STRATA, PEEK_STRATA = "BACKGROUND", "FULLSCREEN_DIALOG"
 
 local active = false
 local rows = {}
@@ -85,7 +86,7 @@ panel:RegisterForDrag("LeftButton")
 panel:SetScript("OnDragStart", panel.StartMoving)
 panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
 panel:Hide()
-table.insert(UISpecialFrames, PANEL_NAME)
+-- Not in UISpecialFrames: CloseSpecialWindows hides every listed frame, so it would hide the window Leave just reopened.
 CastAheadSetup.panel = panel
 
 local readout = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -154,7 +155,7 @@ local function SamplePlate()
     if plate then return plate end
     plate = CreateFrame("Frame", nil, UIParent)
     plate:SetPoint("CENTER", UIParent, "CENTER", 0, 220)
-    plate:SetFrameStrata("MEDIUM")
+    plate:SetFrameStrata(PLATE_STRATA)
     plate:SetMovable(true)
     plate:EnableMouse(true)
     plate:RegisterForDrag("LeftButton")
@@ -552,17 +553,30 @@ function CastAheadSetup.Active()
     return active
 end
 
+local function Lower()
+    local plate = SamplePlate()
+    plate:SetFrameStrata(PLATE_STRATA)
+    if rows.sample then rows.sample.strata = nil end
+end
+
 function CastAheadSetup.Enter()
     if InCombatLockdown() then return false, "combat" end
     if active then return true end
+    local ok, err = pcall(function()
+        for i = 1, 40 do AddUnit("nameplate" .. i) end
+    end)
+    if not ok then
+        for key in pairs(rows) do HideRow(key) end
+        error(err, 0)
+    end
     peeking, peekGen = {}, peekGen + 1
+    Lower()
     CastAheadCore.StopTest(true)
     local window = CastAheadWindow.Frame()
     page = window and window:IsShown() and CastAheadWindow.Current() or nil
     if window then window:Hide() end
     active = true
     local plate = SamplePlate()
-    for i = 1, 40 do AddUnit("nameplate" .. i) end
     SizePlate()
     plate:Show()
     ShowRow("sample", plate)
@@ -616,6 +630,7 @@ local function EndPeek(gen)
     if peeking.row then
         HideRow("sample")
         CastAheadSetup.plate:Hide()
+        Lower()
     end
     if peeking.center then CastAheadCore.ShowCenterSample(false) end
     peeking = {}
@@ -624,12 +639,16 @@ end
 function CastAheadSetup.Peek(kind)
     if active then return end
     if kind == "row" then
+        if not CastAheadConfig.Enabled("nameplates") then return end
         local plate = SamplePlate()
         SizePlate()
+        plate:SetFrameStrata(PEEK_STRATA)
         plate:Show()
+        rows.sample = rows.sample or {}
+        rows.sample.strata = PEEK_STRATA
         ShowRow("sample", plate)
     else
-        CastAheadCore.ShowCenterSample(true)
+        if CastAheadCore.CenterUnlocked() or not CastAheadCore.ShowCenterSample(true, PEEK_STRATA) then return end
     end
     peeking[kind] = true
     peekGen = peekGen + 1
@@ -661,6 +680,11 @@ panel:SetScript("OnEvent", function(_, event, unit)
     if active then Layout() end
 end)
 panel:SetScript("OnKeyDown", function(self, key)
+    if key == "ESCAPE" and not (StaticPopup_Visible and StaticPopup_Visible("CASTAHEAD_SETUP_RESET")) then
+        CastAheadSetup.Leave()
+        self:SetPropagateKeyboardInput(false)
+        return
+    end
     local dir = ARROWS[key]
     self:SetPropagateKeyboardInput(not dir)
     if dir then

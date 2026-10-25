@@ -414,7 +414,10 @@ function BuildGeneral(panel)
     setup:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -8)
     setup:SetMotionScriptsWhileDisabled(true)
     setup:SetScript("OnClick", function() CastAheadSetup.Enter() end)
-    local function PaintSetup() setup:SetEnabled(not InCombatLockdown()) end
+    local function PaintSetup(_, event)
+        local fighting = event == "PLAYER_REGEN_DISABLED" or (event ~= "PLAYER_REGEN_ENABLED" and InCombatLockdown())
+        setup:SetEnabled(not fighting)
+    end
     setup:SetScript("OnEnter", function(self)
         if not InCombatLockdown() then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")

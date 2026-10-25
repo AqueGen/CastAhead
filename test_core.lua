@@ -218,6 +218,10 @@ CreateFrame = function(kind, _, parent)
     end
     f.SetTexture = function(self, tex) self.texture = tex end
     f.SetParent = function(self, p) self.parent = p end
+    f.SetFrameStrata = function(self, strata) self.strata = strata end
+    f.GetFrameStrata = function(self) return self.strata end
+    f.SetFrameLevel = function(self, level) self.level = level end
+    f.GetFrameLevel = function(self) return self.level end
     local barOnly = {
         SetValue = true, SetStatusBarColor = true,
         SetMinMaxValues = true, SetStatusBarTexture = true,
@@ -1506,6 +1510,53 @@ do
     reset()
     C_NamePlate.GetNamePlateForUnit, C_NamePlate.GetNamePlateSize, UIParent = realPlateFor, nil, realUIParent
 end
+
+(function()
+    local realPlateFor, realUIParent = C_NamePlate.GetNamePlateForUnit, UIParent
+    UIParent = { GetEffectiveScale = function() return 1 end }
+    local width, height = 120, 12
+    C_NamePlate.GetNamePlateForUnit = function(u)
+        local plate = realPlateFor(u)
+        if not plate then return nil end
+        plate.GetWidth = function() return width() end
+        plate.GetHeight = function() return height end
+        plate.GetEffectiveScale = function() return 1.5 end
+        return plate
+    end
+    local function size(w, h)
+        width, height = function() return w end, h
+    end
+    CastAheadDB = { leadSeconds = 5 }
+    size(120, 12)
+    enter()
+    check(CastAheadDB.plateSize and CastAheadDB.plateSize[1] == 180,
+        "plate size: a hostile plate is measured once when it is added")
+    CastAheadDB.plateSize = nil
+    castFor(3.0)
+    advance(0.1)
+    check(IconShown(100) and CastAheadDB.plateSize == nil, "plate size: anchoring live bars measures nothing")
+    reset()
+
+    size(0, 0)
+    local ok = pcall(enter)
+    check(ok and CastAheadDB.plateSize == nil, "plate size: a 0x0 plate stores nothing")
+    reset()
+    width = function() error("no width") end
+    ok = pcall(enter)
+    check(ok and CastAheadDB.plateSize == nil, "plate size: a throwing GetWidth stores nothing and breaks nothing")
+    castFor(3.0)
+    check(IconShown(100), "plate size: the plate whose size could not be read still gets its icon")
+    reset()
+    local secret = {}
+    width = function() return secret end
+    issecretvalue = function(v) return v == secret end
+    ok = pcall(enter)
+    issecretvalue = nil
+    check(ok and CastAheadDB.plateSize == nil, "plate size: a Secret width stores nothing")
+    reset()
+    C_NamePlate.GetNamePlateForUnit, UIParent = realPlateFor, realUIParent
+    CastAheadDB = { leadSeconds = 5 }
+end)()
 CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
 -- A cast whose interval is nowhere near the spell's schedule is rejected, and
@@ -4498,9 +4549,11 @@ do
         inCombat = false
         setup.handlers.OnEvent(setup, "PLAYER_REGEN_ENABLED")
         check(setup.enabled == true, "Set up on screen is enabled again when combat ends")
-        inCombat = true
         setup.handlers.OnEvent(setup, "PLAYER_REGEN_DISABLED")
-        check(setup.enabled == false, "Set up on screen is disabled when combat starts with the window open")
+        check(setup.enabled == false, "Set up on screen is disabled when combat starts, before the lockdown reports it")
+        inCombat = true
+        setup.handlers.OnEvent(setup, "PLAYER_REGEN_ENABLED")
+        check(setup.enabled == true, "Set up on screen is enabled when combat ends, before the lockdown lifts")
         CastAheadSetup.Enter, InCombatLockdown, GameTooltip = realEnter, realLock, realTip
     end)()
     local function OffNote()
@@ -5497,7 +5550,7 @@ end
     check(barsOn(onUnit) == 3, "setup: three sample bars on a hostile plate, got " .. barsOn(onUnit))
     check(sampleLines() == 3, "setup: the centre block shows three sample lines, got " .. sampleLines())
     check(timeline.added - added0 == 3, "setup: three sample timeline entries, got " .. (timeline.added - added0))
-    check(panel.shown and inSpecial(), "setup: the panel is shown and Esc closes it")
+    check(panel.shown and not inSpecial(), "setup: the panel is shown and is not an Esc frame")
     check(registered.PLAYER_REGEN_DISABLED and registered.NAME_PLATE_UNIT_ADDED and registered.UI_SCALE_CHANGED,
         "setup: events registered")
 
@@ -5522,7 +5575,7 @@ end
     check(newlyShown(before) == 0, "setup: leaving leaves nothing shown, got " .. newlyShown(before))
     check(liveEvents() == live0, "setup: leaving cancels the sample timeline entries")
     check(winShown and shownPage == "General", "setup: the window comes back on its page")
-    check(inSpecial() and next(registered) == nil, "setup: leaving unregisters events, the panel stays an Esc frame")
+    check(next(registered) == nil, "setup: leaving unregisters events")
 
     winShown, shownPage = false, nil
     S.Enter()
@@ -5566,7 +5619,39 @@ end
 
     S.Enter()
     panel.handlers.OnHide(panel)
-    check(not S.Active() and newlyShown(before) == 0, "setup: Esc hides the panel and leaves the mode")
+    check(not S.Active() and newlyShown(before) == 0, "setup: hiding the panel leaves the mode")
+
+    do
+        local realVisible, popupUp, propagate = StaticPopup_Visible, false, nil
+        StaticPopup_Visible = function(name) return popupUp and name == "CASTAHEAD_SETUP_RESET" end
+        panel.SetPropagateKeyboardInput = function(_, on) propagate = on end
+        _G.CastAheadMainWindow, _G.CastAheadSetupPanel = win, panel
+        table.insert(UISpecialFrames, "CastAheadMainWindow")
+        local function escape()
+            propagate = nil
+            panel.handlers.OnKeyDown(panel, "ESCAPE")
+            if propagate == false then return end
+            for _, name in ipairs(UISpecialFrames) do
+                local f = _G[name]
+                if f and f:IsShown() then
+                    f:Hide()
+                    if f.handlers and f.handlers.OnHide then f.handlers.OnHide(f) end
+                end
+            end
+        end
+        winShown, shownPage = true, nil
+        S.Enter()
+        popupUp = true
+        escape()
+        check(S.Active() and propagate == true, "setup: Esc goes to the Reset question first")
+        popupUp = false
+        escape()
+        check(not S.Active() and propagate == false, "setup: Esc leaves the mode and is kept")
+        check(winShown and shownPage == "General", "setup: after Esc the window opened on entry is back")
+        table.remove(UISpecialFrames)
+        _G.CastAheadMainWindow, _G.CastAheadSetupPanel = nil, nil
+        StaticPopup_Visible, panel.SetPropagateKeyboardInput = realVisible, nil
+    end
 
     S.Enter()
     CastAheadCore.HideAll()
@@ -5584,6 +5669,39 @@ end
         check(barsOn(function(p) return p.unit == "nameplate9" end) == 0, "setup: a friendly plate gets no sample row")
         S.Leave()
         C_NamePlate.GetNamePlateForUnit, hostile.nameplate9 = realPlateFor, nil
+    end
+
+    do
+        local realPlateFor = C_NamePlate.GetNamePlateForUnit
+        C_NamePlate.GetNamePlateForUnit = function(u)
+            if u == "nameplate9" then error("plate scan") end
+            return realPlateFor(u)
+        end
+        hostile.nameplate9 = true
+        winShown = true
+        local ok = pcall(S.Enter)
+        C_NamePlate.GetNamePlateForUnit, hostile.nameplate9 = realPlateFor, nil
+        check(not ok and not S.Active(), "setup: an error in the plate scan leaves the mode closed")
+        check(barsOn(onUnit) == 0 and winShown, "setup: a failed enter leaves no sample row and keeps the window")
+        check(S.Enter() and S.Active(), "setup: entering works again after a failed enter")
+        S.Leave()
+    end
+
+    do
+        S.Enter()
+        local icons, sample = {}, nil
+        for i = 1, #allFrames do
+            local f = allFrames[i]
+            if f.shown and IsBar(f) and f._plate == S.plate then
+                icons[f._index] = f.icon.textureValue
+                sample = f
+            end
+        end
+        check(icons[1] == textures[200] and icons[2] == textures[300],
+            "setup: the plate sample shows real spell icons, got " .. tostring(icons[1]) .. "," .. tostring(icons[2]))
+        check(S.plate.strata == "BACKGROUND" and sample.strata == CastAheadConfig.Strata() and sample.level == 6200,
+            "setup: the sample plate sits under its icons, got " .. tostring(S.plate.strata) .. "/" .. tostring(sample.strata))
+        S.Leave()
     end
 
     do
@@ -5994,6 +6112,59 @@ end
         wait(1.1)
         check(barsOn(onSample) == 0 and newlyShown(base) == 0,
             "peek: the row hides 2 s after the last move, got " .. newlyShown(base))
+
+        local center = CastAheadCore.CenterFrame()
+        local function sampleBars()
+            local list = {}
+            for i = 1, #allFrames do
+                local f = allFrames[i]
+                if f.shown and IsBar(f) and f._plate == S.plate then list[#list + 1] = f end
+            end
+            return list
+        end
+        local function raised(list, strata)
+            for _, f in ipairs(list) do if f.strata ~= strata then return false end end
+            return #list == 3
+        end
+        O.SliderSpec("offsetX", {}).after(30)
+        O.SliderSpec("labelScale", {}).after(110)
+        O.SliderSpec("centerScale", {}).after(110)
+        check(S.plate.strata == "FULLSCREEN_DIALOG" and raised(sampleBars(), "FULLSCREEN_DIALOG")
+            and center.strata == "FULLSCREEN_DIALOG", "peek: the peek draws above the settings window")
+        check(sampleBars()[1].level > (S.plate.level or 0), "peek: the raised icons stay above the raised plate")
+        wait(2.1)
+        check(S.plate.strata == "BACKGROUND" and center.strata == "HIGH", "peek: the peek's frames drop back when it ends")
+        enter()
+        castFor(3.0)
+        local live
+        for i = 1, #allFrames do
+            local f = allFrames[i]
+            if f.shown and IsBar(f) and f._plate and f._plate.unit == unit then live = f end
+        end
+        check(live and live.strata == CastAheadConfig.Strata(), "peek: a live bar keeps the player's strata after a peek")
+        reset()
+        S.Peek("row")
+        S.Peek("center")
+        S.Enter()
+        check(S.plate.strata == "BACKGROUND" and raised(sampleBars(), CastAheadConfig.Strata())
+            and center.strata == "HIGH", "peek: entering the mode drops the peek's frames back")
+        S.Leave()
+
+        local realPrint = print
+        print = function() end
+        CastAheadCore.MoveCenter()
+        S.Peek("center")
+        wait(2.1)
+        local moving = center.shown and center.grip.shown
+        CastAheadCore.MoveCenter()
+        print = realPrint
+        check(moving, "peek: a centre peek leaves a running /ca move alone")
+        CastAheadDB.nameplates = false
+        S.Peek("row")
+        check(not S.plate.shown, "peek: no row peek with the nameplate icons off")
+        wait(2.1)
+        CastAheadDB.nameplates = nil
+        check(newlyShown(base) == 0, "peek: nothing left after the skipped peeks, got " .. newlyShown(base))
 
         S.Peek("row")
         S.Peek("center")
