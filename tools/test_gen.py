@@ -169,6 +169,22 @@ def test_an_opening_that_covers_few_first_casts_is_dropped():
         assert "first = 8.2" in tight_row
 
 
+def test_an_opening_order_shifted_by_an_optional_opener_keeps_the_order_most_pulls_keep():
+    shifted = [5.6] * 14 + [6.1] * 4 + [14.6 + 0.5 * i for i in range(6)]
+    scattered = [5.6] * 9 + [10.0 + 2 * i for i in range(11)]
+    with tempfile.TemporaryDirectory() as tmp:
+        casts = {"1|Zone": {"10": {
+            "1000": _base_cast_record(offset=shifted),
+            "1001": _base_cast_record(cast=[4.0] * 5, offset=scattered),
+            "1002": _base_cast_record(cast=[6.0] * 5, offset=[3.0, 3.2, 3.4, 3.1, 9.0]),
+        }}}
+        lua, _ = _run_gen(tmp, casts, overrides={"include": ["1000", "1001", "1002"]})
+        rows = {s: next(line for line in lua.splitlines() if "spell = %s," % s in line) for s in ("1000", "1001", "1002")}
+        assert "offset = 5.6," in rows["1000"]
+        assert "offset = nil," in rows["1001"]
+        assert "offset = 3.2," in rows["1002"]
+
+
 def test_a_cast_that_turns_into_a_channel_carries_the_channel_length():
     with tempfile.TemporaryDirectory() as tmp:
         casts = {"1|Zone": {"10": {
@@ -314,6 +330,35 @@ def test_damage_new_to_an_anchored_row_needs_more_than_the_minimum():
         assert "dmg = nil" in row_with([0.3, 0.3])
         assert "dmg = nil" in row_with([0.3] * 4)
         assert "dmg = 0.3" in row_with([0.3] * 5)
+
+
+def test_an_offset_is_firm_only_when_nine_pulls_in_ten_keep_it():
+    tight = [8.0] * 19 + [20.0]
+    split = [14.6] * 17 + [6.1] * 3
+    with tempfile.TemporaryDirectory() as tmp:
+        casts = {"1|Zone": {"10": {
+            "1000": _base_cast_record(offset=tight),
+            "1001": _base_cast_record(cast=[4.0] * 5, offset=split),
+        }}}
+        lua, _ = _run_gen(tmp, casts, overrides={"include": ["1000", "1001"]})
+        firm = next(line for line in lua.splitlines() if "spell = 1000," in line)
+        loose = next(line for line in lua.splitlines() if "spell = 1001," in line)
+        assert "offset = 8.0," in firm and "offsetFirm = true," in firm
+        assert "offset = 14.6," in loose and "offsetFirm" not in loose
+
+
+def test_cd_min_is_the_shortest_gap_the_spell_keeps():
+    gaps = [7.3] * 4 + [9.7] * 34 + [10.9] * 2
+    with tempfile.TemporaryDirectory() as tmp:
+        casts = {"1|Zone": {"10": {
+            "1000": _base_cast_record(iv=gaps, starts=41),
+            "1001": _base_cast_record(cast=[4.0] * 5, iv=[]),
+        }}}
+        lua, _ = _run_gen(tmp, casts, overrides={"include": ["1000", "1001"]})
+        timed = next(line for line in lua.splitlines() if "spell = 1000," in line)
+        untimed = next(line for line in lua.splitlines() if "spell = 1001," in line)
+        assert "cdMin = 7.3," in timed
+        assert "cdMin" not in untimed
 
 
 def test_a_no_payload_spell_never_takes_damage():

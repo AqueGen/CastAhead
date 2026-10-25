@@ -23,6 +23,8 @@ MIN_PER_POSITION = 3    # samples needed before a rotation slot is trusted
 MAX_ROTATION = 8
 FLAT_SPREAD = 0.15      # rotation this tight collapses to a single value
 OFFSET_SPREAD = 8.0     # opening order this loose is still worth an estimate
+OFFSET_TOLERANCE = 2.0  # Core.lua claimWindow: a projection this close claims the cast
+OFFSET_FIRM = 0.9       # first casts within OFFSET_TOLERANCE of the offset for it to place an unseen spell
 CD_WINDOW = 0.5
 FIRST_WINDOW = 1.0
 FIRST_TOLERANCE = 4.0  # Match.lua FIRST_TOLERANCE
@@ -203,7 +205,7 @@ ANCHOR_ZONE = re.compile(r'^\s*\[(\d+)\] = \{ name = "([^"]*)",')
 ANCHOR_ROW = re.compile(r'\{ spell = (\d+), npc = (\d+), mob = "([^"]*)", name = "([^"]*)",'
                         r' cast = ([\d.]+), cd = \{ ([^}]*)\}, (.*)\},\s*$')
 ANCHOR_FIELD = re.compile(r"(\w+) = ([^,]+),")
-FLAGS = ("kickable", "filler", "approx", "channel")
+FLAGS = ("kickable", "filler", "approx", "channel", "offsetFirm")
 
 
 def lua_value(s):
@@ -283,6 +285,8 @@ def settle(new, old):
         hold("first", moved(old["first"], new["first"], FIRST_STEP))
         hold("firstN", count_moved(old["firstN"], new["firstN"], MIN_OPENING_SAMPLES))
         hold("offset", moved(old["offset"], new["offset"], OFFSET_STEP))
+        if "cdMin" in old:
+            hold("cdMin", moved(old["cdMin"], new["cdMin"], OFFSET_STEP))
         hold("hits", moved(old["hits"], new["hits"], 1.0) or crossed(old["hits"], new["hits"], AOE_TARGETS, AOE_MARGIN))
         hold("dmg", moved(old["dmg"], new["dmg"], SHARE_STEP) or crossed(old["dmg"], new["dmg"], HEAVY_DAMAGE)
              or crossed(old["dmg"], new["dmg"], HEAVY_SINGLE))
@@ -301,7 +305,7 @@ def settle(new, old):
     row["kickable"] = row["mdt_kick"] if row["mdt_kick"] is not None else row["kick"] >= KICK_SHARE
     if old is not None:
         changed += [f for f in ("approx", "filler", "follow", "followUnknown", "kickable", "level", "mob", "name",
-                                "targeted")
+                                "offsetFirm", "targeted")
                     if row.get(f) != old.get(f)]
     return row, changed
 
@@ -416,6 +420,11 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                     cast, is_channel = measured, False
                 cdn = support(r["iv"], cd) if cd else 0
                 approx = bool(cd) and cdn < APPROX_SUPPORT * len(r["iv"])
+                # The shortest gap the spell really keeps (5th percentile): a cast sooner
+                # than this after its own last one cannot be it. Accumulate Charge's
+                # median is 9.7 but about half the pulls' scripts bring it back after 7.3.
+                ivs = sorted(r["iv"])
+                cd_min = round(ivs[len(ivs) // 20], 1) if cd and len(ivs) >= MIN_SAMPLES else None
                 old = anchor.get((instance_id, int(spellid), int(npcid)))
                 first, firstN = densest(r["first"], FIRST_WINDOW)
                 bar = OPENING_SUPPORT if old is None else \
@@ -434,6 +443,23 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                     lo, hi = offsets[len(offsets) // 10], offsets[-1 - len(offsets) // 10]
                     if hi - lo <= OFFSET_SPREAD:
                         offset = round(statistics.median(offsets), 1)
+                    else:
+                        # Devouring Brutalizer opens with its 9s Devour in about one pull in
+                        # five: that fails the spread test, while most pulls keep one exact order.
+                        offset, _ = densest(offsets, FIRST_WINDOW)
+                        bar = OPENING_SUPPORT if old is None else \
+                            OPENING_SUPPORT - SHARE_MARGIN if old["offset"] is not None \
+                            else OPENING_SUPPORT + SHARE_MARGIN
+                        if sum(1 for x in offsets if abs(x - offset) <= OFFSET_TOLERANCE) < bar * len(offsets):
+                            offset = None
+                # Firm: the opening order alone can name a spell not yet seen on the plate.
+                # Accumulate Charge's 14.6 holds in 9 pulls of 10; the tenth opens at 6, on
+                # Call Lightning's offset, and taking it there called the wrong spell.
+                offset_firm = False
+                if offset is not None:
+                    bar = OFFSET_FIRM if old is None else \
+                        OFFSET_FIRM - SHARE_MARGIN if old.get("offsetFirm") else OFFSET_FIRM + SHARE_MARGIN
+                    offset_firm = sum(1 for x in offsets if abs(x - offset) <= OFFSET_TOLERANCE) >= bar * len(offsets)
                 t = threat(r)
                 if int(spellid) in NO_PAYLOAD or old is not None and old["dmg"] is None \
                         and len(r["dmg"]) < THIN_EVIDENCE:
@@ -463,6 +489,8 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                     # none: Primal Juggernaut's three samples spanned 11s.
                     "firstN": firstN,
                     "offset": offset,
+                    "offsetFirm": offset_firm,
+                    "cdMin": cd_min,
                     "samples": len(r["cast"]) + r.get("kicked", 0),
                     "channel": is_channel,
                     "follow": None if is_channel else follows.get(int(spellid), (None,))[0],
@@ -535,6 +563,8 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                            + (" follow = %s," % r["follow"] if r.get("follow") else "")
                            + (" followUnknown = true," if r.get("followUnknown") else "")
                            + (" soleChannel = true," if r.get("soleChannel") else "")
+                           + (" offsetFirm = true," if r.get("offsetFirm") else "")
+                           + (" cdMin = %s," % r["cdMin"] if r.get("cdMin") is not None else "")
                            + ("" if r.get("targeted") is None
                               else " targeted = %s," % ("true" if r["targeted"] else "false"))))
             f.write("    },\n")
