@@ -110,74 +110,6 @@ local function Redraw()
     if CastAheadCore and CastAheadCore.Reapply then CastAheadCore.Reapply() end
 end
 
-local function ResizeCenter()
-    if CastAheadCore and CastAheadCore.ResizeCenter then CastAheadCore.ResizeCenter() end
-end
-
-local function Peek(kind)
-    if CastAheadSetup then CastAheadSetup.Peek(kind) end
-end
-
-local function RedrawRow()
-    Redraw()
-    Peek("row")
-end
-
-local function ResizeCenterPeek()
-    ResizeCenter()
-    Peek("center")
-end
-
-local SLIDERS = {
-    offsetX = {
-        key = "offsetX",
-        default = 0, min = 0, max = 120, step = 2,
-        caption = function(value)
-            return string.format("Distance from the plate: %d px", value)
-        end,
-        after = RedrawRow,
-    },
-    labelScale = {
-        key = "labelScale",
-        default = CastAheadConfig.LABEL_DEFAULT,
-        min = CastAheadConfig.LABEL_MIN, max = CastAheadConfig.LABEL_MAX, step = 5,
-        low = CastAheadConfig.LABEL_MIN .. "%", high = CastAheadConfig.LABEL_MAX .. "%",
-        caption = function(value) return string.format("Label: %d%% of the icon", value) end,
-        after = RedrawRow,
-    },
-    timeScale = {
-        key = "timeScale",
-        default = CastAheadConfig.TIME_DEFAULT,
-        min = CastAheadConfig.TIME_MIN, max = CastAheadConfig.TIME_MAX, step = 5,
-        low = CastAheadConfig.TIME_MIN .. "%", high = CastAheadConfig.TIME_MAX .. "%",
-        caption = function(value) return string.format("Countdown: %d%% of the icon", value) end,
-        after = RedrawRow,
-    },
-    centerTextScale = {
-        key = "centerTextScale",
-        default = CastAheadConfig.CENTER_TEXT_DEFAULT,
-        min = CastAheadConfig.CENTER_TEXT_MIN, max = CastAheadConfig.CENTER_TEXT_MAX, step = 5,
-        low = CastAheadConfig.CENTER_TEXT_MIN .. "%", high = CastAheadConfig.CENTER_TEXT_MAX .. "%",
-        caption = function(value) return string.format("Text: %d%% of the block", value) end,
-        after = ResizeCenterPeek,
-    },
-    centerScale = {
-        key = "centerScale",
-        default = CastAheadConfig.CENTER_DEFAULT,
-        min = CastAheadConfig.CENTER_MIN, max = CastAheadConfig.CENTER_MAX, step = 5,
-        low = CastAheadConfig.CENTER_MIN .. "%", high = CastAheadConfig.CENTER_MAX .. "%",
-        caption = function(value) return string.format("Size: %d%%", value) end,
-        after = ResizeCenterPeek,
-    },
-}
-
-local function SliderSpec(key, point)
-    local spec = { point = point }
-    for field, value in pairs(SLIDERS[key]) do spec[field] = value end
-    return spec
-end
-CastAheadOptions.SliderSpec = SliderSpec
-
 local function SaveRefresh()
     if CastAheadSaves then CastAheadSaves.Refresh() end
 end
@@ -210,7 +142,7 @@ local SWITCHES = {
     voice = { label = "Voice",
         tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"interrupt\"." },
     fixedSpacing = { label = "Fixed spacing", defaultOff = true,
-        tip = "Space the icons evenly: each step is the icon width plus the Gap slider, however long the words under the icons are. Every row looks the same; two long words side by side may overlap." },
+        tip = "Space the icons evenly: each step is the icon width plus the Gap, however long the words under the icons are. Every row looks the same; two long words side by side may overlap." },
     fullLabels = { label = "Full labels", defaultOff = true,
         tip = "Write the long calls out in full under a nameplate icon: TANKBUSTER instead of BUSTER. Unless Fixed spacing is on, longer words push the icons further apart. Off, the longest calls are shortened (BUSTER, DEF, SOON) and the rows stay tight. The cast table and the voice always use the full word." },
     devMode = { label = "Development mode", defaultOff = true,
@@ -293,7 +225,7 @@ CastAheadOptions.BuildSwitch = BuildSwitch
 local function BuildPlacement(panel, point)
     local anchorLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     anchorLabel:SetPoint(unpack(point))
-    anchorLabel:SetText("Position around the plate")
+    anchorLabel:SetText("Side")
 
     local square = CreateFrame("Frame", nil, panel, "BackdropTemplate")
     square:SetSize(58, 58)
@@ -341,22 +273,35 @@ local function BuildPlacement(panel, point)
         end
     end)
     table.insert(refreshers, function() growDropdown:GenerateMenu() end)
-    return square
+    return square, growDropdown
 end
 CastAheadOptions.BuildPlacement = BuildPlacement
 
--- Sizes and offsets belong to the group that draws with them, so each group
--- resets its own rather than one button clearing settings across the page.
-local function BuildReset(panel, point, keys, after)
-    local reset = CastAheadWindow.Button(panel, "Reset", 70)
-    reset:SetPoint(unpack(point))
-    reset:SetScript("OnClick", function()
-        for _, key in ipairs(keys) do CastAheadConfig.Set(key, nil) end
-        Refresh()
-        if after then after() end
+local function BuildStrata(panel, point)
+    local strataDropdown = CreateFrame("DropdownButton", nil, panel, "WowStyle1DropdownTemplate")
+    strataDropdown:SetSize(150, 24)
+    strataDropdown:SetPoint(unpack(point))
+    strataDropdown:SetupMenu(function(_, root)
+        for _, name in ipairs(CastAheadConfig.STRATA) do
+            root:CreateRadio(name,
+                function() return CastAheadConfig.Strata() == name end,
+                function()
+                    CastAheadConfig.Set("strata", name ~= CastAheadConfig.STRATA_DEFAULT and name or nil)
+                    Redraw()
+                end)
+        end
     end)
-    return reset
+    table.insert(refreshers, function() strataDropdown:GenerateMenu() end)
+    strataDropdown:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Layer", 1, 1, 1)
+        GameTooltip:AddLine("Which layer the icons draw on. BACKGROUND sits above nameplates and under the rest of the UI, like a plate. Pick a higher layer to draw over your bars and frames, DIALOG or higher if your nameplate addon raises its plates.", nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    strataDropdown:SetScript("OnLeave", GameTooltip_Hide)
+    return strataDropdown
 end
+CastAheadOptions.BuildStrata = BuildStrata
 
 local BUILDERS
 
@@ -452,109 +397,17 @@ function BuildGeneral(panel)
         end,
     })
 
-    -- Sound ---------------------------------------------------------------
     local audio = BuildGroup(panel, "Sound", 100)
     local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 }, RedrawAndSaves)
     BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 }, RedrawAndSaves)
 
-    -- Where the icons go --------------------------------------------------
-    local plates = BuildGroup(panel, "Nameplate icons", 417)
+    local plates = BuildGroup(panel, "Nameplate icons", 100)
     local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 })
     BuildSwitch(panel, "fullLabels", { "TOPLEFT", platesOn, "BOTTOMLEFT", 0, -4 })
 
-    local square = BuildPlacement(panel, { "TOPLEFT", plates, "TOPLEFT", 16, -96 })
-
-    local offsetSlider = BuildSlider(panel, SliderSpec("offsetX", { "TOPLEFT", square, "BOTTOMLEFT", -4, -16 }))
-
-    local nudgeXSlider = BuildSlider(panel, {
-        key = "nudgeX",
-        default = 0,
-        min = -CastAheadConfig.NUDGE_MAX, max = CastAheadConfig.NUDGE_MAX, step = 1,
-        point = { "TOPLEFT", offsetSlider, "BOTTOMLEFT", -6, -18 },
-        caption = function(value) return string.format("Nudge sideways: %+d px", value) end,
-        after = RedrawRow,
-    })
-
-    local nudgeYSlider = BuildSlider(panel, {
-        key = "nudgeY",
-        default = 0,
-        min = -CastAheadConfig.NUDGE_MAX, max = CastAheadConfig.NUDGE_MAX, step = 1,
-        point = { "TOPLEFT", nudgeXSlider, "BOTTOMLEFT", -6, -18 },
-        caption = function(value) return string.format("Nudge up or down: %+d px", value) end,
-        after = RedrawRow,
-    })
-
-    BuildReset(panel, { "TOPLEFT", nudgeYSlider, "BOTTOMLEFT", -6, -22 },
-        { "anchor", "grow", "offsetX", "nudgeX", "nudgeY" }, Redraw)
-
-    -- How big they are ----------------------------------------------------
-    -- Everything drawn on a nameplate icon in one place: the icon sets the
-    -- size and the two texts on it are a share of that, so changing the icon
-    -- keeps them in proportion.
-    local sizes = BuildGroup(panel, "Icon size", 413)
-
-    local iconSlider = BuildSlider(panel, {
-        key = "iconSize",
-        default = CastAheadConfig.ICON_DEFAULT,
-        min = CastAheadConfig.ICON_MIN, max = CastAheadConfig.ICON_MAX, step = 2,
-        point = { "TOPLEFT", sizes, "TOPLEFT", 16, -26 },
-        caption = function(value) return string.format("Icon: %d px", value) end,
-        after = RedrawRow,
-    })
-
-    local labelSlider = BuildSlider(panel, SliderSpec("labelScale", { "TOPLEFT", iconSlider, "BOTTOMLEFT", -6, -18 }))
-
-    local timeSlider = BuildSlider(panel, SliderSpec("timeScale", { "TOPLEFT", labelSlider, "BOTTOMLEFT", -6, -18 }))
-
-    local fixedSpacing = BuildSwitch(panel, "fixedSpacing", { "TOPLEFT", timeSlider, "BOTTOMLEFT", -12, -18 })
-    local gapSlider = BuildSlider(panel, {
-        key = "iconGap",
-        default = CastAheadConfig.GAP_DEFAULT, min = 0, max = CastAheadConfig.GAP_MAX, step = 1,
-        point = { "TOPLEFT", fixedSpacing, "BOTTOMLEFT", 6, -4 },
-        caption = function(value) return string.format("Gap: %d px", value) end,
-        after = RedrawRow,
-    })
-
-    local strataLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    strataLabel:SetPoint("TOPLEFT", gapSlider, "BOTTOMLEFT", -6, -18)
-    strataLabel:SetText("Layer (frame strata)")
-    local strataDropdown = CreateFrame("DropdownButton", nil, panel, "WowStyle1DropdownTemplate")
-    strataDropdown:SetSize(170, 24)
-    strataDropdown:SetPoint("TOPLEFT", strataLabel, "BOTTOMLEFT", 0, -4)
-    strataDropdown:SetupMenu(function(_, root)
-        for _, name in ipairs(CastAheadConfig.STRATA) do
-            root:CreateRadio(name,
-                function() return CastAheadConfig.Strata() == name end,
-                function()
-                    CastAheadConfig.Set("strata", name ~= CastAheadConfig.STRATA_DEFAULT and name or nil)
-                    Redraw()
-                end)
-        end
-    end)
-    table.insert(refreshers, function() strataDropdown:GenerateMenu() end)
-    strataDropdown:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Layer", 1, 1, 1)
-        GameTooltip:AddLine("Which layer the icons draw on. BACKGROUND sits above nameplates and under the rest of the UI, like a plate. Pick a higher layer to draw over your bars and frames, DIALOG or higher if your nameplate addon raises its plates.", nil, nil, nil, true)
-        GameTooltip:Show()
-    end)
-    strataDropdown:SetScript("OnLeave", GameTooltip_Hide)
-
-    BuildReset(panel, { "TOPLEFT", strataDropdown, "BOTTOMLEFT", -6, -14 },
-        { "iconSize", "labelScale", "timeScale", "iconGap", "fixedSpacing", "strata" }, Redraw)
-
-    -- Centre call ---------------------------------------------------------
-    local centre = BuildGroup(panel, "Centre call", 229)
+    local centre = BuildGroup(panel, "Centre call", 70)
     BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 })
 
-    local centerSlider = BuildSlider(panel, SliderSpec("centerScale", { "TOPLEFT", centre, "TOPLEFT", 16, -63 }))
-
-    local centerTextSlider = BuildSlider(panel, SliderSpec("centerTextScale", { "TOPLEFT", centerSlider, "BOTTOMLEFT", -6, -18 }))
-
-    BuildReset(panel, { "TOPLEFT", centerTextSlider, "BOTTOMLEFT", -6, -18 },
-        { "centerScale", "centerTextScale", "centerX", "centerY" }, ResizeCenter)
-
-    -- Features ------------------------------------------------------------
     local features = BuildGroup(panel, "Features", 166)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", features, "TOPLEFT", 10, -26 }, function()
         SaveRefresh()

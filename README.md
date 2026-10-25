@@ -28,12 +28,12 @@ Predicts trash casts in Mythic+ and tells you what to do about them. On top of t
 
 A menu on the left: **Settings** (General, Sounds, Defensives while defensive calls are on), **Dungeon** (Guide, Saves, Casts, with the dungeon picked on top), **Raid** (Guide and Saves per difficulty, shown while the Raid switch is on) and **Feedback** (a Report page that prepares the text of a bug report or idea for a [GitHub issue](https://github.com/AqueGen/CastAhead/issues/new?template=report.yml) or a CurseForge comment).
 
-- **General**: what gets called, the outputs (nameplate icons, centre call, timeline, sound, voice), icon size and placement. The early warning ("tank buster soon") is off by default: on top of the real call it can read as two casts.
+- **General**: what gets called and the outputs (nameplate icons, centre call, timeline, sound, voice). Sizes and positions live in Set up on screen. The early warning ("tank buster soon") is off by default: on top of the real call it can read as two casts.
 - **Sounds**: each category keeps the voice or plays any sound your other addons registered, and the game sound channel (Master, Dialog or SFX) sets the volume slider that controls the calls.
 - **Casts**: every tracked cast with its call. Untick a cast to ignore it entirely; the Sound override column swaps the voice for a sound on one cast. Development mode adds the evidence columns.
 - **Guide** and **Saves**: per boss, the defensive calls for your role and the burst windows, as text and as a table.
 
-**Set up on screen**, the first button in General (or `/ca setup`), hides the window and shows sample icons on a sample nameplate and on real enemy plates nearby, plus a sample centre call and timeline. Drag them where you want them, use the mouse wheel to resize and the arrow keys for single pixels; a small panel holds the exact numbers, the output switches and Reset, and Done or Esc closes it. Not available in combat. Moving a size or position slider in General shows its icons or centre call for two seconds, so you see the change without the setup mode.
+**Set up on screen**, the first button in General (or `/ca setup`), hides the window and shows sample icons on a sample nameplate and on real enemy plates nearby, plus a sample centre call and timeline. Drag them where you want them, use the mouse wheel to resize and the arrow keys for single pixels. A small panel holds every size and position setting as exact numbers: for the nameplate icons the side, growth, distance, X and Y, icon, label and countdown size, fixed spacing with its gap, and the layer; for the centre call X and Y from the screen centre, size and text size. Reset puts them all back, and Done or Esc closes it. Not available in combat.
 
 ## Defensive calls (alpha)
 

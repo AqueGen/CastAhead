@@ -2703,19 +2703,15 @@ local function SampleDataRow(key)
     end
 end
 
-local function ShowCenterSample(on, strata)
+local function ShowCenterSample(on)
     if centerUnlocked then ToggleMoveCenter(true) end
     centerSample = (on and CastAheadConfig.CenterText()) and true or false
     if not centerSample then
-        if center then
-            center:EnableMouse(false)
-            center:SetFrameStrata(CENTER_STRATA)
-        end
+        if center then center:EnableMouse(false) end
         HideCenter()
         return false
     end
     local f = CenterFrame()
-    f:SetFrameStrata(strata or CENTER_STRATA)
     f:EnableMouse(true)
     PlaceCenter(f)
     local A = CastAheadMatch.ADVICE
@@ -3643,7 +3639,6 @@ function CastAheadCore.ShowSampleRow(state, frame)
     for i = 1, #row do
         local sample = row[i]
         local bar = GetBar(state, i)
-        if state.strata then SetBarStrata(bar, state.strata) end
         PaintBar(bar, { row = SampleDataRow(sample.key) or { prio = sample.key }, approximate = sample.approx }, nil)
         SetApprox(bar, sample.approx == true)
         bar.time:SetFormattedText("%d", sample.time)
