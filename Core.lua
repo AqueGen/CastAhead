@@ -153,6 +153,7 @@ local tuning = {
     history = true,            -- one creature's same-length casts are told apart by each spell's own history
     historyOffset = true,      -- a spell not yet seen on the plate may be placed by its opening order
     historyTolerance = 4.0,    -- how far a spell's first cast may land from its opening order
+    deferBusy = true,          -- a prediction that fell inside another cast of the mob moves to that cast's end
 }
 
 -- Population: how many of each creature MDT places in this dungeon (Packs.lua,
@@ -2124,6 +2125,22 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
     return false
 end
 
+-- A mob casts one thing at a time: whatever was due while it was busy comes
+-- right after. Devouring Brutalizer's Brutalize lands the moment its 9s Devour
+-- ends, seconds past its own schedule. Only behind a cast we know and that is
+-- not a filler: a mob chaining an unknown filler (Felfire Burst) starts the next
+-- one right where the moved prediction lands, and that start got claimed.
+local function DeferBusy(state, startAt, endAt, busy)
+    if not tuning.deferBusy or not busy or #busy ~= 1 or busy[1].filler then return end
+    for _, track in pairs(state.tracks) do
+        if track.nextAt and track.nextAt > startAt and track.nextAt < endAt then
+            track.nextAt = endAt
+            track.due = nil
+            SyncTimeline(track)
+        end
+    end
+end
+
 function FinishHeld(unit, state)
     local held = state.held
     if not held then return end
@@ -2157,6 +2174,8 @@ local function OnCastStop(unit, channel)
     if not channel then follow = false end
     FinishCast(unit, state, startAt, duration, channel, follow, claimed, state.spellTarget)
     if heldIdentified and #lastIdentified[unit] == 0 then lastIdentified[unit] = heldIdentified end
+    DeferBusy(state, held and held.startAt or startAt, GetTime(), lastIdentified[unit])
+    RefreshBar(unit, state)
 end
 
 -- INTERRUPTED and FAILED are terminal: Blizzard's own cast bar clears on them
@@ -2178,6 +2197,8 @@ local function OnCastInterrupted(unit)
     state.casting = nil
     Record("CUT", unit, math.floor((GetTime() - startAt) * 1000 + 0.5))
     ResolveInterrupted(unit, state, startAt, matched)
+    DeferBusy(state, startAt, GetTime(), matched and matched.candidates)
+    RefreshBar(unit, state)
 end
 
 -- Dispel learning ---------------------------------------------------------

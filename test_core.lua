@@ -1410,6 +1410,32 @@ do
 end
 for _ = 1, 2 do table.remove(CastAheadData[1877]) end
 
+-- A mob casts one thing at a time. Its 1.2s spell is due at t0+22, but an 8.2s
+-- cast holds it until t0+26.5 and the spell comes the moment that one ends:
+-- 4.5s late, past any lateness a prediction may claim, unless the prediction
+-- was moved to the end of the cast that held it.
+table.insert(CastAheadData[1877], { spell = 1701, npc = 17, mob = "Brutalizer", name = "Brutalize", cast = 1.2,
+                          cd = { 20.0 }, first = 2.0, firstN = 20, kick = 0, cc = 0, prio = "TANK" })
+table.insert(CastAheadData[1877], { spell = 1702, npc = 17, mob = "Brutalizer", name = "Devour", cast = 8.2,
+                          cd = { 30.0 }, first = 18.3, firstN = 20, kick = 0, cc = 0 })
+do
+    enter()
+    local t0 = now
+    advance(2.0)
+    castFor(1.2)
+    advance(t0 + 18.3 - now)
+    castFor(8.2)
+    fire("UNIT_SPELLCAST_START", unit)
+    local claim = CastAheadCore.Casting(unit)
+    advance(1.2)
+    fire("UNIT_SPELLCAST_STOP", unit)
+    check(claim and claim.row and claim.row.spell == 1701,
+        "a cast held back by the mob's own longer cast is still claimed when it comes, got "
+        .. tostring(claim and claim.row and claim.row.spell))
+    reset()
+end
+for _ = 1, 2 do table.remove(CastAheadData[1877]) end
+
 -- A first cast projected from the mob's kit reaches the timeline once its
 -- opening is measured well enough, and stays off it while it is not.
 local sibling = CastAheadData[1877][2]
