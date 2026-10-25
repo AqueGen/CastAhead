@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.0](https://github.com/AqueGen/CastAhead/compare/v0.20.0...v0.21.0) (2026-10-25)
+
+
+### Features
+
+* on-screen setup mode ([#85](https://github.com/AqueGen/CastAhead/issues/85)) ([a7afa32](https://github.com/AqueGen/CastAhead/commit/a7afa32de6398882d74bcb9d4ea508f1f9ce0c3b))
+
 ## [0.20.0](https://github.com/AqueGen/CastAhead/compare/v0.19.1...v0.20.0) (2026-10-24)
 
 
