@@ -51,6 +51,9 @@ FIRST_STEP = 2.0        # half of FIRST_TOLERANCE
 OFFSET_STEP = 1.0
 APPROX_MARGIN = 0.05
 SOLE_CHANNEL_SHARE = 0.98
+# Spells whose payload window only ever catches the caster's other spells: Ice Shield
+# is an absorb on an ally, its 5 "hits" in 3295 casts are the same mob's Frostbolts.
+NO_PAYLOAD = {372743}
 
 
 def densest(xs, width):
@@ -320,6 +323,14 @@ def print_report(report, total):
           % (total, total - signs.count("~") - signs.count("+"), signs.count("~"), signs.count("+"), signs.count("-")))
 
 
+def owned_elsewhere(facts, spellid, owned):
+    """The logs gave this creature a spell MDT lists under another one. MDT's lists
+    are not complete (6.3.22 dropped Thorny Saptor's Hunting Leap, cast 769 times
+    in a week), so a spell MDT lists for nobody stays with the creature that cast it."""
+    spellid = str(spellid)
+    return bool(facts and facts["spells"]) and spellid not in facts["spells"] and spellid in owned
+
+
 def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path=None, targets_path=None,
          game_targets_path=None, spell_times_path=None, curated_targets_path=None, follows_path=None,
          fresh=False):
@@ -327,6 +338,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
     # MDT knows what the logs cannot: which creature owns a spell, whether that
     # spell is interruptible, and which creatures are bosses.
     mdt = json.load(open(mdt_path, encoding="utf-8")) if mdt_path else {}
+    owned = {s for facts in mdt.values() for s in facts["spells"]}
     ov = json.load(open(overrides_path, encoding="utf-8")) if overrides_path else {}
     exclude = set(ov.get("exclude", []))
     include = set(ov.get("include", []))
@@ -378,8 +390,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                 if r.get("starts", 0) == 0 and (spell_times.get(spellid) or {}).get("channel"):
                     counts = channel_casts.setdefault(instance_id, {})
                     counts[(int(spellid), int(npcid))] = counts.get((int(spellid), int(npcid)), 0) + len(r["cast"])
-                if facts and facts["spells"] and str(spellid) not in facts["spells"]:
-                    # The logs attributed a spell this creature does not own.
+                if owned_elsewhere(facts, spellid, owned):
                     continue
                 measured = statistics.median(r["cast"]) if r["cast"] else 0.0
                 cast = measured
@@ -424,7 +435,8 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                     if hi - lo <= OFFSET_SPREAD:
                         offset = round(statistics.median(offsets), 1)
                 t = threat(r)
-                if old is not None and old["dmg"] is None and len(r["dmg"]) < THIN_EVIDENCE:
+                if int(spellid) in NO_PAYLOAD or old is not None and old["dmg"] is None \
+                        and len(r["dmg"]) < THIN_EVIDENCE:
                     # The payload window books any hit of the caster, so a few samples
                     # can be another spell's (Ethereal Shade: 3 of 775 casts).
                     t["hits"] = t["dmg"] = None
@@ -442,7 +454,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                     # tally (a boss spell with the same cast time once made an
                     # uninterruptible cast look kickable). For a creature MDT
                     # does not list, the tally is the only evidence there is.
-                    "mdt_kick": bool(facts["spells"].get(str(spellid))) if facts and facts["spells"] else None,
+                    "mdt_kick": bool(facts["spells"][str(spellid)]) if facts and str(spellid) in facts["spells"] else None,
                     # UnitLevel still reads off a hostile nameplate, so this
                     # narrows candidates the moment the mob enters combat.
                     "level": (facts or {}).get("level"),
@@ -474,8 +486,8 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
         instance_id, spellid, npcid = row_key
         facts = mdt.get(str(npcid))
         zone = dungeons.get(instance_id, (anchor_zones[instance_id],))[0]
-        if (str(spellid) in exclude or facts and (facts.get("encounter")
-                or facts["spells"] and str(spellid) not in facts["spells"])):
+        if (str(spellid) in exclude or facts and facts.get("encounter")
+                or owned_elsewhere(facts, spellid, owned)):
             report.append(("-", zone, old, old, []))
             continue
         dungeons.setdefault(instance_id, (zone, []))[1].append(old)
