@@ -155,6 +155,7 @@ local function StubRegion()
     r.Hide = function() r.shown = false end
     r.SetShown = function(_, on) r.shown = on and true or false end
     r.IsShown = function() return r.shown end
+    r.SetAllPoints = function(_, target) r.allPointsTo = target end
     r.GetTexture = function() return r.textureValue end
     setmetatable(r, { __index = function() return function() return r end end })
     return r
@@ -5939,6 +5940,13 @@ end
         check(S.centerBox.shown and not grip.box.shown, "setup: a click on the centre selects it")
         grip.handlers.OnMouseDown(grip, "LeftButton")
         check(grip.box.shown and not S.centerBox.shown, "setup: a click on the row selects it")
+        check(center.fill.shown and center.fill.allPointsTo == center, "setup: the centre sample shows a fill over the whole block")
+        CastAheadDB.centerText = false
+        CastAheadCore.ShowCenterSample(true)
+        check(not center.fill.shown, "setup: no centre fill while Centre call is off")
+        CastAheadDB.centerText = nil
+        CastAheadCore.ShowCenterSample(true)
+        check(center.fill.shown, "setup: the centre fill is back when Centre call is on")
 
         local function placeFirstIcon(ix, iy)
             for i = 1, #allFrames do
@@ -6043,6 +6051,7 @@ end
         S.Leave()
         check(dropped == 1 and CastAheadDB.anchor == "top", "setup: leaving during a row drag saves the drop")
         check(keyboard == false, "setup: leaving releases the keyboard")
+        check(not center.fill.shown, "setup: leaving hides the centre fill")
         check(newlyShown(base) == 0, "setup: nothing left after a drag, got " .. newlyShown(base))
         S.DropRow = realDrop
 
@@ -6170,7 +6179,7 @@ end
 
         CastAheadDB.labelScale = nil
         click(f.labelScale.plus)
-        check(CastAheadDB.labelScale == 105 and f.labelScale.box.value == "105", "panel: + on Label adds 5%")
+        check(CastAheadDB.labelScale == 101 and f.labelScale.box.value == "101", "panel: + on Label adds 1%")
         typeInto("labelScale", "999")
         check(CastAheadDB.labelScale == 200 and f.labelScale.box.value == "200", "panel: a typed label size stops at 200%")
         typeInto("timeScale", "10")
@@ -6179,11 +6188,11 @@ end
 
         CastAheadDB.offsetX = nil
         click(f.offsetX.plus)
-        check(CastAheadDB.offsetX == 2 and f.offsetX.box.value == "2", "panel: + on Distance moves the row out 2")
+        check(CastAheadDB.offsetX == 1 and f.offsetX.box.value == "1", "panel: + on Distance moves the row out 1")
         click(f.offsetX.minus)
         check(CastAheadDB.offsetX == 0, "panel: - on Distance comes back to 0")
         click(f.offsetX.minus)
-        check(CastAheadDB.offsetX == -2 and f.offsetX.box.value == "-2", "panel: - on Distance from 0 goes negative")
+        check(CastAheadDB.offsetX == -1 and f.offsetX.box.value == "-1", "panel: - on Distance from 0 goes negative")
         typeInto("offsetX", "-10")
         check(CastAheadDB.offsetX == -10 and f.offsetX.box.value == "-10", "panel: a typed distance can be -10")
         typeInto("offsetX", "-500")
@@ -6243,10 +6252,10 @@ end
         check(CastAheadDB.centerX == 12, "panel: leaving the box applies the typed value")
         CastAheadDB.centerScale = nil
         click(f.centerScale.minus)
-        check(CastAheadDB.centerScale == 95 and f.centerScale.box.value == "95", "panel: - on the centre size takes 5%")
+        check(CastAheadDB.centerScale == 99 and f.centerScale.box.value == "99", "panel: - on the centre size takes 1%")
         CastAheadDB.centerTextScale = nil
         click(f.centerTextScale.plus)
-        check(CastAheadDB.centerTextScale == 105, "panel: + on the centre text adds 5%")
+        check(CastAheadDB.centerTextScale == 101, "panel: + on the centre text adds 1%")
         local nx = CastAheadDB.nudgeX
         S.Nudge(1, 0)
         check(CastAheadDB.nudgeX == nx + 1 and CastAheadDB.centerX == 12, "panel: typing centre numbers leaves the arrows on the row")

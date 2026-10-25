@@ -376,12 +376,12 @@ end
 
 local C = CastAheadConfig
 local FIELDS = {
-    offsetX = Ranged("offsetX", 0, -OFFSET_MAX, OFFSET_MAX, 2),
+    offsetX = Ranged("offsetX", 0, -OFFSET_MAX, OFFSET_MAX, 1),
     nudgeX = Ranged("nudgeX", 0, -C.NUDGE_MAX, C.NUDGE_MAX, 1),
     nudgeY = Ranged("nudgeY", 0, -C.NUDGE_MAX, C.NUDGE_MAX, 1),
     iconSize = Ranged("iconSize", C.ICON_DEFAULT, C.ICON_MIN, C.ICON_MAX, 1),
-    labelScale = Ranged("labelScale", C.LABEL_DEFAULT, C.LABEL_MIN, C.LABEL_MAX, 5),
-    timeScale = Ranged("timeScale", C.TIME_DEFAULT, C.TIME_MIN, C.TIME_MAX, 5),
+    labelScale = Ranged("labelScale", C.LABEL_DEFAULT, C.LABEL_MIN, C.LABEL_MAX, 1),
+    timeScale = Ranged("timeScale", C.TIME_DEFAULT, C.TIME_MIN, C.TIME_MAX, 1),
     iconGap = Ranged("iconGap", C.GAP_DEFAULT, 0, C.GAP_MAX, 1),
     centerX = {
         step = 1, center = true,
@@ -395,8 +395,8 @@ local FIELDS = {
             CastAheadConfig.Set("centerY", Clamp(v, HalfScreen("GetHeight")) - CastAheadCore.CENTER_Y)
         end,
     },
-    centerScale = Ranged("centerScale", C.CENTER_DEFAULT, C.CENTER_MIN, C.CENTER_MAX, 5, true),
-    centerTextScale = Ranged("centerTextScale", C.CENTER_TEXT_DEFAULT, C.CENTER_TEXT_MIN, C.CENTER_TEXT_MAX, 5, true),
+    centerScale = Ranged("centerScale", C.CENTER_DEFAULT, C.CENTER_MIN, C.CENTER_MAX, 1, true),
+    centerTextScale = Ranged("centerTextScale", C.CENTER_TEXT_DEFAULT, C.CENTER_TEXT_MIN, C.CENTER_TEXT_MAX, 1, true),
 }
 local TARGETS = {
     row = { x = "nudgeX", y = "nudgeY", size = "iconSize", notch = 1, unit = " px" },

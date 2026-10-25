@@ -2490,6 +2490,10 @@ local function CenterFrame()
     center.grip:SetAllPoints(center.lines[1])
     center.grip:SetColorTexture(0, 0, 0, 0.5)
     center.grip:Hide()
+    center.fill = center:CreateTexture(nil, "BACKGROUND")
+    center.fill:SetAllPoints(center)
+    center.fill:SetColorTexture(0, 0, 0, 0.35)
+    center.fill:Hide()
     center:SetMovable(true)
     center:RegisterForDrag("LeftButton")
     center:SetScript("OnDragStart", function(self)
@@ -2707,12 +2711,16 @@ local function ShowCenterSample(on)
     if centerUnlocked then ToggleMoveCenter(true) end
     centerSample = (on and CastAheadConfig.CenterText()) and true or false
     if not centerSample then
-        if center then center:EnableMouse(false) end
+        if center then
+            center:EnableMouse(false)
+            center.fill:Hide()
+        end
         HideCenter()
         return false
     end
     local f = CenterFrame()
     f:EnableMouse(true)
+    f.fill:Show()
     PlaceCenter(f)
     local A = CastAheadMatch.ADVICE
     local defensive = CastAheadSaves and CastAheadSaves.Icons(A.DEFENSIVE, nil)
