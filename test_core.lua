@@ -5250,5 +5250,48 @@ do
     CreateFrame, CastAheadDB, C_UnitAuras, C_Secrets = savedCreate, savedDB, savedAuras, nil
 end
 
+do
+    local savedDB = CastAheadDB
+    CastAheadDB = {}
+    local plate = {}
+    local state = {}
+    CastAheadCore.ShowSampleRow(state, plate)
+    local bars = { unpack(state.bars) }
+    local shown = 0
+    for i = 1, #bars do if bars[i].shown then shown = shown + 1 end end
+    check(#bars == 3 and shown == 3, "sample row: three bars shown")
+    check(bars[1].timeValue == "7" and bars[2].timeValue == "3" and bars[3].timeValue == "12",
+        "sample row: times 7, 3, 12")
+    check(bars[1].tilde.shown == true and not bars[2].tilde.shown, "sample row: only the first carries a tilde")
+    check(bars[1].labelValue == "KICK" and bars[2].labelValue == "DODGE" and bars[3].labelValue == "BUSTER",
+        "sample row: short labels")
+    check(not bars[1].glow.shown, "sample row: no glow")
+    check(bars[1].x ~= nil, "sample row: anchored to the frame")
+    CastAheadCore.SampleStates[state] = plate
+    CastAheadConfig.Set("iconSize", 40)
+    CastAheadCore.Reapply()
+    check(bars[1]._size == 40, "sample row: Reapply resizes registered samples")
+    CastAheadCore.SampleStates[state] = nil
+    CastAheadConfig.Set("fullLabels", true)
+    local full = {}
+    CastAheadCore.ShowSampleRow(full, plate)
+    check(full.bars[3].labelValue == "TANKBUSTER", "sample row: full labels")
+    CastAheadCore.HideSampleRow(full)
+    check(#full.bars == 0, "sample row: hide clears the state")
+    CastAheadConfig.Set("nameplates", false)
+    CastAheadCore.ShowSampleRow(full, plate)
+    shown = 0
+    for i = 1, #full.bars do if full.bars[i].shown then shown = shown + 1 end end
+    check(#full.bars == 3 and shown == 0, "sample row: hidden when nameplates are off")
+    CastAheadCore.HideSampleRow(full)
+    CastAheadCore.HideSampleRow(state)
+    check(not bars[1].shown and not bars[2].shown and not bars[3].shown, "sample row: hide leaves nothing shown")
+    local before = framesMade
+    CastAheadCore.ShowSampleRow(full, plate)
+    check(framesMade == before, "sample row: hidden bars return to the pool")
+    CastAheadCore.HideSampleRow(full)
+    CastAheadDB = savedDB
+end
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

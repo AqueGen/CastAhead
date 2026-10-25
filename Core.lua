@@ -3542,6 +3542,35 @@ function CastAheadCore.ResizeCenter()
     if center then PlaceCenter(center) end
 end
 
+CastAheadCore.SAMPLE_ROW = {
+    { key = "KICK", time = 7, approx = true },
+    { key = "DODGE", time = 3 },
+    { key = "TANK", time = 12 },
+}
+CastAheadCore.SampleStates = {}
+
+function CastAheadCore.ShowSampleRow(state, frame)
+    local row = CastAheadCore.SAMPLE_ROW
+    local on = CastAheadConfig.Enabled("nameplates")
+    for i = 1, #row do
+        local sample = row[i]
+        local bar = GetBar(state, i)
+        PaintBar(bar, { row = { prio = sample.key }, approximate = sample.approx }, nil)
+        SetApprox(bar, sample.approx == true)
+        bar.time:SetFormattedText("%d", sample.time)
+        spread[i] = bar
+    end
+    SpreadBars(spread, #row)
+    for i = 1, #row do
+        AnchorToFrame(frame, state.bars[i], i)
+        state.bars[i]:SetShown(on)
+    end
+end
+
+function CastAheadCore.HideSampleRow(state)
+    ReleaseBars(state)
+end
+
 function CastAheadCore.Reapply()
     local isDisabled = CastAheadUI and CastAheadUI.IsDisabled
     for unit, state in pairs(plates) do
@@ -3570,6 +3599,9 @@ function CastAheadCore.Reapply()
                 DemoAnchor(e, i)
             end
         end
+    end
+    for state, frame in pairs(CastAheadCore.SampleStates) do
+        CastAheadCore.ShowSampleRow(state, frame)
     end
 end
 
