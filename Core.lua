@@ -150,6 +150,9 @@ local tuning = {
     lateClaimMax = 4.0,        -- how long an overdue prediction may still claim a start
     claimMargin = 1.0,         -- a rival with another call almost as close to the start leaves it unclaimed
     firstChannel = true,       -- a plate's first channel is the only channel its creatures have
+    history = true,            -- one creature's same-length casts are told apart by each spell's own history
+    historyOffset = true,      -- a spell not yet seen on the plate may be placed by its opening order
+    historyTolerance = 4.0,    -- how far a spell's first cast may land from its opening order
 }
 
 -- Population: how many of each creature MDT places in this dungeon (Packs.lua,
@@ -1459,6 +1462,55 @@ local function LastRealStart(state, duration, channel)
     return last
 end
 
+-- One creature's same-length casts share a track, which mixes their intervals,
+-- and the engage window is too loose to split them (Corrosive Essence / Rip and
+-- Slice). Here each candidate is judged by its own history on this plate: its
+-- cooldown since its own last cast, or, unseen yet, its firm opening order from
+-- the mob's first cast. Nil when that decides nothing, so the interval and
+-- opening checks still get their turn. One creature only: an offset counts from
+-- that creature's own first cast, so across creatures every offset-0 row would
+-- claim any plate's first cast.
+local function NarrowByHistory(state, candidates, startAt)
+    for i = 2, #candidates do
+        if candidates[i].npc ~= candidates[1].npc then return nil end
+    end
+    -- Each candidate is "fits", "out" (sooner than it ever comes back), "unsure"
+    -- (its own history here says neither) or unseen (no history, no firm offset).
+    local fitting, open, unsure = {}, {}, false
+    for i = 1, #candidates do
+        local row = candidates[i]
+        local own = SpellTrack(state, row)
+        local verdict
+        if own and not own.projected and own.lastStartAt and not own.sure then
+            -- A history built on a guess only passes the guess on: a Call Lightning
+            -- taken for Accumulate Charge once made the next real one "too soon".
+            verdict = "unsure"
+        elseif own and not own.projected and own.lastStartAt then
+            local gap = startAt - own.lastStartAt
+            if CastAheadMatch.SlotForInterval(row, gap, own.index) then
+                verdict = "fits"
+            elseif row.cdMin and gap < row.cdMin - CastAheadMatch.CD_TOLERANCE_FLAT then
+                verdict = "out"
+            else
+                verdict = "unsure"
+            end
+        elseif tuning.historyOffset and (state.actedAt or state.firstCastAt) and row.offset and row.offsetFirm
+            and math.abs(startAt - (state.actedAt or state.firstCastAt) - row.offset) <= tuning.historyTolerance then
+            verdict = "fits"
+        end
+        if verdict == "fits" then fitting[#fitting + 1] = row end
+        if verdict ~= "out" then open[#open + 1] = row end
+        if verdict == "unsure" then unsure = true end
+    end
+    -- One left standing, or one that fits against rivals that are out or unseen. A
+    -- rival with history it cannot place blocks the call: Accumulate Charge 7.3s
+    -- after itself is neither on schedule nor too soon, while Call Lightning 12.1s
+    -- after itself happens to fit, and choosing it was wrong.
+    if #open == 1 and #open < #candidates then return open end
+    if #fitting == 1 and not unsure then return fitting end
+    return nil
+end
+
 local function PickTrack(state, duration, channel, claimed, startAt)
     if claimed and state.tracks[claimed.slot] == claimed and SameLength(claimed, duration, channel) then
         return claimed
@@ -1587,6 +1639,7 @@ local function RefreshCombat(unit)
         wipe(state.tracks)
         state.engagedAt = nil
         state.actedAt = nil
+        state.firstCastAt = nil
         state.castStartAt = nil
         state.casting = nil
         state.held = nil
@@ -1660,6 +1713,7 @@ local function OnCastStart(unit, channel)
         FinishHeld(unit, state)
     end
     state.castStartAt = now
+    state.firstCastAt = state.firstCastAt or now
     state.channelling = channel or nil
     state.interrupted = false
     state.interruptible = nil
@@ -1937,7 +1991,11 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
                 Trace(unit, "packs", candidates)
             end
         end
-        if lastSeen then
+        local byHistory = tuning.history and #candidates > 1 and NarrowByHistory(state, candidates, startAt)
+        if byHistory then
+            candidates = byHistory
+            Trace(unit, "history", candidates)
+        elseif lastSeen then
             candidates = CastAheadMatch.NarrowByInterval(candidates, startAt - lastSeen)
             Trace(unit, "interval", candidates)
         elseif state.engagedAt then
@@ -2370,6 +2428,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
             state.inCombat = nil
             state.engagedAt = nil
             state.actedAt = nil
+            state.firstCastAt = nil
             HideBar(state)
             state.level = SafeLevel(unit)
             local traits = ReadTraits(unit)
