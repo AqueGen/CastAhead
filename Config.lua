@@ -189,16 +189,6 @@ function C.Lead()
     return seconds
 end
 
--- The addon was called Forecast until 2026-09-01. Its saved variables live
--- under the old global for one more load: the TOC now declares CastAheadDB,
--- so ForecastDB arrives populated only while the old file is still on disk.
--- Adopt it once, then let it go.
-function C.AdoptOldName()
-    if CastAheadDB == nil and type(ForecastDB) == "table" then
-        CastAheadDB = ForecastDB
-    end
-end
-
 -- Run once, the moment the saved variables arrive: by PLAYER_LOGIN the
 -- minimap icon has already created the table, and a fresh install would
 -- read as an old profile. Older profile shapes exist and each would

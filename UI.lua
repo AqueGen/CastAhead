@@ -102,10 +102,6 @@ end
 
 SLASH_CASTAHEAD1 = "/castahead"
 SLASH_CASTAHEAD2 = "/ca"
--- The old names still work: they were in the player's muscle memory before
--- the addon was renamed, and nothing else claims them.
-SLASH_CASTAHEAD3 = "/forecast"
-SLASH_CASTAHEAD4 = "/fcast"
 local DEV_COMMANDS = { probe = true, report = true, mark = true, note = true }
 SlashCmdList.CASTAHEAD = function(msg)
     msg = msg and msg:lower() or ""

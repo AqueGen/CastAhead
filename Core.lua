@@ -2214,7 +2214,6 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     end
     if event == "ADDON_LOADED" then
         if unit == "CastAhead" then
-            CastAheadConfig.AdoptOldName()
             CastAheadConfig.Migrate()
         end
         return
