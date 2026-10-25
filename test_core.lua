@@ -4595,10 +4595,10 @@ do
     (function()
         local setup, move
         for _, b in ipairs(made) do
-            if rawget(b, "buttonText") == "Set up on screen" then setup = b end
+            if rawget(b, "buttonText") == "Size and position" then setup = b end
             if rawget(b, "buttonText") == "Move it on screen" then move = b end
         end
-        check(setup and not move, "General has Set up on screen in place of Move it on screen")
+        check(setup and not move, "General has Size and position in place of Move it on screen")
         if not setup then return end
         local realEnter, realLock, realTip = CastAheadSetup.Enter, InCombatLockdown, GameTooltip
         local entered, inCombat, tips = 0, false, {}
@@ -4608,23 +4608,27 @@ do
             SetText = function(_, t) tips[#tips + 1] = t end,
             AddLine = function(_, t) tips[#tips + 1] = t end,
         }, { __index = function() return function() end end })
+        setup.handlers.OnEnter(setup)
+        check(table.concat(tips, "|") == "Size and position|Set the size and position of the nameplate icons and the centre call, with a live preview.",
+            "the button's tooltip says what it does, got " .. table.concat(tips, "|"))
+        tips = {}
         setup.handlers.OnClick(setup)
-        check(entered == 1, "Set up on screen enters the setup mode")
+        check(entered == 1, "Size and position enters the setup mode")
         inCombat = true
         CastAheadOptions.ShowPanel(host, "General")
         check(setup.enabled == false and setup.motionWhileDisabled == true,
-            "Set up on screen is disabled in combat and keeps its tooltip")
+            "Size and position is disabled in combat and keeps its tooltip")
         setup.handlers.OnEnter(setup)
-        check(table.concat(tips, "|") == "Not available in combat.",
+        check(table.concat(tips, "|") == "Size and position|Set the size and position of the nameplate icons and the centre call, with a live preview.|Not available in combat.",
             "the disabled button says why, got " .. table.concat(tips, "|"))
         inCombat = false
         setup.handlers.OnEvent(setup, "PLAYER_REGEN_ENABLED")
-        check(setup.enabled == true, "Set up on screen is enabled again when combat ends")
+        check(setup.enabled == true, "Size and position is enabled again when combat ends")
         setup.handlers.OnEvent(setup, "PLAYER_REGEN_DISABLED")
-        check(setup.enabled == false, "Set up on screen is disabled when combat starts, before the lockdown reports it")
+        check(setup.enabled == false, "Size and position is disabled when combat starts, before the lockdown reports it")
         inCombat = true
         setup.handlers.OnEvent(setup, "PLAYER_REGEN_ENABLED")
-        check(setup.enabled == true, "Set up on screen is enabled when combat ends, before the lockdown lifts")
+        check(setup.enabled == true, "Size and position is enabled when combat ends, before the lockdown lifts")
         CastAheadSetup.Enter, InCombatLockdown, GameTooltip = realEnter, realLock, realTip
     end)()
     local function OffNote()

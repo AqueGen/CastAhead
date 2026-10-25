@@ -364,7 +364,7 @@ end
 -- it is drawn. Each group carries its own on/off switch, so nothing has to be
 -- traced across the page.
 function BuildGeneral(panel)
-    local setup = CastAheadWindow.Button(panel, "Set up on screen", 160, true)
+    local setup = CastAheadWindow.Button(panel, "Size and position", 160, true)
     setup:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -8)
     setup:SetMotionScriptsWhileDisabled(true)
     setup:SetScript("OnClick", function() CastAheadSetup.Enter() end)
@@ -373,9 +373,11 @@ function BuildGeneral(panel)
         setup:SetEnabled(not fighting)
     end
     setup:SetScript("OnEnter", function(self)
-        if not InCombatLockdown() then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Not available in combat.", 1, 1, 1)
+        GameTooltip:SetText("Size and position", 1, 1, 1)
+        GameTooltip:AddLine("Set the size and position of the nameplate icons and the centre call, with a live preview.",
+            nil, nil, nil, true)
+        if InCombatLockdown() then GameTooltip:AddLine("Not available in combat.", 1, 1, 1) end
         GameTooltip:Show()
     end)
     setup:SetScript("OnLeave", GameTooltip_Hide)
