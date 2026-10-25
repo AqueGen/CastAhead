@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.22.0](https://github.com/AqueGen/CastAhead/compare/v0.21.0...v0.22.0) (2026-10-25)
+
+
+### Features
+
+* General shows the training dummies hint next to Size and position ([#90](https://github.com/AqueGen/CastAhead/issues/90)) ([5375e73](https://github.com/AqueGen/CastAhead/commit/5375e73d9710d610e83907a42162025e8c311961))
+* the Size and position tooltip suggests training dummies ([#88](https://github.com/AqueGen/CastAhead/issues/88)) ([418b8a2](https://github.com/AqueGen/CastAhead/commit/418b8a21ff713b4699b85b5b134a4735aa91a250))
+
+
+### Bug Fixes
+
+* no tooltip on the Size and position button ([#91](https://github.com/AqueGen/CastAhead/issues/91)) ([3b84835](https://github.com/AqueGen/CastAhead/commit/3b84835d39cb4e4d65a9ff9ac6e9a568e09147a6))
+
 ## [0.21.0](https://github.com/AqueGen/CastAhead/compare/v0.20.0...v0.21.0) (2026-10-25)
 
 
