@@ -4632,27 +4632,16 @@ do
         end
         check(setup and not move, "General has Size and position in place of Move it on screen")
         if not setup then return end
-        local realEnter, realLock, realTip = CastAheadSetup.Enter, InCombatLockdown, GameTooltip
-        local entered, inCombat, tips = 0, false, {}
+        local realEnter, realLock = CastAheadSetup.Enter, InCombatLockdown
+        local entered, inCombat = 0, false
         CastAheadSetup.Enter = function() entered = entered + 1 return true end
         InCombatLockdown = function() return inCombat end
-        GameTooltip = setmetatable({
-            SetText = function(_, t) tips[#tips + 1] = t end,
-            AddLine = function(_, t) tips[#tips + 1] = t end,
-        }, { __index = function() return function() end end })
-        setup.handlers.OnEnter(setup)
-        check(table.concat(tips, "|") == "Size and position|Set the size and position of the nameplate icons and the centre call, with a live preview.",
-            "the button's tooltip says what it does, got " .. table.concat(tips, "|"))
-        tips = {}
+        check(setup.handlers.OnEnter == nil, "Size and position has no tooltip")
         setup.handlers.OnClick(setup)
         check(entered == 1, "Size and position enters the setup mode")
         inCombat = true
         CastAheadOptions.ShowPanel(host, "General")
-        check(setup.enabled == false and setup.motionWhileDisabled == true,
-            "Size and position is disabled in combat and keeps its tooltip")
-        setup.handlers.OnEnter(setup)
-        check(table.concat(tips, "|") == "Size and position|Set the size and position of the nameplate icons and the centre call, with a live preview.|Not available in combat.",
-            "the disabled button says why, got " .. table.concat(tips, "|"))
+        check(setup.enabled == false, "Size and position is disabled in combat")
         inCombat = false
         setup.handlers.OnEvent(setup, "PLAYER_REGEN_ENABLED")
         check(setup.enabled == true, "Size and position is enabled again when combat ends")
@@ -4666,7 +4655,7 @@ do
             if rawget(fs, "value") == "Best done near training dummies, so the icons show on real nameplates." then hint = fs end
         end
         check(hint ~= nil, "General says next to the button that setup is best done near training dummies")
-        CastAheadSetup.Enter, InCombatLockdown, GameTooltip = realEnter, realLock, realTip
+        CastAheadSetup.Enter, InCombatLockdown = realEnter, realLock
     end)()
     local function OffNote()
         for _, fs in ipairs(texts) do
