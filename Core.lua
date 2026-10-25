@@ -2538,11 +2538,13 @@ local function DropCenter()
     local x, y = CenterDragOffset()
     center.dragging = nil
     if not x then return end
-    if CastAheadSetup and CastAheadSetup.Active() then x, y = CastAheadSetup.SnapAxis(x, y) end
+    local setup = CastAheadSetup and CastAheadSetup.Active()
+    if setup then x, y = CastAheadSetup.SnapAxis(x, y) end
     CastAheadDB = CastAheadDB or {}
     CastAheadDB.centerX, CastAheadDB.centerY = x, y - CENTER_Y
     center._x = nil          -- force the anchor to be re-applied
     PlaceCenter(center)
+    if setup then CastAheadSetup.Refresh() end
 end
 
 -- /ca move (or the window's Move button): show the block with a sample

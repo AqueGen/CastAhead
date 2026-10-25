@@ -99,10 +99,62 @@ local function BuildSlider(panel, spec)
     table.insert(refreshers, function() show(read()) end)
     return slider, label
 end
+CastAheadOptions.BuildSlider = BuildSlider
+
+local function Refresh()
+    for _, refresh in ipairs(refreshers) do refresh() end
+end
+CastAheadOptions.Refresh = Refresh
 
 local function Redraw()
     if CastAheadCore and CastAheadCore.Reapply then CastAheadCore.Reapply() end
 end
+
+local function ResizeCenter()
+    if CastAheadCore and CastAheadCore.ResizeCenter then CastAheadCore.ResizeCenter() end
+end
+
+local SLIDERS = {
+    offsetX = {
+        key = "offsetX",
+        default = 0, min = 0, max = 120, step = 2,
+        caption = function(value)
+            return string.format("Distance from the plate: %d px", value)
+        end,
+        after = Redraw,
+    },
+    labelScale = {
+        key = "labelScale",
+        default = CastAheadConfig.LABEL_DEFAULT,
+        min = CastAheadConfig.LABEL_MIN, max = CastAheadConfig.LABEL_MAX, step = 5,
+        low = CastAheadConfig.LABEL_MIN .. "%", high = CastAheadConfig.LABEL_MAX .. "%",
+        caption = function(value) return string.format("Label: %d%% of the icon", value) end,
+        after = Redraw,
+    },
+    timeScale = {
+        key = "timeScale",
+        default = CastAheadConfig.TIME_DEFAULT,
+        min = CastAheadConfig.TIME_MIN, max = CastAheadConfig.TIME_MAX, step = 5,
+        low = CastAheadConfig.TIME_MIN .. "%", high = CastAheadConfig.TIME_MAX .. "%",
+        caption = function(value) return string.format("Countdown: %d%% of the icon", value) end,
+        after = Redraw,
+    },
+    centerTextScale = {
+        key = "centerTextScale",
+        default = CastAheadConfig.CENTER_TEXT_DEFAULT,
+        min = CastAheadConfig.CENTER_TEXT_MIN, max = CastAheadConfig.CENTER_TEXT_MAX, step = 5,
+        low = CastAheadConfig.CENTER_TEXT_MIN .. "%", high = CastAheadConfig.CENTER_TEXT_MAX .. "%",
+        caption = function(value) return string.format("Text: %d%% of the block", value) end,
+        after = ResizeCenter,
+    },
+}
+
+local function SliderSpec(key, point)
+    local spec = { point = point }
+    for field, value in pairs(SLIDERS[key]) do spec[field] = value end
+    return spec
+end
+CastAheadOptions.SliderSpec = SliderSpec
 
 local function SaveRefresh()
     if CastAheadSaves then CastAheadSaves.Refresh() end
@@ -189,13 +241,14 @@ local function BuildGroup(panel, title, height, free)
 end
 
 -- One switch, placed against whatever the caller anchors it to.
-local function BuildSwitch(panel, key, point, onClick)
+local function BuildSwitch(panel, key, point, onClick, label)
     local option = SWITCHES[key]
+    label = label or option.label
     local box = CreateFrame("CheckButton", nil, panel, "MinimalCheckboxTemplate")
     box:SetPoint(unpack(point))
     box.text = box:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     box.text:SetPoint("LEFT", box, "RIGHT", 2, 0)
-    box.text:SetText(option.label)
+    box.text:SetText(label)
     box:SetHitRectInsets(0, -(box.text:GetStringWidth() + 6), 0, 0)
     box:SetChecked(SwitchOn(key))
     box:SetScript("OnClick", function(self)
@@ -205,7 +258,7 @@ local function BuildSwitch(panel, key, point, onClick)
     end)
     box:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText(option.label, 1, 1, 1)
+        GameTooltip:SetText(label, 1, 1, 1)
         GameTooltip:AddLine(option.tip, nil, nil, nil, true)
         GameTooltip:Show()
     end)
@@ -213,6 +266,63 @@ local function BuildSwitch(panel, key, point, onClick)
     table.insert(refreshers, function() box:SetChecked(SwitchOn(key)) end)
     return box
 end
+CastAheadOptions.BuildSwitch = BuildSwitch
+
+-- The 3x3 side grid with the grow dropdown beside it; returns the grid.
+local function BuildPlacement(panel, point)
+    local anchorLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    anchorLabel:SetPoint(unpack(point))
+    anchorLabel:SetText("Position around the plate")
+
+    local square = CreateFrame("Frame", nil, panel, "BackdropTemplate")
+    square:SetSize(58, 58)
+    square:SetPoint("TOPLEFT", anchorLabel, "BOTTOMLEFT", 4, -6)
+    square:SetBackdrop(FLAT)
+    square:SetBackdropColor(unpack(T.bg))
+    square:SetBackdropBorderColor(unpack(T.border))
+    local grid = {
+        { "topleft", "top", "topright" },
+        { "left", "center", "right" },
+        { "bottomleft", "bottom", "bottomright" },
+    }
+    local current = CastAheadConfig.Get("anchor") or "left"
+    local dots = {}
+    for row = 1, 3 do
+        for column = 1, 3 do
+            local side = grid[row][column]
+            local dot = CreateFrame("CheckButton", nil, square, "UIRadioButtonTemplate")
+            dot:SetPoint("TOPLEFT", square, "TOPLEFT", 4 + (column - 1) * 18, -(4 + (row - 1) * 18))
+            dot:SetChecked(side == current)
+            dot:SetScript("OnClick", function()
+                CastAheadUI.SetAnchor(side)
+                for _, other in ipairs({ square:GetChildren() }) do other:SetChecked(false) end
+                dot:SetChecked(true)
+            end)
+            dots[side] = dot
+        end
+    end
+    table.insert(refreshers, function()
+        local side = CastAheadConfig.Get("anchor") or "left"
+        for dotSide, dot in pairs(dots) do dot:SetChecked(dotSide == side) end
+    end)
+
+    local growLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    growLabel:SetPoint("TOPLEFT", square, "TOPRIGHT", 16, -2)
+    growLabel:SetText("Grow")
+    local growDropdown = CreateFrame("DropdownButton", nil, panel, "WowStyle1DropdownTemplate")
+    growDropdown:SetSize(110, 24)
+    growDropdown:SetPoint("TOPLEFT", growLabel, "BOTTOMLEFT", 0, -4)
+    growDropdown:SetupMenu(function(_, root)
+        for _, direction in ipairs({ "auto", "left", "down", "right", "up" }) do
+            root:CreateRadio(direction,
+                function() return (CastAheadConfig.Get("grow") or "auto") == direction end,
+                function() CastAheadUI.SetGrowth(direction) end)
+        end
+    end)
+    table.insert(refreshers, function() growDropdown:GenerateMenu() end)
+    return square
+end
+CastAheadOptions.BuildPlacement = BuildPlacement
 
 -- Sizes and offsets belong to the group that draws with them, so each group
 -- resets its own rather than one button clearing settings across the page.
@@ -221,7 +331,7 @@ local function BuildReset(panel, point, keys, after)
     reset:SetPoint(unpack(point))
     reset:SetScript("OnClick", function()
         for _, key in ipairs(keys) do CastAheadConfig.Set(key, nil) end
-        for _, refresh in ipairs(refreshers) do refresh() end
+        Refresh()
         if after then after() end
     end)
     return reset
@@ -255,7 +365,7 @@ end
 -- storage from outside, so what was drawn last time may be stale.
 function CastAheadOptions.ShowPanel(host, name)
     local panel = panels[name] or Build(host, name)
-    for _, refresh in ipairs(refreshers) do refresh() end
+    Refresh()
     panel:Relayout()
 end
 
@@ -310,66 +420,9 @@ function BuildGeneral(panel)
     local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 })
     BuildSwitch(panel, "fullLabels", { "TOPLEFT", platesOn, "BOTTOMLEFT", 0, -4 })
 
-    local anchorLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    anchorLabel:SetPoint("TOPLEFT", plates, "TOPLEFT", 16, -96)
-    anchorLabel:SetText("Position around the plate")
+    local square = BuildPlacement(panel, { "TOPLEFT", plates, "TOPLEFT", 16, -96 })
 
-    local square = CreateFrame("Frame", nil, panel, "BackdropTemplate")
-    square:SetSize(58, 58)
-    square:SetPoint("TOPLEFT", anchorLabel, "BOTTOMLEFT", 4, -6)
-    square:SetBackdrop(FLAT)
-    square:SetBackdropColor(unpack(T.bg))
-    square:SetBackdropBorderColor(unpack(T.border))
-    local grid = {
-        { "topleft", "top", "topright" },
-        { "left", "center", "right" },
-        { "bottomleft", "bottom", "bottomright" },
-    }
-    local current = CastAheadConfig.Get("anchor") or "left"
-    local dots = {}
-    for row = 1, 3 do
-        for column = 1, 3 do
-            local side = grid[row][column]
-            local dot = CreateFrame("CheckButton", nil, square, "UIRadioButtonTemplate")
-            dot:SetPoint("TOPLEFT", square, "TOPLEFT", 4 + (column - 1) * 18, -(4 + (row - 1) * 18))
-            dot:SetChecked(side == current)
-            dot:SetScript("OnClick", function()
-                CastAheadUI.SetAnchor(side)
-                for _, other in ipairs({ square:GetChildren() }) do other:SetChecked(false) end
-                dot:SetChecked(true)
-            end)
-            dots[side] = dot
-        end
-    end
-    table.insert(refreshers, function()
-        local side = CastAheadConfig.Get("anchor") or "left"
-        for dotSide, dot in pairs(dots) do dot:SetChecked(dotSide == side) end
-    end)
-
-    local growLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    growLabel:SetPoint("TOPLEFT", square, "TOPRIGHT", 16, -2)
-    growLabel:SetText("Grow")
-    local growDropdown = CreateFrame("DropdownButton", nil, panel, "WowStyle1DropdownTemplate")
-    growDropdown:SetSize(110, 24)
-    growDropdown:SetPoint("TOPLEFT", growLabel, "BOTTOMLEFT", 0, -4)
-    growDropdown:SetupMenu(function(_, root)
-        for _, direction in ipairs({ "auto", "left", "down", "right", "up" }) do
-            root:CreateRadio(direction,
-                function() return (CastAheadConfig.Get("grow") or "auto") == direction end,
-                function() CastAheadUI.SetGrowth(direction) end)
-        end
-    end)
-    table.insert(refreshers, function() growDropdown:GenerateMenu() end)
-
-    local offsetSlider = BuildSlider(panel, {
-        key = "offsetX",
-        default = 0, min = 0, max = 120, step = 2,
-        point = { "TOPLEFT", square, "BOTTOMLEFT", -4, -16 },
-        caption = function(value)
-            return string.format("Distance from the plate: %d px", value)
-        end,
-        after = Redraw,
-    })
+    local offsetSlider = BuildSlider(panel, SliderSpec("offsetX", { "TOPLEFT", square, "BOTTOMLEFT", -4, -16 }))
 
     local nudgeXSlider = BuildSlider(panel, {
         key = "nudgeX",
@@ -407,25 +460,9 @@ function BuildGeneral(panel)
         after = Redraw,
     })
 
-    local labelSlider = BuildSlider(panel, {
-        key = "labelScale",
-        default = CastAheadConfig.LABEL_DEFAULT,
-        min = CastAheadConfig.LABEL_MIN, max = CastAheadConfig.LABEL_MAX, step = 5,
-        low = CastAheadConfig.LABEL_MIN .. "%", high = CastAheadConfig.LABEL_MAX .. "%",
-        point = { "TOPLEFT", iconSlider, "BOTTOMLEFT", -6, -18 },
-        caption = function(value) return string.format("Label: %d%% of the icon", value) end,
-        after = Redraw,
-    })
+    local labelSlider = BuildSlider(panel, SliderSpec("labelScale", { "TOPLEFT", iconSlider, "BOTTOMLEFT", -6, -18 }))
 
-    local timeSlider = BuildSlider(panel, {
-        key = "timeScale",
-        default = CastAheadConfig.TIME_DEFAULT,
-        min = CastAheadConfig.TIME_MIN, max = CastAheadConfig.TIME_MAX, step = 5,
-        low = CastAheadConfig.TIME_MIN .. "%", high = CastAheadConfig.TIME_MAX .. "%",
-        point = { "TOPLEFT", labelSlider, "BOTTOMLEFT", -6, -18 },
-        caption = function(value) return string.format("Countdown: %d%% of the icon", value) end,
-        after = Redraw,
-    })
+    local timeSlider = BuildSlider(panel, SliderSpec("timeScale", { "TOPLEFT", labelSlider, "BOTTOMLEFT", -6, -18 }))
 
     local fixedSpacing = BuildSwitch(panel, "fixedSpacing", { "TOPLEFT", timeSlider, "BOTTOMLEFT", -12, -18 })
     local gapSlider = BuildSlider(panel, {
@@ -468,9 +505,6 @@ function BuildGeneral(panel)
     local centre = BuildGroup(panel, "Centre call", 229)
     BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 })
 
-    local centerScale = function()
-        if CastAheadCore and CastAheadCore.ResizeCenter then CastAheadCore.ResizeCenter() end
-    end
     local centerSlider = BuildSlider(panel, {
         key = "centerScale",
         default = CastAheadConfig.CENTER_DEFAULT,
@@ -478,18 +512,10 @@ function BuildGeneral(panel)
         low = CastAheadConfig.CENTER_MIN .. "%", high = CastAheadConfig.CENTER_MAX .. "%",
         point = { "TOPLEFT", centre, "TOPLEFT", 16, -63 },
         caption = function(value) return string.format("Size: %d%%", value) end,
-        after = centerScale,
+        after = ResizeCenter,
     })
 
-    local centerTextSlider = BuildSlider(panel, {
-        key = "centerTextScale",
-        default = CastAheadConfig.CENTER_TEXT_DEFAULT,
-        min = CastAheadConfig.CENTER_TEXT_MIN, max = CastAheadConfig.CENTER_TEXT_MAX, step = 5,
-        low = CastAheadConfig.CENTER_TEXT_MIN .. "%", high = CastAheadConfig.CENTER_TEXT_MAX .. "%",
-        point = { "TOPLEFT", centerSlider, "BOTTOMLEFT", -6, -18 },
-        caption = function(value) return string.format("Text: %d%% of the block", value) end,
-        after = centerScale,
-    })
+    local centerTextSlider = BuildSlider(panel, SliderSpec("centerTextScale", { "TOPLEFT", centerSlider, "BOTTOMLEFT", -6, -18 }))
 
     local move = CastAheadWindow.Button(panel, "Move it on screen", 140)
     move:SetPoint("TOPLEFT", centerTextSlider, "BOTTOMLEFT", -6, -18)
@@ -498,7 +524,7 @@ function BuildGeneral(panel)
     end)
 
     BuildReset(panel, { "LEFT", move, "RIGHT", 6, 0 },
-        { "centerScale", "centerTextScale", "centerX", "centerY" }, centerScale)
+        { "centerScale", "centerTextScale", "centerX", "centerY" }, ResizeCenter)
 
     -- Features ------------------------------------------------------------
     local features = BuildGroup(panel, "Features", 166)
@@ -630,10 +656,6 @@ end
 
 local function ListHeight(rows) return -LIST_TOP + rows * LIST_ROW_H + LIST_FOOT end
 
-local function RefreshAll()
-    for _, refresh in ipairs(refreshers) do refresh() end
-end
-
 local listRefreshers = {}
 function CastAheadOptions.RefreshDefensives()
     for _, refresh in ipairs(listRefreshers) do refresh() end
@@ -660,7 +682,7 @@ local function BuildButtonList(panel, store, key, title, emptyText)
             if j ~= i then list[#list + 1] = e end
         end
         store.SetList(key, list)
-        RefreshAll()
+        Refresh()
     end
 
     local function RowMenu(owner, i)
@@ -704,7 +726,7 @@ local function BuildButtonList(panel, store, key, title, emptyText)
             end
             b:SetScript("OnClick", function()
                 store.Shift(key, i, step)
-                RefreshAll()
+                Refresh()
             end)
             b:SetScript("OnEnter", function(self)
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -741,7 +763,7 @@ local function BuildButtonList(panel, store, key, title, emptyText)
                 local copy = { unpack(store.EditList(key)) }
                 copy[#copy + 1] = type(e) == "table" and { use = e.use } or e
                 store.SetList(key, copy)
-                RefreshAll()
+                Refresh()
             end)
         end
     end)
@@ -762,7 +784,7 @@ local function BuildButtonList(panel, store, key, title, emptyText)
         store.SetList(key, copy)
         box:SetText("")
         box:ClearFocus()
-        RefreshAll()
+        Refresh()
     end
     add:SetScript("OnClick", Submit)
     box:SetScript("OnEnterPressed", Submit)

@@ -156,8 +156,8 @@ local function StubRegion()
 end
 
 local eventHandler, updateHandler
-CreateFrame = function(kind)
-    local f = { shown = false, texts = {}, kind = kind, handlers = {} }
+CreateFrame = function(kind, _, parent)
+    local f = { shown = false, texts = {}, kind = kind, handlers = {}, parent = parent }
     allFrames[#allFrames + 1] = f
     framesMade = framesMade + 1
     f.Show = function(self)
@@ -180,12 +180,16 @@ CreateFrame = function(kind)
             updateHandler = updateHandler or fn
         end
     end
+    if kind == "EditBox" then
+        f.SetText = function(self, text) self.value = text end
+        f.GetText = function(self) return self.value end
+    end
     f.CreateTexture = StubRegion
     f.CreateFontString = function()
         local fs = StubRegion()
         -- Record into separate fields: Core assigns the font strings to
         -- bar.text / bar.time, so writing there would overwrite them.
-        fs.SetText = function(_, text) f.labelValue = text end
+        fs.SetText = function(self, text) f.labelValue, self.value = text, text end
         fs.SetFormattedText = function(_, fmt, ...) f.timeValue = string.format(fmt, ...) end
         -- The layout steps the icons sideways by the width of the advice under
         -- them, so a stub that answers with a table (the catch-all below) turns
@@ -5381,10 +5385,17 @@ end
         for i = 1, #allFrames do if allFrames[i].shown then s[allFrames[i]] = true end end
         return s
     end
+    local function onScreen(f)
+        while f do
+            if rawget(f, "shown") == false then return false end
+            f = rawget(f, "parent")
+        end
+        return true
+    end
     local function newlyShown(before)
         local n = 0
         for i = 1, #allFrames do
-            if allFrames[i].shown and not before[allFrames[i]] then n = n + 1 end
+            if onScreen(allFrames[i]) and not before[allFrames[i]] then n = n + 1 end
         end
         return n
     end
@@ -5626,6 +5637,8 @@ end
         end
         CastAheadDB.anchor, CastAheadDB.grow, CastAheadDB.offsetX = "top", "right", 40
         CastAheadDB.nudgeX, CastAheadDB.nudgeY = 5, -5
+        S.Select("row")
+        check(panel.numbers[1].box.value == "5" and panel.numbers[2].box.value == "-5", "panel: selecting the row shows its nudges")
         grip.handlers.OnDragStart(grip)
         check(barsOn(onSample) == 0, "setup: the dragged row leaves the sample plate")
         placeFirstIcon(410, 300)
@@ -5635,6 +5648,7 @@ end
         check(CastAheadDB.offsetX == wantOffset and wantOffset == 16, "setup: the drop stores the distance out, got " .. tostring(CastAheadDB.offsetX))
         check(CastAheadDB.nudgeX == 0 and CastAheadDB.nudgeY == 0, "setup: the drop clears the nudges")
         check(barsOn(onSample) == 3, "setup: the dropped row is back on the sample plate")
+        check(panel.numbers[1].box.value == "0" and panel.numbers[2].box.value == "0", "panel: a row drop refreshes the numbers")
 
         S.Nudge(1, 0)
         check(CastAheadDB.nudgeX == 1, "setup: Nudge moves the row right")
@@ -5705,6 +5719,7 @@ end
             .. tostring(CastAheadDB.centerX) .. "," .. tostring(CastAheadCore.CENTER_Y + CastAheadDB.centerY))
         check(center.x == 0 and center.y == 22, "setup: the dropped centre block is placed on the snapped spot, got "
             .. tostring(center.x) .. "," .. tostring(center.y))
+        check(panel.numbers[1].box.value == "0" and panel.numbers[2].box.value == "0", "panel: a centre drop refreshes the numbers")
 
         local realDrop, dropped = S.DropRow, 0
         S.DropRow = function() dropped = dropped + 1 return realDrop() end
@@ -5740,6 +5755,114 @@ end
         panel.EnableKeyboard, panel.SetPropagateKeyboardInput = nil, nil
         CastAheadDB.plateSize = nil
         UIParent, IsShiftKeyDown = realUIParent, realShift
+    end
+
+    do
+        local HINT = "Drag to move, mouse wheel to resize, arrow keys for single pixels. To check on real nameplates, stand near enemies or training dummies."
+        local realPopup, realSlider, realCreate, popup = StaticPopup_Show, MinimalSliderWithSteppersMixin, CreateFrame, nil
+        StaticPopup_Show = function(name) popup = name end
+        local function click(f) f.handlers.OnClick(f) end
+        local function toggle(key, on)
+            local box = panel.outputs[key]
+            box.GetChecked = function() return on end
+            click(box)
+        end
+        reset()
+        hostile[unit] = true
+        CastAheadDB = { centerText = true }
+        S.Enter()
+        check(panel.hint and panel.hint.value == HINT, "panel: the hint reads exactly, got " .. tostring(panel.hint and panel.hint.value))
+
+        toggle("centerText", false)
+        check(CastAheadDB.centerText == false and sampleLines() == 0, "panel: Centre call off hides the centre block")
+        toggle("centerText", true)
+        check(CastAheadConfig.CenterText() and sampleLines() == 3, "panel: Centre call on shows it again")
+        local live = liveEvents()
+        toggle("timeline", false)
+        check(CastAheadDB.timeline == false and liveEvents() == live - 3,
+            "panel: Timeline off takes the timeline samples away, got " .. (live - liveEvents()))
+        toggle("timeline", true)
+        check(CastAheadConfig.Enabled("timeline") and liveEvents() == live, "panel: Timeline on feeds them again")
+        toggle("nameplates", false)
+        check(CastAheadDB.nameplates == false and barsOn(onSample) == 0 and barsOn(onUnit) == 0,
+            "panel: Nameplate icons off hides the sample rows")
+        toggle("nameplates", true)
+        check(barsOn(onSample) == 3 and barsOn(onUnit) == 3, "panel: Nameplate icons on shows them again")
+
+        local n = panel.numbers
+        CastAheadDB.iconSize = nil
+        click(n[3].plus)
+        check(CastAheadDB.iconSize == 27 and n[3].box.value == "27", "panel: + on Size grows the icons 1 px")
+        n[3].box:SetText("200")
+        n[3].box.handlers.OnEnterPressed(n[3].box)
+        check(CastAheadDB.iconSize == 64 and n[3].box.value == "64", "panel: a typed size is clamped to 64")
+        click(n[1].minus)
+        check(CastAheadDB.nudgeX == -1 and n[1].box.value == "-1", "panel: - on X moves the row left 1")
+        S.Nudge(0, 3)
+        check(n[2].box.value == tostring(CastAheadDB.nudgeY), "panel: an arrow move refreshes the numbers")
+
+        CastAheadDB.centerX, CastAheadDB.centerY = 37, 50
+        S.Select("center")
+        check(n[1].box.value == "37" and n[2].box.value == "-70", "panel: the centre's Y is shown from the screen centre, got "
+            .. tostring(n[2].box.value))
+        check(n[1].center.shown and n[2].center.shown, "panel: Center X and Center Y show with the centre selected")
+        click(n[1].center)
+        check(CastAheadDB.centerX == 0 and n[1].box.value == "0", "panel: Center X puts the centre on the vertical axis")
+        click(n[2].center)
+        check(CastAheadCore.CENTER_Y + CastAheadDB.centerY == 0 and n[2].box.value == "0",
+            "panel: Center Y puts the centre on the horizontal axis")
+        n[2].box:SetText("15")
+        n[2].box.handlers.OnEnterPressed(n[2].box)
+        check(CastAheadCore.CENTER_Y + CastAheadDB.centerY == 15, "panel: a typed Y is taken from the screen centre")
+        CastAheadDB.centerScale = nil
+        click(n[3].minus)
+        check(CastAheadDB.centerScale == 99, "panel: - on the centre size takes 1%")
+        S.Select("row")
+        check(not n[1].center.shown and not n[2].center.shown, "panel: Center X and Center Y hide with the row selected")
+
+        click(panel.reset)
+        local dialog = StaticPopupDialogs.CASTAHEAD_SETUP_RESET
+        check(popup == "CASTAHEAD_SETUP_RESET" and dialog and dialog.hideOnEscape
+            and dialog.text == "Put every setting this mode changes back to its default?", "panel: Reset asks first")
+        local KEYS = { "anchor", "grow", "offsetX", "nudgeX", "nudgeY", "iconSize", "labelScale", "timeScale",
+                       "centerX", "centerY", "centerScale", "centerTextScale" }
+        for _, key in ipairs(KEYS) do CastAheadDB[key] = 40 end
+        CastAheadDB.anchor, CastAheadDB.grow, CastAheadDB.timeline = "top", "up", false
+        dialog.OnAccept()
+        local left = {}
+        for _, key in ipairs(KEYS) do if CastAheadDB[key] ~= nil then left[#left + 1] = key end end
+        check(#left == 0, "panel: Reset clears all twelve keys, left " .. table.concat(left, ","))
+        check(CastAheadDB.timeline == false and CastAheadDB.centerText == nil, "panel: Reset leaves the output switches alone")
+        check(n[3].box.value == "26", "panel: Reset refreshes the numbers")
+        CastAheadDB.timeline = nil
+
+        MinimalSliderWithSteppersMixin = realSlider or { Label = { Min = 1, Max = 2 }, Event = { OnValueChanged = 1 } }
+        CreateFrame = function(...)
+            local f = realCreate(...)
+            f.MinText, f.MaxText, f.Slider = StubRegion(), StubRegion(), StubRegion()
+            f.SetValue = function() end
+            return f
+        end
+        local ok, err = pcall(click, panel.more)
+        CreateFrame = realCreate
+        check(ok and panel.moreBody.shown, "panel: More opens " .. tostring(err))
+        click(panel.timeline)
+        check(panel.note.shown and panel.note.value == "Move the timeline in the game's Edit Mode: Esc > Edit Mode.",
+            "panel: Timeline... shows the Edit Mode line")
+        S.Leave()
+        S.Enter()
+        check(not panel.moreBody.shown and not panel.note.shown, "panel: More and the timeline line are collapsed on every Enter")
+
+        toggle("nameplates", false)
+        click(panel.done)
+        check(not S.Active() and VisibleBars() == 0, "panel: Done with the icons off leaves no bar on screen")
+        enter()
+        castFor(3.0)
+        check(not IconShown(100), "panel: after Done the live path obeys Nameplate icons off")
+        CastAheadDB.nameplates = nil
+        CastAheadCore.Reapply()
+        check(IconShown(100), "panel: the live bar shows once the icons are back on")
+        StaticPopup_Show, MinimalSliderWithSteppersMixin = realPopup, realSlider
     end
 
     reset()

@@ -52,6 +52,13 @@ local PANEL_NAME = "CastAheadSetupPanel"
 local EVENTS = { "PLAYER_REGEN_DISABLED", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED",
                  "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" }
 local TIMELINE_LEAD = 5
+local HINT = "Drag to move, mouse wheel to resize, arrow keys for single pixels. To check on real nameplates, stand near enemies or training dummies."
+local TIMELINE_NOTE = "Move the timeline in the game's Edit Mode: Esc > Edit Mode."
+local RESET_KEYS = { "anchor", "grow", "offsetX", "nudgeX", "nudgeY", "iconSize", "labelScale", "timeScale",
+                     "centerX", "centerY", "centerScale", "centerTextScale" }
+local OUTPUTS = { { "nameplates", "Nameplate icons" }, { "centerText", "Centre call" }, { "timeline", "Timeline" } }
+local PANEL_W, PAD, ROW_H = 280, 12, 24
+local BASE_H, MORE_H = 262, 340
 
 local active = false
 local rows = {}
@@ -63,8 +70,8 @@ local dragging = false
 local readoutUntil
 local centerBox
 
-local panel = CreateFrame("Frame", PANEL_NAME, UIParent)
-panel:SetSize(280, 120)
+local panel = CreateFrame("Frame", PANEL_NAME, UIParent, "BackdropTemplate")
+panel:SetSize(PANEL_W, BASE_H)
 panel:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -40, -160)
 panel:SetFrameStrata("DIALOG")
 panel:SetClampedToScreen(true)
@@ -228,39 +235,84 @@ local function ShowReadout(target, text)
     readoutUntil = GetTime() + READOUT_SECONDS
 end
 
+local function Round(v)
+    return math.floor(v + 0.5)
+end
+
+local function CenterNumber(key)
+    return tonumber(CastAheadConfig.Get(key)) or 0
+end
+
+local NUMBERS = {
+    row = {
+        unit = " px", notch = 1,
+        { read = function() return CastAheadConfig.NudgeX() end,
+          write = function(v) CastAheadConfig.Set("nudgeX", Clamp(v, CastAheadConfig.NUDGE_MAX)) end },
+        { read = function() return CastAheadConfig.NudgeY() end,
+          write = function(v) CastAheadConfig.Set("nudgeY", Clamp(v, CastAheadConfig.NUDGE_MAX)) end },
+        { read = function() return CastAheadConfig.IconSize() end,
+          write = function(v)
+              local C = CastAheadConfig
+              C.Set("iconSize", Within(Round(v), C.ICON_MIN, C.ICON_MAX))
+          end },
+    },
+    center = {
+        unit = "%", notch = 5,
+        { read = function() return CenterNumber("centerX") end,
+          write = function(v) CastAheadConfig.Set("centerX", Round(v)) end },
+        { read = function() return CastAheadCore.CENTER_Y + CenterNumber("centerY") end,
+          write = function(v) CastAheadConfig.Set("centerY", Round(v) - CastAheadCore.CENTER_Y) end },
+        { read = function()
+              local C = CastAheadConfig
+              return C.Number("centerScale", C.CENTER_DEFAULT, C.CENTER_MIN, C.CENTER_MAX)
+          end,
+          write = function(v)
+              local C = CastAheadConfig
+              C.Set("centerScale", Within(Round(v), C.CENTER_MIN, C.CENTER_MAX))
+          end },
+    },
+}
+
+local function Refresh()
+    if not panel.numbers then return end
+    for i, number in ipairs(panel.numbers) do
+        number.box:SetText(tostring(Round(NUMBERS[selected][i].read())))
+        if number.center then number.center:SetShown(selected == "center") end
+    end
+    CastAheadOptions.Refresh()
+end
+CastAheadSetup.Refresh = Refresh
+
+local function Apply()
+    if selected == "center" then CastAheadCore.ResizeCenter() else CastAheadCore.Reapply() end
+    Refresh()
+end
+
+local function SetNumber(i, value)
+    NUMBERS[selected][i].write(value)
+    Apply()
+end
+
 function CastAheadSetup.Select(which)
     selected = which
     grip.box:SetShown(which == "row")
     if centerBox then centerBox:SetShown(which == "center" and CastAheadCore.CenterFrame():IsShown()) end
+    Refresh()
 end
 
 function CastAheadSetup.Nudge(dx, dy)
-    local C = CastAheadConfig
-    if selected == "center" then
-        C.Set("centerX", (tonumber(C.Get("centerX")) or 0) + dx)
-        C.Set("centerY", (tonumber(C.Get("centerY")) or 0) + dy)
-        CastAheadCore.ResizeCenter()
-    else
-        C.Set("nudgeX", Clamp(C.NudgeX() + dx, C.NUDGE_MAX))
-        C.Set("nudgeY", Clamp(C.NudgeY() + dy, C.NUDGE_MAX))
-        CastAheadCore.Reapply()
-    end
+    local x, y = NUMBERS[selected][1], NUMBERS[selected][2]
+    x.write(x.read() + dx)
+    y.write(y.read() + dy)
+    Apply()
 end
 
 function CastAheadSetup.Resize(notches)
-    local C = CastAheadConfig
-    if selected == "center" then
-        local scale = Within(C.Number("centerScale", C.CENTER_DEFAULT, C.CENTER_MIN, C.CENTER_MAX) + 5 * notches,
-            C.CENTER_MIN, C.CENTER_MAX)
-        C.Set("centerScale", scale)
-        CastAheadCore.ResizeCenter()
-        ShowReadout(CastAheadCore.CenterFrame(), scale .. "%")
-    else
-        local size = Within(C.IconSize() + notches, C.ICON_MIN, C.ICON_MAX)
-        C.Set("iconSize", size)
-        CastAheadCore.Reapply()
-        ShowReadout(grip, size .. " px")
-    end
+    local numbers = NUMBERS[selected]
+    local size = numbers[3]
+    size.write(size.read() + notches * numbers.notch)
+    Apply()
+    ShowReadout(selected == "center" and CastAheadCore.CenterFrame() or grip, size.read() .. numbers.unit)
 end
 
 local function Wheel(which, delta)
@@ -305,6 +357,7 @@ function CastAheadSetup.DropRow()
     C.Set("nudgeY", nudgeY)
     CastAheadUI.SetAnchor(side)
     CastAheadUI.SetGrowth("auto")
+    Refresh()
 end
 
 grip:SetScript("OnMouseDown", function() CastAheadSetup.Select("row") end)
@@ -322,6 +375,150 @@ local function HookCenter()
     end
     return f
 end
+
+local function CancelTimeline()
+    if not CastAheadTimeline then return end
+    for _, track in pairs(tracks) do CastAheadTimeline.Cancel(track) end
+end
+
+local function ShowOutput(key, on)
+    if key == "nameplates" then
+        CastAheadCore.Reapply()
+    elseif key == "centerText" then
+        CastAheadCore.ShowCenterSample(on)
+        CastAheadSetup.Select(selected)
+    elseif on then
+        FeedTimeline(GetTime())
+    else
+        CancelTimeline()
+    end
+end
+
+local function Layout()
+    local h = BASE_H + panel.hint:GetStringHeight()
+    if panel.moreBody:IsShown() then h = h + MORE_H end
+    if panel.note:IsShown() then h = h + panel.note:GetStringHeight() + 8 end
+    panel:SetHeight(h)
+end
+
+local function BuildMore(body)
+    local O = CastAheadOptions
+    local last
+    for i, key in ipairs({ "labelScale", "timeScale", "centerTextScale", "offsetX" }) do
+        local point = i == 1 and { "TOPLEFT", body, "TOPLEFT", 6, -4 } or { "TOPLEFT", last, "BOTTOMLEFT", -6, -18 }
+        last = O.BuildSlider(body, O.SliderSpec(key, point))
+    end
+    O.BuildPlacement(body, { "TOPLEFT", last, "BOTTOMLEFT", -6, -18 })
+    body.built = true
+end
+
+local function Build()
+    local W, T = CastAheadWindow, CastAheadWindow.THEME
+    panel:SetBackdrop(W.FLAT)
+    panel:SetBackdropColor(unpack(T.bg))
+    panel:SetBackdropBorderColor(unpack(T.border))
+
+    local hint = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    hint:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -PAD)
+    hint:SetWidth(PANEL_W - 2 * PAD)
+    hint:SetJustifyH("LEFT")
+    hint:SetText(HINT)
+    panel.hint = hint
+
+    panel.outputs = {}
+    local last = hint
+    for i, output in ipairs(OUTPUTS) do
+        local key = output[1]
+        last = CastAheadOptions.BuildSwitch(panel, key,
+            { "TOPLEFT", last, "BOTTOMLEFT", i == 1 and -4 or 0, i == 1 and -8 or -4 },
+            function(on) ShowOutput(key, on) end, output[2])
+        panel.outputs[key] = last
+    end
+
+    panel.numbers = {}
+    for i, name in ipairs({ "X", "Y", "Size" }) do
+        local label = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        label:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 4, -12 - (i - 1) * ROW_H)
+        label:SetText(name)
+        local box = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
+        box:SetSize(48, 20)
+        box:SetPoint("LEFT", label, "LEFT", 40, 0)
+        box:SetAutoFocus(false)
+        box:SetScript("OnEnterPressed", function(self)
+            local value = tonumber(self:GetText())
+            self:ClearFocus()
+            if value then SetNumber(i, value) else Refresh() end
+        end)
+        box:SetScript("OnEscapePressed", function(self)
+            self:ClearFocus()
+            Refresh()
+        end)
+        local minus = W.Button(panel, "-", 20)
+        minus:SetPoint("LEFT", box, "RIGHT", 6, 0)
+        minus:SetScript("OnClick", function() SetNumber(i, NUMBERS[selected][i].read() - 1) end)
+        local plus = W.Button(panel, "+", 20)
+        plus:SetPoint("LEFT", minus, "RIGHT", 2, 0)
+        plus:SetScript("OnClick", function() SetNumber(i, NUMBERS[selected][i].read() + 1) end)
+        panel.numbers[i] = { label = label, box = box, minus = minus, plus = plus }
+    end
+    for i, text in ipairs({ "Center X", "Center Y" }) do
+        local center = W.Button(panel, text, 64)
+        center:SetPoint("LEFT", panel.numbers[i].plus, "RIGHT", 8, 0)
+        center:SetScript("OnClick", function() SetNumber(i, 0) end)
+        panel.numbers[i].center = center
+    end
+
+    local more = W.Button(panel, "More", 60)
+    more:SetPoint("TOPLEFT", panel.numbers[3].label, "BOTTOMLEFT", 0, -14)
+    local body = CreateFrame("Frame", nil, panel)
+    body:SetSize(PANEL_W - 2 * PAD, MORE_H)
+    body:SetPoint("TOPLEFT", more, "BOTTOMLEFT", 0, -8)
+    body:Hide()
+    more:SetScript("OnClick", function()
+        if not body.built then BuildMore(body) end
+        body:SetShown(not body:IsShown())
+        Layout()
+    end)
+    panel.more, panel.moreBody = more, body
+
+    local timeline = W.Button(panel, "Timeline...", 80)
+    timeline:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", PAD, PAD)
+    local reset = W.Button(panel, "Reset", 60)
+    reset:SetPoint("LEFT", timeline, "RIGHT", 6, 0)
+    reset:SetScript("OnClick", function()
+        if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_SETUP_RESET") end
+    end)
+    local done = W.Button(panel, "Done", 60, true)
+    done:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -PAD, PAD)
+    done:SetScript("OnClick", function() CastAheadSetup.Leave() end)
+    local note = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    note:SetPoint("BOTTOMLEFT", timeline, "TOPLEFT", 0, 8)
+    note:SetWidth(PANEL_W - 2 * PAD)
+    note:SetJustifyH("LEFT")
+    note:SetText(TIMELINE_NOTE)
+    note:Hide()
+    timeline:SetScript("OnClick", function()
+        note:Show()
+        Layout()
+    end)
+    panel.timeline, panel.reset, panel.done, panel.note = timeline, reset, done, note
+end
+
+StaticPopupDialogs.CASTAHEAD_SETUP_RESET = {
+    text = "Put every setting this mode changes back to its default?",
+    button1 = YES or "Yes",
+    button2 = NO or "No",
+    OnAccept = function()
+        for _, key in ipairs(RESET_KEYS) do CastAheadConfig.Set(key, nil) end
+        CastAheadCore.Reapply()
+        CastAheadCore.ResizeCenter()
+        Refresh()
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
 
 function CastAheadSetup.Active()
     return active
@@ -347,6 +544,10 @@ function CastAheadSetup.Enter()
     FeedTimeline(GetTime())
     for _, event in ipairs(EVENTS) do panel:RegisterEvent(event) end
     panel:EnableKeyboard(true)
+    if not panel.numbers then Build() end
+    panel.moreBody:Hide()
+    panel.note:Hide()
+    Layout()
     panel:Show()
     PlaceGrip()
     CastAheadSetup.Select("row")
@@ -374,9 +575,8 @@ function CastAheadSetup.Leave()
     CastAheadSetup.plate:Hide()
     CastAheadCore.Reapply()
     CastAheadCore.ShowCenterSample(false)
-    if CastAheadTimeline then
-        for _, track in pairs(tracks) do CastAheadTimeline.Cancel(track) end
-    end
+    CancelTimeline()
+    if StaticPopup_Hide then StaticPopup_Hide("CASTAHEAD_SETUP_RESET") end
     panel:Hide()
     if page then CastAheadWindow.Show(page) end
     page = nil
