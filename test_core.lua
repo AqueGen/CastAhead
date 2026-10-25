@@ -4393,8 +4393,22 @@ do
     CastAheadBurstWindows = { [3492] = { [15] = { name = "Ula'tek", { release = 145.5, target = "Venomous Heart" } } } }
     local host = CreateFrame("Frame")
     local ok, err
+    local realSpecBar, onPick = CastAheadWindow.SpecBar, nil
+    CastAheadWindow.SpecBar = function(parent, x, y, pick, ...)
+        onPick = pick
+        return realSpecBar(parent, x, y, pick, ...)
+    end
     ok, err = pcall(CastAheadOptions.ShowPanel, host, "Defensives")
+    CastAheadWindow.SpecBar = realSpecBar
     check(ok, "the Defensives page builds headless " .. tostring(err))
+    do
+        local store, reads = CastAheadSaves.Store, 0
+        local realEdit = store.EditList
+        store.EditList = function(...) reads = reads + 1 return realEdit(...) end
+        if type(onPick) == "function" then onPick() end
+        store.EditList = realEdit
+        check(type(onPick) == "function" and reads > 0, "picking a spec in the Defensives bar repaints the list")
+    end
     ok, err = pcall(CastAheadOptions.ShowPanel, host, "Report")
     check(ok, "the Report page builds headless " .. tostring(err))
     local tabs = table.concat(CastAheadOptions.TABS, " ")
@@ -5814,11 +5828,50 @@ end
         n[2].box:SetText("15")
         n[2].box.handlers.OnEnterPressed(n[2].box)
         check(CastAheadCore.CENTER_Y + CastAheadDB.centerY == 15, "panel: a typed Y is taken from the screen centre")
+        local function typeInto(i, text)
+            n[i].box:SetText(text)
+            n[i].box.handlers.OnEnterPressed(n[i].box)
+        end
+        typeInto(1, "1e999")
+        typeInto(1, "nan")
+        typeInto(1, "-1e999")
+        check(CastAheadDB.centerX == 0 and n[1].box.value == "0", "panel: inf and nan are not taken, got "
+            .. tostring(CastAheadDB.centerX))
+        local savedParent = UIParent
+        UIParent = { GetWidth = function() return 1920 end, GetHeight = function() return 1080 end }
+        typeInto(1, "99999")
+        typeInto(2, "-99999")
+        check(CastAheadDB.centerX == 960 and CastAheadCore.CENTER_Y + CastAheadDB.centerY == -540,
+            "panel: typed centre X and Y stop at the screen edge")
+        S.Nudge(10, -10)
+        check(CastAheadDB.centerX == 960 and CastAheadCore.CENTER_Y + CastAheadDB.centerY == -540,
+            "panel: arrows stop at the screen edge too")
+        UIParent = savedParent
+        n[1].box:SetText("12")
+        n[1].box.handlers.OnEditFocusLost(n[1].box)
+        check(CastAheadDB.centerX == 12, "panel: leaving the box applies the typed value")
         CastAheadDB.centerScale = nil
         click(n[3].minus)
         check(CastAheadDB.centerScale == 99, "panel: - on the centre size takes 1%")
         S.Select("row")
         check(not n[1].center.shown and not n[2].center.shown, "panel: Center X and Center Y hide with the row selected")
+        S.Select("center")
+        toggle("centerText", false)
+        local cx, nx = CastAheadDB.centerX, CastAheadDB.nudgeX
+        S.Nudge(1, 0)
+        check(S.grip.box.shown and CastAheadDB.centerX == cx and CastAheadDB.nudgeX == nx + 1,
+            "panel: switching the centre call off moves the selection to the row")
+        toggle("centerText", true)
+
+        CastAheadDB.plateSize = nil
+        S.Leave()
+        S.Enter()
+        check(panel.guess.shown and panel.guess.value == "Sample size is a guess until a real nameplate is seen.",
+            "panel: the guess line shows while no real plate was measured")
+        CastAheadDB.plateSize = { 150, 20 }
+        fireAll("UI_SCALE_CHANGED")
+        check(not panel.guess.shown, "panel: the guess line hides once a real plate size is known")
+        CastAheadDB.plateSize = nil
 
         click(panel.reset)
         local dialog = StaticPopupDialogs.CASTAHEAD_SETUP_RESET

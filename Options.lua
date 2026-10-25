@@ -3,7 +3,7 @@ CastAheadOptions = {}
 CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Development", "Report" }
 local panels = {}
 local T = CastAheadWindow.THEME
-local FLAT = { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 }
+local FLAT = CastAheadWindow.FLAT
 local COL_W, COL_GAP, COL_X = 250, 8, 8
 local SLIDER_W = COL_W - 40
 
@@ -268,7 +268,6 @@ local function BuildSwitch(panel, key, point, onClick, label)
 end
 CastAheadOptions.BuildSwitch = BuildSwitch
 
--- The 3x3 side grid with the grow dropdown beside it; returns the grid.
 local function BuildPlacement(panel, point)
     local anchorLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     anchorLabel:SetPoint(unpack(point))
@@ -909,7 +908,7 @@ function BuildDefensives(panel)
 
     local store = CastAheadSaves.Store
     local list = BuildButtonList(panel, store, "def", "Defensive", "Empty - no defensive call")
-    CastAheadWindow.SpecBar(list, 0, -SPEC_BAR_PAD, RefreshAll, function()
+    CastAheadWindow.SpecBar(list, 0, -SPEC_BAR_PAD, Refresh, function()
         return (panel:GetRight() or 0) - (list:GetLeft() or 0)
     end)
     panel:HookScript("OnSizeChanged", CastAheadWindow.PaintSpecBars)

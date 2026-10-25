@@ -59,6 +59,8 @@ local RESET_KEYS = { "anchor", "grow", "offsetX", "nudgeX", "nudgeY", "iconSize"
 local OUTPUTS = { { "nameplates", "Nameplate icons" }, { "centerText", "Centre call" }, { "timeline", "Timeline" } }
 local PANEL_W, PAD, ROW_H = 280, 12, 24
 local BASE_H, MORE_H = 262, 340
+local HALF_SCREEN_FALLBACK = 1000
+local GUESS = "Sample size is a guess until a real nameplate is seen."
 
 local active = false
 local rows = {}
@@ -243,6 +245,11 @@ local function CenterNumber(key)
     return tonumber(CastAheadConfig.Get(key)) or 0
 end
 
+local function HalfScreen(getter)
+    local size = UIParent and UIParent[getter] and UIParent[getter](UIParent)
+    return type(size) == "number" and size > 0 and size / 2 or HALF_SCREEN_FALLBACK
+end
+
 local NUMBERS = {
     row = {
         unit = " px", notch = 1,
@@ -259,9 +266,11 @@ local NUMBERS = {
     center = {
         unit = "%", notch = 5,
         { read = function() return CenterNumber("centerX") end,
-          write = function(v) CastAheadConfig.Set("centerX", Round(v)) end },
+          write = function(v) CastAheadConfig.Set("centerX", Clamp(v, HalfScreen("GetWidth"))) end },
         { read = function() return CastAheadCore.CENTER_Y + CenterNumber("centerY") end,
-          write = function(v) CastAheadConfig.Set("centerY", Round(v) - CastAheadCore.CENTER_Y) end },
+          write = function(v)
+              CastAheadConfig.Set("centerY", Clamp(v, HalfScreen("GetHeight")) - CastAheadCore.CENTER_Y)
+          end },
         { read = function()
               local C = CastAheadConfig
               return C.Number("centerScale", C.CENTER_DEFAULT, C.CENTER_MIN, C.CENTER_MAX)
@@ -386,7 +395,7 @@ local function ShowOutput(key, on)
         CastAheadCore.Reapply()
     elseif key == "centerText" then
         CastAheadCore.ShowCenterSample(on)
-        CastAheadSetup.Select(selected)
+        CastAheadSetup.Select(on and selected or "row")
     elseif on then
         FeedTimeline(GetTime())
     else
@@ -395,7 +404,13 @@ local function ShowOutput(key, on)
 end
 
 local function Layout()
+    local guess = panel.guess
+    guess:SetShown(select(3, CastAheadCore.PlateSize()) == "guess")
+    local first = panel.outputs.nameplates
+    first:ClearAllPoints()
+    first:SetPoint("TOPLEFT", guess:IsShown() and guess or panel.hint, "BOTTOMLEFT", -4, -8)
     local h = BASE_H + panel.hint:GetStringHeight()
+    if guess:IsShown() then h = h + guess:GetStringHeight() + 4 end
     if panel.moreBody:IsShown() then h = h + MORE_H end
     if panel.note:IsShown() then h = h + panel.note:GetStringHeight() + 8 end
     panel:SetHeight(h)
@@ -424,6 +439,13 @@ local function Build()
     hint:SetJustifyH("LEFT")
     hint:SetText(HINT)
     panel.hint = hint
+    local guess = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    guess:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0, -4)
+    guess:SetWidth(PANEL_W - 2 * PAD)
+    guess:SetJustifyH("LEFT")
+    guess:SetTextColor(unpack(T.muted))
+    guess:SetText(GUESS)
+    panel.guess = guess
 
     panel.outputs = {}
     local last = hint
@@ -444,14 +466,18 @@ local function Build()
         box:SetSize(48, 20)
         box:SetPoint("LEFT", label, "LEFT", 40, 0)
         box:SetAutoFocus(false)
-        box:SetScript("OnEnterPressed", function(self)
+        local function Commit(self)
             local value = tonumber(self:GetText())
+            if value and value == value and math.abs(value) ~= math.huge then SetNumber(i, value) else Refresh() end
+        end
+        box:SetScript("OnEditFocusLost", Commit)
+        box:SetScript("OnEnterPressed", function(self)
+            Commit(self)
             self:ClearFocus()
-            if value then SetNumber(i, value) else Refresh() end
         end)
         box:SetScript("OnEscapePressed", function(self)
-            self:ClearFocus()
             Refresh()
+            self:ClearFocus()
         end)
         local minus = W.Button(panel, "-", 20)
         minus:SetPoint("LEFT", box, "RIGHT", 6, 0)
@@ -603,6 +629,7 @@ panel:SetScript("OnEvent", function(_, event, unit)
         SizeThinLines()
         CastAheadCore.Reapply()
     end
+    if active then Layout() end
 end)
 panel:SetScript("OnKeyDown", function(self, key)
     local dir = ARROWS[key]
