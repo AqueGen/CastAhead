@@ -365,7 +365,6 @@ end
 function BuildGeneral(panel)
     local setup = CastAheadWindow.Button(panel, "Size and position", 160, true)
     setup:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -8)
-    setup:SetMotionScriptsWhileDisabled(true)
     setup:SetScript("OnClick", function() CastAheadSetup.Enter() end)
     local hint = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     hint:SetPoint("LEFT", setup, "RIGHT", 12, 0)
@@ -375,15 +374,6 @@ function BuildGeneral(panel)
         local fighting = event == "PLAYER_REGEN_DISABLED" or (event ~= "PLAYER_REGEN_ENABLED" and InCombatLockdown())
         setup:SetEnabled(not fighting)
     end
-    setup:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Size and position", 1, 1, 1)
-        GameTooltip:AddLine("Set the size and position of the nameplate icons and the centre call, with a live preview.",
-            nil, nil, nil, true)
-        if InCombatLockdown() then GameTooltip:AddLine("Not available in combat.", 1, 1, 1) end
-        GameTooltip:Show()
-    end)
-    setup:SetScript("OnLeave", GameTooltip_Hide)
     setup:RegisterEvent("PLAYER_REGEN_DISABLED")
     setup:RegisterEvent("PLAYER_REGEN_ENABLED")
     setup:SetScript("OnEvent", PaintSetup)
