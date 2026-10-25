@@ -2695,13 +2695,21 @@ local function UpdateCenter(now)
     PaintCenter(f, picks, now)
 end
 
+local sampleRows = {}
+
 local function SampleDataRow(key)
+    local hit = sampleRows[key]
+    if hit ~= nil then return hit or nil end
     for _, rows in pairs(CastAheadData) do
         for _, row in ipairs(rows) do
             local advice = CastAheadMatch.Advice(row)
-            if advice and advice.key == key then return row end
+            if advice and advice.key == key then
+                sampleRows[key] = row
+                return row
+            end
         end
     end
+    sampleRows[key] = false
 end
 
 local function ShowCenterSample(on)
@@ -2899,7 +2907,6 @@ CastAheadCore.Tuning = tuning
 CastAheadCore.SpreadBars = SpreadBars
 CastAheadCore.Population = function() return killed, exhausted end
 CastAheadCore.MoveCenter = ToggleMoveCenter
-CastAheadCore.CenterUnlocked = function() return centerUnlocked end
 CastAheadCore.IsHostileNameplate = IsHostileNameplate
 CastAheadCore.ShowCenterSample = ShowCenterSample
 CastAheadCore.SampleDataRow = SampleDataRow
@@ -3632,7 +3639,7 @@ CastAheadCore.SampleStates = {}
 
 function CastAheadCore.ShowSampleRow(state, frame)
     local row = CastAheadCore.SAMPLE_ROW
-    local on = CastAheadConfig.Enabled("nameplates")
+    local on = CastAheadConfig.Enabled("nameplates") and (not frame.IsShown or frame:IsShown())
     for i = 1, #row do
         local sample = row[i]
         local bar = GetBar(state, i)
@@ -3653,6 +3660,7 @@ function CastAheadCore.HideSampleRow(state)
 end
 
 function CastAheadCore.Reapply()
+    wipe(sampleRows)
     local isDisabled = CastAheadUI and CastAheadUI.IsDisabled
     for unit, state in pairs(plates) do
         for key, track in pairs(state.tracks) do

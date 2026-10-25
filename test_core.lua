@@ -17,7 +17,6 @@ end
 
 local now = 1000
 GetTime = function() return now end
-ResetCursor = function() end
 MouseIsDown = true
 IsMouseButtonDown = function() return MouseIsDown end
 
@@ -1884,6 +1883,15 @@ SlashCmdList.CASTAHEAD("anchor left")
 check(CastAheadDB.anchor == nil, "anchoring back to the default clears the stored value")
 SlashCmdList.CASTAHEAD("center -200")
 check(CastAheadDB.centerY == -200, "/ca center still moves the centre call")
+CastAheadDB = nil
+do
+    local realPrint, said = print, nil
+    print = function(text) said = text end
+    SlashCmdList.CASTAHEAD("center")
+    print = realPrint
+    check(said and said:find("current -90 px from the screen centre", 1, true),
+        "/ca center names the position from the screen centre, got " .. tostring(said))
+end
 SlashCmdList.CASTAHEAD("grow up")
 check(CastAheadDB.grow == "up", "/ca grow still sets the growth direction")
 CastAheadDB = nil
@@ -5474,6 +5482,28 @@ do
     CastAheadCore.ShowSampleRow(full, plate)
     check(framesMade == before, "sample row: hidden bars return to the pool")
     CastAheadCore.HideSampleRow(full)
+
+    CastAheadConfig.Set("nameplates", nil)
+    local hiddenPlate = { IsShown = function() return false end }
+    local away = {}
+    CastAheadCore.ShowSampleRow(away, hiddenPlate)
+    shown = 0
+    for i = 1, #away.bars do if away.bars[i].shown then shown = shown + 1 end end
+    check(#away.bars == 3 and shown == 0, "sample row: a hidden frame gets no visible bars, got " .. shown)
+    CastAheadCore.HideSampleRow(away)
+
+    CastAheadCore.Reapply()
+    local advices, realAdvice = 0, CastAheadMatch.Advice
+    CastAheadMatch.Advice = function(...)
+        advices = advices + 1
+        return realAdvice(...)
+    end
+    CastAheadCore.SampleDataRow("TANK")
+    local afterFirst = advices
+    CastAheadCore.SampleDataRow("TANK")
+    CastAheadMatch.Advice = realAdvice
+    check(afterFirst > 0 and advices == afterFirst, "sample row: a second lookup of the same key does not scan again, "
+        .. afterFirst .. "/" .. advices)
     CastAheadDB = savedDB
 end
 
@@ -5728,6 +5758,12 @@ end
         escape()
         check(not S.Active() and propagate == false, "setup: Esc leaves the mode and is kept")
         check(winShown and shownPage == "General", "setup: after Esc the window opened on entry is back")
+        winShown, shownPage = false, nil
+        S.Enter()
+        winShown = true
+        check(S.Enter() == true and not winShown, "setup: General's button while the mode runs hides a reopened window")
+        S.Leave()
+        check(winShown and shownPage == "General", "setup: and leaving brings that window back on its page")
         table.remove(UISpecialFrames)
         _G.CastAheadMainWindow, _G.CastAheadSetupPanel = nil, nil
         StaticPopup_Visible, panel.SetPropagateKeyboardInput = realVisible, nil
@@ -5913,6 +5949,13 @@ end
         end
         check(#kept == 0 and CastAheadDB.nudgeX == 0 and CastAheadDB.nudgeY == 0,
             "setup: arrows and other keys pass through and move nothing, kept " .. table.concat(kept, ","))
+        local realLock = InCombatLockdown
+        InCombatLockdown = function() return true end
+        propagate = "untouched"
+        panel.handlers.OnKeyDown(panel, "W")
+        panel.handlers.OnKeyDown(panel, "ESCAPE")
+        InCombatLockdown = realLock
+        check(propagate == "untouched", "setup: a key pressed in combat does not call the restricted propagate setter")
 
         S.Leave()
         check(keyboard == false, "setup: leaving releases the keyboard")
@@ -5969,14 +6012,13 @@ end
         panel.SetHeight = function(_, h) height = h end
         S.Enter()
         check(panel.hint and panel.hint.value == HINT, "panel: the hint reads exactly, got " .. tostring(panel.hint and panel.hint.value))
-        check(panel.outputs == nil and panel.more == nil and panel.moreBody == nil, "panel: no output switches and no More section")
         check(panel.iconsTitle and panel.iconsTitle.text.value == "Nameplate icons" and panel.centreTitle
             and panel.centreTitle.text.value == "Centre call" and panel.timelineSwitch
             and panel.timelineSwitch.text.value == "Blizzard timeline", "panel: the block titles and the timeline row are switches")
         local f = panel.fields or {}
-        local LABELS = { offsetX = "Distance", nudgeX = "X", nudgeY = "Y", iconSize = "Icon", labelScale = "Label",
-                         timeScale = "Countdown", iconGap = "Gap", centerX = "X", centerY = "Y", centerScale = "Size",
-                         centerTextScale = "Text" }
+        local LABELS = { offsetX = "Distance (px)", nudgeX = "X (px)", nudgeY = "Y (px)", iconSize = "Icon (px)",
+                         labelScale = "Label (%)", timeScale = "Countdown (%)", iconGap = "Gap (px)",
+                         centerX = "X (px)", centerY = "Y (px)", centerScale = "Size (%)", centerTextScale = "Text (%)" }
         local missing = {}
         for key, label in pairs(LABELS) do
             local row = f[key]
@@ -6077,6 +6119,14 @@ end
         check(CastAheadDB.iconGap == 40, "panel: a typed gap stops at 40")
         typeInto("iconGap", "-3")
         check(CastAheadDB.iconGap == 0, "panel: a typed gap stops at 0")
+        f.iconSize.box:SetText("40")
+        f.iconSize.box.HasFocus = function() return true end
+        click(f.iconGap.plus)
+        check(f.iconSize.box.value == "40" and f.iconGap.box.value == "1", "panel: a refresh leaves the box being typed in alone, got "
+            .. tostring(f.iconSize.box.value))
+        f.iconSize.box.HasFocus = nil
+        S.Refresh()
+        check(f.iconSize.box.value == "64", "panel: a box without focus follows the stored value")
 
         CastAheadDB.centerX, CastAheadDB.centerY = 37, 50
         S.Refresh()
@@ -6218,7 +6268,8 @@ end
         click(panel.reset)
         local dialog = StaticPopupDialogs.CASTAHEAD_SETUP_RESET
         check(popup == "CASTAHEAD_SETUP_RESET" and dialog and dialog.hideOnEscape
-            and dialog.text == "Put every setting this mode changes back to its default?", "panel: Reset asks first")
+            and dialog.text == "Put every size and position in this panel back to its default? The on/off switches stay as they are.",
+            "panel: Reset asks first")
         local KEYS = { "anchor", "grow", "offsetX", "nudgeX", "nudgeY", "iconSize", "labelScale", "timeScale",
                        "iconGap", "fixedSpacing", "strata", "centerX", "centerY", "centerScale", "centerTextScale" }
         for _, key in ipairs(KEYS) do CastAheadDB[key] = 40 end
@@ -6234,8 +6285,8 @@ end
         check(f.centerY.box.value == "-90" and f.centerScale.box.value == "80", "panel: Reset puts the centre call back at -90 and 80%")
         CastAheadDB.timeline, CastAheadDB.fullLabels = nil, nil
 
-        check(panel.timeline == nil and panel.note.value == "Move it in the game's Edit Mode: Esc > Edit Mode.",
-            "panel: the timeline box carries one permanent Edit Mode hint and no Timeline... button")
+        check(panel.note.value == "Move it in the game's Edit Mode: Esc > Edit Mode.",
+            "panel: the timeline box carries one permanent Edit Mode hint")
 
         click(panel.done)
         check(not S.Active(), "panel: Done leaves the mode")
@@ -6249,7 +6300,6 @@ end
         SlashCmdList.CASTAHEAD("setup")
         check(S.Active(), "/ca setup enters the setup mode")
         S.Leave()
-        check(S.Peek == nil and CastAheadOptions.SliderSpec == nil, "the General-slider peeks are gone")
     end
 
     reset()
@@ -6318,6 +6368,7 @@ end)();
     now = now + 0.5
     panel.handlers.OnUpdate(panel)
     check(S.plate.shown and barsOn(S.plate) == 3, "plates: every plate hidden but none removed, the sample plate comes back")
+    check(barsOn(plates.nameplate4) == 0, "plates: a hidden plate keeps no sample bars, got " .. barsOn(plates.nameplate4))
 
     local realPrint, printed = print, {}
     print = function(text) printed[#printed + 1] = text end
@@ -6335,10 +6386,10 @@ end)();
     now = now + 0.5
     panel.handlers.OnUpdate(panel)
     check(not S.plate.shown and barsOn(S.plate) == 0, "plates: a plate shown again hides the sample plate")
+    check(barsOn(plates.nameplate4) == 3, "plates: a plate shown again gets its sample bars back, got " .. barsOn(plates.nameplate4))
 
     S.Leave()
     check(not panel.shown and not S.plate.shown, "setup: the sample plate goes with the mode")
-    check(S.catcher == nil, "camera: no full-screen mouse catcher, the left button turns the camera")
     S.Enter()
     panel.handlers.OnKeyDown(panel, "ESCAPE")
     check(not S.Active(), "setup: Esc leaves the mode")

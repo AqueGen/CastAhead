@@ -193,8 +193,8 @@ SlashCmdList.CASTAHEAD = function(msg)
             .. tostring(CastAheadDB and CastAheadDB.offsetX or 0) .. ")")
         return
     end
-    -- /ca center -200: move the centre call up/down (pixels from the
-    -- default spot just below the middle of the screen).
+    -- /ca center -200: move the centre call up/down; the number is stored as is,
+    -- relative to CastAheadCore.CENTER_Y.
     local centerY = msg:match("^%s*center%s+(-?%d+)")
     if centerY then
         CastAheadDB = CastAheadDB or {}
@@ -203,7 +203,7 @@ SlashCmdList.CASTAHEAD = function(msg)
         return
     elseif word == "center" then
         print("|cff33ff99Cast Ahead|r usage: /ca center <pixels>  (current "
-            .. tostring(CastAheadConfig.CenterY()) .. ")")
+            .. tostring(CastAheadCore.CENTER_Y + CastAheadConfig.CenterY()) .. " px from the screen centre)")
         return
     end
     local side = msg:match("^%s*anchor%s+(%a+)")

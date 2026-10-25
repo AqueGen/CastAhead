@@ -18,7 +18,7 @@ local HINT = "Change the numbers here; the icons and the centre call show the re
 local TIMELINE_NOTE = "Move it in the game's Edit Mode: Esc > Edit Mode."
 local RESET_KEYS = { "anchor", "grow", "offsetX", "nudgeX", "nudgeY", "iconSize", "labelScale", "timeScale",
                      "iconGap", "fixedSpacing", "strata", "centerX", "centerY", "centerScale", "centerTextScale" }
-local PANEL_W, PAD, ROW_H, LABEL_W = 280, 12, 24, 72
+local PANEL_W, PAD, ROW_H, LABEL_W = 300, 12, 24, 84
 local HALF_SCREEN_FALLBACK = 1000
 local GUESS = "Sample size is a guess until a real nameplate is seen."
 local PLATE_STRATA = "BACKGROUND"
@@ -107,11 +107,16 @@ local function SizePlate()
     SizeThinLines()
 end
 
+local function Shown(frame)
+    return frame and (not frame.IsShown or frame:IsShown())
+end
+
 local function ShowRow(key, frame)
     local state = rows[key] or {}
     rows[key] = state
     CastAheadCore.ShowSampleRow(state, frame)
     CastAheadCore.SampleStates[state] = frame
+    state.plateUp = Shown(frame) and true or false
 end
 
 local function HideRow(key)
@@ -144,15 +149,18 @@ local function FeedTimeline(now)
     end
 end
 
-local function Shown(frame)
-    return frame and (not frame.IsShown or frame:IsShown())
-end
-
 local function HasShownPlateRow()
     for key in pairs(rows) do
         if key ~= "sample" and Shown(C_NamePlate.GetNamePlateForUnit(key)) then return true end
     end
     return false
+end
+
+local function SyncPlateRows()
+    for key, state in pairs(rows) do
+        local plate = key ~= "sample" and C_NamePlate.GetNamePlateForUnit(key)
+        if plate and state.plateUp ~= (Shown(plate) and true or false) then ShowRow(key, plate) end
+    end
 end
 
 local function SyncSample()
@@ -216,7 +224,9 @@ local FIELDS = {
 
 local function Refresh()
     if not panel.fields then return end
-    for key, field in pairs(panel.fields) do field.box:SetText(tostring(Round(FIELDS[key].read()))) end
+    for key, field in pairs(panel.fields) do
+        if not field.box:HasFocus() then field.box:SetText(tostring(Round(FIELDS[key].read()))) end
+    end
     for key, widgets in pairs(blocks) do
         local on = CastAheadConfig.Enabled(key)
         if lit[key] ~= on then
@@ -370,15 +380,15 @@ local function BuildBody(W, T)
     panel.iconsBox = icons
     panel.side, panel.grow = O.BuildPlacement(content, { "TOPLEFT", content, "TOPLEFT", 4, -y })
     y = y + 84
-    Number("offsetX", "Distance")
-    Number("nudgeX", "X")
-    Number("nudgeY", "Y")
-    Number("iconSize", "Icon")
-    Number("labelScale", "Label")
-    Number("timeScale", "Countdown")
+    Number("offsetX", "Distance (px)")
+    Number("nudgeX", "X (px)")
+    Number("nudgeY", "Y (px)")
+    Number("iconSize", "Icon (px)")
+    Number("labelScale", "Label (%)")
+    Number("timeScale", "Countdown (%)")
     panel.fixedSpacing = O.BuildSwitch(content, "fixedSpacing", { "TOPLEFT", content, "TOPLEFT", 0, -y })
     y = y + 26
-    Number("iconGap", "Gap")
+    Number("iconGap", "Gap (px)")
     Label("Layer")
     panel.layer = O.BuildStrata(content, { "TOPLEFT", content, "TOPLEFT", LABEL_W, -y + 2 })
     y = y + 32
@@ -387,15 +397,15 @@ local function BuildBody(W, T)
     local centre
     centre, panel.centreTitle, panel.centreContent = Box("centerText", "Centre call", icons)
     panel.centreBox = centre
-    for _, axis in ipairs({ { "centerX", "X", "Center X" }, { "centerY", "Y", "Center Y" } }) do
+    for _, axis in ipairs({ { "centerX", "X (px)", "Center X" }, { "centerY", "Y (px)", "Center Y" } }) do
         local key = axis[1]
         local row = Number(key, axis[2])
         row.center = W.Button(content, axis[3], 64)
         row.center:SetPoint("LEFT", row.plus, "RIGHT", 8, 0)
         row.center:SetScript("OnClick", function() SetField(key, 0) end)
     end
-    Number("centerScale", "Size")
-    Number("centerTextScale", "Text")
+    Number("centerScale", "Size (%)")
+    Number("centerTextScale", "Text (%)")
     Close(centre)
 
     local line
@@ -446,7 +456,7 @@ local function Build()
 end
 
 StaticPopupDialogs.CASTAHEAD_SETUP_RESET = {
-    text = "Put every setting this mode changes back to its default?",
+    text = "Put every size and position in this panel back to its default? The on/off switches stay as they are.",
     button1 = YES or "Yes",
     button2 = NO or "No",
     OnAccept = function()
@@ -465,9 +475,20 @@ function CastAheadSetup.Active()
     return active
 end
 
+local function StepAside()
+    local window = CastAheadWindow.Frame()
+    if window and window:IsShown() then
+        page = CastAheadWindow.Current()
+        window:Hide()
+    end
+end
+
 function CastAheadSetup.Enter()
     if InCombatLockdown() then return false, "combat" end
-    if active then return true end
+    if active then
+        StepAside()
+        return true
+    end
     local ok, err = pcall(function()
         for i = 1, 40 do AddUnit("nameplate" .. i) end
     end)
@@ -476,9 +497,7 @@ function CastAheadSetup.Enter()
         error(err, 0)
     end
     CastAheadCore.StopTest(true)
-    local window = CastAheadWindow.Frame()
-    page = window and window:IsShown() and CastAheadWindow.Current() or nil
-    if window then window:Hide() end
+    StepAside()
     active = true
     SyncSample()
     CastAheadCore.Reapply()
@@ -536,6 +555,7 @@ panel:SetScript("OnEvent", function(_, event, unit)
     if active then Layout() end
 end)
 panel:SetScript("OnKeyDown", function(self, key)
+    if InCombatLockdown() then return end
     if key == "ESCAPE" and not (StaticPopup_Visible and StaticPopup_Visible("CASTAHEAD_SETUP_RESET")) then
         CastAheadSetup.Leave()
         self:SetPropagateKeyboardInput(false)
@@ -549,6 +569,7 @@ panel:SetScript("OnUpdate", function()
     if now >= recheckAt then
         recheckAt = now + RECHECK
         if (rows.sample ~= nil) == HasShownPlateRow() then SyncSample() end
+        SyncPlateRows()
     end
     if now < refeedAt then return end
     refeedAt = now + 1

@@ -99,7 +99,6 @@ local function BuildSlider(panel, spec)
     table.insert(refreshers, function() show(read()) end)
     return slider, label
 end
-CastAheadOptions.BuildSlider = BuildSlider
 
 local function Refresh()
     for _, refresh in ipairs(refreshers) do refresh() end

@@ -102,7 +102,6 @@ function C.CenterScale()
     return C.Number("centerScale", C.CENTER_DEFAULT, C.CENTER_MIN, C.CENTER_MAX) / 100
 end
 
--- Stored relative to CastAheadCore.CENTER_Y: moving that constant would shift every saved value.
 function C.CenterY()
     return tonumber(C.Get("centerY")) or C.CENTER_Y_DEFAULT
 end
