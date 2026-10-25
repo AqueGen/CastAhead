@@ -1351,6 +1351,65 @@ check(tenLeft, "the sibling keeps its tabled 18s cooldown, not the 12s anchor ga
 check(tilde, "a projected sibling's time is an estimate: the tilde shows beside it")
 reset()
 
+-- Two spells of one creature share a 2.4s cast, so its first cast stays a tie.
+-- A unique cast then names the creature and projects both. The tied spell's
+-- repeat lands on its projection, but it is a repeat: the interval since the
+-- plate's real 2.4s cast decides it, not the opening window from engage.
+table.insert(CastAheadData[1877], { spell = 1401, npc = 14, mob = "Nimbus", name = "Charge", cast = 2.4,
+                          cd = { 8.0 }, first = 3.0, firstN = 20, offset = 6.0, kick = 0, cc = 0 })
+table.insert(CastAheadData[1877], { spell = 1402, npc = 14, mob = "Nimbus", name = "Lightning", cast = 2.4,
+                          cd = { 30.0 }, first = 4.0, firstN = 20, offset = 30.0, kick = 0, cc = 0 })
+table.insert(CastAheadData[1877], { spell = 1403, npc = 14, mob = "Nimbus", name = "Release", cast = 5.3,
+                          cd = { 25.0 }, first = 2.4, firstN = 20, offset = 0.0, kick = 0, cc = 0 })
+do
+    enter()
+    castFor(2.4)                   -- t0: 1401 or 1402, both openings fit
+    castFor(5.3)                   -- t0+2.4: unique, names npc 14 and projects 1401 and 1402
+    advance(0.7)                   -- t0+8.4: one 1401 cooldown on, and on 1401's projection
+    castFor(2.4)
+    local call = CastAheadCore.LastCandidates(unit)
+    check(call and #call == 1 and call[1].spell == 1401, string.format(
+        "a repeat cast on a projected track is matched by its interval, got %s",
+        call and #call == 1 and tostring(call[1].spell) or "no single call"))
+    reset()
+end
+for _ = 1, 3 do table.remove(CastAheadData[1877]) end
+
+-- One creature, two 3.65s casts whose openings from engage overlap, so the
+-- engage window cannot tell them apart. Each spell's own history can: the
+-- mob's first cast is the opener by its firm offset 0, and a cast 9.9s after
+-- the opener's last one cannot be the opener (it never comes back under 19s),
+-- so it is the other spell, whose loose offset alone could not place it.
+table.insert(CastAheadData[1877], { spell = 1601, npc = 16, mob = "Voidscythe", name = "Essence", cast = 3.65,
+                          cd = { 20.6 }, first = 3.0, firstN = 20, offset = 0.0, offsetFirm = true, cdMin = 19.0,
+                          kick = 0, cc = 0 })
+table.insert(CastAheadData[1877], { spell = 1602, npc = 16, mob = "Voidscythe", name = "Slice", cast = 3.65,
+                          cd = { 23.1 }, first = 5.0, firstN = 20, offset = 8.0, kick = 0, cc = 0, prio = "TANK" })
+do
+    local function at(t, length)
+        advance(t - now)
+        fire("UNIT_SPELLCAST_START", unit)
+        local claim = CastAheadCore.Casting(unit)
+        advance(length)
+        fire("UNIT_SPELLCAST_STOP", unit)
+        local call = CastAheadCore.LastCandidates(unit)
+        return call and #call == 1 and call[1].spell or nil, claim and claim.row and claim.row.spell or nil
+    end
+    enter()
+    local t0 = now
+    local first = at(t0 + 3.0, 3.65)
+    at(t0 + 23.6, 3.65)
+    at(t0 + 31.0, 3.65)
+    local opener = at(t0 + 44.2, 3.65)
+    local other = at(t0 + 54.1, 3.65)
+    check(first == 1601, "the mob's first cast is placed by its firm opening order, got " .. tostring(first))
+    check(opener == 1601 and other == 1602, string.format(
+        "a cast too soon for the opener's own history is the other spell, got %s %s",
+        tostring(opener), tostring(other)))
+    reset()
+end
+for _ = 1, 2 do table.remove(CastAheadData[1877]) end
+
 -- A first cast projected from the mob's kit reaches the timeline once its
 -- opening is measured well enough, and stays off it while it is not.
 local sibling = CastAheadData[1877][2]

@@ -149,6 +149,18 @@ if os.getenv("CA_OBSERVED_BELOW") == "0" then
     CastAheadCore.Tuning.observedBelowOnly = false
     knobs[#knobs + 1] = "observedBelowOnly=off"
 end
+if os.getenv("CA_HISTORY") == "0" then
+    CastAheadCore.Tuning.history = false
+    knobs[#knobs + 1] = "history=off"
+end
+if os.getenv("CA_HISTORY_OFFSET") == "0" then
+    CastAheadCore.Tuning.historyOffset = false
+    knobs[#knobs + 1] = "historyOffset=off"
+end
+if os.getenv("CA_HISTORY_TOL") then
+    CastAheadCore.Tuning.historyTolerance = tonumber(os.getenv("CA_HISTORY_TOL"))
+    knobs[#knobs + 1] = "historyTolerance=" .. os.getenv("CA_HISTORY_TOL")
+end
 if #knobs > 0 then print("knobs: " .. table.concat(knobs, ", ")) end
 
 -- The narrowing steps of the cast currently being resolved, per unit.
