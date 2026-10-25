@@ -1072,7 +1072,8 @@ local function AnchorBar(unit, bar, index)
     -- The bar is a child of UIParent, not of the plate, so it does not inherit
     -- the plate's visibility: a plate that is gone or hidden would otherwise
     -- leave its icon floating at the last position it had.
-    if not plate or (plate.IsShown and not plate:IsShown()) then
+    if not plate or (plate.IsShown and not plate:IsShown())
+        or (CastAheadSetup and CastAheadSetup.Active()) then
         bar:Hide()
         return false
     end
@@ -2532,7 +2533,7 @@ end
 
 -- /ca move (or the window's Move button): show the block with a sample
 -- line and let it be dragged; call again to lock it in place.
-local function ToggleMoveCenter()
+local function ToggleMoveCenter(quiet)
     if not centerUnlocked and CastAheadSetup and CastAheadSetup.Active() then CastAheadSetup.Leave() end
     local f = CenterFrame()
     centerUnlocked = not centerUnlocked
@@ -2553,7 +2554,7 @@ local function ToggleMoveCenter()
     else
         f.grip:Hide()
         f:Hide()
-        print("|cff33ff99Cast Ahead|r call block locked")
+        if not quiet then print("|cff33ff99Cast Ahead|r call block locked") end
     end
 end
 
@@ -2666,10 +2667,17 @@ local function UpdateCenter(now)
     PaintCenter(f, picks, now)
 end
 
-local SAMPLE_ICONS = { 136243 }
+local function SampleDataRow(key)
+    for _, rows in pairs(CastAheadData) do
+        for _, row in ipairs(rows) do
+            local advice = CastAheadMatch.Advice(row)
+            if advice and advice.key == key then return row end
+        end
+    end
+end
 
 local function ShowCenterSample(on)
-    if centerUnlocked then ToggleMoveCenter() end
+    if centerUnlocked then ToggleMoveCenter(true) end
     centerSample = (on and CastAheadConfig.CenterText()) and true or false
     if not centerSample then
         if center then center:EnableMouse(false) end
@@ -2681,11 +2689,13 @@ local function ShowCenterSample(on)
     PlaceCenter(f)
     local A = CastAheadMatch.ADVICE
     local defensive = CastAheadSaves and CastAheadSaves.Icons(A.DEFENSIVE, nil)
+    local kick = SampleDataRow("KICK")
     local now = GetTime()
     PaintCenter(f, {
-        { advice = A.KICK, endAt = now + 2.4, icons = SAMPLE_ICONS },
-        { advice = A.DEFENSIVE, endAt = now + 4.0, icons = defensive and #defensive > 0 and defensive or SAMPLE_ICONS },
-        { advice = A.BURST, endAt = now + 6.0, icons = SAMPLE_ICONS },
+        { advice = A.KICK, endAt = now + 2.4, icons = { kick and SpellIcon(kick.spell) or FALLBACK_ICON } },
+        { advice = A.DEFENSIVE, endAt = now + 4.0,
+          icons = defensive and #defensive > 0 and defensive or { FALLBACK_ICON } },
+        { advice = A.BURST, endAt = now + 6.0, icons = { CastAheadBurst and CastAheadBurst.ICON or FALLBACK_ICON } },
     }, now)
 end
 
@@ -2860,6 +2870,8 @@ CastAheadCore.Population = function() return killed, exhausted end
 CastAheadCore.MoveCenter = ToggleMoveCenter
 CastAheadCore.IsHostileNameplate = IsHostileNameplate
 CastAheadCore.ShowCenterSample = ShowCenterSample
+CastAheadCore.SampleDataRow = SampleDataRow
+CastAheadCore.RememberPlateSize = RememberPlateSize
 
 function CastAheadCore.PlateSize()
     local size = CastAheadDB and CastAheadDB.plateSize
@@ -3641,6 +3653,7 @@ end
 -- /ca hide: drop everything we draw. If an icon survives this, it is not
 -- ours - which is worth knowing before hunting for a bug in this addon.
 function CastAheadCore.HideAll()
+    if CastAheadSetup and CastAheadSetup.Active() then CastAheadSetup.Leave() end
     StopTest(true)
     HideCenter()
     for unit in pairs(plates) do

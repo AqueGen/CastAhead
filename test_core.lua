@@ -5323,7 +5323,8 @@ do
     end
 end
 
-do
+-- A function, not a block: the main chunk is at Lua 5.1's 200-local limit.
+(function()
     local savedDB, savedLock = CastAheadDB, InCombatLockdown
     local W = CastAheadWindow
     local savedFrame, savedCurrent, savedShow = W.Frame, W.Current, W.Show
@@ -5429,7 +5430,7 @@ do
     check(newlyShown(before) == 0, "setup: leaving leaves nothing shown, got " .. newlyShown(before))
     check(liveEvents() == live0, "setup: leaving cancels the sample timeline entries")
     check(winShown and shownPage == "General", "setup: the window comes back on its page")
-    check(not inSpecial() and next(registered) == nil, "setup: leaving unregisters everything")
+    check(inSpecial() and next(registered) == nil, "setup: leaving unregisters events, the panel stays an Esc frame")
 
     winShown, shownPage = false, nil
     S.Enter()
@@ -5448,8 +5449,20 @@ do
     S.Enter()
     CastAheadCore.MoveCenter()
     check(not S.Active(), "setup: /ca move leaves the mode first")
+    local realPrint, printed = print, {}
+    print = function(text) printed[#printed + 1] = text end
     S.Enter()
+    print = realPrint
     check(sampleLines() == 3, "setup: entering locks /ca move and shows the sample")
+    check(#printed == 0, "setup: locking /ca move on entry prints nothing, got " .. tostring(printed[1]))
+    local kickIcon, burstIcon
+    for i = 1, #allFrames do
+        local f = allFrames[i]
+        if f.shown and f.timeValue == "Interrupt  2.4" then kickIcon = f.icon.textureValue end
+        if f.shown and f.timeValue == "Burst now  6.0" then burstIcon = f.icon.textureValue end
+    end
+    check(kickIcon == textures[200], "setup: the interrupt sample shows a kick spell's icon, got " .. tostring(kickIcon))
+    check(burstIcon == CastAheadBurst.ICON, "setup: the burst sample shows the burst icon, got " .. tostring(burstIcon))
     S.Leave()
     check(newlyShown(before) == 0, "setup: nothing left after /ca move and the mode")
 
@@ -5457,12 +5470,95 @@ do
     S.Enter()
     check(sampleLines() == 0, "setup: no centre sample with the centre call off")
     S.Leave()
+    CastAheadDB.centerText = true
+
+    S.Enter()
+    panel.handlers.OnHide(panel)
+    check(not S.Active() and newlyShown(before) == 0, "setup: Esc hides the panel and leaves the mode")
+
+    S.Enter()
+    CastAheadCore.HideAll()
+    check(not S.Active() and newlyShown(before) == 0, "setup: /ca hide leaves the mode")
+
+    do
+        local realPlateFor = C_NamePlate.GetNamePlateForUnit
+        C_NamePlate.GetNamePlateForUnit = function(u)
+            if u == "nameplate9" then return { unit = u, IsShown = function() return true end } end
+            return realPlateFor(u)
+        end
+        hostile.nameplate9 = false
+        S.Enter()
+        fireAll("NAME_PLATE_UNIT_ADDED", "nameplate9")
+        check(barsOn(function(p) return p.unit == "nameplate9" end) == 0, "setup: a friendly plate gets no sample row")
+        S.Leave()
+        C_NamePlate.GetNamePlateForUnit, hostile.nameplate9 = realPlateFor, nil
+    end
+
+    do
+        local realAdd, expiry = C_EncounterTimeline.AddScriptEvent, {}
+        C_EncounterTimeline.AddScriptEvent = function(request)
+            local id = realAdd(request)
+            expiry[id] = now + request.duration
+            return id
+        end
+        S.Enter()
+        for _ = 1, 100 do
+            now = now + 1
+            panel.handlers.OnUpdate(panel)
+        end
+        local alive = 0
+        for id in pairs(timeline.live) do
+            if expiry[id] and expiry[id] > now then alive = alive + 1 end
+        end
+        check(alive == 3, "setup: the timeline samples stay while the mode is open, got " .. alive)
+        S.Leave()
+        alive = 0
+        for id in pairs(timeline.live) do if expiry[id] then alive = alive + 1 end end
+        check(alive == 0, "setup: leaving cancels the kept timeline samples, got " .. alive)
+        C_EncounterTimeline.AddScriptEvent = realAdd
+    end
+
+    do
+        local realPlateFor, realUIParent = C_NamePlate.GetNamePlateForUnit, UIParent
+        UIParent = { GetEffectiveScale = function() return 1 end }
+        local scale = 1.5
+        C_NamePlate.GetNamePlateForUnit = function(u)
+            local plate = realPlateFor(u)
+            if not plate then return nil end
+            plate.GetWidth = function() return 120 end
+            plate.GetHeight = function() return 12 end
+            plate.GetEffectiveScale = function() return scale end
+            return plate
+        end
+        local plateSized
+        S.plate.SetSize = function(_, w, h) plateSized = { w, h } end
+        CastAheadDB.plateSize = nil
+        S.Enter()
+        check(plateSized and plateSized[1] == 180 and plateSized[2] == 18,
+            "setup: the sample plate takes the size of a real plate seen on entry")
+        scale = 2
+        fireAll("UI_SCALE_CHANGED")
+        check(plateSized[1] == 240 and plateSized[2] == 24, "setup: the sample plate follows a real plate after a scale change")
+        S.Leave()
+        S.plate.SetSize = nil
+        CastAheadDB.plateSize = nil
+        C_NamePlate.GetNamePlateForUnit, UIParent = realPlateFor, realUIParent
+    end
+    reset()
+
+    enter()
+    castFor(3.0)
+    check(IconShown(100), "setup: a live bar is up before entering")
+    S.Enter()
+    check(not IconShown(100), "setup: live bars give way to the sample row while the mode is open")
+    S.Leave()
+    check(IconShown(100), "setup: live bars come back on leaving")
 
     reset()
     panel.RegisterEvent, panel.UnregisterEvent = nil, nil
     W.Frame, W.Current, W.Show = savedFrame, savedCurrent, savedShow
     CastAheadDB, InCombatLockdown = savedDB, savedLock
-end
+end)()
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

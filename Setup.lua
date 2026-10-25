@@ -39,12 +39,14 @@ end
 local PANEL_NAME = "CastAheadSetupPanel"
 local EVENTS = { "PLAYER_REGEN_DISABLED", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED",
                  "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" }
-local TIMELINE_LEAD = 60
+local TIMELINE_LEAD = 5
+local REFEED_BELOW = 3
 
 local active = false
 local rows = {}
 local tracks = {}
 local page
+local refeedAt = 0
 
 local panel = CreateFrame("Frame", PANEL_NAME, UIParent)
 panel:SetSize(280, 120)
@@ -57,6 +59,7 @@ panel:RegisterForDrag("LeftButton")
 panel:SetScript("OnDragStart", panel.StartMoving)
 panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
 panel:Hide()
+table.insert(UISpecialFrames, PANEL_NAME)
 CastAheadSetup.panel = panel
 
 local function SamplePlate()
@@ -104,26 +107,20 @@ end
 local function AddUnit(unit)
     if not CastAheadCore.IsHostileNameplate(unit) then return end
     local plate = C_NamePlate.GetNamePlateForUnit(unit)
-    if plate and (not plate.IsShown or plate:IsShown()) then ShowRow(unit, plate) end
+    if not (plate and (not plate.IsShown or plate:IsShown())) then return end
+    CastAheadCore.RememberPlateSize(plate)
+    ShowRow(unit, plate)
 end
 
-local function TimelineRow(key)
-    for _, dungeon in pairs(CastAheadData) do
-        for _, row in ipairs(dungeon) do
-            local advice = CastAheadMatch.Advice(row)
-            if advice and advice.key == key then return row end
-        end
-    end
-end
-
-local function FeedTimeline()
+local function FeedTimeline(now)
     if not CastAheadTimeline then return end
-    local now = GetTime()
     for i, sample in ipairs(CastAheadCore.SAMPLE_ROW) do
-        local row = TimelineRow(sample.key)
+        local track = tracks[i] or {}
+        tracks[i] = track
+        local row = (not track.timelineTargetAt or track.timelineTargetAt - now < REFEED_BELOW)
+            and CastAheadCore.SampleDataRow(sample.key)
         if row then
-            tracks[i] = tracks[i] or {}
-            CastAheadTimeline.Sync(tracks[i], now + TIMELINE_LEAD + sample.time, row,
+            CastAheadTimeline.Sync(track, now + TIMELINE_LEAD + sample.time, row,
                 CastAheadMatch.ADVICE[sample.key], true)
         end
     end
@@ -142,14 +139,14 @@ function CastAheadSetup.Enter()
     if window then window:Hide() end
     active = true
     local plate = SamplePlate()
+    for i = 1, 40 do AddUnit("nameplate" .. i) end
     SizePlate()
     plate:Show()
     ShowRow("sample", plate)
-    for i = 1, 40 do AddUnit("nameplate" .. i) end
+    CastAheadCore.Reapply()
     CastAheadCore.ShowCenterSample(true)
-    FeedTimeline()
+    FeedTimeline(GetTime())
     for _, event in ipairs(EVENTS) do panel:RegisterEvent(event) end
-    table.insert(UISpecialFrames, PANEL_NAME)
     panel:Show()
     return true
 end
@@ -158,11 +155,9 @@ function CastAheadSetup.Leave()
     if not active then return end
     active = false
     for _, event in ipairs(EVENTS) do panel:UnregisterEvent(event) end
-    for i = #UISpecialFrames, 1, -1 do
-        if UISpecialFrames[i] == PANEL_NAME then table.remove(UISpecialFrames, i) end
-    end
     for key in pairs(rows) do HideRow(key) end
     CastAheadSetup.plate:Hide()
+    CastAheadCore.Reapply()
     CastAheadCore.ShowCenterSample(false)
     if CastAheadTimeline then
         for _, track in pairs(tracks) do CastAheadTimeline.Cancel(track) end
@@ -178,10 +173,24 @@ panel:SetScript("OnEvent", function(_, event, unit)
         CastAheadSetup.Leave()
     elseif event == "NAME_PLATE_UNIT_ADDED" then
         AddUnit(unit)
+        SizePlate()
     elseif event == "NAME_PLATE_UNIT_REMOVED" then
         HideRow(unit)
     else
+        for key, state in pairs(rows) do
+            local plate = key ~= "sample" and C_NamePlate.GetNamePlateForUnit(key)
+            if plate then
+                CastAheadCore.RememberPlateSize(plate)
+                CastAheadCore.SampleStates[state] = plate
+            end
+        end
         SizePlate()
         CastAheadCore.Reapply()
     end
+end)
+panel:SetScript("OnUpdate", function()
+    local now = GetTime()
+    if now < refeedAt then return end
+    refeedAt = now + 1
+    FeedTimeline(now)
 end)
