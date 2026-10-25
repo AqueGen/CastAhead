@@ -157,7 +157,7 @@ end
 
 local eventHandler, updateHandler
 CreateFrame = function(kind)
-    local f = { shown = false, texts = {}, kind = kind }
+    local f = { shown = false, texts = {}, kind = kind, handlers = {} }
     allFrames[#allFrames + 1] = f
     framesMade = framesMade + 1
     f.Show = function(self)
@@ -170,6 +170,7 @@ CreateFrame = function(kind)
     end
     f.IsShown = function(self) return self.shown end
     f.SetScript = function(_, script, fn)
+        f.handlers[script] = fn
         -- Core registers more than one event frame (the main one, plus a small
         -- frame that saves diagnostics on logout). Only the first owns the
         -- event flow; keeping just the last one silently redirected everything.
@@ -5320,6 +5321,147 @@ do
         check(math.abs(x - p[1]) <= 1 and math.abs(y - p[2]) <= 1,
             "snap: round trip " .. p[1] .. "," .. p[2] .. " -> " .. x .. "," .. y)
     end
+end
+
+do
+    local savedDB, savedLock = CastAheadDB, InCombatLockdown
+    local W = CastAheadWindow
+    local savedFrame, savedCurrent, savedShow = W.Frame, W.Current, W.Show
+    local winShown, shownPage = true, nil
+    local win = { IsShown = function() return winShown end, Hide = function() winShown = false end }
+    W.Frame = function() return win end
+    W.Current = function() return "General" end
+    W.Show = function(name) winShown, shownPage = true, name end
+    local inCombat = false
+    InCombatLockdown = function() return inCombat end
+    CastAheadDB = { centerText = true }
+    local S = CastAheadSetup
+    local panel = S.panel
+    local registered = {}
+    panel.RegisterEvent = function(_, e) registered[e] = true end
+    panel.UnregisterEvent = function(_, e) registered[e] = nil end
+    local function fireAll(event, ...)
+        fire(event, ...)
+        if registered[event] then panel.handlers.OnEvent(panel, event, ...) end
+    end
+    local function shownSet()
+        local s = {}
+        for i = 1, #allFrames do if allFrames[i].shown then s[allFrames[i]] = true end end
+        return s
+    end
+    local function newlyShown(before)
+        local n = 0
+        for i = 1, #allFrames do
+            if allFrames[i].shown and not before[allFrames[i]] then n = n + 1 end
+        end
+        return n
+    end
+    local SAMPLE_LINES = { ["Interrupt  2.4"] = true, ["Defensive  4.0"] = true, ["Burst now  6.0"] = true }
+    local function sampleLines()
+        local n = 0
+        for i = 1, #allFrames do
+            if allFrames[i].shown and SAMPLE_LINES[allFrames[i].timeValue] then n = n + 1 end
+        end
+        return n
+    end
+    local function liveEvents()
+        local n = 0
+        for _ in pairs(timeline.live) do n = n + 1 end
+        return n
+    end
+    local function barsOn(match)
+        local n = 0
+        for i = 1, #allFrames do
+            local f = allFrames[i]
+            if f.shown and IsBar(f) and f._plate and match(f._plate) then n = n + 1 end
+        end
+        return n
+    end
+    local function onSample(p) return p == S.plate end
+    local function onUnit(p) return p.unit == unit end
+    local function inSpecial()
+        for _, n in ipairs(UISpecialFrames) do if n == "CastAheadSetupPanel" then return true end end
+        return false
+    end
+
+    local before = shownSet()
+    inCombat = true
+    local ok, reason = S.Enter()
+    check(ok == false and reason == "combat", "setup: entering in combat is refused")
+    check(not S.Active() and newlyShown(before) == 0 and winShown, "setup: a refused enter shows nothing")
+    inCombat = false
+
+    hostile[unit] = true
+    local live0 = liveEvents()
+    CastAheadCore.Test(1877)
+    check(CastAheadCore.Testing(), "setup: the test drive runs before entering")
+    local added0 = timeline.added
+    check(S.Enter() == true and S.Active(), "setup: enter out of combat")
+    check(not CastAheadCore.Testing(), "setup: entering stops the test drive")
+    check(not winShown, "setup: the window steps aside")
+    check(S.plate and S.plate.shown, "setup: the sample plate is shown")
+    check(barsOn(onSample) == 3, "setup: three sample bars on the sample plate, got " .. barsOn(onSample))
+    check(barsOn(onUnit) == 3, "setup: three sample bars on a hostile plate, got " .. barsOn(onUnit))
+    check(sampleLines() == 3, "setup: the centre block shows three sample lines, got " .. sampleLines())
+    check(timeline.added - added0 == 3, "setup: three sample timeline entries, got " .. (timeline.added - added0))
+    check(panel.shown and inSpecial(), "setup: the panel is shown and Esc closes it")
+    check(registered.PLAYER_REGEN_DISABLED and registered.NAME_PLATE_UNIT_ADDED and registered.UI_SCALE_CHANGED,
+        "setup: events registered")
+
+    fireAll("NAME_PLATE_UNIT_REMOVED", unit)
+    check(barsOn(onUnit) == 0, "setup: a removed plate releases its sample row")
+    fireAll("NAME_PLATE_UNIT_ADDED", unit)
+    check(barsOn(onUnit) == 3, "setup: an added hostile plate gets a sample row")
+
+    local sized
+    S.plate.SetSize = function(_, w, h) sized = { w, h } end
+    CastAheadDB.plateSize = { 150, 20 }
+    fireAll("UI_SCALE_CHANGED")
+    check(sized and sized[1] == 150 and sized[2] == 20, "setup: a UI scale change re-sizes the sample plate")
+    CastAheadDB.plateSize = { 160, 22 }
+    fireAll("DISPLAY_SIZE_CHANGED")
+    check(sized[1] == 160 and sized[2] == 22, "setup: a resolution change re-sizes the sample plate")
+    S.plate.SetSize = nil
+    CastAheadDB.plateSize = nil
+
+    S.Leave()
+    check(not S.Active(), "setup: leave")
+    check(newlyShown(before) == 0, "setup: leaving leaves nothing shown, got " .. newlyShown(before))
+    check(liveEvents() == live0, "setup: leaving cancels the sample timeline entries")
+    check(winShown and shownPage == "General", "setup: the window comes back on its page")
+    check(not inSpecial() and next(registered) == nil, "setup: leaving unregisters everything")
+
+    winShown, shownPage = false, nil
+    S.Enter()
+    S.Leave()
+    check(not winShown and shownPage == nil, "setup: a window closed on entry stays closed")
+
+    S.Enter()
+    fireAll("PLAYER_REGEN_DISABLED")
+    check(not S.Active() and newlyShown(before) == 0, "setup: combat closes the mode")
+
+    S.Enter()
+    CastAheadCore.Test(1877)
+    check(not S.Active() and CastAheadCore.Testing(), "setup: the test drive leaves the mode first")
+    CastAheadCore.Test(1877)
+
+    S.Enter()
+    CastAheadCore.MoveCenter()
+    check(not S.Active(), "setup: /ca move leaves the mode first")
+    S.Enter()
+    check(sampleLines() == 3, "setup: entering locks /ca move and shows the sample")
+    S.Leave()
+    check(newlyShown(before) == 0, "setup: nothing left after /ca move and the mode")
+
+    CastAheadDB.centerText = false
+    S.Enter()
+    check(sampleLines() == 0, "setup: no centre sample with the centre call off")
+    S.Leave()
+
+    reset()
+    panel.RegisterEvent, panel.UnregisterEvent = nil, nil
+    W.Frame, W.Current, W.Show = savedFrame, savedCurrent, savedShow
+    CastAheadDB, InCombatLockdown = savedDB, savedLock
 end
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))

@@ -2421,6 +2421,7 @@ end)
 local CENTER_Y = -120
 local center
 local centerUnlocked = false   -- /ca move: the block is being dragged
+local centerSample = false
 local demo          -- the test drive's state, defined with CastAheadCore.Test
 
 -- Where the block sits: offsets from the screen centre, set by dragging it
@@ -2480,7 +2481,7 @@ local function CenterFrame()
     center:SetMovable(true)
     center:RegisterForDrag("LeftButton")
     center:SetScript("OnDragStart", function(self)
-        if centerUnlocked then self:StartMoving() end
+        if centerUnlocked or centerSample then self:StartMoving() end
     end)
     center:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
@@ -2532,6 +2533,7 @@ end
 -- /ca move (or the window's Move button): show the block with a sample
 -- line and let it be dragged; call again to lock it in place.
 local function ToggleMoveCenter()
+    if not centerUnlocked and CastAheadSetup and CastAheadSetup.Active() then CastAheadSetup.Leave() end
     local f = CenterFrame()
     centerUnlocked = not centerUnlocked
     f:EnableMouse(centerUnlocked)
@@ -2614,15 +2616,7 @@ local function HideCenter()
     center:Hide()
 end
 
-local function UpdateCenter(now)
-    if centerUnlocked then return end     -- being dragged: leave the sample alone
-    local picks = CastAheadConfig.CenterText() and CenterPick(now) or nil
-    if not picks or #picks == 0 then
-        HideCenter()
-        return
-    end
-    local f = CenterFrame()
-    PlaceCenter(f)
+local function PaintCenter(f, picks, now)
     for i = 1, CENTER_LINES do
         local line, pick = f.lines[i], picks[i]
         if pick then
@@ -2658,6 +2652,41 @@ local function UpdateCenter(now)
         end
     end
     f:Show()
+end
+
+local function UpdateCenter(now)
+    if centerUnlocked or centerSample then return end     -- being dragged: leave the sample alone
+    local picks = CastAheadConfig.CenterText() and CenterPick(now) or nil
+    if not picks or #picks == 0 then
+        HideCenter()
+        return
+    end
+    local f = CenterFrame()
+    PlaceCenter(f)
+    PaintCenter(f, picks, now)
+end
+
+local SAMPLE_ICONS = { 136243 }
+
+local function ShowCenterSample(on)
+    if centerUnlocked then ToggleMoveCenter() end
+    centerSample = (on and CastAheadConfig.CenterText()) and true or false
+    if not centerSample then
+        if center then center:EnableMouse(false) end
+        HideCenter()
+        return
+    end
+    local f = CenterFrame()
+    f:EnableMouse(true)
+    PlaceCenter(f)
+    local A = CastAheadMatch.ADVICE
+    local defensive = CastAheadSaves and CastAheadSaves.Icons(A.DEFENSIVE, nil)
+    local now = GetTime()
+    PaintCenter(f, {
+        { advice = A.KICK, endAt = now + 2.4, icons = SAMPLE_ICONS },
+        { advice = A.DEFENSIVE, endAt = now + 4.0, icons = defensive and #defensive > 0 and defensive or SAMPLE_ICONS },
+        { advice = A.BURST, endAt = now + 6.0, icons = SAMPLE_ICONS },
+    }, now)
 end
 
 frame:SetScript("OnUpdate", function()
@@ -2829,6 +2858,8 @@ CastAheadCore.Tuning = tuning
 CastAheadCore.SpreadBars = SpreadBars
 CastAheadCore.Population = function() return killed, exhausted end
 CastAheadCore.MoveCenter = ToggleMoveCenter
+CastAheadCore.IsHostileNameplate = IsHostileNameplate
+CastAheadCore.ShowCenterSample = ShowCenterSample
 
 function CastAheadCore.PlateSize()
     local size = CastAheadDB and CastAheadDB.plateSize
@@ -2947,6 +2978,7 @@ end
 -- in turn, one call at a time on the first hostile plate around: that is for
 -- hearing each cast's sound rather than judging the layout.
 function CastAheadCore.Test(instanceID, list)
+    if CastAheadSetup and CastAheadSetup.Active() then CastAheadSetup.Leave() end
     if demo then StopTest() return end
     local id = instanceID
     if not (id and CastAheadData[id]) then
