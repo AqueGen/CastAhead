@@ -47,7 +47,7 @@ end
 local BuildGeneral, BuildSounds, BuildDefensives, BuildDevelopment, BuildReport
 -- Widgets are painted once, when a panel is first built, but storage can
 -- change behind their back: the /ca anchor|grow|offset|center slash commands
--- and the Move button all write it. Every widget that displays stored state
+-- and the setup mode all write it. Every widget that displays stored state
 -- registers a closure here that re-reads it; showing a panel runs the lot.
 local refreshers = {}
 
@@ -114,6 +114,20 @@ local function ResizeCenter()
     if CastAheadCore and CastAheadCore.ResizeCenter then CastAheadCore.ResizeCenter() end
 end
 
+local function Peek(kind)
+    if CastAheadSetup then CastAheadSetup.Peek(kind) end
+end
+
+local function RedrawRow()
+    Redraw()
+    Peek("row")
+end
+
+local function ResizeCenterPeek()
+    ResizeCenter()
+    Peek("center")
+end
+
 local SLIDERS = {
     offsetX = {
         key = "offsetX",
@@ -121,7 +135,7 @@ local SLIDERS = {
         caption = function(value)
             return string.format("Distance from the plate: %d px", value)
         end,
-        after = Redraw,
+        after = RedrawRow,
     },
     labelScale = {
         key = "labelScale",
@@ -129,7 +143,7 @@ local SLIDERS = {
         min = CastAheadConfig.LABEL_MIN, max = CastAheadConfig.LABEL_MAX, step = 5,
         low = CastAheadConfig.LABEL_MIN .. "%", high = CastAheadConfig.LABEL_MAX .. "%",
         caption = function(value) return string.format("Label: %d%% of the icon", value) end,
-        after = Redraw,
+        after = RedrawRow,
     },
     timeScale = {
         key = "timeScale",
@@ -137,7 +151,7 @@ local SLIDERS = {
         min = CastAheadConfig.TIME_MIN, max = CastAheadConfig.TIME_MAX, step = 5,
         low = CastAheadConfig.TIME_MIN .. "%", high = CastAheadConfig.TIME_MAX .. "%",
         caption = function(value) return string.format("Countdown: %d%% of the icon", value) end,
-        after = Redraw,
+        after = RedrawRow,
     },
     centerTextScale = {
         key = "centerTextScale",
@@ -145,7 +159,15 @@ local SLIDERS = {
         min = CastAheadConfig.CENTER_TEXT_MIN, max = CastAheadConfig.CENTER_TEXT_MAX, step = 5,
         low = CastAheadConfig.CENTER_TEXT_MIN .. "%", high = CastAheadConfig.CENTER_TEXT_MAX .. "%",
         caption = function(value) return string.format("Text: %d%% of the block", value) end,
-        after = ResizeCenter,
+        after = ResizeCenterPeek,
+    },
+    centerScale = {
+        key = "centerScale",
+        default = CastAheadConfig.CENTER_DEFAULT,
+        min = CastAheadConfig.CENTER_MIN, max = CastAheadConfig.CENTER_MAX, step = 5,
+        low = CastAheadConfig.CENTER_MIN .. "%", high = CastAheadConfig.CENTER_MAX .. "%",
+        caption = function(value) return string.format("Size: %d%%", value) end,
+        after = ResizeCenterPeek,
     },
 }
 
@@ -388,7 +410,25 @@ end
 -- it is drawn. Each group carries its own on/off switch, so nothing has to be
 -- traced across the page.
 function BuildGeneral(panel)
-    -- What is announced ---------------------------------------------------
+    local setup = CastAheadWindow.Button(panel, "Set up on screen", 160, true)
+    setup:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -8)
+    setup:SetMotionScriptsWhileDisabled(true)
+    setup:SetScript("OnClick", function() CastAheadSetup.Enter() end)
+    local function PaintSetup() setup:SetEnabled(not InCombatLockdown()) end
+    setup:SetScript("OnEnter", function(self)
+        if not InCombatLockdown() then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Not available in combat.", 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    setup:SetScript("OnLeave", GameTooltip_Hide)
+    setup:RegisterEvent("PLAYER_REGEN_DISABLED")
+    setup:RegisterEvent("PLAYER_REGEN_ENABLED")
+    setup:SetScript("OnEvent", PaintSetup)
+    PaintSetup()
+    table.insert(refreshers, PaintSetup)
+    panel.flowTop = 40
+
     local what = BuildGroup(panel, "What to call out", 204)
     local important = BuildSwitch(panel, "importantOnly",
         { "TOPLEFT", what, "TOPLEFT", 10, -26 })
@@ -429,7 +469,7 @@ function BuildGeneral(panel)
         min = -CastAheadConfig.NUDGE_MAX, max = CastAheadConfig.NUDGE_MAX, step = 1,
         point = { "TOPLEFT", offsetSlider, "BOTTOMLEFT", -6, -18 },
         caption = function(value) return string.format("Nudge sideways: %+d px", value) end,
-        after = Redraw,
+        after = RedrawRow,
     })
 
     local nudgeYSlider = BuildSlider(panel, {
@@ -438,7 +478,7 @@ function BuildGeneral(panel)
         min = -CastAheadConfig.NUDGE_MAX, max = CastAheadConfig.NUDGE_MAX, step = 1,
         point = { "TOPLEFT", nudgeXSlider, "BOTTOMLEFT", -6, -18 },
         caption = function(value) return string.format("Nudge up or down: %+d px", value) end,
-        after = Redraw,
+        after = RedrawRow,
     })
 
     BuildReset(panel, { "TOPLEFT", nudgeYSlider, "BOTTOMLEFT", -6, -22 },
@@ -456,7 +496,7 @@ function BuildGeneral(panel)
         min = CastAheadConfig.ICON_MIN, max = CastAheadConfig.ICON_MAX, step = 2,
         point = { "TOPLEFT", sizes, "TOPLEFT", 16, -26 },
         caption = function(value) return string.format("Icon: %d px", value) end,
-        after = Redraw,
+        after = RedrawRow,
     })
 
     local labelSlider = BuildSlider(panel, SliderSpec("labelScale", { "TOPLEFT", iconSlider, "BOTTOMLEFT", -6, -18 }))
@@ -469,7 +509,7 @@ function BuildGeneral(panel)
         default = CastAheadConfig.GAP_DEFAULT, min = 0, max = CastAheadConfig.GAP_MAX, step = 1,
         point = { "TOPLEFT", fixedSpacing, "BOTTOMLEFT", 6, -4 },
         caption = function(value) return string.format("Gap: %d px", value) end,
-        after = Redraw,
+        after = RedrawRow,
     })
 
     local strataLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -504,25 +544,11 @@ function BuildGeneral(panel)
     local centre = BuildGroup(panel, "Centre call", 229)
     BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 })
 
-    local centerSlider = BuildSlider(panel, {
-        key = "centerScale",
-        default = CastAheadConfig.CENTER_DEFAULT,
-        min = CastAheadConfig.CENTER_MIN, max = CastAheadConfig.CENTER_MAX, step = 5,
-        low = CastAheadConfig.CENTER_MIN .. "%", high = CastAheadConfig.CENTER_MAX .. "%",
-        point = { "TOPLEFT", centre, "TOPLEFT", 16, -63 },
-        caption = function(value) return string.format("Size: %d%%", value) end,
-        after = ResizeCenter,
-    })
+    local centerSlider = BuildSlider(panel, SliderSpec("centerScale", { "TOPLEFT", centre, "TOPLEFT", 16, -63 }))
 
     local centerTextSlider = BuildSlider(panel, SliderSpec("centerTextScale", { "TOPLEFT", centerSlider, "BOTTOMLEFT", -6, -18 }))
 
-    local move = CastAheadWindow.Button(panel, "Move it on screen", 140)
-    move:SetPoint("TOPLEFT", centerTextSlider, "BOTTOMLEFT", -6, -18)
-    move:SetScript("OnClick", function()
-        if CastAheadCore and CastAheadCore.MoveCenter then CastAheadCore.MoveCenter() end
-    end)
-
-    BuildReset(panel, { "LEFT", move, "RIGHT", 6, 0 },
+    BuildReset(panel, { "TOPLEFT", centerTextSlider, "BOTTOMLEFT", -6, -18 },
         { "centerScale", "centerTextScale", "centerX", "centerY" }, ResizeCenter)
 
     -- Features ------------------------------------------------------------

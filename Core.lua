@@ -2547,7 +2547,7 @@ local function DropCenter()
     if setup then CastAheadSetup.Refresh() end
 end
 
--- /ca move (or the window's Move button): show the block with a sample
+-- /ca move: show the block with a sample
 -- line and let it be dragged; call again to lock it in place.
 local function ToggleMoveCenter(quiet)
     if not centerUnlocked and CastAheadSetup and CastAheadSetup.Active() then CastAheadSetup.Leave() end
@@ -2897,7 +2897,10 @@ CastAheadCore.RememberPlateSize = RememberPlateSize
 function CastAheadCore.PlateSize()
     local size = CastAheadDB and CastAheadDB.plateSize
     if size then return size[1], size[2] end
-    if C_NamePlate.GetNamePlateSize then return C_NamePlate.GetNamePlateSize() end
+    if C_NamePlate.GetNamePlateSize then
+        local w, h = C_NamePlate.GetNamePlateSize()
+        return w, h, "guess"
+    end
     return 110, 45, "guess"
 end
 

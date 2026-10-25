@@ -16,6 +16,7 @@ Predicts trash casts in Mythic+ and tells you what to do about them. On top of t
 | --- | --- |
 | `/castahead` or `/ca` | Opens the window |
 | `/ca options` | Opens the settings |
+| `/ca setup` | On-screen setup: place and size the icons and the centre call on samples |
 | `/ca test` | Test drive: sample calls on nearby enemies, through the outputs switched on in General |
 | `/ca move` | Drag the centre-screen call where you want it |
 | `/ca debug` | What the addon sees right now: dungeon, plates, identification, voice chain |
@@ -31,6 +32,8 @@ A menu on the left: **Settings** (General, Sounds, Defensives while defensive ca
 - **Sounds**: each category keeps the voice or plays any sound your other addons registered, and the game sound channel (Master, Dialog or SFX) sets the volume slider that controls the calls.
 - **Casts**: every tracked cast with its call. Untick a cast to ignore it entirely; the Sound override column swaps the voice for a sound on one cast. Development mode adds the evidence columns.
 - **Guide** and **Saves**: per boss, the defensive calls for your role and the burst windows, as text and as a table.
+
+**Set up on screen**, the first button in General (or `/ca setup`), hides the window and shows sample icons on a sample nameplate and on real enemy plates nearby, plus a sample centre call and timeline. Drag them where you want them, use the mouse wheel to resize and the arrow keys for single pixels; a small panel holds the exact numbers, the output switches and Reset, and Done or Esc closes it. Not available in combat. Moving a size or position slider in General shows its icons or centre call for two seconds, so you see the change without the setup mode.
 
 ## Defensive calls (alpha)
 

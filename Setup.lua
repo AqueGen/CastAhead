@@ -61,6 +61,7 @@ local PANEL_W, PAD, ROW_H = 280, 12, 24
 local BASE_H, MORE_H = 262, 340
 local HALF_SCREEN_FALLBACK = 1000
 local GUESS = "Sample size is a guess until a real nameplate is seen."
+local PEEK_SECONDS = 2
 
 local active = false
 local rows = {}
@@ -71,6 +72,7 @@ local selected = "row"
 local dragging = false
 local readoutUntil
 local centerBox
+local peeking, peekGen = {}, 0
 
 local panel = CreateFrame("Frame", PANEL_NAME, UIParent, "BackdropTemplate")
 panel:SetSize(PANEL_W, BASE_H)
@@ -553,6 +555,7 @@ end
 function CastAheadSetup.Enter()
     if InCombatLockdown() then return false, "combat" end
     if active then return true end
+    peeking, peekGen = {}, peekGen + 1
     CastAheadCore.StopTest(true)
     local window = CastAheadWindow.Frame()
     page = window and window:IsShown() and CastAheadWindow.Current() or nil
@@ -606,6 +609,32 @@ function CastAheadSetup.Leave()
     panel:Hide()
     if page then CastAheadWindow.Show(page) end
     page = nil
+end
+
+local function EndPeek(gen)
+    if active or gen ~= peekGen then return end
+    if peeking.row then
+        HideRow("sample")
+        CastAheadSetup.plate:Hide()
+    end
+    if peeking.center then CastAheadCore.ShowCenterSample(false) end
+    peeking = {}
+end
+
+function CastAheadSetup.Peek(kind)
+    if active then return end
+    if kind == "row" then
+        local plate = SamplePlate()
+        SizePlate()
+        plate:Show()
+        ShowRow("sample", plate)
+    else
+        CastAheadCore.ShowCenterSample(true)
+    end
+    peeking[kind] = true
+    peekGen = peekGen + 1
+    local gen = peekGen
+    C_Timer.After(PEEK_SECONDS, function() EndPeek(gen) end)
 end
 
 panel:SetScript("OnHide", CastAheadSetup.Leave)

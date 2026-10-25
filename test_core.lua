@@ -1487,7 +1487,8 @@ do
     check(w == 110 and h == 45 and guess == "guess", "plate size: nothing known gives the fixed default, marked as a guess")
     C_NamePlate.GetNamePlateSize = function() return 140, 30 end
     w, h, guess = CastAheadCore.PlateSize()
-    check(w == 140 and h == 30 and guess == nil, "plate size: the game's own size when no plate has been seen")
+    check(w == 140 and h == 30 and guess == "guess",
+        "plate size: the game's own size when no plate has been seen, still a guess")
     C_NamePlate.GetNamePlateForUnit = function(u)
         local plate = realPlateFor(u)
         if not plate then return nil end
@@ -4356,6 +4357,7 @@ end
 do
     local savedCreate, savedDB, savedWindows = CreateFrame, CastAheadDB, CastAheadBurstWindows
     local savedSlider = MinimalSliderWithSteppersMixin
+    InCombatLockdown = function() return false end
     MinimalSliderWithSteppersMixin = savedSlider or { Label = { Min = 1, Max = 2 }, Event = { OnValueChanged = 1 } }
     local made, texts = {}, {}
     CreateFrame = function(kind, name, parent, ...)
@@ -4468,6 +4470,39 @@ do
             "children switched on stay disabled while the raid switch is off")
         CastAheadDB = {}
     end
+    (function()
+        local setup, move
+        for _, b in ipairs(made) do
+            if rawget(b, "buttonText") == "Set up on screen" then setup = b end
+            if rawget(b, "buttonText") == "Move it on screen" then move = b end
+        end
+        check(setup and not move, "General has Set up on screen in place of Move it on screen")
+        if not setup then return end
+        local realEnter, realLock, realTip = CastAheadSetup.Enter, InCombatLockdown, GameTooltip
+        local entered, inCombat, tips = 0, false, {}
+        CastAheadSetup.Enter = function() entered = entered + 1 return true end
+        InCombatLockdown = function() return inCombat end
+        GameTooltip = setmetatable({
+            SetText = function(_, t) tips[#tips + 1] = t end,
+            AddLine = function(_, t) tips[#tips + 1] = t end,
+        }, { __index = function() return function() end end })
+        setup.handlers.OnClick(setup)
+        check(entered == 1, "Set up on screen enters the setup mode")
+        inCombat = true
+        CastAheadOptions.ShowPanel(host, "General")
+        check(setup.enabled == false and setup.motionWhileDisabled == true,
+            "Set up on screen is disabled in combat and keeps its tooltip")
+        setup.handlers.OnEnter(setup)
+        check(table.concat(tips, "|") == "Not available in combat.",
+            "the disabled button says why, got " .. table.concat(tips, "|"))
+        inCombat = false
+        setup.handlers.OnEvent(setup, "PLAYER_REGEN_ENABLED")
+        check(setup.enabled == true, "Set up on screen is enabled again when combat ends")
+        inCombat = true
+        setup.handlers.OnEvent(setup, "PLAYER_REGEN_DISABLED")
+        check(setup.enabled == false, "Set up on screen is disabled when combat starts with the window open")
+        CastAheadSetup.Enter, InCombatLockdown, GameTooltip = realEnter, realLock, realTip
+    end)()
     local function OffNote()
         for _, fs in ipairs(texts) do
             local v = rawget(fs, "value")
@@ -4491,6 +4526,7 @@ do
 
     CreateFrame, CastAheadDB, CastAheadBurstWindows = savedCreate, savedDB, savedWindows
     MinimalSliderWithSteppersMixin = savedSlider
+    InCombatLockdown = nil
 end
 
 do
@@ -5872,6 +5908,11 @@ end
         fireAll("UI_SCALE_CHANGED")
         check(not panel.guess.shown, "panel: the guess line hides once a real plate size is known")
         CastAheadDB.plateSize = nil
+        C_NamePlate.GetNamePlateSize = function() return 140, 30 end
+        S.Leave()
+        S.Enter()
+        check(panel.guess.shown, "panel: the guess line shows on the game's own plate size too")
+        C_NamePlate.GetNamePlateSize = nil
 
         click(panel.reset)
         local dialog = StaticPopupDialogs.CASTAHEAD_SETUP_RESET
@@ -5916,6 +5957,58 @@ end
         CastAheadCore.Reapply()
         check(IconShown(100), "panel: the live bar shows once the icons are back on")
         StaticPopup_Show, MinimalSliderWithSteppersMixin = realPopup, realSlider
+    end
+
+    do
+        local realTimer, timers = C_Timer, {}
+        C_Timer = { After = function(delay, fn) timers[#timers + 1] = { at = now + delay, fn = fn } end }
+        local function wait(seconds)
+            now = now + seconds
+            for _, t in ipairs(timers) do
+                if not t.done and t.at <= now then
+                    t.done = true
+                    t.fn()
+                end
+            end
+        end
+        reset()
+        CastAheadDB = { centerText = true }
+        local O = CastAheadOptions
+        local base = shownSet()
+
+        SlashCmdList.CASTAHEAD("setup")
+        check(S.Active(), "/ca setup enters the setup mode")
+        S.Leave()
+
+        O.SliderSpec("centerScale", {}).after(120)
+        check(not S.Active() and sampleLines() == 3, "peek: moving the centre size shows the centre block")
+        wait(2.1)
+        check(sampleLines() == 0 and newlyShown(base) == 0, "peek: the centre block hides 2 s after the last move")
+
+        O.SliderSpec("offsetX", {}).after(10)
+        check(S.plate.shown and barsOn(onSample) == 3, "peek: moving a row slider shows the sample plate and row")
+        wait(1.5)
+        O.SliderSpec("labelScale", {}).after(100)
+        wait(1.0)
+        check(barsOn(onSample) == 3, "peek: another move keeps the row up")
+        wait(1.1)
+        check(barsOn(onSample) == 0 and newlyShown(base) == 0,
+            "peek: the row hides 2 s after the last move, got " .. newlyShown(base))
+
+        S.Peek("row")
+        S.Peek("center")
+        S.Enter()
+        check(barsOn(onSample) == 3 and sampleLines() == 3, "peek: entering takes over a showing peek, nothing doubled")
+        wait(2.1)
+        check(S.Active() and S.plate.shown and barsOn(onSample) == 3 and sampleLines() == 3,
+            "peek: the peek timer does not hide the mode's frames")
+        local pending = #timers
+        S.Peek("row")
+        S.Peek("center")
+        check(#timers == pending and barsOn(onSample) == 3, "peek: inside the mode Peek changes nothing")
+        S.Leave()
+        check(newlyShown(base) == 0, "peek: leaving after a taken-over peek leaves nothing, got " .. newlyShown(base))
+        C_Timer = realTimer
     end
 
     reset()

@@ -167,6 +167,10 @@ SlashCmdList.CASTAHEAD = function(msg)
         if CastAheadCore and CastAheadCore.MoveCenter then CastAheadCore.MoveCenter() end
         return
     end
+    if word == "setup" then
+        if not CastAheadSetup.Enter() then print("|cff33ff99Cast Ahead|r Not available in combat.") end
+        return
+    end
     if word == "test" then
         if CastAheadCore and CastAheadCore.Test then CastAheadCore.Test(CastAheadWindow.Dungeon()) end
         return
