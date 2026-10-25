@@ -332,6 +332,35 @@ def test_damage_new_to_an_anchored_row_needs_more_than_the_minimum():
         assert "dmg = 0.3" in row_with([0.3] * 5)
 
 
+def test_an_offset_is_firm_only_when_nine_pulls_in_ten_keep_it():
+    tight = [8.0] * 19 + [20.0]
+    split = [14.6] * 17 + [6.1] * 3
+    with tempfile.TemporaryDirectory() as tmp:
+        casts = {"1|Zone": {"10": {
+            "1000": _base_cast_record(offset=tight),
+            "1001": _base_cast_record(cast=[4.0] * 5, offset=split),
+        }}}
+        lua, _ = _run_gen(tmp, casts, overrides={"include": ["1000", "1001"]})
+        firm = next(line for line in lua.splitlines() if "spell = 1000," in line)
+        loose = next(line for line in lua.splitlines() if "spell = 1001," in line)
+        assert "offset = 8.0," in firm and "offsetFirm = true," in firm
+        assert "offset = 14.6," in loose and "offsetFirm" not in loose
+
+
+def test_cd_min_is_the_shortest_gap_the_spell_keeps():
+    gaps = [7.3] * 4 + [9.7] * 34 + [10.9] * 2
+    with tempfile.TemporaryDirectory() as tmp:
+        casts = {"1|Zone": {"10": {
+            "1000": _base_cast_record(iv=gaps, starts=41),
+            "1001": _base_cast_record(cast=[4.0] * 5, iv=[]),
+        }}}
+        lua, _ = _run_gen(tmp, casts, overrides={"include": ["1000", "1001"]})
+        timed = next(line for line in lua.splitlines() if "spell = 1000," in line)
+        untimed = next(line for line in lua.splitlines() if "spell = 1001," in line)
+        assert "cdMin = 7.3," in timed
+        assert "cdMin" not in untimed
+
+
 def test_a_no_payload_spell_never_takes_damage():
     with tempfile.TemporaryDirectory() as tmp:
         casts = {"1|Zone": {"10": {"372743": _base_cast_record(hits=[1] * 6, dmg=[0.4] * 6, starts=5)}}}
