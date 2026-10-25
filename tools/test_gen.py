@@ -169,6 +169,22 @@ def test_an_opening_that_covers_few_first_casts_is_dropped():
         assert "first = 8.2" in tight_row
 
 
+def test_an_opening_order_shifted_by_an_optional_opener_keeps_the_order_most_pulls_keep():
+    shifted = [5.6] * 14 + [6.1] * 4 + [14.6 + 0.5 * i for i in range(6)]
+    scattered = [5.6] * 9 + [10.0 + 2 * i for i in range(11)]
+    with tempfile.TemporaryDirectory() as tmp:
+        casts = {"1|Zone": {"10": {
+            "1000": _base_cast_record(offset=shifted),
+            "1001": _base_cast_record(cast=[4.0] * 5, offset=scattered),
+            "1002": _base_cast_record(cast=[6.0] * 5, offset=[3.0, 3.2, 3.4, 3.1, 9.0]),
+        }}}
+        lua, _ = _run_gen(tmp, casts, overrides={"include": ["1000", "1001", "1002"]})
+        rows = {s: next(line for line in lua.splitlines() if "spell = %s," % s in line) for s in ("1000", "1001", "1002")}
+        assert "offset = 5.6," in rows["1000"]
+        assert "offset = nil," in rows["1001"]
+        assert "offset = 3.2," in rows["1002"]
+
+
 def test_a_cast_that_turns_into_a_channel_carries_the_channel_length():
     with tempfile.TemporaryDirectory() as tmp:
         casts = {"1|Zone": {"10": {

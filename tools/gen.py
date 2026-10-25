@@ -23,6 +23,7 @@ MIN_PER_POSITION = 3    # samples needed before a rotation slot is trusted
 MAX_ROTATION = 8
 FLAT_SPREAD = 0.15      # rotation this tight collapses to a single value
 OFFSET_SPREAD = 8.0     # opening order this loose is still worth an estimate
+OFFSET_TOLERANCE = 2.0  # Core.lua claimWindow: a projection this close claims the cast
 CD_WINDOW = 0.5
 FIRST_WINDOW = 1.0
 FIRST_TOLERANCE = 4.0  # Match.lua FIRST_TOLERANCE
@@ -434,6 +435,15 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                     lo, hi = offsets[len(offsets) // 10], offsets[-1 - len(offsets) // 10]
                     if hi - lo <= OFFSET_SPREAD:
                         offset = round(statistics.median(offsets), 1)
+                    else:
+                        # Devouring Brutalizer opens with its 9s Devour in about one pull in
+                        # five: that fails the spread test, while most pulls keep one exact order.
+                        offset, _ = densest(offsets, FIRST_WINDOW)
+                        bar = OPENING_SUPPORT if old is None else \
+                            OPENING_SUPPORT - SHARE_MARGIN if old["offset"] is not None \
+                            else OPENING_SUPPORT + SHARE_MARGIN
+                        if sum(1 for x in offsets if abs(x - offset) <= OFFSET_TOLERANCE) < bar * len(offsets):
+                            offset = None
                 t = threat(r)
                 if int(spellid) in NO_PAYLOAD or old is not None and old["dmg"] is None \
                         and len(r["dmg"]) < THIN_EVIDENCE:
