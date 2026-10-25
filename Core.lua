@@ -2439,7 +2439,7 @@ local demo          -- the test drive's state, defined with CastAheadCore.Test
 -- (/ca move) or by /ca center <px>.
 local function CenterOffset()
     return (CastAheadDB and tonumber(CastAheadDB.centerX) or 0),
-        CENTER_Y + (CastAheadDB and tonumber(CastAheadDB.centerY) or 0)
+        CENTER_Y + CastAheadConfig.CenterY()
 end
 
 local CENTER_STRATA = "HIGH"
@@ -2497,7 +2497,7 @@ local function CenterFrame()
     center:SetMovable(true)
     center:RegisterForDrag("LeftButton")
     center:SetScript("OnDragStart", function(self)
-        if centerUnlocked or centerSample then
+        if centerUnlocked then
             self.dragging = true
             self:StartMoving()
         end
@@ -2553,13 +2553,10 @@ local function DropCenter()
     local x, y = CenterDragOffset()
     center.dragging = nil
     if not x then return end
-    local setup = CastAheadSetup and CastAheadSetup.Active()
-    if setup then x, y = CastAheadSetup.SnapAxis(x, y) end
     CastAheadDB = CastAheadDB or {}
     CastAheadDB.centerX, CastAheadDB.centerY = x, y - CENTER_Y
     center._x = nil          -- force the anchor to be re-applied
     PlaceCenter(center)
-    if setup then CastAheadSetup.Refresh() end
 end
 
 -- /ca move: show the block with a sample
@@ -2711,15 +2708,11 @@ local function ShowCenterSample(on)
     if centerUnlocked then ToggleMoveCenter(true) end
     centerSample = (on and CastAheadConfig.CenterText()) and true or false
     if not centerSample then
-        if center then
-            center:EnableMouse(false)
-            center.fill:Hide()
-        end
+        if center then center.fill:Hide() end
         HideCenter()
         return false
     end
     local f = CenterFrame()
-    f:EnableMouse(true)
     f.fill:Show()
     PlaceCenter(f)
     local A = CastAheadMatch.ADVICE
@@ -2868,11 +2861,8 @@ end
 -- the dungeon table load, are plates being tracked, what level did we read, and
 -- how far identification got on each one.
 CastAheadCore = {}
-CastAheadCore.BAR_GAP = BAR_GAP
-CastAheadCore.LABEL_HEIGHT = LABEL_HEIGHT
 CastAheadCore.CENTER_Y = CENTER_Y
 CastAheadCore.CenterFrame = CenterFrame
-CastAheadCore.CenterDragOffset = CenterDragOffset
 CastAheadCore.DropCenter = DropCenter
 CastAheadCore.Announce = PlayAdviceSound
 CastAheadCore.AdviceFile = AdviceFile
@@ -2914,7 +2904,6 @@ CastAheadCore.IsHostileNameplate = IsHostileNameplate
 CastAheadCore.ShowCenterSample = ShowCenterSample
 CastAheadCore.SampleDataRow = SampleDataRow
 CastAheadCore.RememberPlateSize = RememberPlateSize
-CastAheadCore.MeasurePlate = MeasurePlate
 
 function CastAheadCore.PlateSize()
     local size = CastAheadDB and CastAheadDB.plateSize

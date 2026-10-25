@@ -232,6 +232,8 @@ CreateFrame = function(kind, _, parent)
     f.SetParent = function(self, p) self.parent = p end
     f.SetFrameStrata = function(self, strata) self.strata = strata end
     f.GetFrameStrata = function(self) return self.strata end
+    f.EnableMouse = function(self, on) self.mouse = on end
+    f.EnableMouseWheel = function(self, on) self.wheel = on end
     f.SetFrameLevel = function(self, level) self.level = level end
     f.GetFrameLevel = function(self) return self.level end
     local barOnly = {
@@ -5471,74 +5473,6 @@ do
     CastAheadDB = savedDB
 end
 
-do
-    local W, H, SIZE, LABEL = 110, 45, 32, 11
-    local function snap(dx, dy) return CastAheadSetup.Snap(dx, dy, W, H, SIZE, LABEL) end
-    local side, off, nx, ny = snap(-90, 0)
-    check(side == "left" and off == 14 and nx == 1 and ny == 0, "snap: left")
-    check(snap(0, 60) == "top", "snap: top")
-    check(snap(-80, 50) == "topleft", "snap: corner")
-    side, off, nx, ny = snap(5, 3)
-    check(side == "center" and off == 0 and nx == 5 and ny == 3, "snap: inside is center")
-    side, off, nx, ny = snap(-500, 0)
-    check(side == "left" and off == 120 and nx == -100, "snap: overflow goes to nudgeX, clamped")
-    side, off, nx, ny = snap(-74, 0)
-    check(side == "left" and off == -2 and nx == 1 and ny == 0,
-        "snap: a drop between the plate edge and the gap gives a negative distance, got " .. tostring(off) .. "/" .. tostring(nx))
-    side, off, nx, ny = snap(-300, 0)
-    check(off == 120 and nx == -100, "snap: far out still stops at 120")
-    side, off, nx, ny = snap(-20, 0)
-    check(side == "center" and off == 0, "snap: inside the plate keeps distance 0")
-    side, off, nx, ny = snap(-45, 54)
-    check(side == "top" and off == -2 and math.abs(ny) <= 100,"snap: a drop just above the plate gives a negative distance too")
-    side, off, nx, ny = snap(-90, 300)
-    check(side == "topleft" and off == 14 and nx == 1 and ny == 100, "snap: nudgeY clamped")
-    local savedDB = CastAheadDB
-    CastAheadDB = { iconSize = SIZE }
-    local function sign(point)
-        return point:find("LEFT") and -1 or point:find("RIGHT") and 1 or 0,
-            point:find("TOP") and 1 or point:find("BOTTOM") and -1 or 0
-    end
-    local frame = {}
-    local warm = {}
-    CastAheadCore.ShowSampleRow(warm, frame)
-    CastAheadCore.HideSampleRow(warm)
-    for i = 1, #allFrames do
-        local f = allFrames[i]
-        if IsBar(f) then
-            f.realSetPoint = f.SetPoint
-            f.SetPoint = function(self, ...)
-                self.args = { ... }
-                return self.realSetPoint(self, ...)
-            end
-        end
-    end
-    for _, p in ipairs({ { -90, 0 }, { 90, 0 }, { 0, 60 }, { 0, -60 }, { -80, 50 }, { 80, -50 },
-            { 5, 3 }, { -200, 10 }, { 130, 70 }, { -74, 0 }, { -66, 4 }, { 74, -10 } }) do
-        side, off, nx, ny = snap(p[1], p[2])
-        CastAheadConfig.Set("anchor", side)
-        CastAheadConfig.Set("offsetX", off)
-        CastAheadConfig.Set("nudgeX", nx)
-        CastAheadConfig.Set("nudgeY", ny)
-        local state = {}
-        CastAheadCore.ShowSampleRow(state, frame)
-        local bar = state.bars[1]
-        local point, anchor, relative, x, y = unpack(bar.args)
-        local px, py = sign(point)
-        local rx, ry = sign(relative)
-        local cx = rx * W / 2 + x - px * bar._size / 2
-        local cy = ry * H / 2 + y - py * bar._size / 2
-        check(anchor == frame and bar._size == SIZE and math.abs(cx - p[1]) <= 1 and math.abs(cy - p[2]) <= 1,
-            "snap: round trip through the real anchor " .. p[1] .. "," .. p[2] .. " -> " .. cx .. "," .. cy)
-        CastAheadCore.HideSampleRow(state)
-    end
-    for i = 1, #allFrames do
-        local f = allFrames[i]
-        if f.realSetPoint then f.SetPoint, f.realSetPoint, f.args = f.realSetPoint, nil, nil end
-    end
-    CastAheadDB = savedDB
-end
-
 -- A function, not a block: the main chunk is at Lua 5.1's 200-local limit.
 (function()
     local savedDB, savedLock = CastAheadDB, InCombatLockdown
@@ -5917,29 +5851,35 @@ end
 
     do
         reset()
-        local realUIParent, realShift = UIParent, IsShiftKeyDown
+        local realUIParent = UIParent
         UIParent = { GetCenter = function() return 500, 400 end, GetEffectiveScale = function() return 1 end }
-        local shift = false
-        IsShiftKeyDown = function() return shift end
         local keyboard, propagate
         panel.EnableKeyboard = function(_, on) keyboard = on end
         panel.SetPropagateKeyboardInput = function(_, on) propagate = on end
-
-        local x, y, sx, sy = S.SnapAxis(5, -200)
-        check(x == 0 and y == -200 and sx == true and sy == false, "setup: SnapAxis puts x within 8 on the axis")
-        x, y, sx, sy = S.SnapAxis(9, 7)
-        check(x == 9 and y == 0 and sx == false and sy == true, "setup: SnapAxis leaves 9 alone, snaps y 7")
+        local function inside(widget, root)
+            while widget do
+                if widget == root then return true end
+                widget = rawget(widget, "parent")
+            end
+            return false
+        end
 
         CastAheadDB.plateSize = { 110, 45 }
+        CastAheadDB.centerX, CastAheadDB.centerY, CastAheadDB.centerScale = nil, nil, nil
         local base = shownSet()
         S.Enter()
-        local grip, center = S.grip, CastAheadCore.CenterFrame()
+        local center = CastAheadCore.CenterFrame()
         check(keyboard == true, "setup: entering takes the keyboard")
-        check(grip.box.shown and not S.centerBox.shown, "setup: the row is selected on entry")
-        center.handlers.OnMouseDown(center, "LeftButton")
-        check(S.centerBox.shown and not grip.box.shown, "setup: a click on the centre selects it")
-        grip.handlers.OnMouseDown(grip, "LeftButton")
-        check(grip.box.shown and not S.centerBox.shown, "setup: a click on the row selects it")
+        local grabbing = 0
+        for i = 1, #allFrames do
+            local f = allFrames[i]
+            if (f.mouse or f.wheel) and onScreen(f) and not base[f] and not inside(f, panel) then grabbing = grabbing + 1 end
+        end
+        check(grabbing == 0, "setup: nothing the mode shows takes the mouse but the panel, got " .. grabbing)
+        check(S.plate.shown and not S.plate.mouse and not S.plate.handlers.OnDragStart, "setup: the sample plate ignores the mouse")
+        check(center.shown and not center.mouse and not center.wheel, "setup: the centre sample ignores the mouse")
+        center.handlers.OnDragStart(center)
+        check(not center.dragging, "setup: the centre sample cannot be dragged in the mode")
         check(center.fill.shown and center.fill.allPointsTo == center, "setup: the centre sample shows a fill over the whole block")
         CastAheadDB.centerText = false
         CastAheadCore.ShowCenterSample(true)
@@ -5948,141 +5888,58 @@ end
         CastAheadCore.ShowCenterSample(true)
         check(center.fill.shown, "setup: the centre fill is back when Centre call is on")
 
-        local function placeFirstIcon(ix, iy)
-            for i = 1, #allFrames do
-                local f = allFrames[i]
-                if IsBar(f) and f._index == 1 then f.GetCenter = function() return ix, iy end end
-            end
-            S.plate.GetCenter = function() return 500, 300 end
-        end
-        CastAheadDB.anchor, CastAheadDB.grow, CastAheadDB.offsetX = "top", "right", 40
-        CastAheadDB.nudgeX, CastAheadDB.nudgeY = 5, -5
-        S.Select("row")
+        check(center._x == 0 and center._y == -90 and center._scale == 0.8,
+            "defaults: a fresh profile puts the centre call at -90 and 80%, got " .. tostring(center._y) .. "/" .. tostring(center._scale))
+        check(panel.fields.centerY.box.value == "-90" and panel.fields.centerScale.box.value == "80",
+            "defaults: the panel shows -90 and 80 on a fresh profile")
+        CastAheadDB.centerY, CastAheadDB.centerScale = 0, 100
+        CastAheadCore.ResizeCenter()
         S.Refresh()
-        check(panel.fields.nudgeX.box.value == "5" and panel.fields.nudgeY.box.value == "-5", "panel: the numbers show the stored nudges")
-        S.plate.GetCenter = function() return 500, 300 end
-        grip.handlers.OnDragStart(grip)
-        check(barsOn(onSample) == 0, "setup: the dragged row leaves the sample plate")
-        placeFirstIcon(410, 300)
-        grip.handlers.OnDragStop(grip)
-        local _, wantOffset = S.Snap(-90, 0, 110, 45, 26, 11)
-        check(CastAheadDB.anchor == nil and CastAheadDB.grow == nil, "setup: a drop left of the plate stores left and auto growth")
-        check(CastAheadDB.offsetX == wantOffset and wantOffset == 16, "setup: the drop stores the distance out, got " .. tostring(CastAheadDB.offsetX))
-        check(CastAheadDB.nudgeX == 0 and CastAheadDB.nudgeY == 0, "setup: the drop clears the nudges")
-        check(barsOn(onSample) == 3, "setup: the dropped row is back on the sample plate")
-        check(panel.fields.nudgeX.box.value == "0" and panel.fields.nudgeY.box.value == "0"
-            and panel.fields.offsetX.box.value == "16", "panel: a row drop refreshes the numbers")
+        check(center._y == -120 and center._scale == 1 and panel.fields.centerY.box.value == "-120"
+            and panel.fields.centerScale.box.value == "100", "defaults: a stored centre Y and size are kept as they were")
+        CastAheadDB.centerY, CastAheadDB.centerScale = nil, nil
+        check(CastAheadConfig.CenterY() == 30 and CastAheadConfig.CenterScale() == 0.8, "defaults: the accessors answer 30 and 0.8 when unset")
 
-        S.Nudge(1, 0)
-        check(CastAheadDB.nudgeX == 1, "setup: Nudge moves the row right")
-        S.Nudge(0, -10)
-        check(CastAheadDB.nudgeY == -10, "setup: Nudge moves the row down")
-        CastAheadDB.nudgeX, CastAheadDB.nudgeY = 99, -95
-        S.Nudge(10, -10)
-        check(CastAheadDB.nudgeX == 100 and CastAheadDB.nudgeY == -100, "setup: row nudges stop at 100")
         CastAheadDB.nudgeX, CastAheadDB.nudgeY = 0, 0
-        panel.handlers.OnKeyDown(panel, "UP")
-        check(propagate == false and CastAheadDB.nudgeY == 1, "setup: the up arrow is kept and moves the row 1")
-        shift = true
-        panel.handlers.OnKeyDown(panel, "LEFT")
-        check(CastAheadDB.nudgeX == -10, "setup: Shift+left moves the row 10")
-        shift = false
-        panel.handlers.OnKeyDown(panel, "W")
-        check(propagate == true and CastAheadDB.nudgeX == -10 and CastAheadDB.nudgeY == 1,
-            "setup: other keys pass through and move nothing")
-        panel.handlers.OnKeyDown(panel, "UP")
-        panel.handlers.OnKeyUp(panel, "UP")
-        check(propagate == false, "setup: an arrow's key-up is kept")
-        panel.handlers.OnKeyUp(panel, "W")
-        check(propagate == true, "setup: a key-up after an arrow press passes through")
-        CastAheadDB.nudgeY = 1
+        local kept = {}
+        for _, key in ipairs({ "UP", "DOWN", "LEFT", "RIGHT", "W" }) do
+            propagate = nil
+            panel.handlers.OnKeyDown(panel, key)
+            if propagate ~= true then kept[#kept + 1] = key end
+        end
+        check(#kept == 0 and CastAheadDB.nudgeX == 0 and CastAheadDB.nudgeY == 0,
+            "setup: arrows and other keys pass through and move nothing, kept " .. table.concat(kept, ","))
 
-        CastAheadDB.iconSize = nil
-        S.Resize(1)
-        check(CastAheadDB.iconSize == 27, "setup: Resize grows the icons 1 px")
-        CastAheadDB.iconSize = 64
-        S.Resize(1)
-        check(CastAheadDB.iconSize == 64, "setup: icons stop at 64")
-        CastAheadDB.iconSize = 26
-        shift = true
-        grip.handlers.OnMouseWheel(grip, -1)
-        shift = false
-        check(CastAheadDB.iconSize == 21, "setup: Shift+wheel shrinks the icons 5 px")
-
-        S.Select("center")
-        CastAheadDB.centerX, CastAheadDB.centerY = 0, 0
-        S.Nudge(1, 0)
-        S.Nudge(0, -10)
-        check(CastAheadDB.centerX == 1 and CastAheadDB.centerY == -10, "setup: Nudge moves the centre call")
-        CastAheadDB.centerScale = 100
-        S.Resize(-1)
-        check(CastAheadDB.centerScale == 95, "setup: Resize shrinks the centre call 5%")
-        center.handlers.OnMouseWheel(center, 1)
-        check(CastAheadDB.centerScale == 100, "setup: the wheel over the centre grows it 5%")
-        S.Select("row")
-        center.handlers.OnMouseWheel(center, -1)
-        check(S.centerBox.shown and not grip.box.shown and CastAheadDB.centerScale == 95,
-            "setup: the wheel over the unselected centre selects it, then resizes it")
-        check(S.readout.shown and panel.labelValue == "95%", "setup: the readout shows the new size, got " .. tostring(panel.labelValue))
-        now = now + 1.4
-        panel.handlers.OnUpdate(panel)
-        check(S.readout.shown, "setup: the readout stays up for 1.5 s")
-        now = now + 0.2
-        panel.handlers.OnUpdate(panel)
-        check(not S.readout.shown, "setup: the readout hides 1.5 s after the last change")
-        CastAheadDB.centerScale = 100
-
-        center.GetScale = function() return 1 end
-        center.GetHeight = function() return 132 end
-        center.GetCenter = function() return 506, 400 + 3 - 44 end
-        center.handlers.OnDragStart(center)
-        center.handlers.OnDragStop(center)
-        check(CastAheadDB.centerX == 0 and CastAheadCore.CENTER_Y + CastAheadDB.centerY == 0,
-            "setup: a centre drop 6, 3 from the screen centre snaps onto both axes, got "
-            .. tostring(CastAheadDB.centerX) .. "," .. tostring(CastAheadCore.CENTER_Y + CastAheadDB.centerY))
-        check(center.x == 0 and center.y == 22, "setup: the dropped centre block is placed on the snapped spot, got "
-            .. tostring(center.x) .. "," .. tostring(center.y))
-        check(panel.fields.centerX.box.value == "0" and panel.fields.centerY.box.value == "0", "panel: a centre drop refreshes the numbers")
-
-        local realDrop, dropped = S.DropRow, 0
-        S.DropRow = function() dropped = dropped + 1 return realDrop() end
-        grip.handlers.OnDragStart(grip)
-        placeFirstIcon(500, 360)
         S.Leave()
-        check(dropped == 1 and CastAheadDB.anchor == "top", "setup: leaving during a row drag saves the drop")
         check(keyboard == false, "setup: leaving releases the keyboard")
         check(not center.fill.shown, "setup: leaving hides the centre fill")
-        check(newlyShown(base) == 0, "setup: nothing left after a drag, got " .. newlyShown(base))
-        S.DropRow = realDrop
-
-        S.Enter()
-        center.GetCenter = function() return 520, 400 - 40 - 44 end
-        center.handlers.OnDragStart(center)
-        fireAll("PLAYER_REGEN_DISABLED")
-        check(not S.Active() and CastAheadDB.centerX == 20 and CastAheadCore.CENTER_Y + CastAheadDB.centerY == -40,
-            "setup: combat during a centre drag saves the drop")
+        check(newlyShown(base) == 0, "setup: nothing left after the mode, got " .. newlyShown(base))
 
         local realPrint = print
         print = function() end
         CastAheadCore.MoveCenter()
+        check(center.mouse == true and center.shown, "/ca move: outside the mode the block takes the mouse")
+        center.GetScale = function() return 1 end
+        center.GetHeight = function() return 132 end
         center.GetCenter = function() return 506, 400 + 3 - 44 end
         center.handlers.OnDragStart(center)
+        check(center.dragging, "/ca move: the block drags")
         center.handlers.OnDragStop(center)
         CastAheadCore.MoveCenter()
         print = realPrint
         check(CastAheadDB.centerX == 6 and CastAheadCore.CENTER_Y + CastAheadDB.centerY == 3,
-            "setup: a /ca move drop is not snapped, got " .. tostring(CastAheadDB.centerX) .. ","
+            "/ca move: the drop is saved where it landed, not snapped, got " .. tostring(CastAheadDB.centerX) .. ","
             .. tostring(CastAheadCore.CENTER_Y + CastAheadDB.centerY))
+        check(not center.mouse and not center.shown, "/ca move: a second /ca move locks and hides the block")
 
-        for i = 1, #allFrames do allFrames[i].GetCenter = nil end
-        center.GetScale, center.GetHeight = nil, nil
+        center.GetCenter, center.GetScale, center.GetHeight = nil, nil, nil
         panel.EnableKeyboard, panel.SetPropagateKeyboardInput = nil, nil
-        CastAheadDB.plateSize = nil
-        UIParent, IsShiftKeyDown = realUIParent, realShift
+        CastAheadDB.plateSize, CastAheadDB.centerX, CastAheadDB.centerY = nil, nil, nil
+        UIParent = realUIParent
     end
 
     do
-        local HINT = "Drag the icons or the centre call, or type exact numbers."
+        local HINT = "Change the numbers here; the icons and the centre call show the result."
         local realPopup, popup = StaticPopup_Show, nil
         StaticPopup_Show = function(name) popup = name end
         local function down(f)
@@ -6205,8 +6062,6 @@ end
         check(CastAheadDB.nudgeX == -1 and f.nudgeX.box.value == "-1", "panel: - on X moves the row left 1")
         typeInto("nudgeY", "-500")
         check(CastAheadDB.nudgeY == -100, "panel: a typed Y stops at -100")
-        S.Nudge(0, 3)
-        check(f.nudgeY.box.value == "-97", "panel: an arrow move refreshes the numbers, got " .. tostring(f.nudgeY.box.value))
 
         panel.fixedSpacing.GetChecked = function() return true end
         click(panel.fixedSpacing)
@@ -6241,24 +6096,16 @@ end
         typeInto("centerY", "-99999")
         check(CastAheadDB.centerX == 960 and CastAheadCore.CENTER_Y + CastAheadDB.centerY == -540,
             "panel: typed centre X and Y stop at the screen edge")
-        S.Select("center")
-        S.Nudge(10, -10)
-        check(CastAheadDB.centerX == 960 and CastAheadCore.CENTER_Y + CastAheadDB.centerY == -540,
-            "panel: arrows stop at the screen edge too")
-        S.Select("row")
         UIParent = savedParent
         f.centerX.box:SetText("12")
         f.centerX.box.handlers.OnEditFocusLost(f.centerX.box)
         check(CastAheadDB.centerX == 12, "panel: leaving the box applies the typed value")
         CastAheadDB.centerScale = nil
         click(f.centerScale.minus)
-        check(CastAheadDB.centerScale == 99 and f.centerScale.box.value == "99", "panel: - on the centre size takes 1%")
+        check(CastAheadDB.centerScale == 79 and f.centerScale.box.value == "79", "panel: - on the centre size takes 1% off the 80% default")
         CastAheadDB.centerTextScale = nil
         click(f.centerTextScale.plus)
         check(CastAheadDB.centerTextScale == 101, "panel: + on the centre text adds 1%")
-        local nx = CastAheadDB.nudgeX
-        S.Nudge(1, 0)
-        check(CastAheadDB.nudgeX == nx + 1 and CastAheadDB.centerX == 12, "panel: typing centre numbers leaves the arrows on the row")
 
         local function tick(seconds)
             local steps = math.floor(seconds / 0.01 + 0.5)
@@ -6380,6 +6227,7 @@ end
         check(CastAheadDB.timeline == false and CastAheadDB.fullLabels == true and CastAheadDB.centerText == true,
             "panel: Reset leaves the switches alone")
         check(f.iconSize.box.value == "26" and f.iconGap.box.value == "4", "panel: Reset refreshes the numbers")
+        check(f.centerY.box.value == "-90" and f.centerScale.box.value == "80", "panel: Reset puts the centre call back at -90 and 80%")
         CastAheadDB.timeline, CastAheadDB.fullLabels = nil, nil
 
         check(panel.timeline == nil and panel.note.value == "Move it in the game's Edit Mode: Esc > Edit Mode.",
@@ -6409,8 +6257,7 @@ end)();
 (function()
     local S = CastAheadSetup
     local W = CastAheadWindow
-    local saved = { CastAheadDB, InCombatLockdown, UIParent, W.Frame, W.Current, W.Show,
-                    C_NamePlate.GetNamePlateForUnit, UnitIsUnit, SetCursor, ResetCursor }
+    local saved = { CastAheadDB, InCombatLockdown, UIParent, W.Frame, W.Current, W.Show, C_NamePlate.GetNamePlateForUnit }
     reset()
     CastAheadDB = { centerText = true }
     InCombatLockdown = function() return false end
@@ -6424,7 +6271,7 @@ end)();
         fire(event, ...)
         if registered[event] then panel.handlers.OnEvent(panel, event, ...) end
     end
-    local plates, target = {}, nil
+    local plates = {}
     local function addPlate(u, x, y, scale)
         local p = { unit = u, ux = x, uy = y, scale = scale or 1, up = true }
         p.IsShown = function() return p.up end
@@ -6439,25 +6286,7 @@ end)();
         plates[u], hostile[u] = nil, nil
         fireAll("NAME_PLATE_UNIT_REMOVED", u)
     end
-    C_NamePlate.GetNamePlateForUnit = function(u)
-        if u == "target" then return target and plates[target] end
-        return plates[u]
-    end
-    UnitIsUnit = function(a, b)
-        if a == "target" then a = target end
-        if b == "target" then b = target end
-        return a ~= nil and a == b
-    end
-    local function setTarget(u)
-        target, hostile.target = u, u and true or nil
-        fireAll("PLAYER_TARGET_CHANGED")
-    end
-    local function rowBar(frame, index)
-        for i = 1, #allFrames do
-            local f = allFrames[i]
-            if f.shown and IsBar(f) and f._plate == frame and f._index == index then return f end
-        end
-    end
+    C_NamePlate.GetNamePlateForUnit = function(u) return plates[u] end
     local function barsOn(frame)
         local n = 0
         for i = 1, #allFrames do
@@ -6470,150 +6299,41 @@ end)();
     addPlate("nameplate2", 500, 700)
     addPlate("nameplate3", 530, 420, 1.5)
     S.Enter()
-    local frame, key = S.EditablePlate()
-    check(key == "nameplate3" and frame == plates.nameplate3, "edit: without a target the plate nearest the centre is editable, got " .. tostring(key))
-    check(S.grip.shown and S.grip._a and S.grip._a._plate == plates.nameplate3, "edit: the grip sits on the nearest plate's row")
-    check(not S.plate.shown and barsOn(S.plate) == 0, "edit: no sample plate while a hostile plate has a row")
-
-    setTarget("nameplate2")
-    frame, key = S.EditablePlate()
-    check(key == "nameplate2" and frame == plates.nameplate2, "edit: the target's plate wins over the nearest, got " .. tostring(key))
-    check(S.grip._a and S.grip._a._plate == plates.nameplate2, "edit: a target change moves the grip to the target's row")
-    setTarget(nil)
-    check(S.grip._a and S.grip._a._plate == plates.nameplate3, "edit: clearing the target goes back to the nearest plate")
-
-    S.grip.handlers.OnDragStart(S.grip)
-    local first
-    for i = 1, #allFrames do
-        local f = allFrames[i]
-        if f.shown and IsBar(f) and f._index == 1 and f._plate and f._plate ~= plates.nameplate2 and f._plate ~= plates.nameplate3 then first = f end
-    end
-    local ghost = first and first._plate
-    local gp = ghost and ghost.points or {}
-    check(gp[1] == "CENTER" and gp[3] == "BOTTOMLEFT" and gp[4] == 530 and gp[5] == 420,
-        "edit: the drag starts on the editable plate's centre in UIParent units, got " .. tostring(gp[4]) .. "," .. tostring(gp[5]))
-    setTarget("nameplate2")
-    local dropX, dropY = 530 - 120, 420 + 4
-    first.GetCenter = function() return dropX, dropY end
-    S.grip.handlers.OnDragStop(S.grip)
-    first.GetCenter = nil
-    local side, offset, nx, ny = S.Snap(dropX - 530, dropY - 420, 150, 15, first._size, CastAheadCore.LABEL_HEIGHT)
-    check(CastAheadConfig.Get("anchor") == nil and side == "left" and CastAheadDB.offsetX == offset
-        and CastAheadDB.nudgeX == nx and CastAheadDB.nudgeY == ny,
-        "edit: the drop is snapped against the plate it started on, got " .. tostring(CastAheadDB.offsetX) .. "/" .. tostring(CastAheadDB.nudgeY))
-    local bar = rowBar(plates.nameplate3, 1)
-    local point, rel, relPoint, x, y = unpack(bar and bar.points or {})
-    local function sign(p)
-        return p:find("LEFT") and -1 or p:find("RIGHT") and 1 or 0, p:find("TOP") and 1 or p:find("BOTTOM") and -1 or 0
-    end
-    local px, py = sign(point or "")
-    local rx, ry = sign(relPoint or "")
-    local cx = 530 + rx * 75 + (x or 0) - px * bar._size / 2
-    local cy = 420 + ry * 7.5 + (y or 0) - py * bar._size / 2
-    check(rel == plates.nameplate3 and math.abs(cx - dropX) <= 1 and math.abs(cy - dropY) <= 1,
-        "edit: the real anchor puts the first icon back at the drop, got " .. cx .. "," .. cy)
-    check(S.grip._a and S.grip._a._plate == plates.nameplate2, "edit: the target changed during the drag is taken after the drop")
-
-    plates.nameplate2.up = false
-    panel.handlers.OnUpdate(panel)
-    check(select(2, S.EditablePlate()) == "nameplate3" and S.grip._a._plate == plates.nameplate3,
-        "edit: a hidden editable plate hands the row to the next plate")
-    plates.nameplate2.up = true
-    setTarget(nil)
-
+    check(barsOn(plates.nameplate2) == 3 and barsOn(plates.nameplate3) == 3, "plates: every hostile plate in view shows a sample row")
+    check(not S.plate.shown and barsOn(S.plate) == 0, "plates: no sample plate while a hostile plate has a row")
     removePlate("nameplate2")
     removePlate("nameplate3")
-    check(S.plate.shown and barsOn(S.plate) == 3 and select(2, S.EditablePlate()) == "sample",
-        "edit: the sample plate comes back when the last hostile plate goes")
-    check(S.grip._a and S.grip._a._plate == S.plate, "edit: the grip moves to the sample row")
-    check(S.plate.label and S.plate.label.value == "Sample nameplate - stand near enemies or training dummies to edit on real ones",
-        "edit: the sample plate says it is a stand-in, got " .. tostring(S.plate.label and S.plate.label.value))
+    check(S.plate.shown and barsOn(S.plate) == 3, "plates: the sample plate comes back when the last hostile plate goes")
+    check(S.plate.label and S.plate.label.value == "Sample nameplate - stand near enemies or training dummies to see the icons on real ones",
+        "plates: the sample plate says it is a stand-in, got " .. tostring(S.plate.label and S.plate.label.value))
     addPlate("nameplate4", 600, 300)
     fireAll("NAME_PLATE_UNIT_ADDED", "nameplate4")
-    check(not S.plate.shown and barsOn(S.plate) == 0 and select(2, S.EditablePlate()) == "nameplate4",
-        "edit: the sample plate hides as soon as a hostile plate appears")
-
-    S.plate.GetCenter = function() return 500, 400 end
-    local realCenter = plates.nameplate4.GetCenter
-    plates.nameplate4.GetCenter = function() return nil end
-    S.grip.handlers.OnDragStart(S.grip)
-    check(rowBar(plates.nameplate4, 1) ~= nil, "edit: a plate with no readable rect does not start a drag")
-    plates.nameplate4.GetCenter = realCenter
-
+    check(not S.plate.shown and barsOn(S.plate) == 0 and barsOn(plates.nameplate4) == 3,
+        "plates: the sample plate hides as soon as a hostile plate appears")
     plates.nameplate4.up = false
-    panel.handlers.OnUpdate(panel)
-    check(S.plate.shown and barsOn(S.plate) == 3 and select(2, S.EditablePlate()) == "sample"
-        and S.grip._a and S.grip._a._plate == S.plate, "edit: every plate hidden but none removed, the sample plate comes back")
-    plates.nameplate4.up = true
     now = now + 0.5
     panel.handlers.OnUpdate(panel)
-    check(not S.plate.shown and barsOn(S.plate) == 0 and select(2, S.EditablePlate()) == "nameplate4"
-        and S.grip._a and S.grip._a._plate == plates.nameplate4, "edit: a plate shown again takes the row back")
-
-    S.grip.handlers.OnDragStart(S.grip)
-    check(rowBar(plates.nameplate4, 1) == nil, "edit: the drag is under way")
-    removePlate("nameplate4")
-    S.grip.handlers.OnDragStart(S.grip)
-    check(S.plate.shown and rowBar(S.plate, 1) == nil and barsOn(S.plate) == 0,
-        "edit: a drag restarts on the sample row after its plate went away mid-drag")
-    S.grip.handlers.OnDragStop(S.grip)
-    check(barsOn(S.plate) == 3, "edit: the sample row is back after that drag")
-    addPlate("nameplate4", 600, 300)
-    fireAll("NAME_PLATE_UNIT_ADDED", "nameplate4")
-
-    S.grip.handlers.OnDragStart(S.grip)
-    plates.nameplate4.up = false
-    panel.handlers.OnUpdate(panel)
-    S.grip.handlers.OnDragStart(S.grip)
-    check(rowBar(S.plate, 1) == nil and S.plate.shown, "edit: a plate hidden mid-drag cancels the drag, the next one starts")
-    S.grip.handlers.OnDragStop(S.grip)
-    plates.nameplate4.up = true
-    now = now + 0.5
-    panel.handlers.OnUpdate(panel)
-    check(select(2, S.EditablePlate()) == "nameplate4" and S.grip._a and S.grip._a._plate == plates.nameplate4,
-        "edit: back on the plate after the cancelled drag")
+    check(S.plate.shown and barsOn(S.plate) == 3, "plates: every plate hidden but none removed, the sample plate comes back")
 
     local realPrint, printed = print, {}
     print = function(text) printed[#printed + 1] = text end
     CastAheadCore.Debug()
     print = realPrint
-    local editLine, barLines = false, 0
+    local rowLine, barLines = false, 0
     for _, line in ipairs(printed) do
-        if line:find("setup: editable nameplate4", 1, true) then editLine = true end
+        if line:find("setup: sample plate row shown", 1, true) then rowLine = true end
         if line:find("setup bar %d: shown=true size=%d+ icon=%d+") and line:find("point=", 1, true) then barLines = barLines + 1 end
     end
-    check(editLine and barLines == 3, "debug: the setup section lists the editable plate and its three bars, got "
-        .. tostring(editLine) .. "/" .. barLines)
+    check(rowLine and barLines == 3, "debug: the setup section lists the sample plate's row and its three bars, got "
+        .. tostring(rowLine) .. "/" .. barLines)
 
-    local cursor, resets = nil, 0
-    SetCursor = function(c) cursor = c end
-    ResetCursor = function() resets = resets + 1 end
-    S.Select("center")
-    S.grip.handlers.OnEnter(S.grip)
-    check(cursor == "UI_MOVE_CURSOR" and S.grip.box.shown, "hover: the row shows the move cursor and its outline")
-    S.grip.handlers.OnLeave(S.grip)
-    check(resets == 1 and not S.grip.box.shown, "hover: leaving the row resets the cursor and the outline")
-    local center = CastAheadCore.CenterFrame()
-    cursor = nil
-    S.Select("row")
-    center.handlers.OnEnter(center)
-    check(cursor == "UI_MOVE_CURSOR" and S.centerBox.shown, "hover: the centre block shows the move cursor and its outline")
-    center.handlers.OnLeave(center)
-    check(resets == 2 and not S.centerBox.shown, "hover: leaving the centre block resets the cursor")
-    check(S.gripLabel.value == "Drag to move" and S.grip.shown, "hover: Drag to move shows above the row")
+    plates.nameplate4.up = true
+    now = now + 0.5
     panel.handlers.OnUpdate(panel)
-    check(S.centerLabel.value == "Drag to move" and S.centerLabel.shown and panel.shown, "hover: Drag to move shows above the centre block")
+    check(not S.plate.shown and barsOn(S.plate) == 0, "plates: a plate shown again hides the sample plate")
 
-    S.Select("row")
-    center.handlers.OnEnter(center)
-    local paint
-    S.centerBox.lines[1].SetColorTexture = function(_, r, g, b) paint = { r, g, b } end
-    local resetsBefore = resets
     S.Leave()
-    check(resets == resetsBefore + 1 and paint and paint[1] == 1 and paint[2] == 0.82 and paint[3] == 0,
-        "hover: leaving the mode resets the cursor and the outline colour")
-    S.centerBox.lines[1].SetColorTexture = nil
-    check(not S.grip.shown and not panel.shown, "hover: the labels go with the mode")
+    check(not panel.shown and not S.plate.shown, "setup: the sample plate goes with the mode")
     check(S.catcher == nil, "camera: no full-screen mouse catcher, the left button turns the camera")
     S.Enter()
     panel.handlers.OnKeyDown(panel, "ESCAPE")
@@ -6624,8 +6344,7 @@ end)();
 
     removePlate("nameplate4")
     panel.RegisterEvent, panel.UnregisterEvent = nil, nil
-    CastAheadDB, InCombatLockdown, UIParent, W.Frame, W.Current, W.Show,
-        C_NamePlate.GetNamePlateForUnit, UnitIsUnit, SetCursor, ResetCursor = unpack(saved, 1, 10)
+    CastAheadDB, InCombatLockdown, UIParent, W.Frame, W.Current, W.Show, C_NamePlate.GetNamePlateForUnit = unpack(saved, 1, 7)
 end)()
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))

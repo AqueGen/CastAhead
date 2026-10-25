@@ -203,7 +203,7 @@ SlashCmdList.CASTAHEAD = function(msg)
         return
     elseif word == "center" then
         print("|cff33ff99Cast Ahead|r usage: /ca center <pixels>  (current "
-            .. tostring(CastAheadDB and CastAheadDB.centerY or 0) .. ")")
+            .. tostring(CastAheadConfig.CenterY()) .. ")")
         return
     end
     local side = msg:match("^%s*anchor%s+(%a+)")
