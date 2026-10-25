@@ -1472,6 +1472,33 @@ local gap = math.abs(xOf[textures[101]] - xOf[textures[100]])
 check(gap == 30,
     string.format("two short calls sit an icon apart, not a label apart (gap %.0f, expected 30)", gap))
 reset()
+
+do
+    local realPlateFor, realUIParent = C_NamePlate.GetNamePlateForUnit, UIParent
+    UIParent = { GetEffectiveScale = function() return 1 end }
+    CastAheadDB = {}
+    local w, h, guess = CastAheadCore.PlateSize()
+    check(w == 110 and h == 45 and guess == "guess", "plate size: nothing known gives the fixed default, marked as a guess")
+    C_NamePlate.GetNamePlateSize = function() return 140, 30 end
+    w, h, guess = CastAheadCore.PlateSize()
+    check(w == 140 and h == 30 and guess == nil, "plate size: the game's own size when no plate has been seen")
+    C_NamePlate.GetNamePlateForUnit = function(u)
+        local plate = realPlateFor(u)
+        if not plate then return nil end
+        plate.GetWidth = function() return 120 end
+        plate.GetHeight = function() return 12 end
+        plate.GetEffectiveScale = function() return 1.5 end
+        return plate
+    end
+    enter()
+    castFor(3.0)
+    w, h, guess = CastAheadCore.PlateSize()
+    check(w == 180 and h == 18 and guess == nil, "plate size: a shown plate wins, in UIParent units")
+    check(CastAheadDB.plateSize and CastAheadDB.plateSize[1] == 180 and CastAheadDB.plateSize[2] == 18,
+        "plate size: the last real plate is remembered in the profile")
+    reset()
+    C_NamePlate.GetNamePlateForUnit, C_NamePlate.GetNamePlateSize, UIParent = realPlateFor, nil, realUIParent
+end
 CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want it on
 
 -- A cast whose interval is nowhere near the spell's schedule is rejected, and

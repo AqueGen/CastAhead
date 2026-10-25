@@ -1001,15 +1001,7 @@ end
 -- Filled by RefreshBar on every repaint, so the spread costs no garbage.
 local spread = {}
 
-local function AnchorBar(unit, bar, index)
-    local plate = C_NamePlate.GetNamePlateForUnit(unit)
-    -- The bar is a child of UIParent, not of the plate, so it does not inherit
-    -- the plate's visibility: a plate that is gone or hidden would otherwise
-    -- leave its icon floating at the last position it had.
-    if not plate or (plate.IsShown and not plate:IsShown()) then
-        bar:Hide()
-        return false
-    end
+local function AnchorToFrame(plate, bar, index)
     -- Bars stay children of UIParent rather than the plate: plates are recycled
     -- and carry their own alpha, scale and frame level, all of which would drag
     -- the bar around with them.
@@ -1064,6 +1056,28 @@ local function AnchorBar(unit, bar, index)
         end
         bar:SetPoint(spec.point, plate, spec.relative, x, y)
     end
+end
+
+local function RememberPlateSize(plate)
+    if not (plate.GetWidth and plate.GetEffectiveScale and UIParent and CastAheadDB) then return end
+    local ratio = plate:GetEffectiveScale() / UIParent:GetEffectiveScale()
+    local w = math.floor(plate:GetWidth() * ratio * 10 + 0.5) / 10
+    local h = math.floor(plate:GetHeight() * ratio * 10 + 0.5) / 10
+    local size = CastAheadDB.plateSize
+    if not size or size[1] ~= w or size[2] ~= h then CastAheadDB.plateSize = { w, h } end
+end
+
+local function AnchorBar(unit, bar, index)
+    local plate = C_NamePlate.GetNamePlateForUnit(unit)
+    -- The bar is a child of UIParent, not of the plate, so it does not inherit
+    -- the plate's visibility: a plate that is gone or hidden would otherwise
+    -- leave its icon floating at the last position it had.
+    if not plate or (plate.IsShown and not plate:IsShown()) then
+        bar:Hide()
+        return false
+    end
+    RememberPlateSize(plate)
+    AnchorToFrame(plate, bar, index)
     return true
 end
 
@@ -2814,6 +2828,14 @@ CastAheadCore.Tuning = tuning
 CastAheadCore.SpreadBars = SpreadBars
 CastAheadCore.Population = function() return killed, exhausted end
 CastAheadCore.MoveCenter = ToggleMoveCenter
+
+function CastAheadCore.PlateSize()
+    local size = CastAheadDB and CastAheadDB.plateSize
+    if size then return size[1], size[2] end
+    if C_NamePlate.GetNamePlateSize then return C_NamePlate.GetNamePlateSize() end
+    return 110, 45, "guess"
+end
+
 
 -- The window's speaker buttons: hear a call exactly as it would play.
 -- Deliberately ignores the sound/voice mute switches - an explicit click
