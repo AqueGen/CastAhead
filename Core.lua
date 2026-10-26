@@ -1490,7 +1490,8 @@ local function NarrowByHistory(state, candidates, startAt)
             local gap = startAt - own.lastStartAt
             if CastAheadMatch.SlotForInterval(row, gap, own.index) then
                 verdict = "fits"
-            elseif row.cdMin and gap < row.cdMin - CastAheadMatch.CD_TOLERANCE_FLAT then
+            elseif row.cdMin and gap < row.cdMin - CastAheadMatch.CD_TOLERANCE_FLAT and not own.kicked then
+                -- cdMin is measured across completed casts only; a kicked one may come back sooner.
                 verdict = "out"
             else
                 verdict = "unsure"
@@ -1841,6 +1842,7 @@ local function ResolveInterrupted(unit, state, startAt, matched)
         and CastAheadMatch.HasSchedule(only.candidates[1]) then
         only.index = (only.index or 0) + 1
         only.lastStartAt = startAt
+        only.kicked = true
         only.due = nil
         only.warned = nil        -- the next prediction earns its own heads-up
         only.projected = nil     -- anchored on a real cast start from here on
@@ -1875,7 +1877,8 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
         candidates = nil
     end
     local rejected, resetPicked, adapted, disproved
-    if candidates and #candidates == 1 and previousCast
+    -- A gap since a kicked cast says nothing about the schedule: the mob may recast it sooner.
+    if candidates and #candidates == 1 and previousCast and not track.kicked
         and CastAheadMatch.HasSchedule(candidates[1])
         and not CastAheadMatch.SlotForInterval(candidates[1], startAt - previousCast, track.index) then
         local measured = startAt - previousCast
@@ -2090,6 +2093,7 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
     diag.candidates = #candidates
     track.candidates = candidates
     track.lastStartAt = startAt
+    track.kicked = nil
     track.measured = true
     track.firstChannel = nil
     track.length = duration
