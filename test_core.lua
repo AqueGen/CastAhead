@@ -3419,7 +3419,7 @@ do
     C_UnitAuras.AddAuraSound = function() calls = calls + 1 return calls end
     CastAheadDB.saveButtons = { [265] = { def = {} } }
     CastAheadSaves.Refresh()
-    check(calls == 0 and CastAheadSaves.AuraSoundCount() == 0, "a spec with an empty def list hears nothing: no aura sound is registered")
+    check(calls == 1 and CastAheadSaves.AuraSoundCount() == 1, "a tank with an empty def list still hears the tank buster")
     CastAheadDB.saveButtons = nil
     C_UnitAuras.AddAuraSound = function() error("restricted") end
     check(pcall(CastAheadSaves.Refresh) and CastAheadSaves.AuraSoundCount() == 0, "a failing AddAuraSound is skipped")

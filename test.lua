@@ -426,16 +426,26 @@ check(M.Advice(kickRow) == M.ADVICE.KICK, "a kickable cast still says interrupt"
 check(M.Advice({ spell = 902, prio = "KICK", save = { TANK = true } }) == M.ADVICE.KICK, "a curated kick still wins")
 check(M.Advice({ spell = 903, prio = "DODGE", save = { TANK = true } }) == M.ADVICE.DODGE, "a curated dodge outranks the defensive call")
 check(M.Advice({ spell = 903, prio = "TARGET", save = { TANK = true } }) == M.ADVICE.TARGET, "a curated target keeps its call, the save may be someone else's")
-check(M.Advice({ spell = 910, targeted = true, save = { TANK = true } }) == M.ADVICE.TARGET, "a cast the game shows a target for says targeted instead of a save")
+check(M.Advice({ spell = 910, targeted = true, save = { TANK = true } }) == M.ADVICE.BUSTER, "a targeted hit that only kills tanks is a tank buster to the tank")
 check(M.Advice({ spell = 911, targeted = false, save = { TANK = true } }) == M.ADVICE.BUSTER, "an untargeted cast keeps its save")
 check(M.Advice({ spell = 912, prio = "TANK", targeted = true, save = { TANK = true } }) == M.ADVICE.BUSTER, "a curated tank buster with a target is still a tank buster to the tank")
 M.HasButton = function() return false end
-check(M.Advice({ spell = 912, prio = "TANK", targeted = true, save = { TANK = true } }) == M.ADVICE.TANK, "no button ready, the curated tank buster stays")
-check(M.Advice({ spell = 913, prio = "AOE", save = { TANK = true } }) == M.ADVICE.TANK, "no button ready, what only kills the tank is still a tank buster")
+check(M.Advice({ spell = 912, prio = "TANK", targeted = true, save = { TANK = true } }) == M.ADVICE.BUSTER, "no button in the list, the tank still hears the tank buster")
+check(M.Advice({ spell = 913, prio = "AOE", save = { TANK = true } }) == M.ADVICE.BUSTER, "no button in the list, what only kills the tank is still a tank buster")
+check(M.Important({ spell = 914, save = { TANK = true } }), "an uncurated tank-only hit with no button is still announced")
 M.SpecRole = function() return "HEALER" end
 check(M.Advice({ spell = 913, prio = "AOE", save = { TANK = true } }) == M.ADVICE.AOE, "the healer keeps the curated aoe call")
-M.SpecRole = function() return "TANK" end
+M.SpecRole = function() return "DAMAGER" end
 M.HasButton = function() return true end
+check(M.Advice({ spell = 915, targeted = true, save = { DAMAGER = true } }) == M.ADVICE.TARGET, "a cast the game shows a target for says targeted instead of a dps save")
+check(M.Advice({ spell = 916, prio = "TANK", targeted = true, save = { TANK = true, DAMAGER = true } }) == M.ADVICE.TARGET,
+    "a dps still hears targeted on a curated tank buster that also kills dps")
+M.SpecRole = function() return "TANK" end
+local busterPair = { { spell = 917, prio = "TANK", save = { TANK = true } }, { spell = 918, prio = "TANK" } }
+check(M.ConsensusAdvice(busterPair) == M.ADVICE.BUSTER and M.ConsensusAdvice({ busterPair[2], busterPair[1] }) == M.ADVICE.BUSTER,
+    "the tank's save and a plain tank buster agree, and the save is kept")
+check(M.SplitAdvice({ busterPair[1], busterPair[2], { spell = 919, kickable = true } }) and #M.SplitAdvice({ busterPair[1], busterPair[2], { spell = 919, kickable = true } }) == 2,
+    "a split never lists tank buster twice")
 check(M.Advice({ spell = 903, prio = "TARGET", dispel = "Poison", save = { TANK = true } }) == M.ADVICE.POISON, "a dispel outranks the defensive call")
 check(M.Advice({ spell = 903, prio = "BLEED", save = { TANK = true } }) == M.ADVICE.BUSTER, "the defensive call outranks a curated bleed")
 check(M.IsSave(M.ADVICE.DEFENSIVE) and M.IsSave(M.ADVICE.BUSTER) and not M.IsSave(M.ADVICE.AOE) and not M.IsSave(M.ADVICE.TANK),

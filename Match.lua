@@ -165,7 +165,8 @@ function M.SaveAdvice(row)
     local save = row and row.save
     local role = save and M.SpecRole()
     local key = role and M.SaveKey(save, role, row.prio)
-    return key and M.HasButton() and M.ADVICE[key] or nil
+    -- "tank buster" names the threat, so the tank hears it with no button to press.
+    return key and (key == "BUSTER" or M.HasButton()) and M.ADVICE[key] or nil
 end
 
 -- A debuff landing on the player. A healer who can remove it is told to, and
@@ -192,19 +193,14 @@ local SAVE_REPLACES = {
 function M.Beats(row, interruptible)
     local base = BaseAdvice(row, interruptible)
     if base and not SAVE_REPLACES[base] then return base end
-    if row and row.targeted and row.prio ~= "TANK" and M.SaveAdvice(row) then return M.ADVICE.TARGET end
+    local save = row and row.targeted and M.SaveAdvice(row)
+    if save and save ~= M.ADVICE.BUSTER then return M.ADVICE.TARGET end
     return nil
-end
-
--- With every defensive on cooldown the tank still hears what kills it as a tank buster.
-local function TankBuster(row)
-    local role = row.save and M.SpecRole()
-    return role == "TANK" and M.SaveKey(row.save, role, row.prio) and M.ADVICE.TANK or nil
 end
 
 function M.Advice(row, interruptible)
     if not row then return nil end
-    return M.Beats(row, interruptible) or M.SaveAdvice(row) or TankBuster(row) or BaseAdvice(row, interruptible)
+    return M.Beats(row, interruptible) or M.SaveAdvice(row) or BaseAdvice(row, interruptible)
 end
 
 M.MIN_OPENING_SAMPLES = 8
@@ -225,13 +221,18 @@ end
 -- Advice is only safe to show when every remaining candidate agrees. Six spells
 -- share a 2.5s cast in Ruby Life Pools; taking the first one's verdict once told
 -- the player to kick Primal Juggernaut's uninterruptible Crushing Smash.
+local function SameCall(a, b)
+    return a == b or (a ~= nil and b ~= nil and a.file == b.file)
+end
+
 function M.ConsensusAdvice(candidates, interruptible)
     if not candidates or #candidates == 0 then return nil end
     local first = M.Advice(candidates[1], interruptible)
     for i = 2, #candidates do
-        if M.Advice(candidates[i], interruptible) ~= first then
-            return nil
-        end
+        local advice = M.Advice(candidates[i], interruptible)
+        if not SameCall(advice, first) then return nil end
+        -- The tank's save and a plain tank buster say the same; the save carries the buttons.
+        if M.IsSave(advice) then first = advice end
     end
     return first
 end
@@ -246,8 +247,8 @@ function M.SplitAdvice(candidates, interruptible)
     local seen, out = {}, {}
     for i = 1, #candidates do
         local advice = M.Advice(candidates[i], interruptible)
-        if advice and not seen[advice] then
-            seen[advice] = true
+        if advice and not seen[advice.file] then
+            seen[advice.file] = true
             out[#out + 1] = advice
         end
     end
