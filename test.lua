@@ -431,6 +431,10 @@ check(M.Advice({ spell = 911, targeted = false, save = { TANK = true } }) == M.A
 check(M.Advice({ spell = 912, prio = "TANK", targeted = true, save = { TANK = true } }) == M.ADVICE.BUSTER, "a curated tank buster with a target is still a tank buster to the tank")
 M.HasButton = function() return false end
 check(M.Advice({ spell = 912, prio = "TANK", targeted = true, save = { TANK = true } }) == M.ADVICE.TANK, "no button ready, the curated tank buster stays")
+check(M.Advice({ spell = 913, prio = "AOE", save = { TANK = true } }) == M.ADVICE.TANK, "no button ready, what only kills the tank is still a tank buster")
+M.SpecRole = function() return "HEALER" end
+check(M.Advice({ spell = 913, prio = "AOE", save = { TANK = true } }) == M.ADVICE.AOE, "the healer keeps the curated aoe call")
+M.SpecRole = function() return "TANK" end
 M.HasButton = function() return true end
 check(M.Advice({ spell = 903, prio = "TARGET", dispel = "Poison", save = { TANK = true } }) == M.ADVICE.POISON, "a dispel outranks the defensive call")
 check(M.Advice({ spell = 903, prio = "BLEED", save = { TANK = true } }) == M.ADVICE.BUSTER, "the defensive call outranks a curated bleed")

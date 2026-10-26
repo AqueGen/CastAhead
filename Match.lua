@@ -196,9 +196,15 @@ function M.Beats(row, interruptible)
     return nil
 end
 
+-- With every defensive on cooldown the tank still hears what kills it as a tank buster.
+local function TankBuster(row)
+    local role = row.save and M.SpecRole()
+    return role == "TANK" and M.SaveKey(row.save, role, row.prio) and M.ADVICE.TANK or nil
+end
+
 function M.Advice(row, interruptible)
     if not row then return nil end
-    return M.Beats(row, interruptible) or M.SaveAdvice(row) or BaseAdvice(row, interruptible)
+    return M.Beats(row, interruptible) or M.SaveAdvice(row) or TankBuster(row) or BaseAdvice(row, interruptible)
 end
 
 M.MIN_OPENING_SAMPLES = 8
