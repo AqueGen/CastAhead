@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.22.1](https://github.com/AqueGen/CastAhead/compare/v0.22.0...v0.22.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* a prediction that falls inside another cast of the mob moves to that cast's end ([#93](https://github.com/AqueGen/CastAhead/issues/93)) ([e51b2ee](https://github.com/AqueGen/CastAhead/commit/e51b2ee2e403f59d20b6e59c41037699c00920a7))
+* a tank hears "tank buster" on what kills the tank ([#96](https://github.com/AqueGen/CastAhead/issues/96)) ([667a20b](https://github.com/AqueGen/CastAhead/commit/667a20baf1945db2c1cc06e739f72b1bf438d81f))
+
 ## [0.22.0](https://github.com/AqueGen/CastAhead/compare/v0.21.0...v0.22.0) (2026-10-25)
 
 
