@@ -157,6 +157,10 @@ if os.getenv("CA_HISTORY_OFFSET") == "0" then
     CastAheadCore.Tuning.historyOffset = false
     knobs[#knobs + 1] = "historyOffset=off"
 end
+if os.getenv("CA_DEFER") == "0" then
+    CastAheadCore.Tuning.deferBusy = false
+    knobs[#knobs + 1] = "deferBusy=off"
+end
 if os.getenv("CA_HISTORY_TOL") then
     CastAheadCore.Tuning.historyTolerance = tonumber(os.getenv("CA_HISTORY_TOL"))
     knobs[#knobs + 1] = "historyTolerance=" .. os.getenv("CA_HISTORY_TOL")
@@ -511,7 +515,8 @@ local function top(t, n, label)
         end
     end
 end
-top(wrongPairs, 12, "wrong calls, most frequent first:")
+local TOP = tonumber(os.getenv("CA_TOP") or "") or 12
+top(wrongPairs, TOP, "wrong calls, most frequent first:")
 top(blamed, 10, "where the real spell was lost (step before > step that dropped it):")
 top(missed, 12, "left unidentified (ambiguous or none), most frequent first:")
 top(untabledSpells, 12, "cast but absent from Data.lua, most frequent first:")
@@ -525,6 +530,6 @@ for id in (os.getenv("CA_SPELLS") or ""):gmatch("%d+") do
     print(string.format("  start %-8s %-24s starts %3d  right %3d  wrong %3d  unclaimed %3d", id,
         tostring(names[tonumber(id)]), tally.n, tally.right, tally.wrong, tally.n - tally.right - tally.wrong))
 end
-top(startWrongPairs, 12, "wrong calls at cast start, most frequent first:")
+top(startWrongPairs, TOP, "wrong calls at cast start, most frequent first:")
 print(string.format("voiced at cast start: %d right, %d wrong", voicedRight, voicedWrong))
-top(voicedWrongPairs, 12, "wrong voiced calls at cast start, most frequent first:")
+top(voicedWrongPairs, TOP, "wrong voiced calls at cast start, most frequent first:")

@@ -153,6 +153,7 @@ local tuning = {
     history = true,            -- one creature's same-length casts are told apart by each spell's own history
     historyOffset = true,      -- a spell not yet seen on the plate may be placed by its opening order
     historyTolerance = 4.0,    -- how far a spell's first cast may land from its opening order
+    deferBusy = true,          -- a prediction that fell inside another cast of the mob moves to that cast's end
 }
 
 -- Population: how many of each creature MDT places in this dungeon (Packs.lua,
@@ -1489,7 +1490,8 @@ local function NarrowByHistory(state, candidates, startAt)
             local gap = startAt - own.lastStartAt
             if CastAheadMatch.SlotForInterval(row, gap, own.index) then
                 verdict = "fits"
-            elseif row.cdMin and gap < row.cdMin - CastAheadMatch.CD_TOLERANCE_FLAT then
+            elseif row.cdMin and gap < row.cdMin - CastAheadMatch.CD_TOLERANCE_FLAT and not own.kicked then
+                -- cdMin is measured across completed casts only; a kicked one may come back sooner.
                 verdict = "out"
             else
                 verdict = "unsure"
@@ -1840,12 +1842,15 @@ local function ResolveInterrupted(unit, state, startAt, matched)
         and CastAheadMatch.HasSchedule(only.candidates[1]) then
         only.index = (only.index or 0) + 1
         only.lastStartAt = startAt
+        only.kicked = true
         only.due = nil
         only.warned = nil        -- the next prediction earns its own heads-up
         only.projected = nil     -- anchored on a real cast start from here on
         local cd = only.observedCD or CastAheadMatch.CDAt(only.candidates[1], only.index)
         only.nextAt = cd and (startAt + cd) or nil
         SyncTimeline(only)
+        RefreshBar(unit, state)
+        return only
     end
     RefreshBar(unit, state)
 end
@@ -1872,7 +1877,8 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
         candidates = nil
     end
     local rejected, resetPicked, adapted, disproved
-    if candidates and #candidates == 1 and previousCast
+    -- A gap since a kicked cast says nothing about the schedule: the mob may recast it sooner.
+    if candidates and #candidates == 1 and previousCast and not track.kicked
         and CastAheadMatch.HasSchedule(candidates[1])
         and not CastAheadMatch.SlotForInterval(candidates[1], startAt - previousCast, track.index) then
         local measured = startAt - previousCast
@@ -2087,6 +2093,7 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
     diag.candidates = #candidates
     track.candidates = candidates
     track.lastStartAt = startAt
+    track.kicked = nil
     track.measured = true
     track.firstChannel = nil
     track.length = duration
@@ -2124,6 +2131,25 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
     return false
 end
 
+-- A mob casts one thing at a time: whatever was due while it was busy comes
+-- right after. Devouring Brutalizer's Brutalize lands the moment its 9s Devour
+-- ends, seconds past its own schedule. Only behind a cast we know and that is
+-- not a filler: a mob chaining an unknown filler (Felfire Burst) starts the next
+-- one right where the moved prediction lands, and that start got claimed.
+local function DeferBusy(state, startAt, endAt, busy)
+    if not tuning.deferBusy or not busy or #busy ~= 1 or busy[1].filler then return false end
+    local moved = false
+    for _, track in pairs(state.tracks) do
+        if track.nextAt and track.nextAt > startAt and track.nextAt < endAt then
+            track.nextAt = endAt
+            track.due = nil
+            SyncTimeline(track)
+            moved = true
+        end
+    end
+    return moved
+end
+
 function FinishHeld(unit, state)
     local held = state.held
     if not held then return end
@@ -2148,6 +2174,8 @@ local function OnCastStop(unit, channel)
     local heldIdentified
     if held and channel then
         if FinishCast(unit, state, held.startAt, held.duration, false, duration, held.claimed, held.target) then
+            -- The cast and the channel it turned into kept the mob busy as one.
+            DeferBusy(state, held.startAt, GetTime(), lastIdentified[unit])
             RefreshBar(unit, state)
             return
         end
@@ -2157,6 +2185,9 @@ local function OnCastStop(unit, channel)
     if not channel then follow = false end
     FinishCast(unit, state, startAt, duration, channel, follow, claimed, state.spellTarget)
     if heldIdentified and #lastIdentified[unit] == 0 then lastIdentified[unit] = heldIdentified end
+    if DeferBusy(state, held and held.startAt or startAt, GetTime(), lastIdentified[unit]) then
+        RefreshBar(unit, state)
+    end
 end
 
 -- INTERRUPTED and FAILED are terminal: Blizzard's own cast bar clears on them
@@ -2177,7 +2208,10 @@ local function OnCastInterrupted(unit)
     state.castStartAt = nil
     state.casting = nil
     Record("CUT", unit, math.floor((GetTime() - startAt) * 1000 + 0.5))
-    ResolveInterrupted(unit, state, startAt, matched)
+    local resolved = ResolveInterrupted(unit, state, startAt, matched) or matched
+    if DeferBusy(state, startAt, GetTime(), resolved and resolved.candidates) then
+        RefreshBar(unit, state)
+    end
 end
 
 -- Dispel learning ---------------------------------------------------------
