@@ -408,16 +408,18 @@ M.SpecRole = function() return "HEALER" end
 check(M.Advice(saveRow) == M.ADVICE.AOE, "a healer with no verdict keeps the old call")
 M.SpecRole = function() return "TANK" end
 check(M.Advice(saveRow) == M.ADVICE.AOE, "a hit that also lands on dps is no tank save, the old call stays")
-check(M.Advice({ spell = 908, save = { TANK = true } }) == M.ADVICE.DEFENSIVE, "a hit only the tank takes is a tank buster save")
+check(M.Advice({ spell = 908, save = { TANK = true } }) == M.ADVICE.BUSTER, "a hit only the tank takes is a tank buster save")
+check(M.ADVICE.BUSTER.say == "tank buster" and M.ADVICE.BUSTER.file == "TANK", "the tank's save is spoken as a tank buster")
 M.SpecRole = function() return "DAMAGER" end
 check(M.SaveAdvice({ save = { DAMAGER = true } }) == M.ADVICE.DEFENSIVE, "a dps row calls the defensive")
 M.HasButton = function() return false end
 check(M.SaveAdvice({ save = { DAMAGER = true } }) == nil, "no button in the list, no defensive call")
 M.HasButton = function() return true end
 M.SpecRole = function() return "TANK" end
-check(M.Advice({ spell = 909, prio = "TANK", save = { DAMAGER = true, TANK = true } }) == M.ADVICE.DEFENSIVE,
+check(M.Advice({ spell = 909, prio = "TANK", save = { DAMAGER = true, TANK = true } }) == M.ADVICE.BUSTER,
     "a curated tank buster keeps the tank save even when dps were hit too")
-check(M.SaveKey({ DAMAGER = true, TANK = true }, "TANK") == nil and M.SaveKey({ DAMAGER = true, TANK = true }, "DAMAGER") == "DEFENSIVE",
+check(M.SaveKey({ DAMAGER = true, TANK = true }, "TANK") == nil and M.SaveKey({ DAMAGER = true, TANK = true }, "DAMAGER") == "DEFENSIVE"
+    and M.SaveKey({ TANK = true }, "TANK") == "BUSTER",
     "SaveKey applies the tank buster rule to tanks only")
 local kickRow = { spell = 901, cast = 2.0, kickable = true, save = { TANK = true } }
 check(M.Advice(kickRow) == M.ADVICE.KICK, "a kickable cast still says interrupt")
@@ -425,10 +427,15 @@ check(M.Advice({ spell = 902, prio = "KICK", save = { TANK = true } }) == M.ADVI
 check(M.Advice({ spell = 903, prio = "DODGE", save = { TANK = true } }) == M.ADVICE.DODGE, "a curated dodge outranks the defensive call")
 check(M.Advice({ spell = 903, prio = "TARGET", save = { TANK = true } }) == M.ADVICE.TARGET, "a curated target keeps its call, the save may be someone else's")
 check(M.Advice({ spell = 910, targeted = true, save = { TANK = true } }) == M.ADVICE.TARGET, "a cast the game shows a target for says targeted instead of a save")
-check(M.Advice({ spell = 911, targeted = false, save = { TANK = true } }) == M.ADVICE.DEFENSIVE, "an untargeted cast keeps its save")
+check(M.Advice({ spell = 911, targeted = false, save = { TANK = true } }) == M.ADVICE.BUSTER, "an untargeted cast keeps its save")
+check(M.Advice({ spell = 912, prio = "TANK", targeted = true, save = { TANK = true } }) == M.ADVICE.BUSTER, "a curated tank buster with a target is still a tank buster to the tank")
+M.HasButton = function() return false end
+check(M.Advice({ spell = 912, prio = "TANK", targeted = true, save = { TANK = true } }) == M.ADVICE.TANK, "no button ready, the curated tank buster stays")
+M.HasButton = function() return true end
 check(M.Advice({ spell = 903, prio = "TARGET", dispel = "Poison", save = { TANK = true } }) == M.ADVICE.POISON, "a dispel outranks the defensive call")
-check(M.Advice({ spell = 903, prio = "BLEED", save = { TANK = true } }) == M.ADVICE.DEFENSIVE, "the defensive call outranks a curated bleed")
-check(M.IsSave(M.ADVICE.DEFENSIVE) and not M.IsSave(M.ADVICE.AOE), "IsSave names the defensive call")
+check(M.Advice({ spell = 903, prio = "BLEED", save = { TANK = true } }) == M.ADVICE.BUSTER, "the defensive call outranks a curated bleed")
+check(M.IsSave(M.ADVICE.DEFENSIVE) and M.IsSave(M.ADVICE.BUSTER) and not M.IsSave(M.ADVICE.AOE) and not M.IsSave(M.ADVICE.TANK),
+    "IsSave names the defensive call")
 local savedPlayerRole = M.PlayerRole
 M.PlayerRole = function() return nil end
 check(M.Important({ spell = 904, save = { TANK = true } }), "a save row is important even with the role filter off")

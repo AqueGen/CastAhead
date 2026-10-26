@@ -10,7 +10,7 @@ import subprocess
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOUNDS = os.path.join(HERE, "..", "Sounds", "en")
-KEYS = ("DEFENSIVE", "MAGIC", "POISON", "CURSE", "DISEASE")
+KEYS = ("DEFENSIVE", "TANK", "MAGIC", "POISON", "CURSE", "DISEASE")
 DELAYS = (1, 2, 3)  # 4 s of silence pushes the dispel clips past the 5 s cut
 
 

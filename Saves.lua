@@ -215,7 +215,7 @@ function S.Fits(e, row)
     return school ~= 1
 end
 
-local LIST = { DEFENSIVE = "def" }
+local LIST = { DEFENSIVE = "def", BUSTER = "def" }
 local NO_ICONS = {}
 local function FitsAny(e, rows)
     if #rows == 0 then return true end
@@ -593,7 +593,7 @@ local function Blocked()
 end
 
 local function PickedFile(advice)
-    local name = CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[advice.key]
+    local name = CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[advice.sound or advice.key]
     local lsm = name and LibStub and LibStub("LibSharedMedia-3.0", true)
     local sound = lsm and lsm:Fetch("sound", name, true)
     return type(sound) == "string" and sound or nil

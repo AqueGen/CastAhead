@@ -462,7 +462,7 @@ end
 
 local function CustomSound(advice, candidates)
     local name = SpellSound(candidates)
-        or CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[advice.key]
+        or CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[advice.sound or advice.key]
     if not name or name == "" then return nil end
     local lsm = LibStub and LibStub("LibSharedMedia-3.0", true)
     return lsm and lsm:Fetch("sound", name, true) or nil
@@ -486,7 +486,7 @@ end
 
 local function Beep(advice)
     if not SOUNDKIT then return end
-    local kit = SOUNDKIT[ADVICE_SOUND[advice.key] or ""]
+    local kit = SOUNDKIT[ADVICE_SOUND[advice.sound or advice.key] or ""]
     if kit then PlaySound(kit, CastAheadConfig.SoundChannel()) end
 end
 

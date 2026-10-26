@@ -52,6 +52,9 @@ M.ADVICE = {
     TANK = { label = "TANKBUSTER", short = "BUSTER", say = "tank buster", r = 1.00, g = 0.45, b = 0.10 },
     AOE  = { label = "AOE", say = "aoe damage", r = 1.00, g = 0.75, b = 0.15 },
     DEFENSIVE = { label = "DEFENSIVE", short = "DEF", say = "defensive", r = 1.00, g = 0.35, b = 0.85 },
+    -- The tank's own save: whatever kills the tank is a tank buster to the tank,
+    -- so it is said and shown as one, and works as a save everywhere else.
+    BUSTER = { label = "TANKBUSTER", short = "BUSTER", say = "tank buster", r = 1.00, g = 0.45, b = 0.10, file = "TANK", sound = "TANK" },
     SOON  = { label = "BURST SOON", short = "SOON", say = "burst soon", r = 1.00, g = 0.65, b = 0.20 },
     BURST = { label = "BURST", say = "burst now", r = 1.00, g = 0.30, b = 0.10 },
     -- Categories assigned by the curated priority set (row.prio).
@@ -83,7 +86,7 @@ M.ADVICE = {
 -- names.
 for key, advice in pairs(M.ADVICE) do
     advice.key = key
-    advice.file = key:gsub(" ", "_")
+    advice.file = advice.file or key:gsub(" ", "_")
     -- Only the verdicts long enough to crowd their neighbours carry a short
     -- form; the rest are already short and read the same either way.
     advice.short = advice.short or advice.label
@@ -152,7 +155,8 @@ end
 
 function M.SaveKey(save, role, prio)
     if role == "TANK" and not save.raid and prio ~= "TANK" and (save.DAMAGER or save.HEALER) then return nil end
-    return save[role] and "DEFENSIVE" or nil
+    if not save[role] then return nil end
+    return role == "TANK" and "BUSTER" or "DEFENSIVE"
 end
 
 M.HasButton = function() return true end
@@ -177,7 +181,7 @@ function M.AuraAdvice(row, prio)
 end
 
 function M.IsSave(advice)
-    return advice == M.ADVICE.DEFENSIVE
+    return advice == M.ADVICE.DEFENSIVE or advice == M.ADVICE.BUSTER
 end
 
 local SAVE_REPLACES = {
@@ -188,7 +192,7 @@ local SAVE_REPLACES = {
 function M.Beats(row, interruptible)
     local base = BaseAdvice(row, interruptible)
     if base and not SAVE_REPLACES[base] then return base end
-    if row and row.targeted and M.SaveAdvice(row) then return M.ADVICE.TARGET end
+    if row and row.targeted and row.prio ~= "TANK" and M.SaveAdvice(row) then return M.ADVICE.TARGET end
     return nil
 end
 
