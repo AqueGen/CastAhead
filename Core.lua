@@ -1847,6 +1847,8 @@ local function ResolveInterrupted(unit, state, startAt, matched)
         local cd = only.observedCD or CastAheadMatch.CDAt(only.candidates[1], only.index)
         only.nextAt = cd and (startAt + cd) or nil
         SyncTimeline(only)
+        RefreshBar(unit, state)
+        return only
     end
     RefreshBar(unit, state)
 end
@@ -2131,14 +2133,17 @@ end
 -- not a filler: a mob chaining an unknown filler (Felfire Burst) starts the next
 -- one right where the moved prediction lands, and that start got claimed.
 local function DeferBusy(state, startAt, endAt, busy)
-    if not tuning.deferBusy or not busy or #busy ~= 1 or busy[1].filler then return end
+    if not tuning.deferBusy or not busy or #busy ~= 1 or busy[1].filler then return false end
+    local moved = false
     for _, track in pairs(state.tracks) do
         if track.nextAt and track.nextAt > startAt and track.nextAt < endAt then
             track.nextAt = endAt
             track.due = nil
             SyncTimeline(track)
+            moved = true
         end
     end
+    return moved
 end
 
 function FinishHeld(unit, state)
@@ -2165,6 +2170,8 @@ local function OnCastStop(unit, channel)
     local heldIdentified
     if held and channel then
         if FinishCast(unit, state, held.startAt, held.duration, false, duration, held.claimed, held.target) then
+            -- The cast and the channel it turned into kept the mob busy as one.
+            DeferBusy(state, held.startAt, GetTime(), lastIdentified[unit])
             RefreshBar(unit, state)
             return
         end
@@ -2174,8 +2181,9 @@ local function OnCastStop(unit, channel)
     if not channel then follow = false end
     FinishCast(unit, state, startAt, duration, channel, follow, claimed, state.spellTarget)
     if heldIdentified and #lastIdentified[unit] == 0 then lastIdentified[unit] = heldIdentified end
-    DeferBusy(state, held and held.startAt or startAt, GetTime(), lastIdentified[unit])
-    RefreshBar(unit, state)
+    if DeferBusy(state, held and held.startAt or startAt, GetTime(), lastIdentified[unit]) then
+        RefreshBar(unit, state)
+    end
 end
 
 -- INTERRUPTED and FAILED are terminal: Blizzard's own cast bar clears on them
@@ -2196,9 +2204,10 @@ local function OnCastInterrupted(unit)
     state.castStartAt = nil
     state.casting = nil
     Record("CUT", unit, math.floor((GetTime() - startAt) * 1000 + 0.5))
-    ResolveInterrupted(unit, state, startAt, matched)
-    DeferBusy(state, startAt, GetTime(), matched and matched.candidates)
-    RefreshBar(unit, state)
+    local resolved = ResolveInterrupted(unit, state, startAt, matched) or matched
+    if DeferBusy(state, startAt, GetTime(), resolved and resolved.candidates) then
+        RefreshBar(unit, state)
+    end
 end
 
 -- Dispel learning ---------------------------------------------------------

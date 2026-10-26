@@ -1436,6 +1436,65 @@ do
 end
 for _ = 1, 2 do table.remove(CastAheadData[1877]) end
 
+-- The same when the busy cast turns into its own channel: cast and channel keep
+-- the mob busy as one (a 1.2s cast, then a 7.5s channel, holds a 5.3s spell due
+-- in the middle until the channel ends).
+table.insert(CastAheadData[1877], { spell = 1801, npc = 18, mob = "Brute", name = "Smash", cast = 1.2,
+                          cd = { 30.0 }, first = 6.0, firstN = 20, follow = 7.5, kick = 0, cc = 0, prio = "TANK" })
+table.insert(CastAheadData[1877], { spell = 1802, npc = 18, mob = "Brute", name = "Roar", cast = 5.3,
+                          cd = { 9.0 }, first = 0.0, firstN = 20, kick = 0, cc = 0, prio = "AOE" })
+do
+    enter()
+    local t0 = now
+    castFor(5.3)                                   -- Roar at t0, next due t0+9
+    advance(t0 + 6.0 - now)
+    fire("UNIT_SPELLCAST_START", unit)             -- Smash at t0+6
+    advance(1.2)
+    fire("UNIT_SPELLCAST_CHANNEL_START", unit)
+    fire("UNIT_SPELLCAST_STOP", unit)
+    advance(7.5)
+    fire("UNIT_SPELLCAST_CHANNEL_STOP", unit)      -- busy until t0+14.7
+    fire("UNIT_SPELLCAST_START", unit)
+    local claim = CastAheadCore.Casting(unit)
+    advance(5.3)
+    fire("UNIT_SPELLCAST_STOP", unit)
+    check(claim and claim.row and claim.row.spell == 1802,
+        "a prediction inside a cast and its channel moves to the channel's end, got "
+        .. tostring(claim and claim.row and claim.row.spell))
+    reset()
+end
+for _ = 1, 2 do table.remove(CastAheadData[1877]) end
+
+-- And for a kicked cast the plate only matched afterwards by its timing: the
+-- channel predicted while it was being cast moves to the moment of the kick.
+table.insert(CastAheadData[1877], { spell = 1901, npc = 19, mob = "Caller", name = "Bolt", cast = 1.2,
+                          cd = { 9.0 }, first = 0.0, firstN = 20, kick = 0, cc = 0, prio = "KICK" })
+table.insert(CastAheadData[1877], { spell = 1902, npc = 19, mob = "Caller", name = "Storm", cast = 7.5,
+                          cd = { 9.0 }, first = 0.0, firstN = 20, kick = 0, cc = 0, channel = true, prio = "AOE" })
+do
+    local savedWindow, savedLate = CastAheadCore.Tuning.claimWindow, CastAheadCore.Tuning.lateClaimMax
+    CastAheadCore.Tuning.claimWindow, CastAheadCore.Tuning.lateClaimMax = 0, 0
+    enter()
+    local t0 = now
+    castFor(1.2)                                   -- Bolt at t0, next due t0+9
+    advance(t0 + 2.0 - now)
+    channelFor(7.5)                                -- Storm at t0+2, next due t0+11
+    advance(t0 + 10.7 - now)
+    fire("UNIT_SPELLCAST_START", unit)             -- Bolt again, unclaimed at start
+    advance(0.8)
+    fire("UNIT_SPELLCAST_INTERRUPTED", unit)       -- kicked at t0+11.5
+    local storm
+    for _, track in pairs(CastAheadCore.Tracks(unit) or {}) do
+        if track.candidates and #track.candidates == 1 and track.candidates[1].spell == 1902 then storm = track end
+    end
+    check(storm and storm.nextAt and math.abs(storm.nextAt - (t0 + 11.5)) < 0.01,
+        "a channel due inside a kicked cast moves to the kick, got "
+        .. tostring(storm and storm.nextAt and storm.nextAt - t0))
+    reset()
+    CastAheadCore.Tuning.claimWindow, CastAheadCore.Tuning.lateClaimMax = savedWindow, savedLate
+end
+for _ = 1, 2 do table.remove(CastAheadData[1877]) end
+
 -- A first cast projected from the mob's kit reaches the timeline once its
 -- opening is measured well enough, and stays off it while it is not.
 local sibling = CastAheadData[1877][2]
