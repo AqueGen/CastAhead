@@ -3381,11 +3381,11 @@ do
     local files = {}
     C_UnitAuras.AddAuraSound = function(trigger, info) files[#files + 1] = info.soundFileName return #files end
     LibStub = function() return { Fetch = function(_, _, name) return name == "Path" and "custom/path.ogg" or 12345 end } end
-    CastAheadDB.sounds = { DEFENSIVE = "Path" }
+    CastAheadDB.sounds = { TANK = "Path" }
     CastAheadSaves.Refresh()
     check(CastAheadSaves.AuraSoundCount() == 1 and files[#files] == "custom/path.ogg",
         "voice off with a picked file registers that file")
-    CastAheadDB.sounds = { DEFENSIVE = "Kit" }
+    CastAheadDB.sounds = { TANK = "Kit" }
     CastAheadSaves.Refresh()
     check(CastAheadSaves.AuraSoundCount() == 0, "voice off with a picked sound kit registers no clip")
     CastAheadConfig.SetEnabled("voice", true)
@@ -3403,10 +3403,13 @@ do
     check(not CastAheadSaves.AuraPending() and CastAheadSaves.AuraSoundCount() == 1, "CHALLENGE_MODE_COMPLETED retries a pending registration")
     CastAheadDB.sounds = { DEFENSIVE = "Path" }
     CastAheadSaves.Refresh()
-    check(files[#files] == "custom/path.ogg", "a picked sound with a file path replaces the clip")
-    CastAheadDB.sounds = { DEFENSIVE = "Kit" }
+    check(files[#files]:match("Sounds\\en\\TANK%.ogg$"), "a tank's save takes the tank buster pick, not the defensive one")
+    CastAheadDB.sounds = { TANK = "Path" }
     CastAheadSaves.Refresh()
-    check(files[#files]:match("Sounds\\en\\DEFENSIVE%.ogg$"), "a picked sound kit id keeps the clip")
+    check(files[#files] == "custom/path.ogg", "a picked sound with a file path replaces the clip")
+    CastAheadDB.sounds = { TANK = "Kit" }
+    CastAheadSaves.Refresh()
+    check(files[#files]:match("Sounds\\en\\TANK%.ogg$"), "a picked sound kit id keeps the clip")
     LibStub, CastAheadDB.sounds = nil, nil
     CastAheadDB.saveCalls = nil
     CastAheadSaves.Refresh()
@@ -3416,7 +3419,7 @@ do
     C_UnitAuras.AddAuraSound = function() calls = calls + 1 return calls end
     CastAheadDB.saveButtons = { [265] = { def = {} } }
     CastAheadSaves.Refresh()
-    check(calls == 0 and CastAheadSaves.AuraSoundCount() == 0, "a spec with an empty def list hears nothing: no aura sound is registered")
+    check(calls == 1 and CastAheadSaves.AuraSoundCount() == 1, "a tank with an empty def list still hears the tank buster")
     CastAheadDB.saveButtons = nil
     C_UnitAuras.AddAuraSound = function() error("restricted") end
     check(pcall(CastAheadSaves.Refresh) and CastAheadSaves.AuraSoundCount() == 0, "a failing AddAuraSound is skipped")
@@ -3469,7 +3472,7 @@ do
     check(reg[1300000] and reg[1300000]:match("DEFENSIVE_d1%.ogg$") and not reg[1305963], "a difficulty change swaps the raid rows")
     difficulty, role = 15, "TANK"
     CastAheadSaves.Refresh()
-    check(reg[1298367] and reg[1298367]:match("Sounds\\en\\DEFENSIVE%.ogg$") and not reg[1305963],
+    check(reg[1298367] and reg[1298367]:match("Sounds\\en\\TANK%.ogg$") and not reg[1305963],
         "a tank hears a raid row flagged for tanks and damage dealers")
     role = "HEALER"
     fire("SPELLS_CHANGED")
@@ -3539,7 +3542,7 @@ do
         "raid saves: the role's rows by boss, with the delay as lead and the role's damage")
     role = "TANK"
     text = Text(15)
-    check(text:find("Mother's Wrath|h: defensive as it lands - takes about 150% of your health", 1, true) and not text:find("Venomous Surge", 1, true),
+    check(text:find("Mother's Wrath|h: tank buster as it lands - takes about 150% of your health", 1, true) and not text:find("Venomous Surge", 1, true),
         "raid guide: a tank sees the tank rows with the tanks' damage")
     role = "HEALER"
     check(Text(15):find("Coiling Ichor|h: dispel magic as it lands", 1, true),

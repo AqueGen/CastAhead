@@ -215,7 +215,7 @@ function S.Fits(e, row)
     return school ~= 1
 end
 
-local LIST = { DEFENSIVE = "def" }
+local LIST = { DEFENSIVE = "def", BUSTER = "def" }
 local NO_ICONS = {}
 local function FitsAny(e, rows)
     if #rows == 0 then return true end
@@ -305,7 +305,8 @@ function S.ViewRows(instanceID)
         end
     end
     for id, row in pairs(spells) do
-        if M.SaveKey(row, role, CastAheadPriority and CastAheadPriority[id]) and (row.dungeon == instanceID or cast[id]) then
+        local key = M.SaveKey(row, role, CastAheadPriority and CastAheadPriority[id])
+        if key and (row.dungeon == instanceID or cast[id]) then
             buttons = buttons or ViewButtons(spec)
             out[#out + 1] = {
                 id = id, name = row.name or "", boss = row.boss or "", lead = row.lead,
@@ -316,6 +317,7 @@ function S.ViewRows(instanceID)
                 wins = wins[id] or Wins({ prio = CastAheadPriority and CastAheadPriority[id] }),
                 buttons = FitsRow(buttons, row),
                 ep = row.ep and row.ep[role],
+                say = M.ADVICE[key].say,
             }
         end
     end
@@ -376,8 +378,8 @@ local function GuideLine(r)
     local names = {}
     for _, b in ipairs(r.buttons) do names[#names + 1] = ButtonLink(b) end
     local press = #names > 0 and table.concat(names, ", then ") or "no button in your list"
-    local line = string.format("- %s from %s (heard by: %s): defensive - %s", Link("spell", r.id, Icon(SpellTexture(r.id)) .. r.name),
-        r.mob or "?", Heard(r.trigger), press)
+    local line = string.format("- %s from %s (heard by: %s): %s - %s", Link("spell", r.id, Icon(SpellTexture(r.id)) .. r.name),
+        r.mob or "?", Heard(r.trigger), r.say, press)
     local wins = r.wins and M.ADVICE[r.wins]
     if wins then line = line .. string.format(" (%s comes first)", wins.say) end
     if r.ep then line = line .. string.format(". Takes about %d%% of your health at +20", r.ep) end
@@ -477,7 +479,7 @@ local function RaidDefensiveLines(entries, difficultyID, role)
         local id, entry = item.id, item.entry
         local row = entry[difficultyID]
         if row and row[role] then
-            local advice = own and M.AuraAdvice({ [role] = true, dispel = entry.dispel, raid = true }) or M.ADVICE.DEFENSIVE
+            local advice = own and M.AuraAdvice({ [role] = true, dispel = entry.dispel, raid = true }) or M.ADVICE[M.SaveKey({ [role] = true, raid = true }, role)]
             local delay = M.IsSave(advice) and row.delay or 0
             local when = delay > 0 and string.format("about %d s after it lands", delay) or "as it lands"
             if not own and role == "HEALER" and entry.dispel then
@@ -593,7 +595,7 @@ local function Blocked()
 end
 
 local function PickedFile(advice)
-    local name = CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[advice.key]
+    local name = CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[advice.sound or advice.key]
     local lsm = name and LibStub and LibStub("LibSharedMedia-3.0", true)
     local sound = lsm and lsm:Fetch("sound", name, true)
     return type(sound) == "string" and sound or nil

@@ -52,6 +52,9 @@ M.ADVICE = {
     TANK = { label = "TANKBUSTER", short = "BUSTER", say = "tank buster", r = 1.00, g = 0.45, b = 0.10 },
     AOE  = { label = "AOE", say = "aoe damage", r = 1.00, g = 0.75, b = 0.15 },
     DEFENSIVE = { label = "DEFENSIVE", short = "DEF", say = "defensive", r = 1.00, g = 0.35, b = 0.85 },
+    -- The tank's own save: whatever kills the tank is a tank buster to the tank,
+    -- so it is said and shown as one, and works as a save everywhere else.
+    BUSTER = { label = "TANKBUSTER", short = "BUSTER", say = "tank buster", r = 1.00, g = 0.45, b = 0.10, file = "TANK", sound = "TANK" },
     SOON  = { label = "BURST SOON", short = "SOON", say = "burst soon", r = 1.00, g = 0.65, b = 0.20 },
     BURST = { label = "BURST", say = "burst now", r = 1.00, g = 0.30, b = 0.10 },
     -- Categories assigned by the curated priority set (row.prio).
@@ -83,7 +86,7 @@ M.ADVICE = {
 -- names.
 for key, advice in pairs(M.ADVICE) do
     advice.key = key
-    advice.file = key:gsub(" ", "_")
+    advice.file = advice.file or key:gsub(" ", "_")
     -- Only the verdicts long enough to crowd their neighbours carry a short
     -- form; the rest are already short and read the same either way.
     advice.short = advice.short or advice.label
@@ -152,7 +155,8 @@ end
 
 function M.SaveKey(save, role, prio)
     if role == "TANK" and not save.raid and prio ~= "TANK" and (save.DAMAGER or save.HEALER) then return nil end
-    return save[role] and "DEFENSIVE" or nil
+    if not save[role] then return nil end
+    return role == "TANK" and "BUSTER" or "DEFENSIVE"
 end
 
 M.HasButton = function() return true end
@@ -161,7 +165,8 @@ function M.SaveAdvice(row)
     local save = row and row.save
     local role = save and M.SpecRole()
     local key = role and M.SaveKey(save, role, row.prio)
-    return key and M.HasButton() and M.ADVICE[key] or nil
+    -- "tank buster" names the threat, so the tank hears it with no button to press.
+    return key and (key == "BUSTER" or M.HasButton()) and M.ADVICE[key] or nil
 end
 
 -- A debuff landing on the player. A healer who can remove it is told to, and
@@ -177,7 +182,7 @@ function M.AuraAdvice(row, prio)
 end
 
 function M.IsSave(advice)
-    return advice == M.ADVICE.DEFENSIVE
+    return advice == M.ADVICE.DEFENSIVE or advice == M.ADVICE.BUSTER
 end
 
 local SAVE_REPLACES = {
@@ -188,7 +193,8 @@ local SAVE_REPLACES = {
 function M.Beats(row, interruptible)
     local base = BaseAdvice(row, interruptible)
     if base and not SAVE_REPLACES[base] then return base end
-    if row and row.targeted and M.SaveAdvice(row) then return M.ADVICE.TARGET end
+    local save = row and row.targeted and M.SaveAdvice(row)
+    if save and save ~= M.ADVICE.BUSTER then return M.ADVICE.TARGET end
     return nil
 end
 
@@ -215,13 +221,18 @@ end
 -- Advice is only safe to show when every remaining candidate agrees. Six spells
 -- share a 2.5s cast in Ruby Life Pools; taking the first one's verdict once told
 -- the player to kick Primal Juggernaut's uninterruptible Crushing Smash.
+local function SameCall(a, b)
+    return a == b or (a ~= nil and b ~= nil and a.file == b.file)
+end
+
 function M.ConsensusAdvice(candidates, interruptible)
     if not candidates or #candidates == 0 then return nil end
     local first = M.Advice(candidates[1], interruptible)
     for i = 2, #candidates do
-        if M.Advice(candidates[i], interruptible) ~= first then
-            return nil
-        end
+        local advice = M.Advice(candidates[i], interruptible)
+        if not SameCall(advice, first) then return nil end
+        -- The tank's save and a plain tank buster say the same; the save carries the buttons.
+        if M.IsSave(advice) then first = advice end
     end
     return first
 end
@@ -236,8 +247,8 @@ function M.SplitAdvice(candidates, interruptible)
     local seen, out = {}, {}
     for i = 1, #candidates do
         local advice = M.Advice(candidates[i], interruptible)
-        if advice and not seen[advice] then
-            seen[advice] = true
+        if advice and not seen[advice.file] then
+            seen[advice.file] = true
             out[#out + 1] = advice
         end
     end

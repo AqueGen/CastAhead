@@ -38,7 +38,7 @@ end
 local function IconMask(advice)
     local mask = Enum and Enum.EncounterEventIconmask
     if not mask or not advice then return nil end
-    if advice.key == "TANK" then
+    if advice.key == "TANK" or advice.key == "BUSTER" then
         return bit.bor(mask.TankRole or 0, mask.DeadlyEffect or 0)
     elseif advice.key == "AOE" then
         return bit.bor(mask.DpsRole or 0, mask.HealerRole or 0)
@@ -64,7 +64,7 @@ end
 local function Severity(advice)
     local levels = Enum and Enum.EncounterEventSeverity
     if not levels then return nil end
-    if advice and (advice.key == "TANK" or advice.key == "AOE") then
+    if advice and (advice.key == "TANK" or advice.key == "BUSTER" or advice.key == "AOE") then
         return levels.High
     end
     return levels.Medium

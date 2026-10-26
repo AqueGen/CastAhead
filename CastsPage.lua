@@ -40,7 +40,7 @@ end
 
 local function CategorySound(entry)
     local advice = CastAheadMatch.Advice(entry)
-    return advice and CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[advice.key]
+    return advice and CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[advice.sound or advice.key]
 end
 
 local function SpellName(entry)
