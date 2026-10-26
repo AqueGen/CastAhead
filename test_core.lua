@@ -1407,6 +1407,19 @@ do
         "a cast too soon for the opener's own history is the other spell, got %s %s",
         tostring(opener), tostring(other)))
     reset()
+    -- A kicked cast is no evidence of the cooldown: cdMin is measured across
+    -- completed casts, and a mob may recast a kicked spell sooner.
+    enter()
+    t0 = now
+    at(t0 + 3.0, 3.65)
+    at(t0 + 23.6, 3.65)
+    advance(t0 + 44.2 - now)
+    fire("UNIT_SPELLCAST_START", unit)
+    advance(1.0)
+    fire("UNIT_SPELLCAST_INTERRUPTED", unit)
+    local recast = at(t0 + 50.2, 3.65)
+    check(recast ~= 1602, "a recast soon after a kick is not handed to the other spell, got " .. tostring(recast))
+    reset()
 end
 for _ = 1, 2 do table.remove(CastAheadData[1877]) end
 

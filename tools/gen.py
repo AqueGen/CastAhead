@@ -299,6 +299,15 @@ def settle(new, old):
             intervals = new.get("iv")
             fit = support(intervals, row["cd"]) / len(intervals) if intervals and row["cd"] else new["fit"]
             row["approx"] = fit < APPROX_SUPPORT + (APPROX_MARGIN if old["approx"] else -APPROX_MARGIN)
+    # Firm: the opening order alone can name a spell not yet seen on the plate. Judged
+    # around the offset that ships, after the hold. Accumulate Charge's 14.6 holds in
+    # 9 pulls of 10; the tenth opens at 6, on Call Lightning's offset.
+    offsets = new.get("offsets")
+    if offsets is not None:
+        bar = OFFSET_FIRM if old is None else \
+            OFFSET_FIRM - SHARE_MARGIN if old.get("offsetFirm") else OFFSET_FIRM + SHARE_MARGIN
+        row["offsetFirm"] = row["offset"] is not None and bool(offsets) and \
+            sum(1 for x in offsets if abs(x - row["offset"]) <= OFFSET_TOLERANCE) >= bar * len(offsets)
     if row["targeted"] == MIXED:
         row["targeted"] = None
     row["filler"] = not row["cd"] or min(row["cd"]) < MIN_CD
@@ -452,14 +461,6 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                             else OPENING_SUPPORT + SHARE_MARGIN
                         if sum(1 for x in offsets if abs(x - offset) <= OFFSET_TOLERANCE) < bar * len(offsets):
                             offset = None
-                # Firm: the opening order alone can name a spell not yet seen on the plate.
-                # Accumulate Charge's 14.6 holds in 9 pulls of 10; the tenth opens at 6, on
-                # Call Lightning's offset, and taking it there called the wrong spell.
-                offset_firm = False
-                if offset is not None:
-                    bar = OFFSET_FIRM if old is None else \
-                        OFFSET_FIRM - SHARE_MARGIN if old.get("offsetFirm") else OFFSET_FIRM + SHARE_MARGIN
-                    offset_firm = sum(1 for x in offsets if abs(x - offset) <= OFFSET_TOLERANCE) >= bar * len(offsets)
                 t = threat(r)
                 if int(spellid) in NO_PAYLOAD or old is not None and old["dmg"] is None \
                         and len(r["dmg"]) < THIN_EVIDENCE:
@@ -489,7 +490,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
                     # none: Primal Juggernaut's three samples spanned 11s.
                     "firstN": firstN,
                     "offset": offset,
-                    "offsetFirm": offset_firm,
+                    "offsets": offsets,
                     "cdMin": cd_min,
                     "samples": len(r["cast"]) + r.get("kicked", 0),
                     "channel": is_channel,
