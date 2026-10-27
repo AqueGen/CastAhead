@@ -144,6 +144,33 @@ local function OnSucceeded(unit, spellID)
     end
 end
 
+-- Focus probe: does a cast start reach the "focus" token, and can the addon
+-- tell which nameplate the focus is (plate frame lookup, then UnitIsUnit).
+local function FocusPlate()
+    local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, "focus")
+    if not ok then return nil, "err" end
+    if Secret(plate) then return nil, "secret" end
+    if not plate then return nil, "nil" end
+    for i = 1, 40 do
+        local token = "nameplate" .. i
+        if C_NamePlate.GetNamePlateForUnit(token) == plate then return token, "ok" end
+    end
+    return nil, "nomatch"
+end
+
+local function SameUnit(token)
+    if not token then return "-" end
+    local ok, same = pcall(UnitIsUnit, "focus", token)
+    if not ok then return "err" end
+    if Secret(same) then return "secret" end
+    return same and "yes" or "no"
+end
+
+local function OnFocusCast(channel)
+    local token, plate = FocusPlate()
+    Note("KFOC", token, channel and 1 or 0, plate, SameUnit(token), UnitCanAttack("player", "focus") and 1 or 0)
+end
+
 local function FlushCounts()
     for unit, c in pairs(castCounts) do
         Note("KSUM", nil, unit, c.ok, c.secret)
@@ -202,6 +229,10 @@ function K.OnEvent(event, ...)
         if K.OnCCEvent then K.OnCCEvent(event, ...) end
         return
     end
+    if event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_CHANNEL_START" then
+        OnFocusCast(event == "UNIT_SPELLCAST_CHANNEL_START")
+        return
+    end
     if not K.Active() then return end
     if event == "UNIT_SPELLCAST_INTERRUPTED" or event == "UNIT_SPELLCAST_CHANNEL_STOP" then
         local unit, _, _, interruptedBy = ...
@@ -226,6 +257,10 @@ for _, e in ipairs({
 -- Unknown events raise an error on older clients.
 for _, e in ipairs({ "DAMAGE_METER_COMBAT_SESSION_UPDATED", "DAMAGE_METER_RESET" }) do
     pcall(frame.RegisterEvent, frame, e)
+end
+if frame.RegisterUnitEvent then
+    frame:RegisterUnitEvent("UNIT_SPELLCAST_START", "focus")
+    frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", "focus")
 end
 frame:SetScript("OnEvent", function(_, event, ...) K.OnEvent(event, ...) end)
 
