@@ -1,5 +1,5 @@
--- Trial: party kicks and crowd control on enemies, behind Development mode
--- (/ca kicks). Party kicks are seen only when the game lets the addon read
+-- Trial: party kicks and crowd control on enemies, off until turned on in
+-- General - Features or with /ca kicks. Party kicks are seen only when the game lets the addon read
 -- who interrupted or what a party member cast; a kick that misses is
 -- invisible otherwise. Each source is also written to the key journal so one
 -- key shows which of them are readable.
@@ -42,7 +42,7 @@ function K.State(v)
 end
 
 function K.Active()
-    return CastAheadConfig.Dev() and CastAheadConfig.Get("kickSpike") == true
+    return CastAheadConfig.Get("kickSpike") == true
 end
 
 local function Note(kind, slot, ...)
@@ -338,12 +338,18 @@ panel:SetScript("OnUpdate", function(_, dt)
     end
 end)
 
-function K.Toggle()
-    local on = not (CastAheadConfig.Get("kickSpike") == true)
-    CastAheadConfig.Set("kickSpike", on or nil)
+function K.Apply()
+    K.Place()
     K.Roster()
     if K.ApplyCC then K.ApplyCC() end
-    print("|cff33ff99Cast Ahead|r kick and CC trial " .. (on and "on - drag the panel to move it" or "off"))
+end
+
+function K.Toggle()
+    local on = not K.Active()
+    CastAheadConfig.Set("kickSpike", on)
+    K.Apply()
+    if CastAheadOptions and CastAheadOptions.Refresh then CastAheadOptions.Refresh() end
+    print("|cff33ff99Cast Ahead|r party kicks and CC " .. (on and "on - drag the panel to move it" or "off"))
 end
 
 -- Crowd control on enemies ----------------------------------------------

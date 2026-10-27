@@ -102,7 +102,7 @@ end
 
 SLASH_CASTAHEAD1 = "/castahead"
 SLASH_CASTAHEAD2 = "/ca"
-local DEV_COMMANDS = { probe = true, report = true, mark = true, note = true, kicks = true }
+local DEV_COMMANDS = { probe = true, report = true, mark = true, note = true }
 SlashCmdList.CASTAHEAD = function(msg)
     msg = msg and msg:lower() or ""
     -- The sub-command is the FIRST word: `msg:find` anywhere in the string

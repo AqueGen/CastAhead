@@ -4729,7 +4729,7 @@ do
         check(raidSaves.text.color == "muted" and bursts.text.color == "muted", "and their labels are greyed")
         check(raidSaves.motionWhileDisabled == true and bursts.motionWhileDisabled == true,
             "the children keep their tooltips while disabled")
-        check(offHeight == 166, "the Features group keeps the four-row height, got " .. tostring(offHeight))
+        check(offHeight == 194, "the Features group keeps the five-row height, got " .. tostring(offHeight))
         CastAheadDB = { raidMode = true }
         CastAheadOptions.ShowPanel(host, "General")
         check(raidSaves.enabled == true and bursts.enabled == true, "with the raid switch on its two children are enabled")

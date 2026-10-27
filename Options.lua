@@ -163,6 +163,8 @@ local SWITCHES = {
         tip = "In raids, call a defensive for a dangerous boss debuff on you, timed to when its damage hits in top-player fights. Does not need the dungeon switch." },
     burstCalls = { label = "Burst windows", defaultOff = true,
         tip = "On bosses with a phase worth bursting into, say \"burst soon\" five seconds before it and \"burst now\" when it starts, with a countdown in the centre block. Healers get their own phases for group-healing cooldowns. On every other boss it stays silent: press on cooldown." },
+    kickSpike = { label = "Party kicks and CC (trial)", defaultOff = true,
+        tip = "A panel with each party member's interrupt and its cooldown, and below it a bar for every stun, fear or incapacitate on enemy nameplates. Drag it to move it. Another player's kick shows only when it lands, unless the game lets the addon read their cast; a missed kick stays hidden. Same as /ca kicks." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
         tip = "A panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. Only while recording. The key bindings and /ca mark work without it." },
 }
@@ -412,7 +414,7 @@ function BuildGeneral(panel)
     local centre = BuildGroup(panel, "Centre call", 70)
     BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 }, OutputChanged)
 
-    local features = BuildGroup(panel, "Features", 166)
+    local features = BuildGroup(panel, "Features", 194)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", features, "TOPLEFT", 10, -26 }, function()
         SaveRefresh()
         CastAheadOptions.RefreshDefensives()
@@ -446,6 +448,9 @@ function BuildGeneral(panel)
         if child.SetMotionScriptsWhileDisabled then child:SetMotionScriptsWhileDisabled(true) end
     end
     table.insert(refreshers, PaintRaid)
+    BuildSwitch(panel, "kickSpike", { "TOPLEFT", bursts, "BOTTOMLEFT", -16, -4 }, function()
+        if CastAheadKicks then CastAheadKicks.Apply() end
+    end)
 
     local extra = BuildGroup(panel, "Advanced", 97)
     local dev = BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
