@@ -163,7 +163,7 @@ local SWITCHES = {
         tip = "In raids, call a defensive for a dangerous boss debuff on you, timed to when its damage hits in top-player fights. Does not need the dungeon switch." },
     burstCalls = { label = "Burst windows", defaultOff = true,
         tip = "On bosses with a phase worth bursting into, say \"burst soon\" five seconds before it and \"burst now\" when it starts, with a countdown in the centre block. Healers get their own phases for group-healing cooldowns. On every other boss it stays silent: press on cooldown." },
-    kickSpike = { label = "Party kicks and CC (trial)", defaultOff = true,
+    kickSpike = { label = "Party kicks and CC (experimental)", defaultOff = true,
         tip = "A panel with each party member's interrupt and its cooldown, and below it a bar for every stun, fear or incapacitate on enemy nameplates. Drag it to move it. Another player's kick shows only when it lands, unless the game lets the addon read their cast; a missed kick stays hidden. Same as /ca kicks." },
     kickRows = { label = "Kick rows",
         tip = "The party's interrupts and their cooldowns at the top of the panel." },
@@ -546,7 +546,7 @@ function BuildDevelopment(panel)
     DevButton(panel, "Clear journal", 110, { "LEFT", count, "RIGHT", 4, 0 },
         "journal clear", "Empty the journal after you copied it off the disk; asks first. /ca journal clear")
 
-    local kicks = BuildGroup(panel, "Party kicks and CC (trial)", 200)
+    local kicks = BuildGroup(panel, "Party kicks and CC (experimental)", 200)
     local function KicksChanged()
         if CastAheadKicks then CastAheadKicks.Apply() end
     end
