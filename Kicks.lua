@@ -46,8 +46,13 @@ function K.Active()
 end
 
 local function Note(kind, slot, ...)
-    if CastAheadRecorder and CastAheadConfig.Recording() then CastAheadRecorder.Note(kind, slot, ...) end
+    if CastAheadRecorder and CastAheadConfig.Recording() and CastAheadConfig.Enabled("kickProbe") then
+        CastAheadRecorder.Note(kind, slot, ...)
+    end
 end
+
+local function RowsOn() return K.Active() and CastAheadConfig.Enabled("kickRows") end
+local function CCOn() return K.Active() and CastAheadConfig.Enabled("kickCC") end
 
 local function InCombat()
     return UnitAffectingCombat("player") and "1" or "0"
@@ -315,13 +320,14 @@ function K.Paint()
         return
     end
     local now = GetTime()
-    kickCount = #members
-    for i, m in ipairs(members) do
+    kickCount = RowsOn() and #members or 0
+    for i = 1, kickCount do
         local row = Row(i)
-        PaintRow(row, m, now)
+        PaintRow(row, members[i], now)
         row:Show()
     end
-    for i = #members + 1, #rows do rows[i]:Hide() end
+    for i = kickCount + 1, #rows do rows[i]:Hide() end
+    title:SetText(kickCount > 0 and "Kicks" or "Crowd control")
     panel:SetHeight(math.max(1, kickCount) * (ROW_H + GAP))
     if K.LayoutCC then K.LayoutCC(kickCount) end
     panel:Show()
@@ -333,8 +339,8 @@ panel:SetScript("OnUpdate", function(_, dt)
     if elapsed < 0.1 then return end
     elapsed = 0
     local now = GetTime()
-    for i, m in ipairs(members) do
-        if rows[i] then PaintRow(rows[i], m, now) end
+    for i = 1, kickCount do
+        if rows[i] and members[i] then PaintRow(rows[i], members[i], now) end
     end
 end)
 
@@ -450,14 +456,14 @@ local function ShowPlate(token, on)
 end
 
 function K.ApplyCC()
-    local on = K.Active()
+    local on = CCOn()
     for token in pairs(plates) do ShowPlate(token, on) end
     if not on then
         for _, c in pairs(containers) do
             if c then c:Hide() end
         end
     end
-    K.LayoutCC(#members)
+    K.LayoutCC(kickCount)
 end
 
 function K.OnCCEvent(event, token)
@@ -465,13 +471,13 @@ function K.OnCCEvent(event, token)
     if event == "NAME_PLATE_UNIT_ADDED" then
         if UnitCanAttack("player", token) then
             plates[token] = true
-            if K.Active() then ShowPlate(token, true) end
+            if CCOn() then ShowPlate(token, true) end
         end
     elseif event == "NAME_PLATE_UNIT_REMOVED" then
         plates[token] = nil
         ShowPlate(token, false)
     end
-    K.LayoutCC(#members)
+    K.LayoutCC(kickCount)
 end
 
 frame:RegisterEvent("NAME_PLATE_UNIT_ADDED")

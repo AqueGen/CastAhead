@@ -165,6 +165,12 @@ local SWITCHES = {
         tip = "On bosses with a phase worth bursting into, say \"burst soon\" five seconds before it and \"burst now\" when it starts, with a countdown in the centre block. Healers get their own phases for group-healing cooldowns. On every other boss it stays silent: press on cooldown." },
     kickSpike = { label = "Party kicks and CC (trial)", defaultOff = true,
         tip = "A panel with each party member's interrupt and its cooldown, and below it a bar for every stun, fear or incapacitate on enemy nameplates. Drag it to move it. Another player's kick shows only when it lands, unless the game lets the addon read their cast; a missed kick stays hidden. Same as /ca kicks." },
+    kickRows = { label = "Kick rows",
+        tip = "The party's interrupts and their cooldowns at the top of the panel." },
+    kickCC = { label = "Crowd control bars",
+        tip = "A bar for every stun, fear or incapacitate on enemy nameplates, under the kick rows." },
+    kickProbe = { label = "Record kick data",
+        tip = "While recording, write to the key journal whether the game let the addon read who kicked, party casts and the meter's interrupts." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
         tip = "A panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. Only while recording. The key bindings and /ca mark work without it." },
 }
@@ -513,6 +519,15 @@ function BuildDevelopment(panel)
         "journal", "Print how many keys the journal holds. /ca journal")
     DevButton(panel, "Clear journal", 110, { "LEFT", count, "RIGHT", 4, 0 },
         "journal clear", "Empty the journal after you copied it off the disk; asks first. /ca journal clear")
+
+    local kicks = BuildGroup(panel, "Party kicks and CC (trial)", 166)
+    local function KicksChanged()
+        if CastAheadKicks then CastAheadKicks.Apply() end
+    end
+    local kickOn = BuildSwitch(panel, "kickSpike", { "TOPLEFT", kicks, "TOPLEFT", 10, -26 }, KicksChanged, "Show the panel")
+    local rows = BuildSwitch(panel, "kickRows", { "TOPLEFT", kickOn, "BOTTOMLEFT", 16, -4 }, KicksChanged)
+    local cc = BuildSwitch(panel, "kickCC", { "TOPLEFT", rows, "BOTTOMLEFT", 0, -4 }, KicksChanged)
+    BuildSwitch(panel, "kickProbe", { "TOPLEFT", cc, "BOTTOMLEFT", -16, -4 })
 end
 
 local function IconLabel(icon, name)
