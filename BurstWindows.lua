@@ -50,7 +50,7 @@ CastAheadBurstWindows = {
         },
     },
     [3101] = {
-        [8] = { name = "Kystia Manaheart", dungeon = "Murder Row", note = "At about 1:12 Light Infusion breaks and she is Destabilized for 20 s: the biggest burst window of the season. Cast Ahead calls it on the game's own boss warning.",
+        [8] = { name = "Kystia Manaheart", dungeon = "Murder Row", note = "At about 1:12 Light Infusion breaks and she is Destabilized for 20 s: the biggest burst window of the season. CastAhead calls it on the game's own boss warning.",
             { event = 610, target = "Light Infusion" }, -- boss warning
         },
     },
@@ -60,7 +60,7 @@ CastAheadBurstWindows = {
         },
     },
     [3103] = {
-        [8] = { name = "Xathuux the Annihilator", dungeon = "Murder Row", note = "While he moves on Burning Steps (0:41, 1:39 and 2:36, 15 s each) he takes about 1.6 times his normal damage. Cast Ahead calls each one.",
+        [8] = { name = "Xathuux the Annihilator", dungeon = "Murder Row", note = "While he moves on Burning Steps (0:41, 1:39 and 2:36, 15 s each) he takes about 1.6 times his normal damage. CastAhead calls each one.",
             { release = 6.4, pull = true }, -- 6 specs, 19 fights
             { release = 41.6, target = "Burning Steps" }, -- 33 specs, 165 fights
             { release = 98.8, target = "Burning Steps" }, -- 33 specs, 165 fights
@@ -199,7 +199,7 @@ CastAheadBurstWindows = {
         },
     },
     [3457] = {
-        [8] = { name = "The Writhing Coil", dungeon = "Altar of Fangs", note = "The Uncoiled Writhe add comes at about 1:00 and 2:30, and the damage spikes. Cast Ahead calls both.",
+        [8] = { name = "The Writhing Coil", dungeon = "Altar of Fangs", note = "The Uncoiled Writhe add comes at about 1:00 and 2:30, and the damage spikes. CastAhead calls both.",
             { release = 59.5 }, -- 5 specs, 16 fights
             { release = 149.2 }, -- 5 specs, 17 fights
         },
@@ -220,11 +220,11 @@ CastAheadBurstWindows = {
         },
     },
     [3492] = {
-        [14] = { name = "Ula'tek", note = "At about 2:17 Venomous Heart opens and the boss takes several times its normal damage. Cast Ahead calls it.",
+        [14] = { name = "Ula'tek", note = "At about 2:17 Venomous Heart opens and the boss takes several times its normal damage. CastAhead calls it.",
             { release = 2.8, pull = true }, -- 22 specs, 192 fights
             { release = 136.5, target = "Venomous Heart" }, -- 33 specs, 277 fights
         },
-        [15] = { name = "Ula'tek", note = "Venomous Heart opens at about 2:16, 4:45 and 9:34 for 20 s, and the boss takes about 4.5 times its normal damage: the best burst window in the raid. Cast Ahead calls each one, plus 6:06 and 7:19, where top players also burst.",
+        [15] = { name = "Ula'tek", note = "Venomous Heart opens at about 2:16, 4:45 and 9:34 for 20 s, and the boss takes about 4.5 times its normal damage: the best burst window in the raid. CastAhead calls each one, plus 6:06 and 7:19, where top players also burst.",
             { release = 4.3, pull = true }, -- 23 specs, 160 fights
             { release = 135.5, target = "Venomous Heart" }, -- 33 specs, 238 fights
             { release = 284.5, target = "Venomous Heart" }, -- 33 specs, 238 fights
@@ -232,7 +232,7 @@ CastAheadBurstWindows = {
             { release = 439.2 }, -- 5 specs, 29 fights
             { release = 573.7, target = "Venomous Heart" }, -- 33 specs, 148 fights
         },
-        [16] = { name = "Ula'tek", note = "Venomous Heart opens at about 2:25, 4:55 and 9:44 for 20 s, and the boss takes about 4 times its normal damage. Cast Ahead calls each one.",
+        [16] = { name = "Ula'tek", note = "Venomous Heart opens at about 2:25, 4:55 and 9:44 for 20 s, and the boss takes about 4 times its normal damage. CastAhead calls each one.",
             { release = 3.3, pull = true }, -- 14 specs, 138 fights
             { release = 145.5, target = "Venomous Heart" }, -- 30 specs, 232 fights
             { release = 294.5, target = "Venomous Heart" }, -- 30 specs, 232 fights
@@ -260,7 +260,7 @@ CastAheadBurstWindows = {
         [15] = { name = "Kith'ix", note = "Divine Radiance at about 1:41 adds only about a third more damage: no call.",
             { release = 2.8, pull = true }, -- 22 specs, 179 fights
         },
-        [16] = { name = "Kith'ix", note = "From 4:20 to 4:50 the boss takes about twice its normal damage. Cast Ahead calls it.",
+        [16] = { name = "Kith'ix", note = "From 4:20 to 4:50 the boss takes about twice its normal damage. CastAhead calls it.",
             { release = 3.0, pull = true }, -- 18 specs, 161 fights
             { release = 261.5 }, -- 3 specs, 20 fights
         },

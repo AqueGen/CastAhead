@@ -395,7 +395,7 @@ do
     if lsm then
         for key, advice in pairs(CastAheadMatch.ADVICE) do
             if key ~= "SAVE" then
-                lsm:Register("sound", "Cast Ahead: " .. advice.say, SOUND_ROOT .. "en\\" .. advice.file .. ".ogg")
+                lsm:Register("sound", "CastAhead: " .. advice.say, SOUND_ROOT .. "en\\" .. advice.file .. ".ogg")
             end
         end
         -- The game's own alert kits, so the picker has a spread of beeps even
@@ -437,7 +437,7 @@ local function Voice(advice, lead)
         if Speak(text) then return true end
         if not ttsHintShown then
             ttsHintShown = true
-            print("|cff33ff99Cast Ahead|r the game's TTS voice could not speak - enable Combat Audio Alerts"
+            print("|cff33ff99CastAhead|r the game's TTS voice could not speak - enable Combat Audio Alerts"
                 .. " (Options > Accessibility) and give its categories volume. Playing the clip instead.")
         end
         return PlayClip(advice, lead)
@@ -2350,7 +2350,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     if event == "PLAYER_LOGIN" then
         if CastAheadBossAdapter then CastAheadBossAdapter.Connect() end
         if CastAheadDB and CastAheadDB.saveCallsNotice then
-            print("|cff33ff99Cast Ahead:|r defensive calls are now off by default. Turn them on in /ca - General - Features.")
+            print("|cff33ff99CastAhead:|r defensive calls are now off by default. Turn them on in /ca - General - Features.")
             CastAheadDB.saveCallsNotice = nil
             noticePending = true
         end
@@ -2686,11 +2686,11 @@ local function ToggleMoveCenter(quiet)
         for i = 2, CENTER_LINES do f.lines[i]:Hide() end
         f.grip:Show()
         f:Show()
-        print("|cff33ff99Cast Ahead|r drag the call block, then /ca move again to lock it")
+        print("|cff33ff99CastAhead|r drag the call block, then /ca move again to lock it")
     else
         f.grip:Hide()
         f:Hide()
-        if not quiet then print("|cff33ff99Cast Ahead|r call block locked") end
+        if not quiet then print("|cff33ff99CastAhead|r call block locked") end
     end
 end
 
@@ -3111,7 +3111,7 @@ local function StopTest(quiet)
     -- The run also ends on its own, so the window's toggle is repainted here
     -- rather than only where it was clicked.
     if CastAheadUI and CastAheadUI.RefreshTest then CastAheadUI.RefreshTest() end
-    if not quiet then print("|cff33ff99Cast Ahead|r test finished") end
+    if not quiet then print("|cff33ff99CastAhead|r test finished") end
 end
 CastAheadCore.StopTest = StopTest
 
@@ -3196,7 +3196,7 @@ function CastAheadCore.Test(instanceID, list)
     end
     local rows = id and CastAheadData[id]
     if not rows then
-        print("|cff33ff99Cast Ahead|r no dungeon data to test with")
+        print("|cff33ff99CastAhead|r no dungeon data to test with")
         return
     end
     -- One row per distinct call across every dungeon (this one's rows first),
@@ -3225,7 +3225,7 @@ function CastAheadCore.Test(instanceID, list)
         end
     end
     if #picked == 0 then
-        print("|cff33ff99Cast Ahead|r nothing passes the current filters in " .. (rows.name or id))
+        print("|cff33ff99CastAhead|r nothing passes the current filters in " .. (rows.name or id))
         return
     end
     -- Every hostile plate on screen gets icons (training dummies, a pack),
@@ -3276,7 +3276,7 @@ function CastAheadCore.Test(instanceID, list)
         demo.entries[i] = e
     end
     DemoLayout()
-    print(string.format("|cff33ff99Cast Ahead|r test: %d call(s) from %s on %d plate(s) (again to stop)",
+    print(string.format("|cff33ff99CastAhead|r test: %d call(s) from %s on %d plate(s) (again to stop)",
         total, tostring(rows.name or id), plates))
     if CastAheadUI and CastAheadUI.RefreshTest then CastAheadUI.RefreshTest() end
     -- The whole-addon run: features that are switched on join with a sample each.
@@ -3629,13 +3629,13 @@ function CastAheadCore.SyncCombatLog()
         if not LoggingCombat() then
             LoggingCombat(true)
             CastAheadDB.combatLogOurs = true
-            print("|cff33ff99Cast Ahead|r combat log on for this dungeon")
+            print("|cff33ff99CastAhead|r combat log on for this dungeon")
         end
     elseif CastAheadDB.combatLogOurs then
         CastAheadDB.combatLogOurs = nil
         if LoggingCombat() then
             LoggingCombat(false)
-            print("|cff33ff99Cast Ahead|r combat log off")
+            print("|cff33ff99CastAhead|r combat log off")
         end
     end
 end
@@ -3653,12 +3653,12 @@ function CastAheadCore.Probe(command)
             CastAheadDB.probe, CastAheadDB.sweep, CastAheadDB.fingerprints = nil, nil, nil
         end
         session = nil
-        print("|cff33ff99Cast Ahead|r probe results cleared")
+        print("|cff33ff99CastAhead|r probe results cleared")
         return
     end
     if command == "sweep" then
         local db = CastAheadDB and CastAheadDB.sweep
-        if not db then print("|cff33ff99Cast Ahead|r no sweep results yet") return end
+        if not db then print("|cff33ff99CastAhead|r no sweep results yet") return end
         local names = {}
         for name, r in pairs(db) do
             if r.readable > 0 then names[#names + 1] = name end
@@ -3666,7 +3666,7 @@ function CastAheadCore.Probe(command)
         table.sort(names)
         for _, name in ipairs(names) do
             local r = db[name]
-            print(string.format("|cff33ff99Cast Ahead|r %-34s readable %4d  secret %4d  nil %4d  err %4d  distinct %s  e.g. %s",
+            print(string.format("|cff33ff99CastAhead|r %-34s readable %4d  secret %4d  nil %4d  err %4d  distinct %s  e.g. %s",
                 name, r.readable, r.secret, r.empty, r.errors or 0, tostring(r.distinct or 0), tostring(r.sample)))
         end
         return
@@ -3674,24 +3674,24 @@ function CastAheadCore.Probe(command)
     local fp = CastAheadDB and CastAheadDB.fingerprints
     if fp and #fp > 0 then
         local last = fp[#fp]
-        print(string.format("|cff33ff99Cast Ahead|r fingerprints: %d session(s), last %s with %d casts and %d anchors",
+        print(string.format("|cff33ff99CastAhead|r fingerprints: %d session(s), last %s with %d casts and %d anchors",
             #fp, tostring(last.started), #last.rows, #last.anchors))
     end
     local db = CastAheadDB and CastAheadDB.probe
-    if not db then print("|cff33ff99Cast Ahead|r no probe results yet") return end
+    if not db then print("|cff33ff99CastAhead|r no probe results yet") return end
     local names = {}
     for name in pairs(db) do names[#names + 1] = name end
     table.sort(names)
     for _, name in ipairs(names) do
         local r = db[name]
-        print(string.format("|cff33ff99Cast Ahead|r %-26s readable %3d  secret %3d  nil %3d  err %3d  distinct %s  e.g. %s",
+        print(string.format("|cff33ff99CastAhead|r %-26s readable %3d  secret %3d  nil %3d  err %3d  distinct %s  e.g. %s",
             name, r.readable, r.secret, r.empty, r.errors or 0, tostring(r.distinct or 0), tostring(r.sample)))
     end
 end
 
 function CastAheadCore.Debug()
     local function say(fmt, ...)
-        print("|cff33ff99Cast Ahead|r " .. string.format(fmt, ...))
+        print("|cff33ff99CastAhead|r " .. string.format(fmt, ...))
     end
     local db = CastAheadDB or {}
     say("output: nameplates=%s timeline=%s | alerts=%s voice=%s",
@@ -3755,7 +3755,7 @@ function CastAheadCore.Debug()
             end
         end
     end
-    say("%d icon(s) drawn by Cast Ahead. Anything else on screen is another addon.", visible)
+    say("%d icon(s) drawn by CastAhead. Anything else on screen is another addon.", visible)
     -- Voice chain, both legs tried for real so "the switch does nothing" can
     -- be pinned on the leg that is silent.
     local api = C_CombatAudioAlert
@@ -3860,5 +3860,5 @@ function CastAheadCore.HideAll()
     for unit in pairs(plates) do
         DropUnit(unit)
     end
-    print("|cff33ff99Cast Ahead|r all icons cleared - anything still on screen belongs to another addon")
+    print("|cff33ff99CastAhead|r all icons cleared - anything still on screen belongs to another addon")
 end

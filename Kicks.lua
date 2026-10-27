@@ -409,7 +409,7 @@ function K.Toggle()
     CastAheadConfig.Set("kickSpike", on)
     K.Apply()
     if CastAheadOptions and CastAheadOptions.Refresh then CastAheadOptions.Refresh() end
-    print("|cff33ff99Cast Ahead|r party kicks and CC " .. (on and "on - place it in Size and position" or "off"))
+    print("|cff33ff99CastAhead|r party kicks and CC " .. (on and "on - place it in Size and position" or "off"))
 end
 
 -- Crowd control on enemies ----------------------------------------------

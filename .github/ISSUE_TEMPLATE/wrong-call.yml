@@ -1,5 +1,5 @@
 name: Wrong call
-description: Cast Ahead named the wrong spell or called it at the wrong time
+description: CastAhead named the wrong spell or called it at the wrong time
 labels: ["wrong call"]
 body:
   - type: markdown

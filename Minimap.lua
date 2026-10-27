@@ -11,7 +11,6 @@ if not (LDB and LDBIcon) then return end
 
 local broker = LDB:NewDataObject("CastAhead", {
     type = "launcher",
-    label = "Cast Ahead",
     icon = CastAheadWindow.ICON,
     OnClick = function(_, button)
         if button == "RightButton" and CastAheadCore and CastAheadCore.Debug then
@@ -21,8 +20,8 @@ local broker = LDB:NewDataObject("CastAhead", {
         end
     end,
     OnTooltipShow = function(tooltip)
-        tooltip:AddLine("Cast Ahead")
-        tooltip:AddLine("Left click: open Cast Ahead", 0.8, 0.8, 0.8)
+        tooltip:AddLine("CastAhead")
+        tooltip:AddLine("Left click: open CastAhead", 0.8, 0.8, 0.8)
         tooltip:AddLine("Right click: print status to chat", 0.6, 0.6, 0.6)
     end,
 })

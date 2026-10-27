@@ -487,10 +487,10 @@ CastAheadDB = { schema = 3, sounds = { TANK = "Cast Ahead: big defensive", HEALE
     BIG = "Cast Ahead: big defensive", SMALL = "Cast Ahead: heal up", KEEP = "Cast Ahead: defensive" },
     spellSounds = { [123] = "Cast Ahead: heal up", [124] = "Cast Ahead: small defensive" } }
 fire("ADDON_LOADED", "CastAhead")
-check(CastAheadDB.sounds.TANK == "Cast Ahead: defensive" and CastAheadDB.sounds.HEALER == "Cast Ahead: defensive"
-    and CastAheadDB.sounds.KEEP == "Cast Ahead: defensive" and CastAheadDB.sounds.DEFENSIVE == "Cast Ahead: defensive",
+check(CastAheadDB.sounds.TANK == "CastAhead: defensive" and CastAheadDB.sounds.HEALER == "CastAhead: defensive"
+    and CastAheadDB.sounds.KEEP == "CastAhead: defensive" and CastAheadDB.sounds.DEFENSIVE == "CastAhead: defensive",
     "sound picks naming the deleted defensive clips point at the merged one")
-check(CastAheadDB.spellSounds[123] == nil and CastAheadDB.spellSounds[124] == "Cast Ahead: defensive",
+check(CastAheadDB.spellSounds[123] == nil and CastAheadDB.spellSounds[124] == "CastAhead: defensive",
     "spell sound picks follow, and a heal up pick is dropped")
 CastAheadDB = { schema = 3, saveButtons = { [71] = { big = { 1 }, small = { 2 } } }, sounds = { SMALL = "x" } }
 fire("ADDON_LOADED", "CastAhead")
@@ -613,7 +613,7 @@ do
     C_Timer = savedTimer
     check(#delays == 1 and delays[1] > 0, "the notice is shown once, a moment after the world loads")
     print = realPrint
-    check(#lines == 1 and lines[1]:find("Cast Ahead:|r defensive calls are now off by default. Turn them on in /ca - General - Features.", 1, true)
+    check(#lines == 1 and lines[1]:find("CastAhead:|r defensive calls are now off by default. Turn them on in /ca - General - Features.", 1, true)
         and CastAheadDB.saveCallsNotice == nil, "the notice prints once and clears")
     check(shows == 1 and noticeFrame and noticeFrame.shown and CastAheadDB.saveCallsNotice == nil,
         "the update notice shows once and clears the flag")
@@ -2447,13 +2447,13 @@ table.remove(CastAheadData[1877])
 UnitShouldDisplaySpellTargetName = nil
 
 -- A sound picked from our own clips under the old display name still plays.
-CastAheadDB = { sounds = { TANK = "CastAhead: tank buster", AOE = "Horn" }, spellSounds = { [100] = "CastAhead: dodge" } }
+CastAheadDB = { sounds = { TANK = "Cast Ahead: tank buster", AOE = "Horn" }, spellSounds = { [100] = "Cast Ahead: dodge" } }
 CastAheadConfig.Migrate()
-check(CastAheadDB.sounds.TANK == "Cast Ahead: tank buster" and CastAheadDB.sounds.AOE == "Horn"
-    and CastAheadDB.spellSounds[100] == "Cast Ahead: dodge", "sound picks follow the renamed clips")
-CastAheadDB = { spellSounds = { [100] = "CastAhead: dodge" } }
+check(CastAheadDB.sounds.TANK == "CastAhead: tank buster" and CastAheadDB.sounds.AOE == "Horn"
+    and CastAheadDB.spellSounds[100] == "CastAhead: dodge", "sound picks follow the renamed clips")
+CastAheadDB = { spellSounds = { [100] = "Cast Ahead: dodge" } }
 CastAheadConfig.Migrate()
-check(CastAheadDB.spellSounds[100] == "Cast Ahead: dodge",
+check(CastAheadDB.spellSounds[100] == "CastAhead: dodge",
     "per-spell picks follow the rename when no category was ever picked")
 CastAheadDB = nil
 
@@ -2580,7 +2580,7 @@ local n3 = R.Mark()
 check(n3 == n2 + 1 and Lines()[#Lines()]:match("|MARK|%-|" .. n3 .. "|%-$"),
     "a mark long after keeps working, and mobs older than two minutes are no longer snapshotted")
 Loud()
-check(printed[#printed] and printed[#printed]:find("Cast Ahead", 1, true), "every mark is confirmed in chat")
+check(printed[#printed] and printed[#printed]:find("CastAhead", 1, true), "every mark is confirmed in chat")
 
 -- Export: header, one summary per mark, the windows, a footer that counts lines.
 local text = (R.Export(R.Current()):gsub("%^", "|"))
@@ -5386,7 +5386,7 @@ do
     GetSpecializationInfoByID = function(id) return id, "Havoc", "", 0, "DAMAGER", "DEMONHUNTER", "Demon Hunter" end
     CastAheadDB = { raidMode = true, burstCalls = true }
     local save = CastAheadOptions.ReportText("save")
-    check(save:find("Cast Ahead report: Wrong defensive call\nAddon 9.9.9, game 12.1.0 (65000), enUS\n", 1, true)
+    check(save:find("CastAhead report: Wrong defensive call\nAddon 9.9.9, game 12.1.0 (65000), enUS\n", 1, true)
         and save:find("Spec: Havoc Demon Hunter", 1, true) and save:find("Defensive calls: dungeons off, raids off", 1, true)
         and save:find("Anything else about what happened:\n$"), "a defensive report carries version, spec, the switch and ends on its question")
     local burst = CastAheadOptions.ReportText("burst")

@@ -353,7 +353,7 @@ end
 
 if StaticPopupDialogs then
     StaticPopupDialogs.CASTAHEAD_RESET_ALL = {
-        text = "Reset every Cast Ahead setting, list and window position to a new install, then reload the UI? Recorded data stays.",
+        text = "Reset every CastAhead setting, list and window position to a new install, then reload the UI? Recorded data stays.",
         button1 = YES or "Yes",
         button2 = NO or "No",
         OnAccept = function()
@@ -495,7 +495,7 @@ function BuildGeneral(panel)
         local button = CastAheadWindow.Button(panel, "Test", 44)
         button:SetPoint("LEFT", switch, "LEFT", COL_W - 10 - indent - 52, 0)
         button:SetScript("OnClick", function()
-            if not run() then print("|cff33ff99Cast Ahead|r switch it on first, then press Test") end
+            if not run() then print("|cff33ff99CastAhead|r switch it on first, then press Test") end
         end)
         button:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -828,7 +828,7 @@ function BuildDefensives(panel)
     if not CastAheadSaves then
         local note = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         note:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -6)
-        note:SetText("Restart the game to finish the Cast Ahead update - defensive calls are off until then.")
+        note:SetText("Restart the game to finish the CastAhead update - defensive calls are off until then.")
         return
     end
     local group = BuildGroup(panel, "Defensive calls", DEFENSIVES_H)
@@ -916,7 +916,7 @@ end
 local BURST_DIFFICULTIES = { { 14, "Normal" }, { 15, "Heroic" }, { 16, "Mythic" }, { 8, "Keys" } }
 local REPORT_KINDS = {
     { key = "cast", label = "Wrong trash call", ask = "Anything else about what happened:",
-      what = { "Called, but the mob never cast it", "Cast, but Cast Ahead said nothing", "Named the wrong spell",
+      what = { "Called, but the mob never cast it", "Cast, but CastAhead said nothing", "Named the wrong spell",
                "Called too early", "Called too late", "Wrong call type (kick, dodge, AoE...)" } },
     { key = "save", label = "Wrong defensive call", ask = "Anything else about what happened:",
       what = { "Needed a defensive", "No defensive was needed", "No call at all",
@@ -949,7 +949,7 @@ function CastAheadOptions.ReportText(key)
     local game, build
     if GetBuildInfo then game, build = GetBuildInfo() end
     local lines = {
-        "Cast Ahead report: " .. kind.label,
+        "CastAhead report: " .. kind.label,
         string.format("Addon %s, game %s (%s), %s", meta and meta("CastAhead", "Version") or "?", game or "?", build or "?",
             GetLocale and GetLocale() or "?"),
     }

@@ -1,10 +1,10 @@
-# Cast Ahead
+# CastAhead
 
 Predicts trash casts in Mythic+ and tells you what to do about them. On top of that it can call defensives (trash, dangerous debuffs, boss abilities) and burst windows on bosses.
 
 ## What it does
 
-- **Names the cast before the game does.** In 12.1 an addon may not read what a hostile unit is casting, so Cast Ahead measures the cast bar's length and matches it against a database of every trash cast in the season's dungeons, narrowed by the interval between casts and by which spells the creature owns.
+- **Names the cast before the game does.** In 12.1 an addon may not read what a hostile unit is casting, so CastAhead measures the cast bar's length and matches it against a database of every trash cast in the season's dungeons, narrowed by the interval between casts and by which spells the creature owns.
 - **Says the answer, not the spell name.** "Interrupt", "dispel poison", "tank buster", "dodge", "adds incoming" - spoken by recorded clips or the game's own combat voice, shown as a countdown icon beside the nameplate and as a call in the middle of the screen.
 - **Counts down to the next one.** Cooldowns are stored as rotations, not averages: a mob that cycles 4.8 / 4.8 / 8.7 seconds is predicted on the right slot.
 - **Filters to what you can act on.** By default only hand-picked important casts, and only the ones your role can answer.
@@ -37,7 +37,7 @@ A menu on the left: **Settings** (General, Sounds, Defensives while defensive ca
 
 ## Defensive calls (alpha)
 
-Off by default: "Defensive calls in dungeons" in General - Features. Cast Ahead says "defensive" and shows up to three icons of the buttons you can press right now. The calls come from trash casts, from dangerous debuffs landing on you (sound only), and from boss abilities in DBM or BigWigs timers.
+Off by default: "Defensive calls in dungeons" in General - Features. CastAhead says "defensive" and shows up to three icons of the buttons you can press right now. The calls come from trash casts, from dangerous debuffs landing on you (sound only), and from boss abilities in DBM or BigWigs timers.
 
 A hit gets a call when the whole episode (the hit plus its damage over time, pulses and stacks) would take you below zero at +20 without a defensive, and top players at +20 press one for it. Calls are judged at +20 whatever key you run. Tanks get calls for tank busters only. A cast aimed at one player says "targeted" instead, because the game does not tell addons whom it is aimed at.
 
@@ -45,15 +45,15 @@ Each spec ships one ordered list of personal defensives; the top ready button is
 
 ## Raid debuff calls (alpha)
 
-In Heroic and Mythic, with "Defensive calls in raids" on under "Raid (experimental)", Cast Ahead says "defensive" when a boss debuff that kills its carrier without a defensive lands on you. A debuff is on the list when, in top-player fights, the worst 8 seconds while it is up take at least the carrier's whole health in half the cases or more, a personal defensive is pressed in at least a quarter of them, fewer than half of the carriers die anyway, and the deadly part comes within 12 seconds of the debuff landing. Heroic and Mythic are judged separately; a debuff too rare on Mythic to judge borrows its Heroic verdict. Tank debuffs call tanks, the rest call damage dealers and healers, and a healer who can remove it hears the dispel. The game lets an addon hear these debuffs only as they land, so a later call is the same line after up to 3 seconds of silence. The Raid Guide lists them per boss, with the checked debuffs that get no call greyed out and the reason.
+In Heroic and Mythic, with "Defensive calls in raids" on under "Raid (experimental)", CastAhead says "defensive" when a boss debuff that kills its carrier without a defensive lands on you. A debuff is on the list when, in top-player fights, the worst 8 seconds while it is up take at least the carrier's whole health in half the cases or more, a personal defensive is pressed in at least a quarter of them, fewer than half of the carriers die anyway, and the deadly part comes within 12 seconds of the debuff landing. Heroic and Mythic are judged separately; a debuff too rare on Mythic to judge borrows its Heroic verdict. Tank debuffs call tanks, the rest call damage dealers and healers, and a healer who can remove it hears the dispel. The game lets an addon hear these debuffs only as they land, so a later call is the same line after up to 3 seconds of silence. The Raid Guide lists them per boss, with the checked debuffs that get no call greyed out and the reason.
 
 ## Burst windows (alpha)
 
-With "Burst windows" on under "Raid (experimental)", Cast Ahead says "burst now" when a boss phase worth bursting into starts. The "Burst soon" slider under it adds a heads-up up to 10 seconds earlier; it is off by default. The phases come from top-player runs and are kept only where at least three specs agree; a boss without one gets no call: burst on the pull, then on cooldown. Healers get their own moments for group-healing cooldowns. A phase the boss starts at a health mark is called on the game's own boss warning instead. A defensive call within two seconds of a burst call goes first. The Guide pages show every boss's phases, key bosses in the Dungeon Guide and raid bosses in the Raid Guide.
+With "Burst windows" on under "Raid (experimental)", CastAhead says "burst now" when a boss phase worth bursting into starts. The "Burst soon" slider under it adds a heads-up up to 10 seconds earlier; it is off by default. The phases come from top-player runs and are kept only where at least three specs agree; a boss without one gets no call: burst on the pull, then on cooldown. Healers get their own moments for group-healing cooldowns. A phase the boss starts at a health mark is called on the game's own boss warning instead. A defensive call within two seconds of a burst call goes first. The Guide pages show every boss's phases, key bosses in the Dungeon Guide and raid bosses in the Raid Guide.
 
 ## Reporting a wrong call
 
-Turn on Development mode (General - Advanced). Its Development tab records the combat log, a journal of each key and what the game reveals about each enemy cast; the "Mark panel" switch there adds a panel to mark a wrong call on a mob you pick, with an optional note. The same marks can be bound under Key Bindings > Cast Ahead. After the key, `/ca report` gives the text for a [wrong call issue](https://github.com/AqueGen/CastAhead/issues/new?template=wrong-call.yml) or a CurseForge comment. The journal holds spell and creature ids and timings, no names of people.
+Turn on Development mode (General - Advanced). Its Development tab records the combat log, a journal of each key and what the game reveals about each enemy cast; the "Mark panel" switch there adds a panel to mark a wrong call on a mob you pick, with an optional note. The same marks can be bound under Key Bindings > CastAhead. After the key, `/ca report` gives the text for a [wrong call issue](https://github.com/AqueGen/CastAhead/issues/new?template=wrong-call.yml) or a CurseForge comment. The journal holds spell and creature ids and timings, no names of people.
 
 ## Where the data comes from
 

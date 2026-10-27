@@ -89,7 +89,7 @@ local function Build()
 
     local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     title:SetPoint("TOPLEFT", 6, -5)
-    title:SetText("Cast Ahead - mark a wrong call")
+    title:SetText("CastAhead - mark a wrong call")
 
     panel.rows = {}
     for i = 1, ROWS do
@@ -176,7 +176,7 @@ local function BuildWindow()
     window:SetScript("OnDragStop", window.StopMovingOrSizing)
     local title = window:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     title:SetPoint("TOP", 0, -5)
-    title:SetText("Cast Ahead - report")
+    title:SetText("CastAhead - report")
     local hint = window:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     hint:SetPoint("TOPLEFT", 12, -30)
     hint:SetText("Ctrl+C, then paste into an issue at github.com/AqueGen/CastAhead or a CurseForge comment.")
