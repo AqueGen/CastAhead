@@ -422,7 +422,7 @@ function BuildGeneral(panel)
     local centre = BuildGroup(panel, "Centre call", 70)
     BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 }, OutputChanged)
 
-    local features = BuildGroup(panel, "Features", 338)
+    local features = BuildGroup(panel, "Features", 370)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", features, "TOPLEFT", 10, -26 }, function()
         SaveRefresh()
         CastAheadOptions.RefreshDefensives()
