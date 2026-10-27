@@ -332,6 +332,7 @@ dofile("CastsPage.lua")
 dofile("SavesPage.lua")
 dofile("UI.lua")
 dofile("Core.lua")
+dofile("Kicks.lua")
 dofile("Setup.lua")
 dofile("Recorder.lua")
 dofile("ReportWindow.lua")
@@ -6201,6 +6202,9 @@ end
         check(f.centerX and f.centerX.center and f.centerY.center and f.nudgeX and not f.nudgeX.center,
             "panel: only the centre's X and Y carry Center buttons")
         check(height and height <= 728, "panel: the panel fits under the top-right corner at UI scale 1, got " .. tostring(height))
+        check(f.kickX and f.kickX.label.value == "X (px)" and f.kickY and f.kickY.label.value == "Y (px)"
+            and f.kickScale and f.kickScale.label.value == "Size (%)" and panel.kickGrow,
+            "panel: the kicks block has X, Y, Size and the grow button")
         do
             local function inside(widget, box)
                 while widget do

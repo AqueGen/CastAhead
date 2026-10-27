@@ -230,38 +230,55 @@ frame:SetScript("OnEvent", function(_, event, ...) K.OnEvent(event, ...) end)
 
 -- Display ---------------------------------------------------------------
 
-local FONT = STANDARD_TEXT_FONT or "Fonts\FRIZQT__.TTF"
+local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local ROW_W, ROW_H, GAP = 180, 18, 2
+local CC_H = 14
+local CC_TOP = 6
+
+K.X_DEFAULT, K.Y_DEFAULT = -350, 100
+K.SCALE_DEFAULT, K.SCALE_MIN, K.SCALE_MAX = 100, 50, 200
 
 local panel = CreateFrame("Frame", "CastAheadKicksPanel", UIParent)
 panel:SetSize(ROW_W, ROW_H)
-panel:SetMovable(true)
-panel:EnableMouse(true)
-panel:RegisterForDrag("LeftButton")
-panel:SetScript("OnDragStart", panel.StartMoving)
-panel:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    local point, _, relPoint, x, y = self:GetPoint()
-    CastAheadConfig.Set("kickSpikePos", { point = point, relPoint = relPoint, x = x, y = y })
-end)
-
-local function Place()
-    local pos = CastAheadConfig.Get("kickSpikePos")
-    panel:ClearAllPoints()
-    if type(pos) == "table" and pos.point then
-        panel:SetPoint(pos.point, UIParent, pos.relPoint, pos.x, pos.y)
-    else
-        panel:SetPoint("CENTER", UIParent, "CENTER", -350, 100)
-    end
-end
-K.Place = Place
 panel:Hide()
 K.panel = panel
 
 local title = panel:CreateFontString(nil, "OVERLAY")
 title:SetFont(FONT, 11, "OUTLINE")
-title:SetPoint("BOTTOMLEFT", panel, "TOPLEFT", 0, 2)
 title:SetText("Kicks")
+
+function K.GrowsUp()
+    return CastAheadConfig.Get("kickGrow") == "UP"
+end
+
+-- X and Y are the panel's starting corner from the screen centre: its top
+-- left when it grows down, its bottom left when it grows up.
+local function Place()
+    local up = K.GrowsUp()
+    panel:ClearAllPoints()
+    panel:SetPoint(up and "BOTTOMLEFT" or "TOPLEFT", UIParent, "CENTER",
+        CastAheadConfig.Number("kickX", K.X_DEFAULT, -4000, 4000),
+        CastAheadConfig.Number("kickY", K.Y_DEFAULT, -4000, 4000))
+    panel:SetScale(CastAheadConfig.Number("kickScale", K.SCALE_DEFAULT, K.SCALE_MIN, K.SCALE_MAX) / 100)
+    title:ClearAllPoints()
+    if up then
+        title:SetPoint("TOPLEFT", panel, "BOTTOMLEFT", 0, -2)
+    else
+        title:SetPoint("BOTTOMLEFT", panel, "TOPLEFT", 0, 2)
+    end
+end
+K.Place = Place
+
+-- Puts a child `offset` px from the panel's starting edge, in the grow direction.
+local function Stack(child, offset, x)
+    child:ClearAllPoints()
+    if K.GrowsUp() then
+        child:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", x or 0, offset)
+    else
+        child:SetPoint("TOPLEFT", panel, "TOPLEFT", x or 0, -offset)
+    end
+end
+K.Stack = Stack
 
 local rows = {}
 
@@ -270,8 +287,7 @@ local function Row(i)
     if row then return row end
     row = CreateFrame("StatusBar", nil, panel)
     row:SetSize(ROW_W - ROW_H - GAP, ROW_H)
-    row:SetPoint("TOPLEFT", panel, "TOPLEFT", ROW_H + GAP, -(i - 1) * (ROW_H + GAP))
-    row:SetStatusBarTexture("Interface\Buttons\WHITE8X8")
+    row:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
     row:SetMinMaxValues(0, 1)
     row.bg = row:CreateTexture(nil, "BACKGROUND")
     row.bg:SetAllPoints()
@@ -317,6 +333,11 @@ end
 
 local kickCount = 0
 
+-- Where the crowd control part starts, past the kick rows.
+function K.CCStart()
+    return kickCount * (ROW_H + GAP) + (kickCount > 0 and CC_TOP or 0)
+end
+
 function K.Paint()
     if not K.Active() then
         panel:Hide()
@@ -326,13 +347,14 @@ function K.Paint()
     kickCount = RowsOn() and not (demo and not demo.kicks) and #members or 0
     for i = 1, kickCount do
         local row = Row(i)
+        Stack(row, (i - 1) * (ROW_H + GAP), ROW_H + GAP)
         PaintRow(row, members[i], now)
         row:Show()
     end
     for i = kickCount + 1, #rows do rows[i]:Hide() end
     title:SetText(kickCount > 0 and "Kicks" or "Crowd control")
     panel:SetHeight(math.max(1, kickCount) * (ROW_H + GAP))
-    if K.LayoutCC then K.LayoutCC(kickCount) end
+    if K.LayoutCC then K.LayoutCC() end
     panel:Show()
 end
 
@@ -349,8 +371,9 @@ end)
 
 function K.Apply()
     if K.Demoing and K.Demoing() and not K.Active() then K.Demo(false) end
-    K.Place()
+    Place()
     K.Roster()
+    K.Paint()
     if K.ApplyCC then K.ApplyCC() end
 end
 
@@ -359,7 +382,7 @@ function K.Toggle()
     CastAheadConfig.Set("kickSpike", on)
     K.Apply()
     if CastAheadOptions and CastAheadOptions.Refresh then CastAheadOptions.Refresh() end
-    print("|cff33ff99Cast Ahead|r party kicks and CC " .. (on and "on - drag the panel to move it" or "off"))
+    print("|cff33ff99Cast Ahead|r party kicks and CC " .. (on and "on - place it in Size and position" or "off"))
 end
 
 -- Crowd control on enemies ----------------------------------------------
@@ -377,7 +400,6 @@ for _, id in ipairs({
     360806, 1513,
 }) do K.CC[id] = true end
 
-local CC_H = 14
 local containers = {}
 local plates = {}
 
@@ -431,17 +453,29 @@ local function Container(token)
     return c
 end
 
--- Chains the shown containers in nameplate order under the kick rows.
-function K.LayoutCC(kickRows)
+-- Chains the shown containers in nameplate order past the kick rows, in the
+-- grow direction; each container's own bars grow the same way.
+function K.LayoutCC()
+    local up = K.GrowsUp()
     local prev
     for i = 1, 40 do
         local c = containers["nameplate" .. i]
         if c and c:IsShown() then
-            c:ClearAllPoints()
+            if c.growsUp ~= up and AnchorUtil and AnchorUtil.FlowDirection then
+                c.growsUp = up
+                c:SetFlowLayoutAnchorPoint(up and "BOTTOMLEFT" or "TOPLEFT")
+                c:SetFlowLayoutGrowthDirection(AnchorUtil.FlowDirection.Right,
+                    up and AnchorUtil.FlowDirection.Up or AnchorUtil.FlowDirection.Down)
+            end
             if prev then
-                c:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, 0)
+                c:ClearAllPoints()
+                if up then
+                    c:SetPoint("BOTTOMLEFT", prev, "TOPLEFT", 0, 0)
+                else
+                    c:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, 0)
+                end
             else
-                c:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -(kickRows * (ROW_H + GAP)) - 6)
+                K.Stack(c, K.CCStart())
             end
             prev = c
         end
@@ -467,7 +501,7 @@ function K.ApplyCC()
             if c then c:Hide() end
         end
     end
-    K.LayoutCC(kickCount)
+    K.LayoutCC()
 end
 
 function K.OnCCEvent(event, token)
@@ -481,7 +515,7 @@ function K.OnCCEvent(event, token)
         plates[token] = nil
         ShowPlate(token, false)
     end
-    K.LayoutCC(kickCount)
+    K.LayoutCC()
 end
 
 frame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
@@ -547,8 +581,7 @@ local function DemoTick()
             state.endsAt = now + cc.len
         end
         local left = state.endsAt - now
-        bar:ClearAllPoints()
-        bar:SetPoint("TOPLEFT", panel, "TOPLEFT", CC_H + GAP, -(kickCount * (ROW_H + GAP)) - 6 - (i - 1) * (CC_H + GAP))
+        K.Stack(bar, K.CCStart() + (i - 1) * (CC_H + GAP), CC_H + GAP)
         if showCC and left > 0 then
             bar.icon:SetTexture(C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(cc.id) or 134400)
             bar.name:SetText(C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(cc.id) or "")
