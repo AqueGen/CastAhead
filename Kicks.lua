@@ -69,7 +69,10 @@ function K.Who(guid)
     return "other"
 end
 
+local demo
+
 function K.Roster()
+    if demo then return end
     wipe(members)
     wipe(byUnit)
     for _, unit in ipairs(UNITS) do
@@ -345,6 +348,7 @@ panel:SetScript("OnUpdate", function(_, dt)
 end)
 
 function K.Apply()
+    if K.Demoing and K.Demoing() and not K.Active() then K.Demo(false) end
     K.Place()
     K.Roster()
     if K.ApplyCC then K.ApplyCC() end
@@ -456,7 +460,7 @@ local function ShowPlate(token, on)
 end
 
 function K.ApplyCC()
-    local on = CCOn()
+    local on = CCOn() and not demo
     for token in pairs(plates) do ShowPlate(token, on) end
     if not on then
         for _, c in pairs(containers) do
@@ -471,7 +475,7 @@ function K.OnCCEvent(event, token)
     if event == "NAME_PLATE_UNIT_ADDED" then
         if UnitCanAttack("player", token) then
             plates[token] = true
-            if CCOn() then ShowPlate(token, true) end
+            if CCOn() and not demo then ShowPlate(token, true) end
         end
     elseif event == "NAME_PLATE_UNIT_REMOVED" then
         plates[token] = nil
@@ -482,3 +486,118 @@ end
 
 frame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 frame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
+
+-- Demo ------------------------------------------------------------------
+-- A made-up key group (you plus four) whose kicks go on cooldown in turn,
+-- and a few crowd control bars that run out and start again. Runs with the
+-- test drive or /ca kicks demo, while the panel is on.
+local DEMO_GROUP = {
+    { unit = "player" },
+    { name = "Warrior", class = "WARRIOR", role = "TANK" },
+    { name = "Mage", class = "MAGE" },
+    { name = "Rogue", class = "ROGUE" },
+    { name = "Priest", class = "PRIEST", role = "HEALER" },
+}
+local DEMO_CC = { { id = 119381, len = 3 }, { id = 30283, len = 3 }, { id = 118, len = 8 } }
+local DEMO_KICK_EVERY = 2.5
+
+local demoBars = {}
+
+local function DemoBar(i)
+    local bar = demoBars[i]
+    if bar then return bar end
+    bar = CreateFrame("StatusBar", nil, panel)
+    bar:SetSize(ROW_W - CC_H - GAP, CC_H)
+    bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+    bar:SetStatusBarColor(0.85, 0.65, 0.1, 0.9)
+    bar:SetMinMaxValues(0, 1)
+    local bg = bar:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0, 0, 0, 0.6)
+    bar.icon = bar:CreateTexture(nil, "ARTWORK")
+    bar.icon:SetSize(CC_H, CC_H)
+    bar.icon:SetPoint("RIGHT", bar, "LEFT", -GAP, 0)
+    bar.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    bar.name = bar:CreateFontString(nil, "OVERLAY")
+    bar.name:SetFont(FONT, 10, "OUTLINE")
+    bar.name:SetPoint("LEFT", 3, 0)
+    bar.time = bar:CreateFontString(nil, "OVERLAY")
+    bar.time:SetFont(FONT, 10, "OUTLINE")
+    bar.time:SetPoint("RIGHT", -3, 0)
+    demoBars[i] = bar
+    return bar
+end
+
+local function DemoTick()
+    if not demo then return end
+    local now = GetTime()
+    if now >= demo.nextKick then
+        demo.nextKick = now + DEMO_KICK_EVERY
+        local ready = {}
+        for _, m in ipairs(members) do
+            if m.role ~= "HEALER" and (not m.readyAt or m.readyAt <= now) then ready[#ready + 1] = m end
+        end
+        if #ready > 0 then K.Start(ready[math.random(#ready)].unit, nil, "demo") end
+    end
+    local showCC = CCOn()
+    for i, cc in ipairs(DEMO_CC) do
+        local bar = DemoBar(i)
+        local state = demo.cc[i]
+        if now >= state.endsAt + 1.5 then
+            state.endsAt = now + cc.len
+        end
+        local left = state.endsAt - now
+        bar:ClearAllPoints()
+        bar:SetPoint("TOPLEFT", panel, "TOPLEFT", CC_H + GAP, -(kickCount * (ROW_H + GAP)) - 6 - (i - 1) * (CC_H + GAP))
+        if showCC and left > 0 then
+            bar.icon:SetTexture(C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(cc.id) or 134400)
+            bar.name:SetText(C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(cc.id) or "")
+            bar.time:SetText(string.format("%.1f", left))
+            bar:SetValue(left / cc.len)
+            bar:Show()
+        else
+            bar:Hide()
+        end
+    end
+end
+
+local demoFrame = CreateFrame("Frame")
+
+function K.Demo(on)
+    on = on and K.Active() or false
+    if on == (demo ~= nil) then return end
+    if on then
+        local now = GetTime()
+        demo = { nextKick = now + 1, cc = {} }
+        for i, cc in ipairs(DEMO_CC) do demo.cc[i] = { endsAt = now + cc.len - (i - 1) } end
+        wipe(members)
+        wipe(byUnit)
+        local _, myClass = UnitClass("player")
+        for i, d in ipairs(DEMO_GROUP) do
+            local class = d.class or myClass
+            local m = {
+                unit = d.unit or ("demo" .. i),
+                name = d.name or UnitName("player"),
+                class = class,
+                role = d.role or "DAMAGER",
+                kick = K.CLASS_KICK[class],
+            }
+            if m.kick then
+                m.cd = K.KICKS[m.kick]
+                members[#members + 1] = m
+                byUnit[m.unit] = m
+            end
+        end
+        demoFrame:SetScript("OnUpdate", DemoTick)
+        K.ApplyCC()
+        K.Paint()
+    else
+        demo = nil
+        demoFrame:SetScript("OnUpdate", nil)
+        for _, bar in ipairs(demoBars) do bar:Hide() end
+        K.Roster()
+        K.ApplyCC()
+    end
+end
+
+function K.Demoing() return demo ~= nil end

@@ -44,6 +44,7 @@ function CastAheadUI.RefreshTest()
     local running = CastAheadCore and CastAheadCore.Testing and CastAheadCore.Testing()
     if testButton then testButton:SetText(running and "Stop test" or "Test drive") end
     if CastAheadUI.RefreshPlayList then CastAheadUI.RefreshPlayList(running) end
+    if CastAheadKicks then CastAheadKicks.Demo(running) end
 end
 
 function CastAheadUI.RefreshTabs()
@@ -123,7 +124,13 @@ SlashCmdList.CASTAHEAD = function(msg)
         return
     end
     if word == "kicks" then
-        if CastAheadKicks then CastAheadKicks.Toggle() end
+        if not CastAheadKicks then return end
+        if msg:match("^%s*%a+%s+demo") then
+            if not CastAheadKicks.Active() then CastAheadKicks.Toggle() end
+            CastAheadKicks.Demo(not CastAheadKicks.Demoing())
+        else
+            CastAheadKicks.Toggle()
+        end
         return
     end
     if word == "journal" then

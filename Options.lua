@@ -520,14 +520,16 @@ function BuildDevelopment(panel)
     DevButton(panel, "Clear journal", 110, { "LEFT", count, "RIGHT", 4, 0 },
         "journal clear", "Empty the journal after you copied it off the disk; asks first. /ca journal clear")
 
-    local kicks = BuildGroup(panel, "Party kicks and CC (trial)", 166)
+    local kicks = BuildGroup(panel, "Party kicks and CC (trial)", 200)
     local function KicksChanged()
         if CastAheadKicks then CastAheadKicks.Apply() end
     end
     local kickOn = BuildSwitch(panel, "kickSpike", { "TOPLEFT", kicks, "TOPLEFT", 10, -26 }, KicksChanged, "Show the panel")
     local rows = BuildSwitch(panel, "kickRows", { "TOPLEFT", kickOn, "BOTTOMLEFT", 16, -4 }, KicksChanged)
     local cc = BuildSwitch(panel, "kickCC", { "TOPLEFT", rows, "BOTTOMLEFT", 0, -4 }, KicksChanged)
-    BuildSwitch(panel, "kickProbe", { "TOPLEFT", cc, "BOTTOMLEFT", -16, -4 })
+    local probe = BuildSwitch(panel, "kickProbe", { "TOPLEFT", cc, "BOTTOMLEFT", -16, -4 })
+    DevButton(panel, "Demo", 70, { "TOPLEFT", probe, "BOTTOMLEFT", 6, -8 },
+        "kicks demo", "Fill the panel with a made-up key group whose kicks go on cooldown in turn, and sample crowd control bars. Click again to stop. The test drive runs it too. /ca kicks demo")
 end
 
 local function IconLabel(icon, name)
