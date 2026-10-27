@@ -318,6 +318,7 @@ local function KicksSample(on)
     if not CastAheadKicks then return end
     CastAheadKicks.Apply()
     local want = on and CastAheadKicks.Active()
+    CastAheadKicks.SetEditing(want)
     if want and not CastAheadKicks.Demoing() then
         CastAheadKicks.Demo(true)
         kicksDemo = true

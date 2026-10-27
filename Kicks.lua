@@ -269,6 +269,33 @@ local function Place()
 end
 K.Place = Place
 
+-- While Size and position is open the panel can be dragged; the drop is
+-- saved as the same X and Y the number fields show.
+local editBg = panel:CreateTexture(nil, "BACKGROUND")
+editBg:SetPoint("TOPLEFT", -4, 4)
+editBg:SetPoint("BOTTOMRIGHT", 4, -4)
+editBg:SetColorTexture(0.2, 0.6, 1, 0.25)
+editBg:Hide()
+
+panel:RegisterForDrag("LeftButton")
+panel:SetScript("OnDragStart", function(self) self:StartMoving() end)
+panel:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    local cx, cy = UIParent:GetCenter()
+    local own, ui = self:GetEffectiveScale(), UIParent:GetEffectiveScale()
+    local y = K.GrowsUp() and self:GetBottom() or self:GetTop()
+    CastAheadConfig.Set("kickX", math.floor((self:GetLeft() * own - cx * ui) / own + 0.5))
+    CastAheadConfig.Set("kickY", math.floor((y * own - cy * ui) / own + 0.5))
+    Place()
+    if CastAheadSetup and CastAheadSetup.Refresh then CastAheadSetup.Refresh() end
+end)
+
+function K.SetEditing(on)
+    panel:SetMovable(on)
+    panel:EnableMouse(on)
+    editBg:SetShown(on)
+end
+
 -- Puts a child `offset` px from the panel's starting edge, in the grow direction.
 local function Stack(child, offset, x)
     child:ClearAllPoints()
