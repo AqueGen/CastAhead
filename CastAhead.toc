@@ -38,6 +38,7 @@ Timeline.lua
 Core.lua
 Setup.lua
 Recorder.lua
+Kicks.lua
 Window.lua
 CastsPage.lua
 SavesPage.lua

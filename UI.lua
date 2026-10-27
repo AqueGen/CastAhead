@@ -102,7 +102,7 @@ end
 
 SLASH_CASTAHEAD1 = "/castahead"
 SLASH_CASTAHEAD2 = "/ca"
-local DEV_COMMANDS = { probe = true, report = true, mark = true, note = true }
+local DEV_COMMANDS = { probe = true, report = true, mark = true, note = true, kicks = true }
 SlashCmdList.CASTAHEAD = function(msg)
     msg = msg and msg:lower() or ""
     -- The sub-command is the FIRST word: `msg:find` anywhere in the string
@@ -120,6 +120,10 @@ SlashCmdList.CASTAHEAD = function(msg)
     end
     if word == "report" then
         if CastAheadReport then CastAheadReport.Toggle() end
+        return
+    end
+    if word == "kicks" then
+        if CastAheadKicks then CastAheadKicks.Toggle() end
         return
     end
     if word == "journal" then
