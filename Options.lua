@@ -420,7 +420,7 @@ function BuildGeneral(panel)
     local centre = BuildGroup(panel, "Centre call", 70)
     BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 }, OutputChanged)
 
-    local features = BuildGroup(panel, "Features", 194)
+    local features = BuildGroup(panel, "Features", 250)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", features, "TOPLEFT", 10, -26 }, function()
         SaveRefresh()
         CastAheadOptions.RefreshDefensives()
@@ -454,9 +454,26 @@ function BuildGeneral(panel)
         if child.SetMotionScriptsWhileDisabled then child:SetMotionScriptsWhileDisabled(true) end
     end
     table.insert(refreshers, PaintRaid)
-    local kicks = BuildSwitch(panel, "kickSpike", { "TOPLEFT", bursts, "BOTTOMLEFT", -16, -4 }, function()
+    local kickRows, kickCC
+    local function PaintKicks()
+        local on = SwitchOn("kickSpike")
+        local color = on and { 1, 1, 1 } or T.muted
+        for _, child in ipairs({ kickRows, kickCC }) do
+            child:SetEnabled(on)
+            child.text:SetTextColor(unpack(color))
+        end
+    end
+    local function KicksChanged()
         if CastAheadKicks then CastAheadKicks.Apply() end
-    end)
+        PaintKicks()
+    end
+    local kicks = BuildSwitch(panel, "kickSpike", { "TOPLEFT", bursts, "BOTTOMLEFT", -16, -4 }, KicksChanged)
+    kickRows = BuildSwitch(panel, "kickRows", { "TOPLEFT", kicks, "BOTTOMLEFT", 16, -4 }, KicksChanged)
+    kickCC = BuildSwitch(panel, "kickCC", { "TOPLEFT", kickRows, "BOTTOMLEFT", 0, -4 }, KicksChanged)
+    for _, child in ipairs({ kickRows, kickCC }) do
+        if child.SetMotionScriptsWhileDisabled then child:SetMotionScriptsWhileDisabled(true) end
+    end
+    table.insert(refreshers, PaintKicks)
 
     -- A Test button at the right end of a feature's row shows that feature alone.
     local function TestButton(switch, indent, tip, run)
@@ -477,7 +494,7 @@ function BuildGeneral(panel)
         function() return CastAheadCore.FeatureTest("defensive") end)
     TestButton(bursts, 16, "A sample \"burst soon\", then \"burst now\" with its countdown.",
         function() return CastAheadCore.FeatureTest("burst") end)
-    TestButton(kicks, 0, "A made-up key group whose kicks go on cooldown in turn, and sample crowd control bars. Press again to stop.",
+    TestButton(kicks, 0, "A made-up key group whose kicks go on cooldown in turn, and sample crowd control bars - whichever of the two is switched on below. Press again to stop.",
         function()
             if not (CastAheadKicks and CastAheadKicks.Active()) then return false end
             CastAheadKicks.Demo(not CastAheadKicks.Demoing())
@@ -524,13 +541,14 @@ function BuildDevelopment(panel)
     end)
 
     panel.flowTop = function() return 6 + intro:GetStringHeight() + 12 end
-    local recording = BuildGroup(panel, "Recording", 100)
+    local recording = BuildGroup(panel, "Recording", 128)
     local recordAll = BuildSwitch(panel, "recordAll", { "TOPLEFT", recording, "TOPLEFT", 10, -26 }, function()
         if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
     end)
-    BuildSwitch(panel, "showMarkPanel", { "TOPLEFT", recordAll, "BOTTOMLEFT", 0, -4 }, function()
+    local markPanel = BuildSwitch(panel, "showMarkPanel", { "TOPLEFT", recordAll, "BOTTOMLEFT", 0, -4 }, function()
         if CastAheadReport then CastAheadReport.Refresh() end
     end)
+    BuildSwitch(panel, "kickProbe", { "TOPLEFT", markPanel, "BOTTOMLEFT", 0, -4 })
 
     local group = BuildGroup(panel, "Recorded enemy data", 62)
     local show = DevButton(panel, "Show", 70, { "TOPLEFT", group, "TOPLEFT", 16, -28 },
@@ -545,19 +563,6 @@ function BuildDevelopment(panel)
         "journal", "Print how many keys the journal holds. /ca journal")
     DevButton(panel, "Clear journal", 110, { "LEFT", count, "RIGHT", 4, 0 },
         "journal clear", "Empty the journal after you copied it off the disk; asks first. /ca journal clear")
-
-    local kicks = BuildGroup(panel, "Party kicks and CC (experimental)", 200)
-    local function KicksChanged()
-        if CastAheadKicks then CastAheadKicks.Apply() end
-    end
-    local kickOn = BuildSwitch(panel, "kickSpike", { "TOPLEFT", kicks, "TOPLEFT", 10, -26 }, KicksChanged, "Show the panel")
-    local rows = BuildSwitch(panel, "kickRows", { "TOPLEFT", kickOn, "BOTTOMLEFT", 16, -4 }, KicksChanged)
-    local cc = BuildSwitch(panel, "kickCC", { "TOPLEFT", rows, "BOTTOMLEFT", 0, -4 }, KicksChanged)
-    local probe = BuildSwitch(panel, "kickProbe", { "TOPLEFT", cc, "BOTTOMLEFT", -16, -4 })
-    local demoKicks = DevButton(panel, "Demo kicks", 90, { "TOPLEFT", probe, "BOTTOMLEFT", 6, -8 },
-        "kicks demo kicks", "Fill the panel with a made-up key group whose kicks go on cooldown in turn. Click again to stop. /ca kicks demo kicks")
-    DevButton(panel, "Demo CC", 80, { "LEFT", demoKicks, "RIGHT", 4, 0 },
-        "kicks demo cc", "Show sample crowd control bars that run out and start again. Click again to stop. /ca kicks demo cc")
 end
 
 local function IconLabel(icon, name)

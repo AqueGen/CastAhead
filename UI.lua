@@ -133,9 +133,7 @@ SlashCmdList.CASTAHEAD = function(msg)
         if not CastAheadKicks then return end
         if msg:match("^%s*%a+%s+demo") then
             if not CastAheadKicks.Active() then CastAheadKicks.Toggle() end
-            local part = msg:match("^%s*%a+%s+demo%s+(%a+)")
-            local running = CastAheadKicks.Demoing() and CastAheadKicks.DemoPart() == part
-            CastAheadKicks.Demo(not running, part)
+            CastAheadKicks.Demo(not CastAheadKicks.Demoing())
         else
             CastAheadKicks.Toggle()
         end
