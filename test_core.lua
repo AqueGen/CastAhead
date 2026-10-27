@@ -4693,7 +4693,7 @@ do
             if page:find(gone, 1, true) then found[#found + 1] = gone end
         end
         check(#found == 0, "General builds no size or position control, found " .. table.concat(found, ","))
-        check(sliders == 1 and dropdowns == 0, "General keeps only the early-warning slider and no dropdown, got "
+        check(sliders == 2 and dropdowns == 0, "General keeps only the early-warning and burst-soon sliders and no dropdown, got "
             .. sliders .. "/" .. dropdowns)
         check(page:find("|Show icons on nameplates|", 1, true) and page:find("|Full labels|", 1, true)
             and page:find("|Show the centre call|", 1, true), "General keeps the nameplate and centre call switches")
@@ -4730,7 +4730,7 @@ do
         check(raidSaves.text.color == "muted" and bursts.text.color == "muted", "and their labels are greyed")
         check(raidSaves.motionWhileDisabled == true and bursts.motionWhileDisabled == true,
             "the children keep their tooltips while disabled")
-        check(offHeight == 250, "the Features group keeps the seven-row height, got " .. tostring(offHeight))
+        check(offHeight == 310, "the Features group keeps its height with the burst slider, got " .. tostring(offHeight))
         CastAheadDB = { raidMode = true }
         CastAheadOptions.ShowPanel(host, "General")
         check(raidSaves.enabled == true and bursts.enabled == true, "with the raid switch on its two children are enabled")
@@ -5126,6 +5126,13 @@ do
             B.Tick(now)
         end
     end
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(31)
+    check(table.concat(heard, ",") == "BURST", "burst: with the default lead of 0 only burst now plays, heard "
+        .. table.concat(heard, ","))
+    B.OnEncounter("ENCOUNTER_END", 3492, 15, now)
+    heard = {}
+    CastAheadDB = { raidMode = true, burstCalls = true, burstLeadSeconds = 5 }
     local function Heard() return table.concat(heard, ",") end
 
     local t0 = now
@@ -5182,7 +5189,7 @@ do
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
     run(40)
     check(#heard == 0, "burst: burst windows stay silent while the raid switch is off")
-    CastAheadDB = { raidMode = true, burstCalls = true }
+    CastAheadDB = { raidMode = true, burstCalls = true, burstLeadSeconds = 5 }
 
     B.OnEncounter("ENCOUNTER_START", 3492, 16, now)
     run(40)
@@ -5278,7 +5285,7 @@ do
     GetSpecialization = function() return 1 end
     GetSpecializationRole = function() return "DAMAGER" end
     CastAheadBurstWindows = { [3492] = { [15] = { { release = 30 } } } }
-    CastAheadDB = { raidMode = true, burstCalls = true, centerText = true, saveCalls = true }
+    CastAheadDB = { raidMode = true, burstCalls = true, centerText = true, saveCalls = true, burstLeadSeconds = 5 }
     GetInstanceInfo = function() return "Abyss", "raid", 15, "", 0, 0, false, 9999 end
     fire("PLAYER_ENTERING_WORLD")
 
@@ -5454,7 +5461,7 @@ do
     CastAheadBurstWindows = {
         [3492] = { [15] = { name = "Ula'tek", { release = 30 }, { release = 70, role = "HEALER" } } },
         [3101] = { [8] = { name = "Kystia Manaheart", { event = 610, target = "Light Infusion" } } } }
-    CastAheadDB = { raidMode = true, burstCalls = true }
+    CastAheadDB = { raidMode = true, burstCalls = true, burstLeadSeconds = 5 }
     local function run(seconds)
         for _ = 1, seconds * 2 do
             now = now + 0.5

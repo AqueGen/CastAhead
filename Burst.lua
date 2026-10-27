@@ -3,7 +3,6 @@ local B = CastAheadBurst
 local M = CastAheadMatch
 
 local SAVE_GAP = 2
-local SOON = 5
 local BURST_SHOWN = 5
 local ICON = "Interface\\Icons\\Spell_Nature_Bloodlust"
 B.ICON = ICON
@@ -177,15 +176,15 @@ function B.OnEncounter(event, encounterID, difficultyID, now)
     local byDifficulty = CastAheadBurstWindows and CastAheadBurstWindows[encounterID]
     local windows = byDifficulty and byDifficulty[difficultyID]
     if not windows then return end
-    local role, events = Role(), {}
+    local role, events, soon = Role(), {}, CastAheadConfig.BurstLead()
     for _, w in ipairs(windows) do
         local mine = ForRole(w, role)
         if mine and w.event then
             events[#events + 1] = w.event
         elseif mine and not w.pull then
             local at = now + w.release
-            if w.release >= SOON then
-                entries[#entries + 1] = { fireAt = at - SOON, endAt = at, advice = M.ADVICE.SOON }
+            if soon > 0 and w.release >= soon then
+                entries[#entries + 1] = { fireAt = at - soon, endAt = at, advice = M.ADVICE.SOON }
             end
             entries[#entries + 1] = { fireAt = at, endAt = at + BURST_SHOWN, advice = M.ADVICE.BURST }
         end
@@ -224,9 +223,12 @@ end
 -- window ends.
 function B.Demo(now)
     wipe(entries)
-    local at = now + SOON + 1
-    entries[1] = { fireAt = at - SOON, endAt = at, advice = M.ADVICE.SOON, demo = true }
-    entries[2] = { fireAt = at, endAt = at + BURST_SHOWN, advice = M.ADVICE.BURST, demo = true }
+    local soon = CastAheadConfig.BurstLead()
+    local at = now + soon + 1
+    if soon > 0 then
+        entries[#entries + 1] = { fireAt = at - soon, endAt = at, advice = M.ADVICE.SOON, demo = true }
+    end
+    entries[#entries + 1] = { fireAt = at, endAt = at + BURST_SHOWN, advice = M.ADVICE.BURST, demo = true }
     return at + BURST_SHOWN
 end
 

@@ -162,7 +162,7 @@ local SWITCHES = {
     raidSaves = { label = "Defensive calls in raids", defaultOff = true,
         tip = "In raids, call a defensive for a dangerous boss debuff on you, timed to when its damage hits in top-player fights. Does not need the dungeon switch." },
     burstCalls = { label = "Burst windows", defaultOff = true,
-        tip = "On bosses with a phase worth bursting into, say \"burst soon\" five seconds before it and \"burst now\" when it starts, with a countdown in the centre block. Healers get their own phases for group-healing cooldowns. On every other boss it stays silent: press on cooldown." },
+        tip = "On bosses with a phase worth bursting into, say \"burst now\" when it starts, with a countdown in the centre block, and \"burst soon\" ahead of it if the slider below is set. Healers get their own phases for group-healing cooldowns. On every other boss it stays silent: press on cooldown." },
     kickSpike = { label = "Kicks and CC (experimental)", defaultOff = true,
         tip = "A panel with each party member's interrupt and its cooldown, and below it a bar for every stun, fear or incapacitate on enemy nameplates. Drag it to move it. Another player's kick shows only when it lands, unless the game lets the addon read their cast; a missed kick stays hidden. Same as /ca kicks." },
     kickRows = { label = "Kick rows",
@@ -420,19 +420,23 @@ function BuildGeneral(panel)
     local centre = BuildGroup(panel, "Centre call", 70)
     BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 }, OutputChanged)
 
-    local features = BuildGroup(panel, "Features", 250)
+    local features = BuildGroup(panel, "Features", 310)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", features, "TOPLEFT", 10, -26 }, function()
         SaveRefresh()
         CastAheadOptions.RefreshDefensives()
         if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
     end)
-    local raidSaves, bursts
+    local raidSaves, bursts, burstSoon, soonLabel
     local function PaintRaid()
         local on = SwitchOn("raidMode")
         local color = on and { 1, 1, 1 } or T.muted
         for _, child in ipairs({ raidSaves, bursts }) do
             child:SetEnabled(on)
             child.text:SetTextColor(unpack(color))
+        end
+        if burstSoon then
+            burstSoon:SetAlpha(on and 1 or 0.5)
+            soonLabel:SetTextColor(unpack(color))
         end
     end
     local function RaidChanged()
@@ -453,6 +457,17 @@ function BuildGeneral(panel)
     for _, child in ipairs({ raidSaves, bursts }) do
         if child.SetMotionScriptsWhileDisabled then child:SetMotionScriptsWhileDisabled(true) end
     end
+    burstSoon, soonLabel = BuildSlider(panel, {
+        key = "burstLeadSeconds",
+        default = 0,
+        min = 0, max = CastAheadConfig.BURST_LEAD_MAX,
+        low = "off", high = CastAheadConfig.BURST_LEAD_MAX .. "s",
+        point = { "TOPLEFT", bursts, "BOTTOMLEFT", 6, -8 },
+        width = COL_W - 80,
+        caption = function(value)
+            return value > 0 and string.format("Burst soon: %ds before", value) or "Burst soon: off"
+        end,
+    })
     table.insert(refreshers, PaintRaid)
     local kickRows, kickCC
     local function PaintKicks()
@@ -467,7 +482,7 @@ function BuildGeneral(panel)
         if CastAheadKicks then CastAheadKicks.Apply() end
         PaintKicks()
     end
-    local kicks = BuildSwitch(panel, "kickSpike", { "TOPLEFT", bursts, "BOTTOMLEFT", -16, -4 }, KicksChanged)
+    local kicks = BuildSwitch(panel, "kickSpike", { "TOPLEFT", burstSoon, "BOTTOMLEFT", -28, -20 }, KicksChanged)
     kickRows = BuildSwitch(panel, "kickRows", { "TOPLEFT", kicks, "BOTTOMLEFT", 16, -4 }, KicksChanged)
     kickCC = BuildSwitch(panel, "kickCC", { "TOPLEFT", kickRows, "BOTTOMLEFT", 0, -4 }, KicksChanged)
     for _, child in ipairs({ kickRows, kickCC }) do
