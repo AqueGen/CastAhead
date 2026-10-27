@@ -222,8 +222,8 @@ function C.Migrate()
     for _, field in ipairs({ "sounds", "spellSounds" }) do
         local picks = CastAheadDB[field]
         for key, name in pairs(type(picks) == "table" and picks or {}) do
-            if type(name) == "string" and name:sub(1, 11) == "CastAhead: " then
-                picks[key] = "Cast Ahead: " .. name:sub(12)
+            if type(name) == "string" and name:sub(1, 12) == "Cast Ahead: " then
+                picks[key] = "CastAhead: " .. name:sub(13)
             end
         end
     end
@@ -274,9 +274,9 @@ function C.Migrate()
         for _, field in ipairs({ "sounds", "spellSounds" }) do
             local picks = CastAheadDB[field]
             for key, name in pairs(type(picks) == "table" and picks or {}) do
-                if name == "Cast Ahead: small defensive" or name == "Cast Ahead: big defensive" then
-                    picks[key] = "Cast Ahead: defensive"
-                elseif name == "Cast Ahead: heal up" then
+                if name == "CastAhead: small defensive" or name == "CastAhead: big defensive" then
+                    picks[key] = "CastAhead: defensive"
+                elseif name == "CastAhead: heal up" then
                     picks[key] = nil
                 end
             end

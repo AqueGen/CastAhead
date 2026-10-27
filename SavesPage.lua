@@ -103,7 +103,7 @@ local function EpNote(host, y, text)
     return NOTE_H
 end
 
-local RESTART = "Restart the game to finish the Cast Ahead update - defensive calls are off until then."
+local RESTART = "Restart the game to finish the CastAhead update - defensive calls are off until then."
 
 -- One Saves page: a table of the save rows for the picked place (a dungeon, or a raid difficulty).
 -- headers renames columns and note replaces the damage note where the dungeon wording does not fit.
