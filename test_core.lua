@@ -6583,5 +6583,30 @@ end)();
     CastAheadDB, InCombatLockdown, UIParent, W.Frame, W.Current, W.Show, C_NamePlate.GetNamePlateForUnit = unpack(saved, 1, 7)
 end)()
 
+;(function()
+    local K = CastAheadKicks
+    local saved = { IsInGroup, IsInRaid, UnitClass, UnitName, CastAheadConfig.Get("kickSpike") }
+    local group, raid = false, false
+    IsInGroup = function() return group end
+    IsInRaid = function() return raid end
+    UnitClass = function() return "Warrior", "WARRIOR" end
+    UnitName = function() return "Me" end
+    CastAheadConfig.Set("kickSpike", true)
+    K.Paint()
+    check(not K.panel.shown, "kicks: solo hides the panel")
+    group = true
+    K.Paint()
+    check(K.panel.shown, "kicks: a party shows the panel")
+    raid = true
+    K.Paint()
+    check(not K.panel.shown, "kicks: a raid group hides the panel")
+    K.Demo(true)
+    check(K.panel.shown, "kicks: the demo shows even in a raid group")
+    K.Demo(false)
+    check(not K.panel.shown, "kicks: ending the demo in a raid group hides the panel again")
+    IsInGroup, IsInRaid, UnitClass, UnitName = saved[1], saved[2], saved[3], saved[4]
+    CastAheadConfig.Set("kickSpike", saved[5])
+end)()
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

@@ -164,7 +164,7 @@ local SWITCHES = {
     burstCalls = { label = "Burst windows", defaultOff = true,
         tip = "On bosses with a phase worth bursting into, say \"burst now\" when it starts, with a countdown in the centre block, and \"burst soon\" ahead of it if the slider below is set. Healers get their own phases for group-healing cooldowns. On every other boss it stays silent: press on cooldown." },
     kickSpike = { label = "Kicks and CC (experimental)", defaultOff = true,
-        tip = "A panel with each party member's interrupt and its cooldown, and below it a bar for every stun, fear or incapacitate on enemy nameplates. Drag it to move it. Another player's kick shows only when it lands, unless the game lets the addon read their cast; a missed kick stays hidden. Same as /ca kicks." },
+        tip = "A panel with each party member's interrupt and its cooldown, and below it a bar for every stun, fear or incapacitate on enemy nameplates. Shown only in a party of up to five, not solo or in a raid group. Drag it to move it. Another player's kick shows only when it lands, unless the game lets the addon read their cast; a missed kick stays hidden. Same as /ca kicks." },
     kickRows = { label = "Kick rows",
         tip = "The party's interrupts and their cooldowns at the top of the panel." },
     kickDefs = { label = "Party defensives",

@@ -401,8 +401,13 @@ function K.CCStart()
     return kickCount * (ROW_H + GAP) + (kickCount > 0 and CC_TOP or 0)
 end
 
+-- Solo there is no one else to track, and in a raid party1-4 is only your subgroup.
+local function InParty()
+    return IsInGroup() and not IsInRaid()
+end
+
 function K.Paint()
-    if not K.Active() then
+    if not K.Active() or not (demo or InParty()) then
         panel:Hide()
         return
     end
