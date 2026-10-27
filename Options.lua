@@ -167,6 +167,8 @@ local SWITCHES = {
         tip = "A panel with each party member's interrupt and its cooldown, and below it a bar for every stun, fear or incapacitate on enemy nameplates. Drag it to move it. Another player's kick shows only when it lands, unless the game lets the addon read their cast; a missed kick stays hidden. Same as /ca kicks." },
     kickRows = { label = "Kick rows",
         tip = "The party's interrupts and their cooldowns at the top of the panel." },
+    kickDefs = { label = "Party defensives",
+        tip = "A bar while a big group cooldown or an external is up: Rallying Cry, Anti-Magic Zone, Darkness, Pain Suppression and the like, on you or on a party member. It shows what is up now, not when it comes back." },
     kickCC = { label = "Crowd control bars",
         tip = "A bar for every stun, fear or incapacitate on enemy nameplates, under the kick rows." },
     kickProbe = { label = "Record kick data",
@@ -420,7 +422,7 @@ function BuildGeneral(panel)
     local centre = BuildGroup(panel, "Centre call", 70)
     BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 }, OutputChanged)
 
-    local features = BuildGroup(panel, "Features", 310)
+    local features = BuildGroup(panel, "Features", 338)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", features, "TOPLEFT", 10, -26 }, function()
         SaveRefresh()
         CastAheadOptions.RefreshDefensives()
@@ -469,11 +471,11 @@ function BuildGeneral(panel)
         end,
     })
     table.insert(refreshers, PaintRaid)
-    local kickRows, kickCC
+    local kickRows, kickDefs, kickCC
     local function PaintKicks()
         local on = SwitchOn("kickSpike")
         local color = on and { 1, 1, 1 } or T.muted
-        for _, child in ipairs({ kickRows, kickCC }) do
+        for _, child in ipairs({ kickRows, kickDefs, kickCC }) do
             child:SetEnabled(on)
             child.text:SetTextColor(unpack(color))
         end
@@ -484,8 +486,9 @@ function BuildGeneral(panel)
     end
     local kicks = BuildSwitch(panel, "kickSpike", { "TOPLEFT", burstSoon, "BOTTOMLEFT", -28, -20 }, KicksChanged)
     kickRows = BuildSwitch(panel, "kickRows", { "TOPLEFT", kicks, "BOTTOMLEFT", 16, -4 }, KicksChanged)
-    kickCC = BuildSwitch(panel, "kickCC", { "TOPLEFT", kickRows, "BOTTOMLEFT", 0, -4 }, KicksChanged)
-    for _, child in ipairs({ kickRows, kickCC }) do
+    kickDefs = BuildSwitch(panel, "kickDefs", { "TOPLEFT", kickRows, "BOTTOMLEFT", 0, -4 }, KicksChanged)
+    kickCC = BuildSwitch(panel, "kickCC", { "TOPLEFT", kickDefs, "BOTTOMLEFT", 0, -4 }, KicksChanged)
+    for _, child in ipairs({ kickRows, kickDefs, kickCC }) do
         if child.SetMotionScriptsWhileDisabled then child:SetMotionScriptsWhileDisabled(true) end
     end
     table.insert(refreshers, PaintKicks)

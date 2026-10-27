@@ -53,6 +53,7 @@ end
 
 local function RowsOn() return K.Active() and CastAheadConfig.Enabled("kickRows") end
 local function CCOn() return K.Active() and CastAheadConfig.Enabled("kickCC") end
+local function DefsOn() return K.Active() and CastAheadConfig.Enabled("kickDefs") end
 
 local function InCombat()
     return UnitAffectingCombat("player") and "1" or "0"
@@ -379,7 +380,7 @@ function K.Paint()
         row:Show()
     end
     for i = kickCount + 1, #rows do rows[i]:Hide() end
-    title:SetText(kickCount > 0 and "Kicks" or "Crowd control")
+    title:SetText(kickCount > 0 and "Kicks" or "Group and enemy auras")
     panel:SetHeight(math.max(1, kickCount) * (ROW_H + GAP))
     if K.LayoutCC then K.LayoutCC() end
     panel:Show()
@@ -412,12 +413,25 @@ function K.Toggle()
     print("|cff33ff99CastAhead|r party kicks and CC " .. (on and "on - place it in Size and position" or "off"))
 end
 
--- Crowd control on enemies ----------------------------------------------
--- One Blizzard aura container per nameplate token, filtered to these debuffs
--- (each checked in SpellEffect to apply a stun, fear or confuse aura). The
--- game draws the bars, so Secret aura data in combat is never read here, and
--- who cast the control is unknown. Containers are chained under the kick
--- rows; an empty container has no height, so the stack has no gaps.
+-- Aura bars: party defensives and crowd control -------------------------
+-- Blizzard aura containers filtered to spell ids (each checked in SpellEffect
+-- to apply the aura): the game draws the bars, so Secret aura data in combat
+-- is never read here. Defensives show while they are up on you (group
+-- cooldowns and externals) or on a party member (externals only, so a group
+-- cooldown is not listed five times); when they come back is unknown.
+-- Crowd control shows per enemy nameplate; who cast it is unknown. All of it
+-- is chained past the kick rows; an empty container has no height, so the
+-- stack has no gaps.
+K.GROUP_DEFS = {}
+for _, id in ipairs({ 97463, 31821, 81782, 64844, 145629, 325174, 209426, 363534, 374227 }) do
+    K.GROUP_DEFS[id] = true
+end
+K.EXTERNALS = {}
+for _, id in ipairs({ 6940, 1022, 204018, 33206, 47788, 102342, 116849, 357170 }) do K.EXTERNALS[id] = true end
+local MY_DEFS = {}
+for id in pairs(K.GROUP_DEFS) do MY_DEFS[id] = true end
+for id in pairs(K.EXTERNALS) do MY_DEFS[id] = true end
+
 K.CC = {}
 for _, id in ipairs({
     853, 408, 1833, 1776, 2094, 5211, 30283, 89766, 119381, 132168, 132169, 179057,
@@ -427,66 +441,78 @@ for _, id in ipairs({
     360806, 1513,
 }) do K.CC[id] = true end
 
+local DEF_COLOR = { 0.2, 0.75, 0.35 }
+local CC_COLOR = { 0.85, 0.65, 0.1 }
+local DEF_UNITS = { "player", "party1", "party2", "party3", "party4" }
+
 local containers = {}
 local plates = {}
 
-local function InitButton(btn)
-    btn:SetSize(ROW_W, CC_H)
-    local icon = btn:CreateTexture(nil, "ARTWORK")
-    icon:SetSize(CC_H, CC_H)
-    icon:SetPoint("LEFT")
-    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    local bar = CreateFrame("StatusBar", nil, btn)
-    bar:SetPoint("TOPLEFT", icon, "TOPRIGHT", GAP, 0)
-    bar:SetPoint("BOTTOMRIGHT")
-    bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
-    bar:SetStatusBarColor(0.85, 0.65, 0.1, 0.9)
-    local bg = bar:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
-    bg:SetColorTexture(0, 0, 0, 0.6)
-    local text = bar:CreateFontString(nil, "OVERLAY")
-    text:SetFont(FONT, 10, "OUTLINE")
-    text:SetPoint("RIGHT", -3, 0)
-    local name = bar:CreateFontString(nil, "OVERLAY")
-    name:SetFont(FONT, 10, "OUTLINE")
-    name:SetPoint("LEFT", 3, 0)
-    btn:SetIcon(icon)
-    btn:SetDurationBar(bar, {})
-    btn:SetDurationText(text, {})
-    btn:SetSpellName(name)
-    if btn.SetHideTooltipInCombat then btn:SetHideTooltipInCombat(true) end
+local function Initializer(color)
+    return function(btn)
+        btn:SetSize(ROW_W, CC_H)
+        local icon = btn:CreateTexture(nil, "ARTWORK")
+        icon:SetSize(CC_H, CC_H)
+        icon:SetPoint("LEFT")
+        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        local bar = CreateFrame("StatusBar", nil, btn)
+        bar:SetPoint("TOPLEFT", icon, "TOPRIGHT", GAP, 0)
+        bar:SetPoint("BOTTOMRIGHT")
+        bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+        bar:SetStatusBarColor(color[1], color[2], color[3], 0.9)
+        local bg = bar:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        bg:SetColorTexture(0, 0, 0, 0.6)
+        local text = bar:CreateFontString(nil, "OVERLAY")
+        text:SetFont(FONT, 10, "OUTLINE")
+        text:SetPoint("RIGHT", -3, 0)
+        local name = bar:CreateFontString(nil, "OVERLAY")
+        name:SetFont(FONT, 10, "OUTLINE")
+        name:SetPoint("LEFT", 3, 0)
+        btn:SetIcon(icon)
+        btn:SetDurationBar(bar, {})
+        btn:SetDurationText(text, {})
+        btn:SetSpellName(name)
+        if btn.SetHideTooltipInCombat then btn:SetHideTooltipInCombat(true) end
+    end
 end
+local InitCC, InitDef = Initializer(CC_COLOR), Initializer(DEF_COLOR)
 
-local function Container(token)
-    local c = containers[token]
+-- `key` names the container: "def:<unit>" or "cc:<nameplate token>".
+local function Container(key, unit, filter, spells, init)
+    local c = containers[key]
     if c ~= nil then return c or nil end
     local ok, made = pcall(CreateFrame, "AuraContainer", nil, panel, "CustomAuraContainerTemplate")
     if not ok or not made then
-        containers[token] = false
+        containers[key] = false
         return nil
     end
     c = made
     if c.SetEditModePreviewEnabled then c:SetEditModePreviewEnabled(false) end
     c:SetFlowLayoutMaximumLineSize(ROW_W)
-    c:SetUnit(token)
-    c:AddAuraGroup("cc", "HARMFUL", {
-        candidateFilters = { includeSpellIDs = K.CC },
-        initializeFrame = InitButton,
+    c:SetUnit(unit)
+    c:AddAuraGroup("bars", filter, {
+        candidateFilters = { includeSpellIDs = spells },
+        initializeFrame = init,
         sortMethod = AuraContainerSortMethod.Expiration,
         maxFrameCount = 3,
         layout = { elementWidth = ROW_W, elementHeight = CC_H, lineSpacing = GAP, forceNewLine = true },
     })
-    containers[token] = c
+    containers[key] = c
     return c
 end
 
--- Chains the shown containers in nameplate order past the kick rows, in the
+local order = {}
+for _, unit in ipairs(DEF_UNITS) do order[#order + 1] = "def:" .. unit end
+for i = 1, 40 do order[#order + 1] = "cc:nameplate" .. i end
+
+-- Chains the shown containers past the kick rows, defensives first, in the
 -- grow direction; each container's own bars grow the same way.
 function K.LayoutCC()
     local up = K.GrowsUp()
     local prev
-    for i = 1, 40 do
-        local c = containers["nameplate" .. i]
+    for _, key in ipairs(order) do
+        local c = containers[key]
         if c and c:IsShown() then
             if c.growsUp ~= up and AnchorUtil and AnchorUtil.FlowDirection then
                 c.growsUp = up
@@ -510,7 +536,8 @@ function K.LayoutCC()
 end
 
 local function ShowPlate(token, on)
-    local c = on and Container(token) or containers[token]
+    local key = "cc:" .. token
+    local c = on and Container(key, token, "HARMFUL", K.CC, InitCC) or containers[key]
     if not c then return end
     if on then
         c:SetUnit(token)
@@ -520,11 +547,23 @@ local function ShowPlate(token, on)
     end
 end
 
+local function ApplyDefs(on)
+    for _, unit in ipairs(DEF_UNITS) do
+        local key = "def:" .. unit
+        local show = on and UnitExists(unit)
+        local c = show and Container(key, unit, "HELPFUL", unit == "player" and MY_DEFS or K.EXTERNALS, InitDef)
+            or containers[key]
+        if c then c:SetShown(show and true or false) end
+    end
+end
+
 function K.ApplyCC()
+    ApplyDefs(DefsOn() and not demo)
     local on = CCOn() and not demo
     for token in pairs(plates) do ShowPlate(token, on) end
     if not on then
-        for _, c in pairs(containers) do
+        for i = 1, 40 do
+            local c = containers["cc:nameplate" .. i]
             if c then c:Hide() end
         end
     end
@@ -559,7 +598,10 @@ local DEMO_GROUP = {
     { name = "Rogue", class = "ROGUE" },
     { name = "Priest", class = "PRIEST", role = "HEALER" },
 }
-local DEMO_CC = { { id = 119381, len = 3 }, { id = 30283, len = 3 }, { id = 118, len = 8 } }
+local DEMO_BARS = {
+    { id = 97463, len = 10, def = true }, { id = 33206, len = 8, def = true },
+    { id = 119381, len = 3 }, { id = 30283, len = 3 }, { id = 118, len = 8 },
+}
 local DEMO_KICK_EVERY = 2.5
 
 local demoBars = {}
@@ -570,7 +612,8 @@ local function DemoBar(i)
     bar = CreateFrame("StatusBar", nil, panel)
     bar:SetSize(ROW_W - CC_H - GAP, CC_H)
     bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
-    bar:SetStatusBarColor(0.85, 0.65, 0.1, 0.9)
+    local color = DEMO_BARS[i].def and DEF_COLOR or CC_COLOR
+    bar:SetStatusBarColor(color[1], color[2], color[3], 0.9)
     bar:SetMinMaxValues(0, 1)
     local bg = bar:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
@@ -600,20 +643,21 @@ local function DemoTick()
         end
         if #ready > 0 then K.Start(ready[math.random(#ready)].unit, nil, "demo") end
     end
-    local showCC = CCOn()
-    for i, cc in ipairs(DEMO_CC) do
+    local showCC, showDefs, slot = CCOn(), DefsOn(), 0
+    for i, sample in ipairs(DEMO_BARS) do
         local bar = DemoBar(i)
         local state = demo.cc[i]
         if now >= state.endsAt + 1.5 then
-            state.endsAt = now + cc.len
+            state.endsAt = now + sample.len
         end
         local left = state.endsAt - now
-        K.Stack(bar, K.CCStart() + (i - 1) * (CC_H + GAP), CC_H + GAP)
-        if showCC and left > 0 then
-            bar.icon:SetTexture(C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(cc.id) or 134400)
-            bar.name:SetText(C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(cc.id) or "")
+        if (sample.def and showDefs or not sample.def and showCC) and left > 0 then
+            K.Stack(bar, K.CCStart() + slot * (CC_H + GAP), CC_H + GAP)
+            slot = slot + 1
+            bar.icon:SetTexture(C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sample.id) or 134400)
+            bar.name:SetText(C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(sample.id) or "")
             bar.time:SetText(string.format("%.1f", left))
-            bar:SetValue(left / cc.len)
+            bar:SetValue(left / sample.len)
             bar:Show()
         else
             bar:Hide()
@@ -629,7 +673,7 @@ function K.Demo(on)
     if on then
         local now = GetTime()
         demo = { nextKick = now + 1, cc = {} }
-        for i, cc in ipairs(DEMO_CC) do demo.cc[i] = { endsAt = now + cc.len - (i - 1) } end
+        for i, sample in ipairs(DEMO_BARS) do demo.cc[i] = { endsAt = now + sample.len - (i - 1) } end
         wipe(members)
         wipe(byUnit)
         local _, myClass = UnitClass("player")
