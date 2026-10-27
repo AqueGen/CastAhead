@@ -1,4 +1,4 @@
-"""Read Cast Ahead key journals and wrong-call reports, and check them against the data and the combat log.
+"""Read CastAhead key journals and wrong-call reports, and check them against the data and the combat log.
 
     python tools/audit.py issue <export.txt> [--data Data.lua]
     python tools/audit.py owner <SavedVariables CastAhead.lua> <combat log> [--key N] [--data Data.lua] [--out DIR]
@@ -120,7 +120,7 @@ def mob_history(lines, mob, before_t):
 
 def issue_report(report, rows):
     h = report.header
-    out = ["## Cast Ahead report - instance %s, level %s, addon %s, data %s, role %s" % (
+    out = ["## CastAhead report - instance %s, level %s, addon %s, data %s, role %s" % (
         h.get("instance"), h.get("level"), h.get("addon"), h.get("data"), h.get("role"))]
     if report.problems:
         out.append("Problems: " + "; ".join(report.problems))
@@ -347,7 +347,7 @@ def casts_in(window, spells):
 
 def coverage_report(sv_text, log_paths, data_text, priority):
     windows = key_windows(log_paths)
-    used, out = set(), ["# Cast Ahead coverage"]
+    used, out = set(), ["# CastAhead coverage"]
     for n, (instance, level, lines) in enumerate(journal_keys(sv_text), 1):
         rows = load_data_rows(data_text, instance)
         if not rows or not level:

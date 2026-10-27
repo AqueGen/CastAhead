@@ -18,7 +18,7 @@ local UNCAPPED = { MARK = true, SNAP = true, NOTE = true }
 -- Saved variables reach the disk only on a reload or logout; a crash loses
 -- every key recorded since.
 StaticPopupDialogs.CASTAHEAD_RELOAD = {
-    text = "Cast Ahead: the key journal is full (" .. R.MAX_KEYS .. " keys). Reload now to save it to disk, copy it off, then clear it on the Development tab.",
+    text = "CastAhead: the key journal is full (" .. R.MAX_KEYS .. " keys). Reload now to save it to disk, copy it off, then clear it on the Development tab.",
     button1 = RELOADUI or "Reload",
     button2 = LATER or "Later",
     OnAccept = function() ReloadUI() end,
@@ -29,7 +29,7 @@ StaticPopupDialogs.CASTAHEAD_RELOAD = {
 }
 
 StaticPopupDialogs.CASTAHEAD_CLEAR_JOURNAL = {
-    text = "Cast Ahead: clear the key journal? Copy it off the disk first - cleared keys are gone after the next reload.",
+    text = "CastAhead: clear the key journal? Copy it off the disk first - cleared keys are gone after the next reload.",
     button1 = YES or "Yes",
     button2 = NO or "No",
     OnAccept = function() R.Clear() end,
@@ -111,7 +111,7 @@ function R.Summary(key)
         if kind == "STOP" then casts = casts + 1 end
         if kind == "START" and not line:match("^%d+|START|[^|]*|%d|[^|]*|%-|") then calls = calls + 1 end
     end
-    return string.format("|cff33ff99Cast Ahead|r %d casts, %d calls, %d marks recorded - /ca report",
+    return string.format("|cff33ff99CastAhead|r %d casts, %d calls, %d marks recorded - /ca report",
         casts, calls, key.marks or 0)
 end
 
@@ -147,11 +147,11 @@ end
 local function CoverageLine(key)
     local never, total = R.Coverage(key)
     if #never == 0 then
-        return string.format("|cff33ff99Cast Ahead|r every one of this dungeon's %d spells was shown", total)
+        return string.format("|cff33ff99CastAhead|r every one of this dungeon's %d spells was shown", total)
     end
     local names = {}
     for i = 1, math.min(#never, 8) do names[i] = never[i].name or tostring(never[i].spell) end
-    return string.format("|cff33ff99Cast Ahead|r shown %d of %d spells; never shown: %s%s",
+    return string.format("|cff33ff99CastAhead|r shown %d of %d spells; never shown: %s%s",
         total - #never, total, table.concat(names, ", "), #never > 8 and (" and " .. (#never - 8) .. " more") or "")
 end
 
@@ -185,7 +185,7 @@ function R.Clear()
     local open = R.Current()
     journal.keys = open and { open } or {}
     journal.fullAsked = nil
-    print("|cff33ff99Cast Ahead|r key journal cleared")
+    print("|cff33ff99CastAhead|r key journal cleared")
 end
 
 function R.StartKey(info)
@@ -395,7 +395,7 @@ function R.Mark()
             Field(casting.sinceMs or "-"), Field(table.concat(preds, ",")) })
     end
     R.selected = nil
-    print("|cff33ff99Cast Ahead|r mark " .. n .. " recorded" .. (selected ~= "-" and (" on " .. selected) or ""))
+    print("|cff33ff99CastAhead|r mark " .. n .. " recorded" .. (selected ~= "-" and (" on " .. selected) or ""))
     return n, key
 end
 

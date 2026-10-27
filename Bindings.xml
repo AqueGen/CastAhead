@@ -1,8 +1,8 @@
 <Bindings>
-  <Binding name="CASTAHEAD_MARK" category="Cast Ahead">
+  <Binding name="CASTAHEAD_MARK" category="CastAhead">
     CastAheadReport.Mark(false)
   </Binding>
-  <Binding name="CASTAHEAD_MARK_NOTE" category="Cast Ahead">
+  <Binding name="CASTAHEAD_MARK_NOTE" category="CastAhead">
     CastAheadReport.Mark(true)
   </Binding>
 </Bindings>
