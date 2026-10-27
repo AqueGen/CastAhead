@@ -323,7 +323,7 @@ function K.Paint()
         return
     end
     local now = GetTime()
-    kickCount = RowsOn() and #members or 0
+    kickCount = RowsOn() and not (demo and not demo.kicks) and #members or 0
     for i = 1, kickCount do
         local row = Row(i)
         PaintRow(row, members[i], now)
@@ -539,7 +539,7 @@ local function DemoTick()
         end
         if #ready > 0 then K.Start(ready[math.random(#ready)].unit, nil, "demo") end
     end
-    local showCC = CCOn()
+    local showCC = CCOn() and demo.showCC
     for i, cc in ipairs(DEMO_CC) do
         local bar = DemoBar(i)
         local state = demo.cc[i]
@@ -563,12 +563,14 @@ end
 
 local demoFrame = CreateFrame("Frame")
 
-function K.Demo(on)
+-- `part` is "kicks" or "cc" for one half of the panel, nil for both.
+function K.Demo(on, part)
     on = on and K.Active() or false
+    if on and demo and demo.part ~= part then K.Demo(false) end
     if on == (demo ~= nil) then return end
     if on then
         local now = GetTime()
-        demo = { nextKick = now + 1, cc = {} }
+        demo = { part = part, nextKick = now + 1, cc = {}, kicks = part ~= "cc", showCC = part ~= "kicks" }
         for i, cc in ipairs(DEMO_CC) do demo.cc[i] = { endsAt = now + cc.len - (i - 1) } end
         wipe(members)
         wipe(byUnit)
@@ -601,3 +603,4 @@ function K.Demo(on)
 end
 
 function K.Demoing() return demo ~= nil end
+function K.DemoPart() return demo and demo.part end

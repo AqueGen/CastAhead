@@ -1,4 +1,5 @@
 local testButton
+local kicksByTest = false
 local DUNGEON_PAGES = { Casts = true, Saves = true, Guide = true, RaidGuide = true, RaidSaves = true }
 
 -- Stored as nil when on, false when off, so a fresh profile defaults to on.
@@ -42,9 +43,14 @@ end
 -- clicked. Core calls this when a run ends.
 function CastAheadUI.RefreshTest()
     local running = CastAheadCore and CastAheadCore.Testing and CastAheadCore.Testing()
-    if testButton then testButton:SetText(running and "Stop test" or "Test drive") end
+    if testButton then testButton:SetText(running and "Stop test" or "Test drive all") end
     if CastAheadUI.RefreshPlayList then CastAheadUI.RefreshPlayList(running) end
-    if CastAheadKicks then CastAheadKicks.Demo(running) end
+    -- Test drive all runs the kick demo too; only the demo it started is stopped with it.
+    local all = running and CastAheadCore.TestingAll and CastAheadCore.TestingAll() or false
+    if CastAheadKicks and (all or kicksByTest) then
+        CastAheadKicks.Demo(all)
+        kicksByTest = all
+    end
 end
 
 function CastAheadUI.RefreshTabs()
@@ -73,13 +79,13 @@ end
 
 -- Dry run of the selected dungeon's calls: icons, sounds, timeline.
 function CastAheadWindow.titleButtons(add)
-    testButton = add("Test drive", 90, true, function()
+    testButton = add("Test drive all", 110, true, function()
         if CastAheadCore and CastAheadCore.Test then CastAheadCore.Test(CastAheadWindow.Dungeon()) end
     end)
     testButton:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-        GameTooltip:SetText("Test drive", 1, 1, 1)
-        GameTooltip:AddLine("Play the selected dungeon's calls with nothing pulled, through the outputs switched on in General: icons on any nameplate in front of you, the centre call, the timeline, the voice and the sounds. Click again to stop.", nil, nil, nil, true)
+        GameTooltip:SetText("Test drive all", 1, 1, 1)
+        GameTooltip:AddLine("Play the selected dungeon's calls with nothing pulled, through the outputs switched on in General: icons on any nameplate in front of you, the centre call, the timeline, the voice and the sounds. Features that are switched on join in with samples of their own. Each feature also has its own Test button in General - Features. Click again to stop.", nil, nil, nil, true)
         GameTooltip:Show()
     end)
     testButton:SetScript("OnLeave", GameTooltip_Hide)
@@ -127,7 +133,9 @@ SlashCmdList.CASTAHEAD = function(msg)
         if not CastAheadKicks then return end
         if msg:match("^%s*%a+%s+demo") then
             if not CastAheadKicks.Active() then CastAheadKicks.Toggle() end
-            CastAheadKicks.Demo(not CastAheadKicks.Demoing())
+            local part = msg:match("^%s*%a+%s+demo%s+(%a+)")
+            local running = CastAheadKicks.Demoing() and CastAheadKicks.DemoPart() == part
+            CastAheadKicks.Demo(not running, part)
         else
             CastAheadKicks.Toggle()
         end

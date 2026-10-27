@@ -204,7 +204,7 @@ function B.Tick(now)
         Disarm()
     end
     if #entries == 0 then return end
-    if IsEncounterInProgress and not IsEncounterInProgress() then wipe(entries) return end
+    if IsEncounterInProgress and not IsEncounterInProgress() and not entries[1].demo then wipe(entries) return end
     if not On() then return end
     for _, e in ipairs(entries) do
         if not e.fired and now >= e.fireAt and now < e.endAt then
@@ -217,6 +217,21 @@ function B.Tick(now)
             end
         end
     end
+end
+
+-- One "burst soon" then "burst now" for the settings' Test button. It runs
+-- outside an encounter, so Tick keeps entries marked `demo`. Returns when the
+-- window ends.
+function B.Demo(now)
+    wipe(entries)
+    local at = now + SOON + 1
+    entries[1] = { fireAt = at - SOON, endAt = at, advice = M.ADVICE.SOON, demo = true }
+    entries[2] = { fireAt = at, endAt = at + BURST_SHOWN, advice = M.ADVICE.BURST, demo = true }
+    return at + BURST_SHOWN
+end
+
+function B.ClearDemo()
+    if entries[1] and entries[1].demo then wipe(entries) end
 end
 
 function B.Pending(now)

@@ -4856,7 +4856,7 @@ do
         titleAdded[#titleAdded + 1] = text
         return { SetScript = function() end, SetText = function() end }
     end)
-    check(titleAdded[1] == "Test drive" and #titleAdded == 1, "the title bar keeps only Test drive, got " .. table.concat(titleAdded, ","))
+    check(titleAdded[1] == "Test drive all" and #titleAdded == 1, "the title bar keeps only Test drive all, got " .. table.concat(titleAdded, ","))
     CastAheadUI.ShowTab("Casts")
     local f = CastAheadWindow.Frame()
     check(f and f.w == 600 and f.h == 420, "a saved size below the minimum opens at the minimum")
@@ -5238,6 +5238,22 @@ do
     B.Tick(now)
     B.Pending(now)
     check(specLookups == 0, "burst: no windows, no spec lookups per frame")
+    GetSpecialization = function() return 1 end
+
+    -- The settings' Test button: a sample window outside any encounter.
+    heard = {}
+    IsEncounterInProgress = function() return false end
+    local demoEnd = B.Demo(now)
+    run(1)
+    check(Heard() == "SOON", "burst demo: burst soon plays outside an encounter, heard " .. Heard())
+    run(demoEnd - now)
+    check(Heard() == "SOON,BURST", "burst demo: then burst now, heard " .. Heard())
+    B.Demo(now)
+    B.ClearDemo()
+    run(10)
+    check(Heard() == "SOON,BURST", "burst demo: cleared before it fires stays silent, heard " .. Heard())
+    IsEncounterInProgress = nil
+
     S.Cancel("test:save1")
     S.Cancel("test:save2")
     S.Cancel("test:save3")
