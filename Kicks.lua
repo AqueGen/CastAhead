@@ -1,7 +1,8 @@
 -- Trial: party kicks and crowd control on enemies, off until turned on in
 -- General - Features or with /ca kicks. Party kicks are seen only when the game lets the addon read
 -- who interrupted or what a party member cast; a kick that misses is
--- invisible otherwise. Each source is also written to the key journal so one
+-- invisible otherwise. The meter adds each member's landed kicks this pull,
+-- shown as a count because it is secret in combat. Each source is also written to the key journal so one
 -- key shows which of them are readable.
 CastAheadKicks = {}
 local K = CastAheadKicks
@@ -190,6 +191,25 @@ local function MeterSources()
     return sources, "ok"
 end
 
+-- In combat the meter hides amounts and GUIDs but not the class or
+-- isLocalPlayer, so a source goes to the one other member of its class; two
+-- members of one class get no count rather than a wrong one.
+function K.MemberFor(source)
+    if source.isLocalPlayer then return byUnit.player end
+    local found
+    for _, m in ipairs(members) do
+        if m.unit ~= "player" and m.class == source.classFilename then
+            if found then return nil end
+            found = m
+        end
+    end
+    return found
+end
+
+local function ClearCounts()
+    for _, m in ipairs(members) do m.count, m.counted = nil, nil end
+end
+
 -- The Current session restarts with each combat, so the baseline is wiped
 -- when combat starts (PLAYER_REGEN_DISABLED).
 local function OnMeter(meterType)
@@ -203,6 +223,9 @@ local function OnMeter(meterType)
     for i, s in ipairs(sources) do
         local amount, guid = s.totalAmount, s.sourceGUID
         fields[i] = tostring(s.classFilename or "?") .. ":" .. K.State(s.specIconID) .. ":" .. K.State(amount) .. ":" .. K.State(guid)
+        -- The count may be secret: only the row's font string reads it.
+        local m = K.MemberFor(s)
+        if m and m.unit ~= "player" then m.count, m.counted = amount, true end
         if not Secret(amount) and not Secret(guid) and guid and type(amount) == "number" then
             local last = meterSeen[guid] or 0
             if amount > last then
@@ -246,6 +269,7 @@ function K.OnEvent(event, ...)
         OnMeter(...)
     elseif event == "DAMAGE_METER_RESET" or event == "PLAYER_REGEN_DISABLED" then
         wipe(meterSeen)
+        ClearCounts()
     end
 end
 
@@ -385,6 +409,13 @@ local function PaintRow(row, m, now)
         row:SetValue(1 - left / m.cd)
         row.time:SetText(string.format("%d", math.ceil(left)))
         row.icon:SetDesaturated(true)
+    elseif m.unit ~= "player" then
+        -- Another member's readiness is unknown; the meter gives only the
+        -- kicks they landed this pull.
+        row:SetStatusBarColor(r * 0.45, g * 0.45, b * 0.45, 0.9)
+        row:SetValue(1)
+        if m.counted then row.time:SetFormattedText("x%d", m.count) else row.time:SetText("") end
+        row.icon:SetDesaturated(false)
     else
         row:SetStatusBarColor(r, g, b, 0.9)
         row:SetValue(1)
@@ -681,7 +712,12 @@ local function DemoTick()
         for _, m in ipairs(members) do
             if m.role ~= "HEALER" and (not m.readyAt or m.readyAt <= now) then ready[#ready + 1] = m end
         end
-        if #ready > 0 then K.Start(ready[math.random(#ready)].unit, nil, "demo") end
+        local m = #ready > 0 and ready[math.random(#ready)]
+        if m and m.unit == "player" then
+            K.Start(m.unit, nil, "demo")
+        elseif m then
+            m.count, m.counted = (m.count or 0) + 1, true
+        end
     end
     local showCC, showDefs, slot = CCOn(), DefsOn(), 0
     for i, sample in ipairs(DEMO_BARS) do

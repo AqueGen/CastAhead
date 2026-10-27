@@ -6608,5 +6608,43 @@ end)()
     CastAheadConfig.Set("kickSpike", saved[5])
 end)()
 
+;(function()
+    local K = CastAheadKicks
+    local saved = { UnitExists, UnitClass, UnitName, C_DamageMeter, Enum, CastAheadConfig.Get("kickSpike"), IsInGroup, IsInRaid }
+    IsInGroup = function() return true end
+    IsInRaid = function() return false end
+    local classes = { player = "MAGE", party1 = "WARRIOR", party2 = "ROGUE", party3 = "ROGUE", party4 = "MAGE" }
+    UnitExists = function(unit) return classes[unit] ~= nil end
+    UnitClass = function(unit) return classes[unit], classes[unit] end
+    UnitName = function(unit) return unit end
+    Enum = setmetatable({ DamageMeterType = { Interrupts = 5 }, DamageMeterSessionType = { Current = 1 } },
+        { __index = saved[5] })
+    local sources = {
+        { classFilename = "WARRIOR", totalAmount = 2 },
+        { classFilename = "ROGUE", totalAmount = 1 },
+        { classFilename = "MAGE", isLocalPlayer = true, totalAmount = 4 },
+        { classFilename = "MAGE", totalAmount = 3 },
+    }
+    C_DamageMeter = { GetCombatSessionFromType = function() return { combatSources = sources } end }
+    CastAheadConfig.Set("kickSpike", true)
+    K.Roster()
+    local function count(unit)
+        for _, m in ipairs(K.Members()) do
+            if m.unit == unit then return m.counted and m.count end
+        end
+    end
+    K.OnEvent("DAMAGE_METER_COMBAT_SESSION_UPDATED", 5)
+    check(count("party1") == 2, "kicks: the only warrior takes the warrior's meter count")
+    check(not count("party2") and not count("party3"), "kicks: two rogues, neither takes the count")
+    check(not count("player"), "kicks: your own row keeps the timer, no count")
+    check(count("party4") == 3, "kicks: the other mage takes the count when you are a mage too")
+    K.OnEvent("PLAYER_REGEN_DISABLED")
+    check(not count("party1"), "kicks: a new pull clears the counts")
+    UnitExists, UnitClass, UnitName, C_DamageMeter, Enum = saved[1], saved[2], saved[3], saved[4], saved[5]
+    CastAheadConfig.Set("kickSpike", saved[6])
+    K.Roster()
+    IsInGroup, IsInRaid = saved[7], saved[8]
+end)()
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)
