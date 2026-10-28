@@ -32,7 +32,6 @@ local RAID_DEFAULT = 15
 local MOVED = { Bursts = "RaidGuide", RaidDefensives = "RaidGuide" }
 
 local frame, titleBar, titleAnchor, scaleDrop, menu, content, grid, raidGrid, scroll, footerText, footerHint
-local sizing = false
 local pages, order, headers, dungeonButtons, raidButtons = {}, {}, {}, {}, {}
 local current, dungeon, picked, raidDifficulty, raidPicked
 
@@ -69,7 +68,20 @@ function W.Button(parent, text, width, primary)
 end
 
 local NOTICE_W, NOTICE_PAD, NOTICE_ICON = 360, 14, 18
-local NOTICE_TEXT = "Defensive calls are now off by default, so they were switched off once for everyone, in dungeons and in raids.\n\nTurn them on in General - Features."
+local DEFENSIVES_OFF = {
+    text = "Defensive calls are now off by default, so they were switched off once for everyone, in dungeons and in raids.\n\nTurn them on in General - Features.",
+    button = "Open settings", page = "General",
+}
+-- Shown once after an update, never on a new install. Only changes that
+-- change how a run plays out go here; raise `id` for each new message.
+W.NEWS = {
+    id = 1,
+    title = "What's new in CastAhead",
+    text = "- The Casts page now sorts every cast by what you get in combat: called out loud, shown without sound, or hidden. Hover a cast to see why.\n\n"
+        .. "- Click a cast to give it its own settings: star it as important, mute it, or give it its own sound or early warning.\n\n"
+        .. "- \"My role only\" now hides tank busters and dispels you cannot use even with \"Important casts only\" off.",
+    button = "Open Casts", page = "Casts",
+}
 local notice
 
 local function BuildNotice()
@@ -103,33 +115,36 @@ local function BuildNotice()
     icon:SetSize(NOTICE_ICON, NOTICE_ICON)
     icon:SetPoint("LEFT", bar, "LEFT", NOTICE_PAD, 0)
     icon:SetTexture(W.ICON)
-    local title = bar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("LEFT", icon, "RIGHT", PAD, 0)
-    title:SetTextColor(unpack(T.gold))
-    title:SetText("CastAhead update")
+    notice.title = bar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    notice.title:SetPoint("LEFT", icon, "RIGHT", PAD, 0)
+    notice.title:SetTextColor(unpack(T.gold))
 
     notice.body = notice:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     notice.body:SetPoint("TOPLEFT", bar, "BOTTOMLEFT", NOTICE_PAD, -NOTICE_PAD)
     notice.body:SetWidth(NOTICE_W - 2 * NOTICE_PAD)
     notice.body:SetJustifyH("LEFT")
     notice.body:SetTextColor(unpack(T.text))
-    notice.body:SetText(NOTICE_TEXT)
 
     notice.close = W.Button(notice, "Close", 80, false)
     notice.close:SetPoint("BOTTOMRIGHT", notice, "BOTTOMRIGHT", -NOTICE_PAD, NOTICE_PAD)
     notice.close:SetScript("OnClick", function() notice:Hide() end)
-    notice.open = W.Button(notice, "Open settings", 110, true)
+    notice.open = W.Button(notice, "", 110, true)
     notice.open:SetPoint("RIGHT", notice.close, "LEFT", -PAD, 0)
-    notice.open:SetScript("OnClick", function()
-        notice:Hide()
-        CastAheadUI.ShowTab("General")
-    end)
-
-    notice:SetSize(NOTICE_W, TITLE_H + 1 + 3 * NOTICE_PAD + ENTRY_H + math.ceil(notice.body:GetStringHeight()))
 end
 
-function W.ShowUpdateNotice()
+-- `message` = { title, text, button, page }; the button opens that page.
+-- Without one it is the notice about defensive calls going off by default.
+function W.ShowUpdateNotice(message)
+    message = message or DEFENSIVES_OFF
     if not notice then BuildNotice() end
+    notice.title:SetText(message.title or "CastAhead update")
+    notice.body:SetText(message.text)
+    notice.open:SetText(message.button)
+    notice.open:SetScript("OnClick", function()
+        notice:Hide()
+        CastAheadUI.ShowTab(message.page)
+    end)
+    notice:SetSize(NOTICE_W, TITLE_H + 1 + 3 * NOTICE_PAD + ENTRY_H + math.ceil(notice.body:GetStringHeight()))
     notice:Show()
 end
 
@@ -466,7 +481,7 @@ local function Build()
         raidButtons[i] = b
     end
     content:SetScript("OnSizeChanged", function(_, width)
-        if not sizing then LayoutGrid(width) end
+        LayoutGrid(width)
     end)
 
     scroll = CreateFrame("ScrollFrame", nil, content, "UIPanelScrollFrameTemplate")
@@ -476,7 +491,7 @@ local function Build()
         end
     end
     scroll:SetScript("OnSizeChanged", function(_, width)
-        if not sizing then FitHosts(width) end
+        FitHosts(width)
     end)
 
     local function Resized()
@@ -495,12 +510,10 @@ local function Build()
         local left, top = frame:GetLeft(), frame:GetTop()
         frame:ClearAllPoints()
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
-        sizing = true
         frame:StartSizing("BOTTOMRIGHT")
     end)
     grip:SetScript("OnMouseUp", function()
         frame:StopMovingOrSizing()
-        sizing = false
         local s = Saved()
         s.width, s.height = frame:GetWidth(), frame:GetHeight()
         Resized()

@@ -61,8 +61,8 @@ function CastAheadUI.ShowTab(name)
     CastAheadWindow.Show(name)
 end
 
-function CastAheadUI.ShowUpdateNotice()
-    CastAheadWindow.ShowUpdateNotice()
+function CastAheadUI.ShowUpdateNotice(message)
+    CastAheadWindow.ShowUpdateNotice(message)
 end
 
 local function WindowShown()

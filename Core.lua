@@ -255,9 +255,13 @@ local ADVICE_SOUND = {           -- keyed by CastAheadMatch.ADVICE key
 local function ImportantOnly()
     return CastAheadConfig.Enabled("importantOnly")
 end
+CastAheadMatch.ImportantOnly = ImportantOnly
 
-local function Announceable(candidates)
-    return not ImportantOnly() or CastAheadMatch.AnyImportant(candidates)
+-- What a run shows and calls: "Important casts only" and "My role only"
+-- each trim it on their own (Match.Shown).
+local function Announceable(candidates, interruptible)
+    if not candidates or #candidates == 0 then return not ImportantOnly() end
+    return CastAheadMatch.AnyShown(candidates, interruptible)
 end
 
 -- Only a prediction this solid is worth putting on Blizzard's timeline: one
@@ -330,6 +334,8 @@ local function KnowsAny(list)
     end
     return false
 end
+
+CastAheadMatch.OwnImportant = function(spellID) return CastAheadConfig.SpellImportant(spellID) end
 
 CastAheadMatch.PlayerCanHandle = function(category)
     if not CastAheadConfig.Enabled("roleFilter") then return true end
@@ -508,9 +514,10 @@ end
 local function PlayAdviceSound(advice, lead, candidates)
     if not advice then return end
     if not CastAheadConfig.Enabled("sound") then return end
+    if CastAheadConfig.AllMuted(candidates) then return end
     -- The heads-up is a number of seconds now; 0 means the player does not
     -- want it at all.
-    if lead and CastAheadConfig.Lead() <= 0 and not CastAheadMatch.IsSave(advice) then return end
+    if lead and CastAheadConfig.LeadFor(candidates) <= 0 and not CastAheadMatch.IsSave(advice) then return end
     Alert(advice, lead, candidates, CastAheadConfig.Enabled("voice"))
 end
 
@@ -1120,7 +1127,7 @@ function StartPreview(unit, state)
     if not npc then return end
     local kit = CastAheadMatch.SpellsOfNPC(dungeon, npc)
     kit = CastAheadMatch.NarrowByEnabled(kit, CastAheadUI and CastAheadUI.IsDisabled)
-    if ImportantOnly() then kit = CastAheadMatch.OnlyImportant(kit) end
+    kit = CastAheadMatch.OnlyShown(kit)
     if #kit == 0 then return end
     local rows = {}
     for i = 1, #kit do
@@ -1150,7 +1157,7 @@ local function StartOpening(unit, state)
     -- Identification ran on the full kit above; only what gets shown is
     -- filtered, and the soonest *shown* opener is wanted - returning when the
     -- very first one was a filler hid every important opener behind it.
-    if ImportantOnly() then candidates = CastAheadMatch.OnlyImportant(candidates) end
+    candidates = CastAheadMatch.OnlyShown(candidates)
     local soonest = CastAheadMatch.SoonestOpening(candidates)
     if not soonest then return end
     state.opening = {
@@ -1273,15 +1280,13 @@ local function CollectRows(state)
     end
     -- Display filter only: identification above used every row, or a kicked
     -- filler could no longer name the mob it belongs to.
-    if ImportantOnly() then
-        local kept = {}
-        for i = 1, #rows do
-            if CastAheadMatch.AnyImportant(rows[i].candidates) then
-                kept[#kept + 1] = rows[i]
-            end
+    local kept = {}
+    for i = 1, #rows do
+        if CastAheadMatch.AnyShown(rows[i].candidates) then
+            kept[#kept + 1] = rows[i]
         end
-        rows = kept
     end
+    rows = kept
     table.sort(rows, RowSort)
     return rows
 end
@@ -1798,7 +1803,7 @@ local function OnCastStart(unit, channel)
     end
     -- Sound fires once, on the cast that needs answering - not on the timer
     -- that led up to it.
-    if state.casting and Announceable(state.casting.candidates) then
+    if state.casting and Announceable(state.casting.candidates, state.interruptible) then
         PlayAdviceSound(CastAheadMatch.ConsensusAdvice(state.casting.candidates, state.interruptible),
             nil, state.casting.candidates)
     end
@@ -2281,7 +2286,7 @@ local function RecordStart(unit, channel)
     local state = plates[unit]
     if not (state and state.castStartAt == GetTime()) then return end
     local casting = state and state.casting
-    local advice = casting and Announceable(casting.candidates)
+    local advice = casting and Announceable(casting.candidates, state.interruptible)
         and CastAheadMatch.ConsensusAdvice(casting.candidates, state.interruptible)
     local target = state and state.spellTarget
     Record("START", unit, channel and 1 or 0, casting and casting.row and casting.row.spell or "-",
@@ -2353,14 +2358,25 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
             print("|cff33ff99CastAhead:|r defensive calls are now off by default. Turn them on in /ca - General - Features.")
             CastAheadDB.saveCallsNotice = nil
             noticePending = true
+        elseif not noticePending then
+            -- What's new: once per message, never on a new install, and
+            -- never over another notice still waiting to be shown.
+            local news = CastAheadWindow and CastAheadWindow.NEWS
+            if news and CastAheadDB then
+                if not CastAheadConfig.newInstall and (tonumber(CastAheadDB.newsSeen) or 0) < news.id then
+                    noticePending = news
+                end
+                CastAheadDB.newsSeen = news.id
+            end
         end
         return
     end
     if event == "PLAYER_ENTERING_WORLD" then
         if noticePending then
+            local message = noticePending ~= true and noticePending or nil
             noticePending = nil
             local function Show()
-                if CastAheadUI and CastAheadUI.ShowUpdateNotice then CastAheadUI.ShowUpdateNotice() end
+                if CastAheadUI and CastAheadUI.ShowUpdateNotice then CastAheadUI.ShowUpdateNotice(message) end
             end
             -- Shown straight at login the notice was gone by the time the world appeared.
             if C_Timer then C_Timer.After(NOTICE_DELAY, Show) else Show() end
@@ -2521,7 +2537,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
                 local before = CastAheadMatch.ConsensusAdvice(state.casting.candidates, was)
                 local advice = CastAheadMatch.ConsensusAdvice(state.casting.candidates, state.interruptible)
                 if advice and advice.label == "KICK" and advice ~= before
-                    and Announceable(state.casting.candidates) then
+                    and Announceable(state.casting.candidates, state.interruptible) then
                     PlayAdviceSound(advice, nil, state.casting.candidates)
                 end
             end
@@ -2701,7 +2717,7 @@ local function CenterPick(now)
     for i = #centerPicks, 1, -1 do centerPicks[i] = nil end
     for unit, state in pairs(plates) do
         local c = state.casting
-        if c and c.endAt and c.endAt > now and Announceable(c.candidates) then
+        if c and c.endAt and c.endAt > now and Announceable(c.candidates, state.interruptible) then
             local advice = CastAheadMatch.ConsensusAdvice(c.candidates, state.interruptible)
             if advice then
                 centerPicks[#centerPicks + 1] = { endAt = c.endAt, advice = advice, row = c.row,
@@ -2899,7 +2915,7 @@ frame:SetScript("OnUpdate", function()
                         -- Not for a cast already going out: its own alert
                         -- fired at START, and "soon" is wrong for it anyway.
                         if not entry.casting and entry.track and not entry.track.warned then
-                            local lead = CastAheadConfig.Lead()
+                            local lead = CastAheadConfig.LeadFor(entry.candidates)
                             local first = entry.candidates and entry.candidates[1]
                             local saveLead = CastAheadSaves and CastAheadConfig.SaveCalls()
                                 and first and first.save and CastAheadConfig.SaveLead() or 0
@@ -3272,7 +3288,7 @@ function CastAheadCore.Test(instanceID, list)
                     if CastAheadTimeline then CastAheadTimeline.Finish(e.track) end
                 else
                     local remaining = e.endAt - t
-                    local lead = CastAheadConfig.Lead()
+                    local lead = CastAheadConfig.LeadFor({ e.row })
                     if lead > 0 and remaining <= lead and not e.warned then
                         e.warned = true
                         PlayAdviceSound(CastAheadMatch.Advice(e.row), true, { e.row })
@@ -3514,7 +3530,7 @@ function ProbeCall(row, unit)
     local state = plates[unit]
     local casting = state and state.casting
     row.claimed = casting and casting.row and casting.row.spell or "-"
-    local advice = casting and Announceable(casting.candidates)
+    local advice = casting and Announceable(casting.candidates, state.interruptible)
         and CastAheadMatch.ConsensusAdvice(casting.candidates, state.interruptible)
     row.call = advice and advice.key or "-"
 end

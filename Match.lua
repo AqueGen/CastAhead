@@ -414,19 +414,38 @@ M.CAPABILITY_GATED = {
 -- filter is off).
 M.PlayerRole = function() return nil end
 M.PlayerCanHandle = function() return true end
+-- The player's own star (true/false), nil when they left it to the curated set.
+M.OwnImportant = function() return nil end
+-- "Important casts only" from General.
+M.ImportantOnly = function() return false end
 
--- "Important" means a human curated this cast into the priority set, and the
--- player can act on it. Kept as functions here so the display filter and the
--- sound gate agree on the meaning.
-function M.Important(row)
-    if M.IsSave(M.Advice(row)) then return true end
-    if not row.prio then return false end
+-- The cast's call is one this character can act on: its role, and the
+-- dispels it knows. Judged by the call the cast actually makes - a dispel
+-- refined to the school it left, a cast the game just declared
+-- interruptible - and by its curated category only when it makes none.
+function M.FitsPlayer(row, interruptible)
+    local advice = M.Advice(row, interruptible)
+    local key = (advice and advice.key) or row.prio
+    if not key then return true end
     local hides = M.ROLE_HIDES[M.PlayerRole()]
-    if hides and hides[row.prio] then return false end
-    if M.CAPABILITY_GATED[row.prio] and not M.PlayerCanHandle(row.prio) then
-        return false
-    end
+    if hides and hides[key] then return false end
+    if M.CAPABILITY_GATED[key] and not M.PlayerCanHandle(key) then return false end
     return true
+end
+
+-- "Important" means the player's own star when they set one, else a human
+-- curated this cast into the priority set and the player can act on it. Kept
+-- as functions here so the display filter, the sound gate and the Casts page
+-- agree on the meaning.
+function M.Curated(row)
+    if M.IsSave(M.Advice(row)) then return true end
+    return row.prio ~= nil and M.FitsPlayer(row)
+end
+
+function M.Important(row)
+    local own = M.OwnImportant(row.spell)
+    if own ~= nil then return own and M.Advice(row) ~= nil end
+    return M.Curated(row)
 end
 
 function M.AnyImportant(candidates)
@@ -441,6 +460,34 @@ function M.OnlyImportant(rows)
     local out = {}
     for i = 1, #rows do
         if M.Important(rows[i]) then out[#out + 1] = rows[i] end
+    end
+    return out
+end
+
+-- Whether a run shows and calls the cast at all. With "Important casts only"
+-- that is the important set; without it, everything this character can act
+-- on ("My role only"), plus whatever the player starred and every defensive
+-- call.
+function M.Shown(row, interruptible)
+    if M.ImportantOnly() then return M.Important(row) end
+    if M.OwnImportant(row.spell) == true then return M.Advice(row) ~= nil end
+    return M.IsSave(M.Advice(row, interruptible)) or M.FitsPlayer(row, interruptible)
+end
+
+-- `interruptible` is what the game says about the cast going out now, when
+-- there is one; it can turn a statistical verdict into a kick.
+function M.AnyShown(candidates, interruptible)
+    if not candidates then return false end
+    for i = 1, #candidates do
+        if M.Shown(candidates[i], interruptible) then return true end
+    end
+    return false
+end
+
+function M.OnlyShown(rows)
+    local out = {}
+    for i = 1, #rows do
+        if M.Shown(rows[i]) then out[#out + 1] = rows[i] end
     end
     return out
 end
