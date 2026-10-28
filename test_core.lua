@@ -2246,6 +2246,59 @@ check(fresh and fresh.shown, "a new profile draws the centre call")
 reset()
 CastAheadDB = { leadSeconds = 5, centerText = true }
 
+-- "My role only" without "Important casts only", and Mute, through the real
+-- cast path: spell 100 turned into a curated tank buster for the test.
+do
+    local row100
+    for _, r in ipairs(CastAheadData[1877]) do
+        if r.spell == 100 then row100 = r end
+    end
+    local prio, role = row100.prio, CastAheadMatch.PlayerRole
+    local function liveCast()
+        enter()
+        castFor(3.0)
+        advance(17.0)
+        sounds, spoken, clips = 0, 0, 0
+        fire("UNIT_SPELLCAST_START", unit)
+        advance(0.5)
+        local centre = CenterFrameStub()
+        -- Only this cast's own icon: the mob's other spell (101) keeps its
+        -- overdue "!" icon whatever happens to 100.
+        local bars = 0
+        for i = 1, #allFrames do
+            local f = allFrames[i]
+            if f.shown and IsBar(f) and type(f.labelValue) == "string" and not f.labelValue:find("!", 1, true) then
+                bars = bars + 1
+            end
+        end
+        local result = { centre = centre and centre.shown or false, alerts = Alerts(), bars = bars }
+        reset()
+        return result
+    end
+    row100.prio = "TANK"
+    CastAheadMatch.PlayerRole = function() return "DAMAGER" end
+    CastAheadDB = { leadSeconds = 5, centerText = true, importantOnly = false }
+    local got = liveCast()
+    check(not got.centre and got.alerts == 0 and got.bars == 0, string.format(
+        "a dps with My role only gets no tank buster even without Important casts only, got centre=%s alerts=%d bars=%d",
+        tostring(got.centre), got.alerts, got.bars))
+    CastAheadDB = { leadSeconds = 5, centerText = true, importantOnly = false, spellImportant = { [100] = true } }
+    got = liveCast()
+    check(got.centre and got.alerts == 1, "a starred tank buster reaches a dps anyway")
+    CastAheadDB.spellImportant = nil
+    CastAheadMatch.PlayerRole = function() return "TANK" end
+    got = liveCast()
+    check(got.centre and got.alerts == 1 and got.bars > 0, "a tank gets the tank buster")
+    CastAheadMatch.PlayerRole = role
+    row100.prio = prio
+    CastAheadDB = { leadSeconds = 5, centerText = true, spellMute = { [100] = true } }
+    got = liveCast()
+    check(got.centre and got.alerts == 0 and got.bars > 0, string.format(
+        "a muted cast keeps its icon and centre call and stays silent, got centre=%s alerts=%d bars=%d",
+        tostring(got.centre), got.alerts, got.bars))
+    CastAheadDB = { leadSeconds = 5, centerText = true }
+end
+
 -- A tie whose candidates disagree names both calls instead of nothing: the
 -- player is told a cast is out and which two answers are in play. Spell 300
 -- is DODGE; a 1.5s KICK lookalike on another creature makes the tie.
