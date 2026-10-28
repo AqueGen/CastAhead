@@ -5,14 +5,16 @@ Predicts trash casts in Mythic+ and tells you what to do about them. On top of t
 ## What it does
 
 - **Names the cast before the game does.** In 12.1 an addon may not read what a hostile unit is casting, so CastAhead measures the cast bar's length and matches it against a database of every trash cast in the season's dungeons, narrowed by the interval between casts and by which spells the creature owns.
-- **Says the answer, not the spell name.** "Interrupt", "dispel poison", "tank buster", "dodge", "adds incoming" - spoken by recorded clips or the game's own combat voice, shown as a countdown icon beside the nameplate and as a call in the middle of the screen.
+- **Says the answer, not the spell name.** "Kick", "dispel poison", "tank buster", "dodge", "adds incoming" - spoken by recorded clips or the game's own combat voice, shown as a countdown icon beside the nameplate and as a call in the middle of the screen.
 - **Counts down to the next one.** Cooldowns are stored as rotations, not averages: a mob that cycles 4.8 / 4.8 / 8.7 seconds is predicted on the right slot.
 - **Filters to what you can act on.** By default only hand-picked important casts, and only the ones your role can answer.
 - **Feeds Blizzard's encounter timeline** with predictions confident enough to be shown as exact.
 
 ## Kick calls and focus
 
-By default the kick call plays only for important casts (the starred ones on the Casts page) and says "important kick". If your focus is a live enemy, only your focus gets the call; its raid mark does not matter. With no focus, a friendly one or a dead one, every mob does. "Kick voice only on important casts" in General - Sound turns this off and brings back "interrupt" on every kickable cast.
+A kickable cast with a star on the Casts page says "important kick"; any other kickable cast says "kick". By default only starred casts are shown and called, so you hear "important kick" alone; turn off "Important casts only" in General to hear "kick" on the rest.
+
+"Kick calls only for my focus" in General - Sound is on by default. While your focus is a live enemy, only its casts get the kick call, whatever its raid mark; the other mobs keep their icons. With no focus, a friendly one or a dead one, every mob is called. Turn it off to hear kick calls on every mob whatever your focus.
 
 ## What it cannot do
 
