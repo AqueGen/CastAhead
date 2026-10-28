@@ -6669,6 +6669,13 @@ end)()
     check(C.AllMuted({ { spell = 1 }, { spell = 2 } }), "overrides: a bar of muted casts is silent")
     check(not C.AllMuted({ { spell = 1 }, { spell = 9 } }), "overrides: one unmuted candidate keeps the call")
     check(CastAheadUI.OverrideSummary({ spell = 1 }) == "Not important, Muted, Bell, Early 6s", "overrides: every own setting listed")
+    CastAheadDB.importantOnly = true
+    local shown, loud = CastAheadUI.RunState({ spell = 1, prio = "AOE" })
+    check(not shown, "run state: an unstarred cast is hidden while Important casts only is on")
+    shown, loud = CastAheadUI.RunState({ spell = 2, prio = "AOE" })
+    check(shown and not loud, "run state: a muted important cast shows without a call")
+    shown, loud = CastAheadUI.RunState({ spell = 9, prio = "AOE" })
+    check(shown and loud, "run state: an important cast with nothing of its own shows and calls")
     CastAheadDB = saved
 end)()
 

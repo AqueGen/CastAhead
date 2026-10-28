@@ -80,6 +80,22 @@ local function HasOverrides(entry)
     return false
 end
 
+-- What a run does with the cast once the global settings apply: shown at all,
+-- called out loud, and the reason when not.
+local function RunState(entry)
+    if IsDisabled(entry.spell) then return false, false, "Switched off here: no icon, no call." end
+    if CastAheadConfig.Enabled("importantOnly") and not CastAheadMatch.Important(entry) then
+        if Starred(entry) then
+            return false, false, "Hidden in a run: \"My role only\" in General, your character cannot act on it."
+        end
+        return false, false, "Hidden in a run: not important, and \"Important casts only\" is on in General."
+    end
+    if not CastAheadConfig.Enabled("sound") then return true, false, "Shown, no call: Sound is off in General." end
+    if CastAheadConfig.SpellMuted(entry.spell) then return true, false, "Shown, no call: muted on this cast." end
+    return true, true, nil
+end
+CastAheadUI.RunState = RunState
+
 -- One tick when any setting of the cast differs from the global ones.
 local function OverrideMark(entry)
     return HasOverrides(entry) and "|A:common-icon-checkmark:14:14|a" or ""
@@ -631,12 +647,25 @@ local function CreateRow(parent, index)
             row.check = CreateFrame("CheckButton", nil, row, "MinimalCheckboxTemplate")
             row.check:SetSize(WIDGET_HEIGHT, WIDGET_HEIGHT)
             row.check:SetPoint("LEFT", row, "LEFT", x + (column.width - WIDGET_HEIGHT) / 2, 0)
+            row.check:SetScript("OnEnter", function(self)
+                if not row.runWhy then return end
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:AddLine(row.runWhy, 1, 1, 1, true)
+                GameTooltip:Show()
+            end)
+            row.check:SetScript("OnLeave", GameTooltip_Hide)
         elseif column.key == "hear" then
             row.hear = CreateFrame("Button", nil, row)
             row.hear:SetSize(16, 16)
             row.hear:SetPoint("LEFT", row, "LEFT", x, 0)
-            row.hear:SetNormalAtlas("chatframe-button-icon-speaker-on")
             row.hear:SetHighlightAtlas("chatframe-button-icon-speaker-on")
+            row.hear:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:AddLine("Click to hear the call.")
+                if row.runWhy then GameTooltip:AddLine(row.runWhy, 1, 0.5, 0.2, true) end
+                GameTooltip:Show()
+            end)
+            row.hear:SetScript("OnLeave", GameTooltip_Hide)
             row.hear:SetScript("OnClick", function(self)
                 local e = self:GetParent().entry
                 if e and CastAheadCore and CastAheadCore.PreviewAdvice then
@@ -788,6 +817,12 @@ function Refresh()
             local selected = editor and editor:IsShown() and editor.entry == entry
             if selected then editing = true end
             row.selected:SetShown(selected or false)
+            -- The tick is the player's own choice; pale when the global settings
+            -- keep the cast out of a run anyway, a crossed speaker when it stays silent.
+            local shown, loud, why = RunState(entry)
+            row.runWhy = why
+            row.check:SetAlpha((shown or IsDisabled(entry.spell)) and 1 or 0.35)
+            row.hear:SetNormalAtlas(loud and "chatframe-button-icon-speaker-on" or "voicechat-icon-speaker-mute")
             row.check:SetChecked(not IsDisabled(entry.spell))
             row.check:SetScript("OnClick", function(self)
                 SetDisabled(entry.spell, not self:GetChecked())
