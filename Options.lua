@@ -142,7 +142,7 @@ local SWITCHES = {
     centerText = { label = "Show the centre call",
         tip = "The response in words, big, near the middle of the screen while an important cast goes out." },
     timeline = { label = "Feed the Blizzard timeline",
-        tip = "Feed confident predictions to the game's own encounter timeline. DBM also shows them as its bars. BigWigs hides the game's timeline unless you turn it on in BigWigs - Timeline; \"Show in BigWigs bars\" below is the other way." },
+        tip = "Feed confident predictions to the game's own encounter timeline." },
     bigwigsBars = { label = "Show in BigWigs bars", defaultOff = true,
         tip = "Also show confident predictions as BigWigs bars. BigWigs leaves other addons' timeline entries out of its bars, so without this they never show there. It uses a part of BigWigs that is not an official addon API, so a BigWigs update may stop it working." },
     sound = { label = "Sound",
@@ -402,19 +402,34 @@ function BuildGeneral(panel)
         { "TOPLEFT", important, "BOTTOMLEFT", 0, -4 })
     local timeline = BuildSwitch(panel, "timeline",
         { "TOPLEFT", role, "BOTTOMLEFT", 0, -4 }, OutputChanged)
+    local PaintTimelineOff
     local bigwigs = BuildSwitch(panel, "bigwigsBars",
-        { "TOPLEFT", timeline, "BOTTOMLEFT", 0, -4 }, OutputChanged)
-    -- BigWigs switches the game's timeline off by default; say so here, where
-    -- the player looks for the entries that never appear.
+        { "TOPLEFT", timeline, "BOTTOMLEFT", 0, -4 }, function()
+            OutputChanged()
+            PaintTimelineOff()
+        end)
+    -- BigWigs turns the game's timeline off by default and leaves our entries
+    -- out of its bars (DBM shows them as its own bars). A line appears only
+    -- while the entries cannot be seen, and says what to do; the BigWigs
+    -- switch only with BigWigs installed.
     local timelineOff = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    timelineOff:SetPoint("TOPLEFT", bigwigs, "BOTTOMLEFT", 4, -2)
     timelineOff:SetWidth(COL_W - 30)
     timelineOff:SetJustifyH("LEFT")
     timelineOff:SetTextColor(1, 0.5, 0.2)
-    local function PaintTimelineOff()
+    function PaintTimelineOff()
         local off = C_EncounterTimeline and C_EncounterTimeline.IsFeatureEnabled
             and not C_EncounterTimeline.IsFeatureEnabled()
-        timelineOff:SetText(off and "The game's timeline is off (BigWigs turns it off by default)." or " ")
+        local bigWigs = type(BigWigsLoader) == "table"
+        bigwigs:SetShown(bigWigs)
+        timelineOff:ClearAllPoints()
+        timelineOff:SetPoint("TOPLEFT", bigWigs and bigwigs or timeline, "BOTTOMLEFT", 4, -2)
+        local text = " "
+        if off and bigWigs and CastAheadConfig.Get("bigwigsBars") ~= true then
+            text = "BigWigs has the game's timeline off: tick Show in BigWigs bars, or turn on its Blizzard timeline."
+        elseif off and not bigWigs then
+            text = "The game's timeline is switched off."
+        end
+        timelineOff:SetText(text)
     end
     PaintTimelineOff()
     table.insert(refreshers, PaintTimelineOff)
