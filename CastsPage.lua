@@ -73,18 +73,14 @@ local function OverrideSummary(entry)
 end
 CastAheadUI.OverrideSummary = OverrideSummary
 
--- The same overrides as one small icon each, always in the same order, so
--- the column keeps one width however many there are.
-local function OverrideIcons(entry)
-    local icons = {}
-    local own = CastAheadConfig.SpellImportant(entry.spell)
-    if own == true then icons[#icons + 1] = "|A:auctionhouse-icon-favorite:14:14|a" end
-    if own == false then icons[#icons + 1] = "|A:auctionhouse-icon-favorite:14:14:0:0:110:110:110|a" end
-    if CastAheadConfig.SpellMuted(entry.spell) then icons[#icons + 1] = "|A:voicechat-icon-speaker-mute:14:14|a" end
+-- Importance has its own column, so the Overrides mark covers the rest: one
+-- tick when the cast is muted or has its own sound or early warning.
+local function OverrideMark(entry)
     local sound = SpellSound(entry)
-    if sound and sound ~= "" then icons[#icons + 1] = "|A:chatframe-button-icon-speaker-on:14:14|a" end
-    if CastAheadConfig.SpellLead(entry.spell) then icons[#icons + 1] = "|A:auctionhouse-icon-clock:14:14|a" end
-    return table.concat(icons, " ")
+    if CastAheadConfig.SpellMuted(entry.spell) or (sound and sound ~= "") or CastAheadConfig.SpellLead(entry.spell) then
+        return "|A:common-icon-checkmark:14:14|a"
+    end
+    return ""
 end
 
 local function SpellName(entry)
@@ -111,10 +107,10 @@ local COLUMNS = {
     -- be auditioned outside a pull.
     { key = "hear", width = 18 },
     { key = "icon", width = 20 },
-    -- A star marks the curated priority set - what "Only important casts"
-    -- keeps. The enable checkbox is the player's own choice, this is ours.
-    { key = "prio", dev = true, header = "Imp", width = 28,
-      text = function(e) return Starred(e) and "|A:auctionhouse-icon-favorite:12:12|a" or "" end,
+    -- A star marks what "Only important casts" keeps: the curated set unless
+    -- the player starred or unstarred the cast; a click on it toggles that.
+    { key = "prio", header = "Important", width = 70, justify = "CENTER",
+      text = function(e) return Starred(e) and "|A:auctionhouse-icon-favorite:14:14|a" or "" end,
       sort = function(e) return Starred(e) and 1 or 0 end },
     {
         key = "advice", header = "Do", width = 88,
@@ -181,7 +177,7 @@ local COLUMNS = {
     { key = "overrides", header = "Overrides", width = 80,
       text = function(e)
           if not CastAheadMatch.Advice(e) then return "|cff555555-|r" end
-          return OverrideIcons(e)
+          return OverrideMark(e)
       end,
       sort = OverrideSummary },
 }
@@ -269,13 +265,13 @@ local HEADER_TIPS = {
     hear = { "Play the call",
         "Click to hear how this cast is announced, without waiting for a pull." },
     prio = { "Important",
-        "Starred casts are the ones worth reacting to. |cffffd100Only important casts|r in the General tab hides everything else." },
+        "Starred casts are the ones worth reacting to. |cffffd100Only important casts|r in the General tab hides everything else. Click a cell to star or unstar a cast." },
     advice = { "What to do",
         "The call made when this cast starts. Grey means the cast is tracked but has no call: it is rare in the logs and not starred." },
     spell = { "Spell",
         "The cast being tracked. Hover a row for the spell tooltip." },
     overrides = { "Overrides",
-        "Settings this one cast has of its own instead of the global ones, one icon each: star - marked important (grey: not important), crossed speaker - muted, speaker - its own sound, clock - its own early warning. Hover a row for the details, click it to change them." },
+        "A tick when the cast is muted or has its own sound or early warning instead of the global ones. Hover a row for the details, click it to change them." },
     mob = { "Caster",
         "Which creature casts it. In 12.1 a nameplate never reveals a creature's name or ID, so this comes from combat logs - the addon only guesses which of them is in front of you." },
     level = { "Mob level",
@@ -302,7 +298,7 @@ local HEADER_TIPS = {
 
 -- Widgets ------------------------------------------------------------------
 
-local Refresh, ToggleEditor
+local Refresh, ToggleEditor, SetImportant
 
 -- One cast's own settings, docked right of the table when the page has room
 -- for it, else along the bottom. Unticked, a value setting follows the global
@@ -365,6 +361,15 @@ end
 
 local function EditorChanged()
     PaintEditor()
+    Refresh()
+end
+
+-- The player's star; matching the curated choice stores nothing.
+function SetImportant(entry, on)
+    if on == (entry.prio ~= nil) then on = nil end
+    SetOwn("spellImportant", entry, on)
+    Reapply()
+    if editor and editor:IsShown() then PaintEditor() end
     Refresh()
 end
 
@@ -453,13 +458,7 @@ local function BuildEditor()
         "Counts for \"Important casts only\" in General. Starts as our curated choice.")
     editor.curated = a:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     editor.curated:SetPoint("LEFT", editor.important.label, "RIGHT", 8, 0)
-    editor.important:SetScript("OnClick", function(self)
-        local e, on = editor.entry, self:GetChecked()
-        if on == (e.prio ~= nil) then on = nil end
-        SetOwn("spellImportant", e, on)
-        Reapply()
-        EditorChanged()
-    end)
+    editor.important:SetScript("OnClick", function(self) SetImportant(editor.entry, self:GetChecked()) end)
     editor.mute = Check(a, "Mute", { "TOPLEFT", a, "TOPLEFT", 0, -26 },
         "No call for this cast. Its icon and bar still show.")
     editor.mute:SetScript("OnClick", function(self)
@@ -678,6 +677,17 @@ local function CreateRow(parent, index)
                     if row.entry then ShowMobModel(self, row.entry) end
                 end)
                 hover:SetScript("OnLeave", HideMobModel)
+            end
+            if column.key == "prio" then
+                local star = CreateFrame("Button", nil, row)
+                star:SetPoint("TOPLEFT", row, "TOPLEFT", x, 0)
+                star:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", x, 0)
+                star:SetWidth(column.width)
+                star:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+                star:SetScript("OnClick", function()
+                    local e = row.entry
+                    if e and CastAheadMatch.Advice(e) then SetImportant(e, not Starred(e)) end
+                end)
             end
         end
     end
