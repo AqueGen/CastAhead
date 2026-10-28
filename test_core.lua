@@ -630,6 +630,31 @@ do
     check(not noticeFrame.shown, "Close hides the notice")
     CastAheadUI.ShowTab, CreateFrame, CastAheadUI.ShowUpdateNotice = savedShowTab, savedCreate, savedNotice
 
+    -- What's new: once per message after an update, with a button to its
+    -- page; a new install is not told what changed.
+    local told = {}
+    CastAheadUI.ShowUpdateNotice = function(message) told[#told + 1] = message end
+    savedTimer = C_Timer
+    C_Timer = { After = function(_, fn) fn() end }
+    local function login(db, newInstall)
+        CastAheadDB = db
+        CastAheadConfig.newInstall = newInstall
+        fire("PLAYER_LOGIN")
+        fire("PLAYER_ENTERING_WORLD")
+    end
+    login({ schema = 6 }, false)
+    check(#told == 1 and told[1] == CastAheadWindow.NEWS and told[1].page == "Casts",
+        "an updated profile is told what's new once, with a button to the Casts page")
+    check(CastAheadDB.newsSeen == CastAheadWindow.NEWS.id, "the message is marked seen")
+    login(CastAheadDB, false)
+    check(#told == 1, "the same message is not shown again")
+    login({}, true)
+    check(#told == 1 and CastAheadDB.newsSeen == CastAheadWindow.NEWS.id,
+        "a new install is not told what changed and starts with the message seen")
+    C_Timer = savedTimer
+    CastAheadConfig.newInstall = nil
+    CastAheadUI.ShowUpdateNotice = savedNotice
+
     CastAheadDB = nil
 end
 
@@ -1095,7 +1120,7 @@ CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want i
 
 do
     local keys = table.concat(CastAheadUI.VisibleColumns(false), ",")
-    check(keys == "check,hear,icon,advice,spell,mob,cast,cd,sound", "outside Development mode the cast table shows 9 columns, got " .. keys)
+    check(keys == "check,hear,icon,prio,advice,spell,mob,cast,cd,overrides", "outside Development mode the cast table shows 10 columns, got " .. keys)
     check(#CastAheadUI.VisibleColumns(true) == 18, "Development mode shows every column")
     check(CastAheadUI.VisibleSortKey("n", false) == "advice", "a hidden sort column falls back to Do outside Development mode")
     check(CastAheadUI.VisibleSortKey("n", true) == "n", "Development mode keeps a development sort column")
@@ -2244,6 +2269,59 @@ local fresh = CenterFrameStub()
 check(fresh and fresh.shown, "a new profile draws the centre call")
 reset()
 CastAheadDB = { leadSeconds = 5, centerText = true }
+
+-- "My role only" without "Important casts only", and Mute, through the real
+-- cast path: spell 100 turned into a curated tank buster for the test.
+do
+    local row100
+    for _, r in ipairs(CastAheadData[1877]) do
+        if r.spell == 100 then row100 = r end
+    end
+    local prio, role = row100.prio, CastAheadMatch.PlayerRole
+    local function liveCast()
+        enter()
+        castFor(3.0)
+        advance(17.0)
+        sounds, spoken, clips = 0, 0, 0
+        fire("UNIT_SPELLCAST_START", unit)
+        advance(0.5)
+        local centre = CenterFrameStub()
+        -- Only this cast's own icon: the mob's other spell (101) keeps its
+        -- overdue "!" icon whatever happens to 100.
+        local bars = 0
+        for i = 1, #allFrames do
+            local f = allFrames[i]
+            if f.shown and IsBar(f) and type(f.labelValue) == "string" and not f.labelValue:find("!", 1, true) then
+                bars = bars + 1
+            end
+        end
+        local result = { centre = centre and centre.shown or false, alerts = Alerts(), bars = bars }
+        reset()
+        return result
+    end
+    row100.prio = "TANK"
+    CastAheadMatch.PlayerRole = function() return "DAMAGER" end
+    CastAheadDB = { leadSeconds = 5, centerText = true, importantOnly = false }
+    local got = liveCast()
+    check(not got.centre and got.alerts == 0 and got.bars == 0, string.format(
+        "a dps with My role only gets no tank buster even without Important casts only, got centre=%s alerts=%d bars=%d",
+        tostring(got.centre), got.alerts, got.bars))
+    CastAheadDB = { leadSeconds = 5, centerText = true, importantOnly = false, spellImportant = { [100] = true } }
+    got = liveCast()
+    check(got.centre and got.alerts == 1, "a starred tank buster reaches a dps anyway")
+    CastAheadDB.spellImportant = nil
+    CastAheadMatch.PlayerRole = function() return "TANK" end
+    got = liveCast()
+    check(got.centre and got.alerts == 1 and got.bars > 0, "a tank gets the tank buster")
+    CastAheadMatch.PlayerRole = role
+    row100.prio = prio
+    CastAheadDB = { leadSeconds = 5, centerText = true, spellMute = { [100] = true } }
+    got = liveCast()
+    check(got.centre and got.alerts == 0 and got.bars > 0, string.format(
+        "a muted cast keeps its icon and centre call and stays silent, got centre=%s alerts=%d bars=%d",
+        tostring(got.centre), got.alerts, got.bars))
+    CastAheadDB = { leadSeconds = 5, centerText = true }
+end
 
 -- A tie whose candidates disagree names both calls instead of nothing: the
 -- player is told a cast is out and which two answers are in play. Spell 300
@@ -6554,6 +6632,61 @@ end)();
     removePlate("nameplate4")
     panel.RegisterEvent, panel.UnregisterEvent = nil, nil
     CastAheadDB, InCombatLockdown, UIParent, W.Frame, W.Current, W.Show, C_NamePlate.GetNamePlateForUnit = unpack(saved, 1, 7)
+end)()
+
+;(function()
+    local saved = CastAheadDB
+    CastAheadDB = { leadSeconds = 3, spellLead = { [1] = 6, [2] = 0, [3] = 99 } }
+    local C = CastAheadConfig
+    check(C.LeadFor({ { spell = 9 } }) == 3, "lead: a cast without its own warning gets the global one")
+    check(C.LeadFor({ { spell = 1 } }) == 6, "lead: a cast's own warning beats the global one")
+    check(C.LeadFor({ { spell = 2 } }) == 0, "lead: a cast can switch its warning off")
+    check(C.LeadFor({ { spell = 3 } }) == C.LEAD_MAX, "lead: an own warning past the range is clamped")
+    check(C.LeadFor({ { spell = 2 }, { spell = 9 } }) == 3, "lead: of several candidates the longest wins")
+    check(C.LeadFor(nil) == 3, "lead: no candidates means the global one")
+    CastAheadDB.leadSeconds = 0
+    check(C.LeadFor({ { spell = 1 } }) == 6, "lead: an own warning works with the global one off")
+    CastAheadDB.spellSounds = { [1] = "Bell", [2] = "" }
+    check(CastAheadUI.OverrideSummary({ spell = 1 }) == "Bell, Early 6s", "overrides: sound and warning listed")
+    check(CastAheadUI.OverrideSummary({ spell = 2 }) == "Own sound: voice, Early off", "overrides: a ticked sound with no pick is listed as the voice")
+    check(CastAheadUI.OverrideSummary({ spell = 9 }) == "", "overrides: nothing own, nothing listed")
+    CastAheadDB.spellImportant = { [1] = false }
+    CastAheadDB.spellMute = { [1] = true, [2] = true }
+    check(not CastAheadMatch.Important({ spell = 1, prio = "AOE" }), "overrides: an unstarred curated cast is not important")
+    check(CastAheadMatch.Important({ spell = 9, prio = "AOE" }), "overrides: without a star of its own the curated set decides")
+    local role = CastAheadMatch.PlayerRole
+    CastAheadMatch.PlayerRole = function() return "DAMAGER" end
+    check(not CastAheadMatch.Important({ spell = 9, prio = "TANK" }), "overrides: a tank buster is not a dps player's call")
+    CastAheadDB.spellImportant[7] = true
+    check(CastAheadMatch.Important({ spell = 7, prio = "TANK" }), "overrides: a starred tank buster is shown to a dps player too")
+    CastAheadMatch.PlayerRole = role
+    check(C.AllMuted({ { spell = 1 }, { spell = 2 } }), "overrides: a bar of muted casts is silent")
+    check(not C.AllMuted({ { spell = 1 }, { spell = 9 } }), "overrides: one unmuted candidate keeps the call")
+    check(CastAheadUI.OverrideSummary({ spell = 1 }) == "Not important, Muted, Bell, Early 6s", "overrides: every own setting listed")
+    CastAheadDB.importantOnly = true
+    local shown, loud = CastAheadUI.RunState({ spell = 1, prio = "AOE" })
+    check(not shown, "run state: an unstarred cast is hidden while Important casts only is on")
+    shown, loud = CastAheadUI.RunState({ spell = 2, prio = "AOE" })
+    check(shown and not loud, "run state: a muted important cast shows without a call")
+    shown, loud = CastAheadUI.RunState({ spell = 9, prio = "AOE" })
+    check(shown and loud, "run state: an important cast with nothing of its own shows and calls")
+    CastAheadDB.importantOnly = false
+    local role = CastAheadMatch.PlayerRole
+    CastAheadMatch.PlayerRole = function() return "DAMAGER" end
+    check(not CastAheadMatch.Shown({ spell = 9, prio = "TANK" }), "role filter: a tank buster stays off a dps run without Important casts only")
+    check(CastAheadMatch.Shown({ spell = 9, prio = "KICK" }), "role filter: a dps still gets kicks")
+    check(CastAheadMatch.Shown({ spell = 7, prio = "TANK" }), "role filter: a starred tank buster shows anyway")
+    check(CastAheadMatch.Shown({ spell = 8 }), "role filter: without Important casts only an uncurated cast shows")
+    local heavy = { spell = 11, dmg = 0.3 }
+    check(not CastAheadMatch.Shown(heavy), "role filter: a logged tank buster stays off a dps run")
+    check(CastAheadMatch.Shown(heavy, true), "role filter: the same cast shows once the game says it can be kicked")
+    shown, loud = CastAheadUI.RunState({ spell = 8 })
+    check(shown and not loud, "run state: a cast with no call shows its icon without a call")
+    CastAheadDB.spellImportant[12] = false
+    local _, _, why = CastAheadUI.RunState({ spell = 12, prio = "TANK" })
+    check(why and why:find("role", 1, true), "run state: an unstarred tank buster off Important casts only is hidden for the role, got " .. tostring(why))
+    CastAheadMatch.PlayerRole = role
+    CastAheadDB = saved
 end)()
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))

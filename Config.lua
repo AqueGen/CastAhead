@@ -194,6 +194,45 @@ function C.Lead()
     return seconds
 end
 
+-- A cast's own early warning (Casts page) wins over the global one, even when
+-- the global one is off. With several candidates the longest wins, so none of
+-- them is announced late.
+function C.SpellLead(spellID)
+    local own = CastAheadDB and CastAheadDB.spellLead and tonumber(CastAheadDB.spellLead[spellID])
+    return own and math.max(0, math.min(C.LEAD_MAX, own)) or nil
+end
+
+-- The player's own star for a cast: true or false when set on the Casts page,
+-- nil to follow the curated set.
+function C.SpellImportant(spellID)
+    local own = CastAheadDB and CastAheadDB.spellImportant and CastAheadDB.spellImportant[spellID]
+    if own == nil then return nil end
+    return own == true
+end
+
+function C.SpellMuted(spellID)
+    return CastAheadDB and CastAheadDB.spellMute and CastAheadDB.spellMute[spellID] == true or false
+end
+
+-- A bar is silent only when every spell it may be is muted.
+function C.AllMuted(candidates)
+    if not candidates or #candidates == 0 then return false end
+    for _, row in ipairs(candidates) do
+        if not C.SpellMuted(row.spell) then return false end
+    end
+    return true
+end
+
+function C.LeadFor(candidates)
+    local global = C.Lead()
+    if not candidates or #candidates == 0 then return global end
+    local best = 0
+    for _, row in ipairs(candidates) do
+        best = math.max(best, C.SpellLead(row.spell) or global)
+    end
+    return best
+end
+
 -- Run once, the moment the saved variables arrive: by PLAYER_LOGIN the
 -- minimap icon has already created the table, and a fresh install would
 -- read as an old profile. Older profile shapes exist and each would
@@ -203,6 +242,8 @@ C.SCHEMA = 6
 
 function C.Migrate()
     local existing = CastAheadDB ~= nil
+    -- A new install has nothing to be told about what changed.
+    C.newInstall = not existing
     CastAheadDB = CastAheadDB or {}
     if type(CastAheadDB.ctx) == "table" then
         -- The key context was the one that ever fired; the raid one is

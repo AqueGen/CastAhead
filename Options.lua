@@ -92,13 +92,15 @@ local function BuildSlider(panel, spec)
     slider:RegisterCallback(MinimalSliderWithSteppersMixin.Event.OnValueChanged, function(_, value)
         if suppress then return end
         value = math.floor(value / step + 0.5) * step
-        CastAheadConfig.Set(spec.key, value)
+        if spec.write then spec.write(value) else CastAheadConfig.Set(spec.key, value) end
         paint(value)
         if spec.after then spec.after(value) end
     end, slider)
     table.insert(refreshers, function() show(read()) end)
+    slider.Repaint = function() show(read()) end
     return slider, label
 end
+CastAheadOptions.BuildSlider = BuildSlider
 
 local function Refresh()
     for _, refresh in ipairs(refreshers) do refresh() end
