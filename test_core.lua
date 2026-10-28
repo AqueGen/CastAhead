@@ -631,6 +631,31 @@ do
     check(not noticeFrame.shown, "Close hides the notice")
     CastAheadUI.ShowTab, CreateFrame, CastAheadUI.ShowUpdateNotice = savedShowTab, savedCreate, savedNotice
 
+    -- What's new: once per message after an update, with a button to its
+    -- page; a new install is not told what changed.
+    local told = {}
+    CastAheadUI.ShowUpdateNotice = function(message) told[#told + 1] = message end
+    savedTimer = C_Timer
+    C_Timer = { After = function(_, fn) fn() end }
+    local function login(db, newInstall)
+        CastAheadDB = db
+        CastAheadConfig.newInstall = newInstall
+        fire("PLAYER_LOGIN")
+        fire("PLAYER_ENTERING_WORLD")
+    end
+    login({ schema = 6 }, false)
+    check(#told == 1 and told[1] == CastAheadWindow.NEWS and told[1].page == "Casts",
+        "an updated profile is told what's new once, with a button to the Casts page")
+    check(CastAheadDB.newsSeen == CastAheadWindow.NEWS.id, "the message is marked seen")
+    login(CastAheadDB, false)
+    check(#told == 1, "the same message is not shown again")
+    login({}, true)
+    check(#told == 1 and CastAheadDB.newsSeen == CastAheadWindow.NEWS.id,
+        "a new install is not told what changed and starts with the message seen")
+    C_Timer = savedTimer
+    CastAheadConfig.newInstall = nil
+    CastAheadUI.ShowUpdateNotice = savedNotice
+
     CastAheadDB = nil
 end
 

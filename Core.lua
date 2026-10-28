@@ -2358,14 +2358,25 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
             print("|cff33ff99CastAhead:|r defensive calls are now off by default. Turn them on in /ca - General - Features.")
             CastAheadDB.saveCallsNotice = nil
             noticePending = true
+        elseif not noticePending then
+            -- What's new: once per message, never on a new install, and
+            -- never over another notice still waiting to be shown.
+            local news = CastAheadWindow and CastAheadWindow.NEWS
+            if news and CastAheadDB then
+                if not CastAheadConfig.newInstall and (tonumber(CastAheadDB.newsSeen) or 0) < news.id then
+                    noticePending = news
+                end
+                CastAheadDB.newsSeen = news.id
+            end
         end
         return
     end
     if event == "PLAYER_ENTERING_WORLD" then
         if noticePending then
+            local message = noticePending ~= true and noticePending or nil
             noticePending = nil
             local function Show()
-                if CastAheadUI and CastAheadUI.ShowUpdateNotice then CastAheadUI.ShowUpdateNotice() end
+                if CastAheadUI and CastAheadUI.ShowUpdateNotice then CastAheadUI.ShowUpdateNotice(message) end
             end
             -- Shown straight at login the notice was gone by the time the world appeared.
             if C_Timer then C_Timer.After(NOTICE_DELAY, Show) else Show() end
