@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.1](https://github.com/AqueGen/CastAhead/compare/v0.24.0...v0.24.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* BigWigs bars per mob, on by default while the game's timeline is off ([#108](https://github.com/AqueGen/CastAhead/issues/108)) ([5494188](https://github.com/AqueGen/CastAhead/commit/5494188ef5adb5ad3b479b9170ef24cae9ee485a))
+
 ## [0.24.0](https://github.com/AqueGen/CastAhead/compare/v0.23.0...v0.24.0) (2026-10-28)
 
 
