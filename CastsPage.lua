@@ -73,14 +73,16 @@ local function OverrideSummary(entry)
 end
 CastAheadUI.OverrideSummary = OverrideSummary
 
--- Importance has its own column, so the Overrides mark covers the rest: one
--- tick when the cast is muted or has its own sound or early warning.
-local function OverrideMark(entry)
-    local sound = SpellSound(entry)
-    if CastAheadConfig.SpellMuted(entry.spell) or (sound and sound ~= "") or CastAheadConfig.SpellLead(entry.spell) then
-        return "|A:common-icon-checkmark:14:14|a"
+local function HasOverrides(entry)
+    for _, field in ipairs({ "spellImportant", "spellMute", "spellSounds", "spellLead" }) do
+        if CastAheadDB and CastAheadDB[field] and CastAheadDB[field][entry.spell] ~= nil then return true end
     end
-    return ""
+    return false
+end
+
+-- One tick when any setting of the cast differs from the global ones.
+local function OverrideMark(entry)
+    return HasOverrides(entry) and "|A:common-icon-checkmark:14:14|a" or ""
 end
 
 local function SpellName(entry)
@@ -271,7 +273,7 @@ local HEADER_TIPS = {
     spell = { "Spell",
         "The cast being tracked. Hover a row for the spell tooltip." },
     overrides = { "Overrides",
-        "A tick when the cast is muted or has its own sound or early warning instead of the global ones. Hover a row for the details, click it to change them." },
+        "A tick when any setting of the cast differs from the global ones: its star, mute, its own sound or early warning. Hover a row for the details, click it to change them." },
     mob = { "Caster",
         "Which creature casts it. In 12.1 a nameplate never reveals a creature's name or ID, so this comes from combat logs - the addon only guesses which of them is in front of you." },
     level = { "Mob level",
@@ -325,13 +327,6 @@ local function Check(parent, text, point, tip)
     end)
     check:SetScript("OnLeave", GameTooltip_Hide)
     return check
-end
-
-local function HasOverrides(entry)
-    for _, field in ipairs({ "spellImportant", "spellMute", "spellSounds", "spellLead" }) do
-        if CastAheadDB and CastAheadDB[field] and CastAheadDB[field][entry.spell] ~= nil then return true end
-    end
-    return false
 end
 
 local function PaintEditor()
