@@ -2,16 +2,17 @@ CastAheadWindow = {}
 local W = CastAheadWindow
 
 W.THEME = {
-    bg = { 0.063, 0.075, 0.09, 0.97 },
+    bg = { 0.063, 0.075, 0.09, 0.99 },
     panel = { 0.082, 0.098, 0.125, 1 },
     border = { 0.235, 0.251, 0.282, 1 },
+    control = { 0.36, 0.38, 0.43, 1 },
     line = { 0.125, 0.145, 0.176, 1 },
     gold = { 1, 0.82, 0 },
     text = { 0.9, 0.9, 0.9 },
-    muted = { 0.545, 0.576, 0.627 },
+    muted = { 0.66, 0.68, 0.72 },
     selected = { 0.165, 0.192, 0.251, 1 },
 }
-W.MIN_W, W.MIN_H = 600, 420
+W.MIN_W, W.MIN_H = 460, 420
 W.ICON = "Interface\\AddOns\\CastAhead\\Media\\icon"
 
 local T = W.THEME
@@ -55,7 +56,7 @@ function W.Button(parent, text, width, primary)
     b:SetSize(width, ENTRY_H)
     b:SetBackdrop(FLAT)
     b:SetBackdropColor(unpack(T.panel))
-    b:SetBackdropBorderColor(unpack(primary and T.gold or T.border))
+    b:SetBackdropBorderColor(unpack(primary and T.gold or T.control))
     b.label = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     b.label:SetPoint("CENTER")
     b.label:SetTextColor(unpack(primary and T.gold or T.text))
@@ -236,12 +237,27 @@ function W.SpecBar(parent, x, y, onPick, roomFromParentLeft)
     return SPEC_BAR_H
 end
 
+-- The scale is only ever the player's choice. A window too big for the screen is capped in
+-- size instead: shrinking the scale to fit left the grip under a frame scaled below its
+-- parent, and the next StartSizing ran away from the cursor.
+-- Size of the window while its grip is dragged: the start size plus how far the cursor
+-- moved right and down (in window units), kept between the minimum and the room left on screen.
+function W.GripSize(w0, h0, dx, dy, minW, minH, maxW, maxH)
+    return math.max(minW, math.min(w0 + dx, maxW)), math.max(minH, math.min(h0 + dy, maxH))
+end
+
 function W.ApplyScale(target)
     target = target or frame
     if not target then return end
-    local wanted = CastAheadConfig.Number("uiScale", SCALE_DEFAULT, SCALE_MIN, SCALE_MAX) / 100
-    local fits = math.min(UIParent:GetWidth() / target:GetWidth(), UIParent:GetHeight() / target:GetHeight())
-    target:SetScale(math.min(wanted, fits))
+    local scale = CastAheadConfig.Number("uiScale", SCALE_DEFAULT, SCALE_MIN, SCALE_MAX) / 100
+    target:SetScale(scale)
+    local maxW, maxH = UIParent:GetWidth() / scale, UIParent:GetHeight() / scale
+    if target.SetResizeBounds and target:IsResizable() then
+        target:SetResizeBounds(W.MIN_W, W.MIN_H, maxW, maxH)
+    end
+    if target:GetWidth() > maxW or target:GetHeight() > maxH then
+        target:SetSize(math.min(target:GetWidth(), maxW), math.min(target:GetHeight(), maxH))
+    end
 end
 
 function W.Dungeon()
@@ -277,15 +293,21 @@ local function PaintDungeons()
     end
 end
 
+-- Up to PER_ROW buttons a row, fewer when the window is narrow, so a dungeon name keeps
+-- room for itself; the grid grows a row and the page below follows its bottom edge.
+local GRID_BUTTON_MIN = 140
 local function LayoutGrid(width)
-    local w = (width - (PER_ROW - 1) * GAP) / PER_ROW
+    local perRow = math.max(1, math.min(PER_ROW, math.floor((width + GAP) / (GRID_BUTTON_MIN + GAP))))
+    local w = (width - (perRow - 1) * GAP) / perRow
     for _, set in ipairs({ { dungeonButtons, grid }, { raidButtons, raidGrid } }) do
         for i, b in ipairs(set[1]) do
             b:SetWidth(w)
             b:ClearAllPoints()
-            b:SetPoint("TOPLEFT", set[2], "TOPLEFT", ((i - 1) % PER_ROW) * (w + GAP),
-                -math.floor((i - 1) / PER_ROW) * (ENTRY_H + GAP))
+            b:SetPoint("TOPLEFT", set[2], "TOPLEFT", ((i - 1) % perRow) * (w + GAP),
+                -math.floor((i - 1) / perRow) * (ENTRY_H + GAP))
         end
+        local rows = math.max(math.ceil(#set[1] / perRow), 1)
+        set[2]:SetHeight(rows * ENTRY_H + (rows - 1) * GAP)
     end
 end
 
@@ -303,6 +325,7 @@ end
 local function Entry(page)
     if page.entry then return end
     local b = W.Button(menu, page.label or page.name, MENU_W - 2 * PAD, false)
+    b:SetBackdropBorderColor(unpack(T.border))
     b.label:ClearAllPoints()
     b.label:SetPoint("LEFT", b, "LEFT", PAD, 0)
     b.bar = b:CreateTexture(nil, "OVERLAY")
@@ -506,14 +529,31 @@ local function Build()
     grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
     grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
     grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
-    grip:SetScript("OnMouseDown", function()
+    -- The grip sizes the window itself instead of StartSizing: in game StartSizing now
+    -- and then set a size of its own on the first frame (460x420 became 793x572 with the
+    -- cursor still on the grip), and the window ran off under the pointer.
+    grip:SetScript("OnMouseDown", function(self, button)
+        if button ~= "LeftButton" then return end
         local left, top = frame:GetLeft(), frame:GetTop()
         frame:ClearAllPoints()
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
-        frame:StartSizing("BOTTOMRIGHT")
+        local scale = frame:GetEffectiveScale()
+        local x0, y0 = GetCursorPosition()
+        local w0, h0 = frame:GetWidth(), frame:GetHeight()
+        -- Never past the screen's right or bottom edge
+        local maxW = UIParent:GetWidth() * UIParent:GetEffectiveScale() / scale - left
+        self:SetScript("OnUpdate", function(grabbed)
+            if not IsMouseButtonDown("LeftButton") then
+                grabbed:GetScript("OnMouseUp")(grabbed)
+                return
+            end
+            local x, y = GetCursorPosition()
+            frame:SetSize(W.GripSize(w0, h0, (x - x0) / scale, (y0 - y) / scale, W.MIN_W, W.MIN_H, maxW, top))
+        end)
     end)
-    grip:SetScript("OnMouseUp", function()
-        frame:StopMovingOrSizing()
+    grip:SetScript("OnMouseUp", function(self)
+        if not self:GetScript("OnUpdate") then return end
+        self:SetScript("OnUpdate", nil)
         local s = Saved()
         s.width, s.height = frame:GetWidth(), frame:GetHeight()
         Resized()

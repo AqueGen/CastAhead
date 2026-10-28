@@ -4617,7 +4617,7 @@ end
 
 do
     local ok, err = pcall(dofile, "Options.lua")
-    check(ok and CastAheadOptions and CastAheadOptions.Flow, "Options.lua loads and exposes Flow " .. tostring(err))
+    check(ok and CastAheadOptions and CastAheadOptions.RelayoutGroups, "Options.lua loads " .. tostring(err))
     local savedSwitchDB = CastAheadDB
     CastAheadDB = {}
     CastAheadOptions.SetSwitch("saveCalls", true)
@@ -4625,17 +4625,6 @@ do
     CastAheadOptions.SetSwitch("saveCalls", false)
     check(CastAheadDB.saveCalls == false, "switching it off stores false, not nil")
     CastAheadDB = savedSwitchDB
-    local Flow = CastAheadOptions and CastAheadOptions.Flow or function() return {}, 0 end
-    local pos, total = Flow(250, 250, 8, { 100, 50, 70 })
-    check(#pos == 3 and pos[1].x == 0 and pos[1].y == 0 and pos[2].y == 108 and pos[3].y == 166 and total == 236,
-        "one column stacks groups with the gap")
-    pos, total = Flow(508, 250, 8, { 100, 50, 70 })
-    check(pos[1].x == 0 and pos[2].x == 258 and pos[2].y == 0 and pos[3].x == 258 and pos[3].y == 58 and total == 128,
-        "two columns: each group goes to the shortest column")
-    pos = Flow(100, 250, 8, { 10 })
-    check(pos[1].x == 0 and pos[1].y == 0, "narrower than one column still gives one column")
-    pos, total = Flow(1040, 250, 8, { 300, 20, 20, 20 })
-    check(pos[4].x == 774 and pos[4].y == 0 and total == 300, "four columns, the tallest decides the height")
 end
 
 do
@@ -4643,33 +4632,29 @@ do
         local g = { h = h, shown = shown }
         function g:GetHeight() return self.h end
         function g:IsShown() return self.shown end
-        function g:ClearAllPoints() self.point = nil end
-        function g:SetPoint(_, _, _, x, y) self.point = { x = x, y = y } end
+        function g:ClearAllPoints() self.point, self.right = nil, nil end
+        function g:SetPoint(at, _, _, x, y)
+            if at == "TOPRIGHT" then self.right = { x = x, y = y } else self.point = { x = x, y = y } end
+        end
         return g
     end
     local a, b, c = Group(100, true), Group(50, false), Group(70, true)
     local panel = { groups = { a, b, c } }
-    function panel:GetWidth() return 250 end
+    function panel:GetWidth() return 1000 end
     function panel:SetHeight(h) self.height = h end
     local relayout = CastAheadOptions and CastAheadOptions.RelayoutGroups
     check(relayout ~= nil, "Options.lua exposes RelayoutGroups")
     if relayout then relayout(panel) end
     check(c.point and c.point.y == -(6 + 108) and panel.height == 6 + 178 + 12,
         "a hidden group leaves no gap: the next one takes its slot")
-
-    local d, e = Group(100, true), Group(50, true)
-    local wide = { groups = { d, e }, w = 515 }
-    function wide:GetWidth() return self.w end
-    function wide:SetHeight(h) self.height = h end
-    if relayout then relayout(wide) end
-    check(e.point and e.point.x == 8 and e.point.y == -(6 + 108),
-        "a second column that would cross the page edge wraps under the first")
-    wide.w = 516
-    if relayout then relayout(wide) end
-    check(e.point and e.point.x == 8 + 258 and e.point.y == -6, "two columns once both fit inside the page margin")
-    wide.flowBottom = function() return 30 end
-    if relayout then relayout(wide) end
-    check(wide.height == 6 + 100 + 30 + 12, "a note under the groups adds its height to the panel")
+    check(a.point.x == 8 and c.point.x == 8 and a.right and a.right.x == -8 and c.right.y == c.point.y,
+        "however wide the page, groups stack in one column and span it between the margins")
+    c.flowPad = 30
+    if relayout then relayout(panel) end
+    check(c.point.y == -(6 + 108 + 30) and panel.height == 6 + 208 + 12, "a group's flowPad opens room above it")
+    panel.flowBottom = function() return 30 end
+    if relayout then relayout(panel) end
+    check(panel.height == 6 + 208 + 30 + 12, "a note under the groups adds its height to the panel")
 end
 
 do
@@ -4938,7 +4923,16 @@ do
     check(titleAdded[1] == "Test drive all" and #titleAdded == 1, "the title bar keeps only Test drive all, got " .. table.concat(titleAdded, ","))
     CastAheadUI.ShowTab("Casts")
     local f = CastAheadWindow.Frame()
-    check(f and f.w == 600 and f.h == 420, "a saved size below the minimum opens at the minimum")
+    check(f and f.w == CastAheadWindow.MIN_W and f.h == CastAheadWindow.MIN_H, "a saved size below the minimum opens at the minimum")
+    do
+        local GripSize = CastAheadWindow.GripSize
+        local w, h = GripSize(600, 420, 100, 50, 460, 420, 1500, 900)
+        check(w == 700 and h == 470, "dragging the grip right and down grows the window by the cursor's move")
+        w, h = GripSize(600, 420, -400, -300, 460, 420, 1500, 900)
+        check(w == 460 and h == 420, "dragging the grip past the minimum stops at the minimum")
+        w, h = GripSize(600, 420, 2000, 2000, 460, 420, 1000, 800)
+        check(w == 1000 and h == 800, "dragging the grip past the screen edge stops at the edge")
+    end
     do
         local list
         for _, b in ipairs(made) do
