@@ -6682,6 +6682,14 @@ end)()
     check(shown and not loud, "run state: a muted important cast shows without a call")
     shown, loud = CastAheadUI.RunState({ spell = 9, prio = "AOE" })
     check(shown and loud, "run state: an important cast with nothing of its own shows and calls")
+    CastAheadDB.importantOnly = false
+    local role = CastAheadMatch.PlayerRole
+    CastAheadMatch.PlayerRole = function() return "DAMAGER" end
+    check(not CastAheadMatch.Shown({ spell = 9, prio = "TANK" }), "role filter: a tank buster stays off a dps run without Important casts only")
+    check(CastAheadMatch.Shown({ spell = 9, prio = "KICK" }), "role filter: a dps still gets kicks")
+    check(CastAheadMatch.Shown({ spell = 7, prio = "TANK" }), "role filter: a starred tank buster shows anyway")
+    check(CastAheadMatch.Shown({ spell = 8 }), "role filter: without Important casts only an uncurated cast shows")
+    CastAheadMatch.PlayerRole = role
     CastAheadDB = saved
 end)()
 

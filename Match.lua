@@ -416,6 +416,21 @@ M.PlayerRole = function() return nil end
 M.PlayerCanHandle = function() return true end
 -- The player's own star (true/false), nil when they left it to the curated set.
 M.OwnImportant = function() return nil end
+-- "Important casts only" from General.
+M.ImportantOnly = function() return false end
+
+-- The cast's call is one this character can act on: its role, and the
+-- dispels it knows. Curated casts are judged by their curated category,
+-- the rest by the call the logs gave them.
+function M.FitsPlayer(row)
+    local advice = M.Advice(row)
+    local key = row.prio or (advice and advice.key)
+    if not key then return true end
+    local hides = M.ROLE_HIDES[M.PlayerRole()]
+    if hides and hides[key] then return false end
+    if M.CAPABILITY_GATED[key] and not M.PlayerCanHandle(key) then return false end
+    return true
+end
 
 -- "Important" means the player's own star when they set one, else a human
 -- curated this cast into the priority set and the player can act on it. Kept
@@ -423,13 +438,7 @@ M.OwnImportant = function() return nil end
 -- agree on the meaning.
 function M.Curated(row)
     if M.IsSave(M.Advice(row)) then return true end
-    if not row.prio then return false end
-    local hides = M.ROLE_HIDES[M.PlayerRole()]
-    if hides and hides[row.prio] then return false end
-    if M.CAPABILITY_GATED[row.prio] and not M.PlayerCanHandle(row.prio) then
-        return false
-    end
-    return true
+    return row.prio ~= nil and M.FitsPlayer(row)
 end
 
 function M.Important(row)
@@ -450,6 +459,32 @@ function M.OnlyImportant(rows)
     local out = {}
     for i = 1, #rows do
         if M.Important(rows[i]) then out[#out + 1] = rows[i] end
+    end
+    return out
+end
+
+-- Whether a run shows and calls the cast at all. With "Important casts only"
+-- that is the important set; without it, everything this character can act
+-- on ("My role only"), plus whatever the player starred and every defensive
+-- call.
+function M.Shown(row)
+    if M.ImportantOnly() then return M.Important(row) end
+    if M.OwnImportant(row.spell) == true then return M.Advice(row) ~= nil end
+    return M.IsSave(M.Advice(row)) or M.FitsPlayer(row)
+end
+
+function M.AnyShown(candidates)
+    if not candidates then return false end
+    for i = 1, #candidates do
+        if M.Shown(candidates[i]) then return true end
+    end
+    return false
+end
+
+function M.OnlyShown(rows)
+    local out = {}
+    for i = 1, #rows do
+        if M.Shown(rows[i]) then out[#out + 1] = rows[i] end
     end
     return out
 end

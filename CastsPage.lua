@@ -83,11 +83,11 @@ end
 local function RunState(entry)
     local hidden = "Not shown or called in combat: "
     if IsDisabled(entry.spell) then return false, false, hidden .. "switched off here." end
-    if CastAheadConfig.Enabled("importantOnly") and not CastAheadMatch.Important(entry) then
+    if not CastAheadMatch.Shown(entry) then
         if CastAheadConfig.SpellImportant(entry.spell) == false then
             return false, false, hidden .. "you unstarred it, and \"Important casts only\" is on in General."
         end
-        if entry.prio then
+        if not CastAheadMatch.FitsPlayer(entry) then
             return false, false, hidden .. "not for your role (\"My role only\" in General). Star it to show it anyway."
         end
         return false, false, hidden .. "no star, and \"Important casts only\" is on in General. Star it to show it."
@@ -839,7 +839,6 @@ function Refresh()
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", rowParent, "TOPLEFT", 0, -y)
             y = y + ROW_HEIGHT
-            row:SetAlpha(section.key == "hidden" and 0.5 or 1)
             row.entry = entry
             row.icon:SetTexture((C_Spell.GetSpellInfo(entry.spell) or {}).iconID or 136243)
             -- Rows resting on almost no observations are shown, but muted: the
@@ -899,7 +898,7 @@ function Refresh()
     end
     local dungeons = 0
     for _ in pairs(CastAheadData) do dungeons = dungeons + 1 end
-    local summary = string.format("%d of %d spells shown, %d important | %d dungeons in the database",
+    local summary = string.format("%d of %d casts listed, %d important | %d dungeons in the database",
         #list, total, starred, dungeons)
     -- Both outputs off looks exactly like a broken addon, so say it plainly.
     if not CastAheadConfig.Enabled("nameplates") and not CastAheadConfig.Enabled("timeline") then
