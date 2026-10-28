@@ -6780,36 +6780,63 @@ end)()
 end)()
 
 -- "Show in BigWigs bars": confident predictions go to BigWigs over its
--- message bus; two mobs on one spell share one bar, owned by the sooner one.
+-- message bus, one bar per mob, only while BigWigs is running.
 ;(function()
-    local savedDB, savedLoader = CastAheadDB, BigWigsLoader
-    local sent = {}
-    BigWigsLoader = { SendMessage = function(_, msg, _, a, b, c) sent[#sent + 1] = { msg = msg, a = a, b = b, c = c } end }
-    CastAheadDB = { bigwigsBars = true }
+    local savedDB, savedLoader, savedBigWigs = CastAheadDB, BigWigsLoader, BigWigs
+    local savedFeature = C_EncounterTimeline and C_EncounterTimeline.IsFeatureEnabled
+    local sent, running, gameTimeline = {}, true, false
+    BigWigsLoader = { SendMessage = function(_, msg, module, ...) sent[#sent + 1] = { msg = msg, module = module, args = { ... } } end }
+    BigWigs = { IsEnabled = function() return running end }
+    C_EncounterTimeline = C_EncounterTimeline or {}
+    C_EncounterTimeline.IsFeatureEnabled = function() return gameTimeline end
+    CastAheadDB = {}
     local TL, now = CastAheadTimeline, GetTime()
     local row, advice = { spell = 100, name = "Big" }, CastAheadMatch.ADVICE.AOE
     local first, second = {}, {}
     TL.Sync(first, now + 10, row, advice, true)
-    check(#sent == 1 and sent[1].msg == "BigWigs_StartBar" and type(sent[1].b) == "string" and sent[1].b:find("Big", 1, true)
-        and math.abs(sent[1].c - 10) < 0.01, "bigwigs: a confident prediction starts a bar named by its call and spell")
+    local start = sent[1]
+    check(#sent == 1 and start.msg == "BigWigs_StartBar" and type(start.args[2]) == "string" and start.args[2]:find("Big", 1, true)
+        and math.abs(start.args[3] - 10) < 0.01 and start.args[5] and start.args[5] > 0,
+        "bigwigs: a confident prediction starts a bar named by its call and spell, waiting at zero like the timeline")
     TL.Sync(first, now + 10.5, row, advice, true)
     check(#sent == 1, "bigwigs: a small retime leaves the bar alone")
     TL.Sync(second, now + 15, row, advice, true)
-    check(#sent == 1, "bigwigs: a later prediction of the same spell does not take the bar")
+    check(#sent == 2 and sent[2].msg == "BigWigs_StartBar" and sent[2].module ~= start.module,
+        "bigwigs: a second mob on the same spell gets a bar of its own")
     TL.Cancel(second)
-    check(#sent == 1, "bigwigs: a mob that does not own the bar cannot stop it")
+    check(#sent == 3 and sent[3].msg == "BigWigs_StopBar" and sent[3].module == sent[2].module,
+        "bigwigs: a mob stops only its own bar")
     TL.Finish(first)
-    check(#sent == 2 and sent[2].msg == "BigWigs_StopBar" and sent[2].a == sent[1].b, "bigwigs: the cast starting stops its bar")
+    check(#sent == 4 and sent[4].msg == "BigWigs_StopBar" and sent[4].module == start.module and sent[4].args[1] == start.args[2],
+        "bigwigs: the cast starting stops its bar")
     TL.Sync(first, now + 5, row, advice, false)
-    check(#sent == 2, "bigwigs: an unsure prediction gets no bar")
-    CastAheadDB.bigwigsBars = nil
+    check(#sent == 4, "bigwigs: an unsure prediction gets no bar")
     TL.Sync(first, now + 10, row, advice, true)
-    check(#sent == 2, "bigwigs: off by default, nothing is sent")
+    CastAheadDB.bigwigsBars = false
+    TL.Sync(first, now + 10, row, advice, true)
+    check(#sent == 6 and sent[6].msg == "BigWigs_StopBar", "bigwigs: switching it off takes the bar down")
+    TL.Sync(first, now + 12, row, advice, true)
+    check(#sent == 6, "bigwigs: switched off, nothing is sent")
+    CastAheadDB = { timeline = false }
+    TL.Sync({}, now + 10, row, advice, true)
+    check(#sent == 6, "bigwigs: it follows the Feed the Blizzard timeline switch")
+    CastAheadDB = {}
+    gameTimeline = true
+    TL.Sync({}, now + 10, row, advice, true)
+    check(#sent == 6, "bigwigs: with the game's timeline showing, no bars on top of it")
+    gameTimeline = false
+    running = false
+    local early = {}
+    TL.Sync(early, now + 10, row, advice, true)
+    check(#sent == 6 and early.barText == nil, "bigwigs: nothing is sent or recorded while BigWigs is not running")
+    running = true
+    TL.Sync(early, now + 10, row, advice, true)
+    check(#sent == 7 and sent[7].msg == "BigWigs_StartBar", "bigwigs: the bar goes up once BigWigs runs")
     BigWigsLoader = { SendMessage = function() error("changed") end }
-    CastAheadDB.bigwigsBars = true
     local ok = pcall(TL.Sync, {}, now + 10, row, advice, true)
     check(ok, "bigwigs: a changed BigWigs fails quietly")
-    CastAheadDB, BigWigsLoader = savedDB, savedLoader
+    CastAheadDB, BigWigsLoader, BigWigs = savedDB, savedLoader, savedBigWigs
+    C_EncounterTimeline.IsFeatureEnabled = savedFeature
 end)()
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))

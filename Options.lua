@@ -143,8 +143,8 @@ local SWITCHES = {
         tip = "The response in words, big, near the middle of the screen while an important cast goes out." },
     timeline = { label = "Feed the Blizzard timeline",
         tip = "Feed confident predictions to the game's own encounter timeline." },
-    bigwigsBars = { label = "Show in BigWigs bars", defaultOff = true,
-        tip = "Also show confident predictions as BigWigs bars. BigWigs leaves other addons' timeline entries out of its bars, so without this they never show there. It uses a part of BigWigs that is not an official addon API, so a BigWigs update may stop it working." },
+    bigwigsBars = { label = "Show in BigWigs bars",
+        tip = "BigWigs turns the game's timeline off and leaves other addons' entries out of its bars. While the game's timeline is off, the same predictions show as BigWigs bars instead. It uses a part of BigWigs that is not an official addon API, so a BigWigs update may stop it working." },
     sound = { label = "Sound",
         tip = "Master switch for everything the addon plays." },
     voice = { label = "Voice",
@@ -424,7 +424,7 @@ function BuildGeneral(panel)
         timelineOff:ClearAllPoints()
         timelineOff:SetPoint("TOPLEFT", bigWigs and bigwigs or timeline, "BOTTOMLEFT", 4, -2)
         local text = " "
-        if off and bigWigs and CastAheadConfig.Get("bigwigsBars") ~= true then
+        if off and bigWigs and not CastAheadConfig.Enabled("bigwigsBars") then
             text = "BigWigs has the game's timeline off: tick Show in BigWigs bars, or turn on its Blizzard timeline."
         elseif off and not bigWigs then
             text = "The game's timeline is switched off."

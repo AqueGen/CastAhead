@@ -3244,6 +3244,7 @@ function CastAheadCore.Test(instanceID, list)
         print("|cff33ff99CastAhead|r nothing passes the current filters in " .. (rows.name or id))
         return
     end
+    if CastAheadTimeline then CastAheadTimeline.NoteBigWigsAsleep() end
     -- Every hostile plate on screen gets icons (training dummies, a pack),
     -- rows dealt round-robin, so the layout can be judged on real plates.
     -- By unit token, not via GetNamePlates(): nameplate addons replace the

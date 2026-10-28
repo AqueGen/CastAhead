@@ -141,8 +141,10 @@ local function FeedTimeline(now)
     for i, sample in ipairs(CastAheadCore.SAMPLE_ROW) do
         local track = tracks[i] or {}
         tracks[i] = track
-        local row = (not track.timelineTargetAt or now >= track.timelineTargetAt)
-            and CastAheadCore.SampleDataRow(sample.key)
+        -- A sample is fed again once it has run out, on the timeline or, with
+        -- the game's timeline off, as a BigWigs bar.
+        local due = track.timelineTargetAt or track.barTargetAt
+        local row = (not due or now >= due) and CastAheadCore.SampleDataRow(sample.key)
         if row then
             CastAheadTimeline.Sync(track, now + TIMELINE_LEAD + sample.time, row,
                 CastAheadMatch.ADVICE[sample.key], true)
@@ -567,6 +569,7 @@ function CastAheadSetup.Enter()
     CastAheadCore.Reapply()
     CastAheadCore.ShowCenterSample(true)
     FeedTimeline(GetTime())
+    if CastAheadTimeline then CastAheadTimeline.NoteBigWigsAsleep() end
     KicksSample(true)
     for _, event in ipairs(EVENTS) do panel:RegisterEvent(event) end
     panel:EnableKeyboard(true)
