@@ -270,7 +270,7 @@ local function KickVoiceAllowed(unit, candidates, advice)
         return true
     end
     if not CastAheadMatch.AnyImportant(candidates) then return false end
-    if not (UnitExists("focus") and UnitCanAttack("player", "focus")) then return true end
+    if not (UnitExists("focus") and UnitCanAttack("player", "focus") and not UnitIsDead("focus")) then return true end
     if not unit then return false end
     local same = UnitIsUnit("focus", unit)
     if issecretvalue and issecretvalue(same) then return false end

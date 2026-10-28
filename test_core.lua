@@ -1387,6 +1387,10 @@ do
     hostile.focus, focusIs = false, false
     check(kickAlerts(open, 3.5) == 1, "kick voice: friendly focus falls back to all mobs")
 
+    hostile.focus, focusIs, dead.focus = true, false, true
+    check(kickAlerts(open, 3.5) == 1, "kick voice: dead focus falls back to all mobs")
+    dead.focus = nil
+
     check(kickAlerts(open, 5.2, true) == 0, "kick voice: turning interruptible obeys the gate")
     check(kickAlerts({ importantOnly = false, leadSeconds = 0, kickImportantOnly = false }, 5.2, true) == 1,
         "kick voice: a late-kickable cast is voiced with the gate off")
