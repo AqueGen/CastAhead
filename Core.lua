@@ -255,9 +255,13 @@ local ADVICE_SOUND = {           -- keyed by CastAheadMatch.ADVICE key
 local function ImportantOnly()
     return CastAheadConfig.Enabled("importantOnly")
 end
+CastAheadMatch.ImportantOnly = ImportantOnly
 
+-- What a run shows and calls: "Important casts only" and "My role only"
+-- each trim it on their own (Match.Shown).
 local function Announceable(candidates)
-    return not ImportantOnly() or CastAheadMatch.AnyImportant(candidates)
+    if not candidates or #candidates == 0 then return not ImportantOnly() end
+    return CastAheadMatch.AnyShown(candidates)
 end
 
 -- Only a prediction this solid is worth putting on Blizzard's timeline: one
@@ -1123,7 +1127,7 @@ function StartPreview(unit, state)
     if not npc then return end
     local kit = CastAheadMatch.SpellsOfNPC(dungeon, npc)
     kit = CastAheadMatch.NarrowByEnabled(kit, CastAheadUI and CastAheadUI.IsDisabled)
-    if ImportantOnly() then kit = CastAheadMatch.OnlyImportant(kit) end
+    kit = CastAheadMatch.OnlyShown(kit)
     if #kit == 0 then return end
     local rows = {}
     for i = 1, #kit do
@@ -1153,7 +1157,7 @@ local function StartOpening(unit, state)
     -- Identification ran on the full kit above; only what gets shown is
     -- filtered, and the soonest *shown* opener is wanted - returning when the
     -- very first one was a filler hid every important opener behind it.
-    if ImportantOnly() then candidates = CastAheadMatch.OnlyImportant(candidates) end
+    candidates = CastAheadMatch.OnlyShown(candidates)
     local soonest = CastAheadMatch.SoonestOpening(candidates)
     if not soonest then return end
     state.opening = {
@@ -1276,15 +1280,13 @@ local function CollectRows(state)
     end
     -- Display filter only: identification above used every row, or a kicked
     -- filler could no longer name the mob it belongs to.
-    if ImportantOnly() then
-        local kept = {}
-        for i = 1, #rows do
-            if CastAheadMatch.AnyImportant(rows[i].candidates) then
-                kept[#kept + 1] = rows[i]
-            end
+    local kept = {}
+    for i = 1, #rows do
+        if CastAheadMatch.AnyShown(rows[i].candidates) then
+            kept[#kept + 1] = rows[i]
         end
-        rows = kept
     end
+    rows = kept
     table.sort(rows, RowSort)
     return rows
 end
