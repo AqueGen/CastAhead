@@ -331,6 +331,8 @@ local function KnowsAny(list)
     return false
 end
 
+CastAheadMatch.OwnImportant = function(spellID) return CastAheadConfig.SpellImportant(spellID) end
+
 CastAheadMatch.PlayerCanHandle = function(category)
     if not CastAheadConfig.Enabled("roleFilter") then return true end
     if not IsPlayerSpell then return true end
@@ -508,6 +510,7 @@ end
 local function PlayAdviceSound(advice, lead, candidates)
     if not advice then return end
     if not CastAheadConfig.Enabled("sound") then return end
+    if CastAheadConfig.AllMuted(candidates) then return end
     -- The heads-up is a number of seconds now; 0 means the player does not
     -- want it at all.
     if lead and CastAheadConfig.LeadFor(candidates) <= 0 and not CastAheadMatch.IsSave(advice) then return end
