@@ -736,6 +736,10 @@ local function CreateRow(parent, index)
         if (e.n or 0) < THIN_EVIDENCE then
             GameTooltip:AddLine("Few casts seen - its timings are a rough estimate", 1, 0.5, 0.2)
         end
+        if CastAheadMatch.Advice(e) then
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine("Click to edit this cast", 0.4, 0.8, 1)
+        end
         GameTooltip:Show()
     end)
     row:SetScript("OnLeave", GameTooltip_Hide)
@@ -897,6 +901,9 @@ local function Build(page)
         GameTooltip:Show()
     end)
     listButton:SetScript("OnLeave", GameTooltip_Hide)
+    local hint = host:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    hint:SetPoint("LEFT", listButton, "RIGHT", 12, 0)
+    hint:SetText("Click a cast to change its settings")
     CastAheadUI.RefreshTest()
 
     sideScroll, tableFrame = CastAheadWindow.SideScroll(host, TABLE_TOP)
