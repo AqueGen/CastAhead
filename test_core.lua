@@ -1096,8 +1096,8 @@ CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want i
 
 do
     local keys = table.concat(CastAheadUI.VisibleColumns(false), ",")
-    check(keys == "check,hear,icon,prio,advice,spell,mob,cast,cd,overrides", "outside Development mode the cast table shows 10 columns, got " .. keys)
-    check(#CastAheadUI.VisibleColumns(true) == 18, "Development mode shows every column")
+    check(keys == "check,hear,icon,prio,advice,spell,mob,cast,cd,combat,overrides", "outside Development mode the cast table shows 11 columns, got " .. keys)
+    check(#CastAheadUI.VisibleColumns(true) == 19, "Development mode shows every column")
     check(CastAheadUI.VisibleSortKey("n", false) == "advice", "a hidden sort column falls back to Do outside Development mode")
     check(CastAheadUI.VisibleSortKey("n", true) == "n", "Development mode keeps a development sort column")
     check(CastAheadUI.VisibleSortKey("cast", false) == "cast", "a visible sort column is kept")
