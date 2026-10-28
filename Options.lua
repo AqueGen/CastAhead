@@ -134,7 +134,7 @@ local SWITCHES = {
     voice = { label = "Voice",
         tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"interrupt\"." },
     kickImportantOnly = { label = "Kick voice only on important casts",
-        tip = "Play the kick call only for casts marked with a star, and only on your focus when it is an enemy." },
+        tip = "Play the kick call only for important casts, and only on your focus when it is an enemy, whatever mark it has." },
     fixedSpacing = { label = "Fixed spacing", defaultOff = true,
         tip = "Space the icons evenly: each step is the icon width plus the Gap, however long the words under the icons are. Every row looks the same; two long words side by side may overlap." },
     fullLabels = { label = "Full labels", defaultOff = true,
