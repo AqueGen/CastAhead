@@ -84,7 +84,7 @@ local function RunState(entry)
     local hidden = "Not shown or called in combat: "
     if IsDisabled(entry.spell) then return false, false, hidden .. "switched off here." end
     if not CastAheadMatch.Shown(entry) then
-        if CastAheadConfig.SpellImportant(entry.spell) == false then
+        if CastAheadConfig.SpellImportant(entry.spell) == false and CastAheadMatch.ImportantOnly() then
             return false, false, hidden .. "you unstarred it, and \"Important casts only\" is on in General."
         end
         if not CastAheadMatch.FitsPlayer(entry) then
@@ -93,6 +93,7 @@ local function RunState(entry)
         return false, false, hidden .. "no star, and \"Important casts only\" is on in General. Star it to show it."
     end
     local silent = "Shown in combat without a call: "
+    if not CastAheadMatch.Advice(entry) then return true, false, silent .. "the logs give it no call, so only its icon and timer show." end
     if not CastAheadConfig.Enabled("sound") then return true, false, silent .. "Sound is off in General." end
     if CastAheadConfig.SpellMuted(entry.spell) then return true, false, silent .. "muted on this cast." end
     return true, true, nil
@@ -671,7 +672,7 @@ local function CreateRow(parent, index)
         local own = OverrideSummary(e)
         if own ~= "" then GameTooltip:AddLine("Own settings: " .. own, 1, 0.82, 0) end
         local _, _, why = RunState(e)
-        if why and CastAheadMatch.Advice(e) then GameTooltip:AddLine(why, 1, 0.5, 0.2, true) end
+        if why then GameTooltip:AddLine(why, 1, 0.5, 0.2, true) end
         GameTooltip:AddLine(string.format("%d observations in the logs", e.n or 0), 0.7, 0.7, 0.7)
         GameTooltip:AddLine(string.format("Interrupted: %d%% of casts. Stopped another way: %d%%.",
             (e.kick or 0) * 100, (e.cc or 0) * 100), 0.7, 0.7, 0.7)
@@ -722,7 +723,7 @@ end
 -- outcome shows by where a row sits.
 local SECTIONS = {
     { key = "call", title = "In combat with a call" },
-    { key = "silent", title = "In combat without sound", why = "muted, or Sound is off in General" },
+    { key = "silent", title = "In combat without sound", why = "muted, no call for it, or Sound is off in General" },
     { key = "hidden", title = "Hidden in combat",
       why = "switched off, no star with Important casts only, or not for your role - hover a row" },
 }
@@ -730,10 +731,27 @@ local SECTION_H = 26
 local sectionRows = {}
 
 local function SectionOf(entry)
-    if not CastAheadMatch.Advice(entry) then return "hidden" end
     local shown, loud = RunState(entry)
     if not shown then return "hidden" end
     return loud and "call" or "silent"
+end
+
+local function Grouped(list)
+    local groups = { call = {}, silent = {}, hidden = {} }
+    for _, entry in ipairs(list) do
+        local group = groups[SectionOf(entry)]
+        group[#group + 1] = entry
+    end
+    return groups
+end
+
+-- The table's order, block by block, for Play list.
+local function DisplayOrder()
+    local groups, out = Grouped(SortedRows()), {}
+    for _, section in ipairs(SECTIONS) do
+        for _, entry in ipairs(groups[section.key]) do out[#out + 1] = entry end
+    end
+    return out
 end
 
 local function SectionRow(i)
@@ -772,11 +790,7 @@ function Refresh()
         end
     end
 
-    local groups = { call = {}, silent = {}, hidden = {} }
-    for _, entry in ipairs(list) do
-        local group = groups[SectionOf(entry)]
-        group[#group + 1] = entry
-    end
+    local groups = Grouped(list)
 
     local editing, y, n, shownSections = false, 0, 0, 0
     for _, section in ipairs(SECTIONS) do
@@ -889,7 +903,7 @@ local function Build(page)
     listButton:SetPoint("LEFT", search, "RIGHT", 8, 0)
     listButton:SetScript("OnClick", function()
         if CastAheadCore and CastAheadCore.Test then
-            CastAheadCore.Test(CastAheadWindow.Dungeon(), SortedRows())
+            CastAheadCore.Test(CastAheadWindow.Dungeon(), DisplayOrder())
         end
     end)
     listButton:SetScript("OnEnter", function(self)

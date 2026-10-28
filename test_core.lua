@@ -6599,6 +6599,14 @@ end)()
     check(CastAheadMatch.Shown({ spell = 9, prio = "KICK" }), "role filter: a dps still gets kicks")
     check(CastAheadMatch.Shown({ spell = 7, prio = "TANK" }), "role filter: a starred tank buster shows anyway")
     check(CastAheadMatch.Shown({ spell = 8 }), "role filter: without Important casts only an uncurated cast shows")
+    local heavy = { spell = 11, dmg = 0.3 }
+    check(not CastAheadMatch.Shown(heavy), "role filter: a logged tank buster stays off a dps run")
+    check(CastAheadMatch.Shown(heavy, true), "role filter: the same cast shows once the game says it can be kicked")
+    shown, loud = CastAheadUI.RunState({ spell = 8 })
+    check(shown and not loud, "run state: a cast with no call shows its icon without a call")
+    CastAheadDB.spellImportant[12] = false
+    local _, _, why = CastAheadUI.RunState({ spell = 12, prio = "TANK" })
+    check(why and why:find("role", 1, true), "run state: an unstarred tank buster off Important casts only is hidden for the role, got " .. tostring(why))
     CastAheadMatch.PlayerRole = role
     CastAheadDB = saved
 end)()

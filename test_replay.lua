@@ -252,7 +252,7 @@ local function judgeStart(unit, spell, instance)
         tally.wrong = tally.wrong + 1
         bump(startWrongPairs, spell .. " -> " .. claim.row.spell)
     end
-    local said = CastAheadMatch.AnyImportant(claim.candidates)
+    local said = CastAheadMatch.AnyShown(claim.candidates)
         and CastAheadMatch.ConsensusAdvice(claim.candidates)
     if said then
         if truth and said == CastAheadMatch.Advice(truth) then
