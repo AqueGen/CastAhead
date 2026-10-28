@@ -43,16 +43,28 @@ local function CategorySound(entry)
     return advice and CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[advice.sound or advice.key]
 end
 
-local function SetSpellLead(entry, seconds)
+local function SetOwn(field, entry, value)
     CastAheadDB = CastAheadDB or {}
-    CastAheadDB.spellLead = CastAheadDB.spellLead or {}
-    CastAheadDB.spellLead[entry.spell] = seconds
+    CastAheadDB[field] = CastAheadDB[field] or {}
+    CastAheadDB[field][entry.spell] = value
+end
+
+local function SetSpellLead(entry, seconds) SetOwn("spellLead", entry, seconds) end
+
+-- Starred by the player, else by the curated set.
+local function Starred(entry)
+    local own = CastAheadConfig.SpellImportant(entry.spell)
+    if own ~= nil then return own end
+    return entry.prio ~= nil
 end
 
 -- What this cast does differently from the global settings, in a few words;
 -- empty when nothing.
 local function OverrideSummary(entry)
     local parts = {}
+    local own = CastAheadConfig.SpellImportant(entry.spell)
+    if own ~= nil then parts[#parts + 1] = own and "Important" or "Not important" end
+    if CastAheadConfig.SpellMuted(entry.spell) then parts[#parts + 1] = "Muted" end
     local sound = SpellSound(entry)
     if sound and sound ~= "" then parts[#parts + 1] = sound end
     local lead = CastAheadConfig.SpellLead(entry.spell)
@@ -88,8 +100,8 @@ local COLUMNS = {
     -- A star marks the curated priority set - what "Only important casts"
     -- keeps. The enable checkbox is the player's own choice, this is ours.
     { key = "prio", dev = true, header = "Imp", width = 28,
-      text = function(e) return e.prio and "|A:auctionhouse-icon-favorite:12:12|a" or "" end,
-      sort = function(e) return e.prio and 1 or 0 end },
+      text = function(e) return Starred(e) and "|A:auctionhouse-icon-favorite:12:12|a" or "" end,
+      sort = function(e) return Starred(e) and 1 or 0 end },
     {
         key = "advice", header = "Do", width = 88,
         text = function(e)
@@ -99,7 +111,7 @@ local COLUMNS = {
             if not advice then return "|cff555555-|r" end
             -- Uncurated rows keep their statistical verdict but in grey: only
             -- starred casts are shown in a run, so only they earn the colour.
-            if not e.prio then
+            if not Starred(e) then
                 return "|cff777777" .. advice.label .. "|r"
             end
             return string.format("|cff%02x%02x%02x%s|r",
@@ -279,19 +291,33 @@ local HEADER_TIPS = {
 
 local Refresh, ToggleEditor
 
--- One cast's own settings. Unticked, a setting follows the global one, shown
--- greyed so the player sees what the cast gets anyway.
+-- One cast's own settings, docked right of the table when the page has room
+-- for it, else along the bottom. Unticked, a value setting follows the global
+-- one, shown greyed so the player sees what the cast gets anyway.
+local PANEL_W, PANEL_GAP = 280, 12
 local editor
 
-local function CheckLabel(check, text)
-    local label = editor:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    label:SetPoint("LEFT", check, "RIGHT", 2, 0)
-    label:SetText(text)
+local function Reapply()
+    if CastAheadCore and CastAheadCore.Reapply then CastAheadCore.Reapply() end
+end
+
+local function Check(parent, text, point)
+    local check = CreateFrame("CheckButton", nil, parent, "MinimalCheckboxTemplate")
+    check:SetSize(WIDGET_HEIGHT, WIDGET_HEIGHT)
+    check:SetPoint(unpack(point))
+    check.label = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    check.label:SetPoint("LEFT", check, "RIGHT", 2, 0)
+    check.label:SetText(text)
+    return check
 end
 
 local function PaintEditor()
     local e = editor.entry
-    editor.title:SetText(SpellName(e) .. "  |cff9999ff" .. (e.mob or "?") .. "|r")
+    editor.title:SetText(SpellName(e))
+    editor.mob:SetText("|cff9999ff" .. (e.mob or "?") .. "|r")
+    editor.important:SetChecked(Starred(e))
+    editor.curated:SetText(e.prio and "|cff888888curated: important|r" or "|cff888888curated: not important|r")
+    editor.mute:SetChecked(CastAheadConfig.SpellMuted(e.spell))
     local own = SpellSound(e)
     editor.ownSound:SetChecked(own ~= nil)
     editor.sound:SetEnabled(own ~= nil)
@@ -307,42 +333,78 @@ local function EditorChanged()
     Refresh()
 end
 
+-- Right of the table when it fits there, else a strip along the bottom. Both
+-- hang off the scroll frame, so they stay put while the table scrolls.
+local function LayoutEditor()
+    if not (editor and editor:IsShown()) then return 0 end
+    local scroll, width = host:GetParent(), host:GetWidth()
+    local right = width - TableWidth() >= PANEL_W + PANEL_GAP
+    editor:ClearAllPoints()
+    editor.colB:ClearAllPoints()
+    if right then
+        editor:SetPoint("TOPLEFT", scroll, "TOPLEFT", width - PANEL_W, -TABLE_TOP)
+        editor:SetSize(PANEL_W, 270)
+        editor.colB:SetPoint("TOPLEFT", editor.colA, "BOTTOMLEFT", 0, -10)
+        return 0
+    end
+    editor:SetPoint("BOTTOMLEFT", scroll, "BOTTOMLEFT", 0, 0)
+    editor:SetSize(width, 150)
+    editor.colB:SetPoint("TOPLEFT", editor.colA, "TOPRIGHT", 20, 0)
+    return 150
+end
+
 local function BuildEditor()
-    editor = CreateFrame("Frame", "CastAheadCastEditor", host)
-    editor:SetSize(320, 160)
-    editor:SetFrameStrata("DIALOG")
-    editor:SetClampedToScreen(true)
+    editor = CreateFrame("Frame", nil, host)
+    editor:SetFrameLevel(host:GetFrameLevel() + 50)
     editor:EnableMouse(true)
     editor:Hide()
-    tinsert(UISpecialFrames, "CastAheadCastEditor")
     local edge = editor:CreateTexture(nil, "BACKGROUND")
     edge:SetAllPoints()
     edge:SetColorTexture(1, 1, 1, 0.25)
     local bg = editor:CreateTexture(nil, "BORDER")
     bg:SetPoint("TOPLEFT", 1, -1)
     bg:SetPoint("BOTTOMRIGHT", -1, 1)
-    bg:SetColorTexture(0.05, 0.05, 0.07, 0.97)
+    bg:SetColorTexture(0.05, 0.05, 0.07, 1)
 
     editor.title = editor:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     editor.title:SetPoint("TOPLEFT", 10, -10)
     editor.title:SetPoint("TOPRIGHT", -30, -10)
     editor.title:SetJustifyH("LEFT")
     editor.title:SetWordWrap(false)
+    editor.mob = editor:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    editor.mob:SetPoint("TOPLEFT", editor.title, "BOTTOMLEFT", 0, -4)
     local close = CreateFrame("Button", nil, editor, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", 0, 0)
+    close:SetScript("OnClick", function() ToggleEditor(nil) end)
 
-    editor.ownSound = CreateFrame("CheckButton", nil, editor, "MinimalCheckboxTemplate")
-    editor.ownSound:SetSize(WIDGET_HEIGHT, WIDGET_HEIGHT)
-    editor.ownSound:SetPoint("TOPLEFT", 8, -36)
-    CheckLabel(editor.ownSound, "Own sound")
+    editor.colA = CreateFrame("Frame", nil, editor)
+    editor.colA:SetSize(260, 96)
+    editor.colA:SetPoint("TOPLEFT", 10, -48)
+    local a = editor.colA
+    editor.important = Check(a, "Important", { "TOPLEFT", a, "TOPLEFT", 0, 0 })
+    editor.curated = a:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    editor.curated:SetPoint("LEFT", editor.important.label, "RIGHT", 8, 0)
+    editor.important:SetScript("OnClick", function(self)
+        local e, on = editor.entry, self:GetChecked()
+        if on == (e.prio ~= nil) then on = nil end
+        SetOwn("spellImportant", e, on)
+        Reapply()
+        EditorChanged()
+    end)
+    editor.mute = Check(a, "Mute: no call, the icon stays", { "TOPLEFT", a, "TOPLEFT", 0, -26 })
+    editor.mute:SetScript("OnClick", function(self)
+        SetOwn("spellMute", editor.entry, self:GetChecked() or nil)
+        EditorChanged()
+    end)
+    editor.ownSound = Check(a, "Own sound", { "TOPLEFT", a, "TOPLEFT", 0, -52 })
     editor.ownSound:SetScript("OnClick", function(self)
         local e = editor.entry
         SetSpellSound(e, self:GetChecked() and (SpellSound(e) or "") or nil)
         EditorChanged()
     end)
-    editor.sound = CreateFrame("DropdownButton", nil, editor, "WowStyle1DropdownTemplate")
-    editor.sound:SetSize(170, WIDGET_HEIGHT)
-    editor.sound:SetPoint("TOPRIGHT", -10, -36)
+    editor.sound = CreateFrame("DropdownButton", nil, a, "WowStyle1DropdownTemplate")
+    editor.sound:SetSize(200, WIDGET_HEIGHT)
+    editor.sound:SetPoint("TOPLEFT", a, "TOPLEFT", 24, -76)
     editor.sound:SetupMenu(function(_, root)
         local e = editor.entry
         if not (e and CastAheadOptions and CastAheadOptions.SoundMenu) then return end
@@ -359,15 +421,15 @@ local function BuildEditor()
             CastAheadMatch.Advice(e))
     end)
 
-    editor.ownLead = CreateFrame("CheckButton", nil, editor, "MinimalCheckboxTemplate")
-    editor.ownLead:SetSize(WIDGET_HEIGHT, WIDGET_HEIGHT)
-    editor.ownLead:SetPoint("TOPLEFT", editor.ownSound, "BOTTOMLEFT", 0, -10)
-    CheckLabel(editor.ownLead, "Own early warning")
+    editor.colB = CreateFrame("Frame", nil, editor)
+    editor.colB:SetSize(260, 80)
+    local b = editor.colB
+    editor.ownLead = Check(b, "Own early warning", { "TOPLEFT", b, "TOPLEFT", 0, 0 })
     editor.ownLead:SetScript("OnClick", function(self)
         SetSpellLead(editor.entry, self:GetChecked() and CastAheadConfig.Lead() or nil)
         EditorChanged()
     end)
-    editor.lead = CastAheadOptions.BuildSlider(editor, {
+    editor.lead = CastAheadOptions.BuildSlider(b, {
         min = 0, max = CastAheadConfig.LEAD_MAX,
         low = "off", high = CastAheadConfig.LEAD_MAX .. "s",
         width = 200,
@@ -391,33 +453,27 @@ local function BuildEditor()
     local reset = CastAheadWindow.Button(editor, "Reset", 70)
     reset:SetPoint("BOTTOMRIGHT", -10, 10)
     reset:SetScript("OnClick", function()
-        SetSpellSound(editor.entry, nil)
-        SetSpellLead(editor.entry, nil)
+        local e = editor.entry
+        for _, field in ipairs({ "spellImportant", "spellMute", "spellSounds", "spellLead" }) do
+            SetOwn(field, e, nil)
+        end
+        Reapply()
         EditorChanged()
-    end)
-
-    -- A click anywhere else closes it, except inside the sound menu it opened.
-    editor:SetScript("OnShow", function(self) self:RegisterEvent("GLOBAL_MOUSE_DOWN") end)
-    editor:SetScript("OnHide", function(self) self:UnregisterEvent("GLOBAL_MOUSE_DOWN") end)
-    editor:SetScript("OnEvent", function(self)
-        if self:IsMouseOver() or (self.owner and self.owner:IsMouseOver()) then return end
-        local menus = Menu and Menu.GetManager and Menu.GetManager()
-        if menus and menus:IsAnyMenuOpen() then return end
-        self:Hide()
     end)
 end
 
-function ToggleEditor(entry, owner)
+-- Opens the panel on a cast, or closes it when that cast is already open
+-- (or for nil).
+function ToggleEditor(entry)
     if not editor then BuildEditor() end
-    if editor:IsShown() and editor.entry == entry then
+    if not entry or editor:IsShown() and editor.entry == entry then
         editor:Hide()
-        return
+    else
+        editor.entry = entry
+        editor:Show()
+        PaintEditor()
     end
-    editor.entry, editor.owner = entry, owner
-    editor:ClearAllPoints()
-    editor:SetPoint("TOPRIGHT", owner, "BOTTOMRIGHT", 0, -2)
-    PaintEditor()
-    editor:Show()
+    Refresh()
 end
 
 local function CreateHeader(parent, index, column)
@@ -469,6 +525,10 @@ local function CreateRow(parent, index)
     row:SetSize(TableWidth(), ROW_HEIGHT)
     row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -(index - 1) * ROW_HEIGHT)
     row.cells = {}
+    row.selected = row:CreateTexture(nil, "BACKGROUND")
+    row.selected:SetAllPoints()
+    row.selected:SetColorTexture(1, 0.82, 0, 0.12)
+    row.selected:Hide()
 
     for i = 1, #tableColumns do
         local column = tableColumns[i]
@@ -588,6 +648,7 @@ function Refresh()
         end
     end
 
+    local editing = false
     for i = 1, math.max(#list, #rows) do
         local entry = list[i]
         if entry and not rows[i] then
@@ -616,6 +677,9 @@ function Refresh()
             row.approx:SetAlpha(alpha)
             -- Nothing to say for a row with no verdict - no speaker, no sound.
             row.hear:SetShown(CastAheadMatch.Advice(entry) ~= nil)
+            local selected = editor and editor:IsShown() and editor.entry == entry
+            if selected then editing = true end
+            row.selected:SetShown(selected or false)
             row.check:SetChecked(not IsDisabled(entry.spell))
             row.check:SetScript("OnClick", function(self)
                 SetDisabled(entry.spell, not self:GetChecked())
@@ -628,17 +692,22 @@ function Refresh()
         end
     end
 
+    -- The cast being edited left the table (another dungeon, a search).
+    if editor and editor:IsShown() and not editing then editor:Hide() end
+    -- A bottom strip covers the last rows, so the page grows by its height.
+    local bottom = LayoutEditor()
+
     local rowsHeight = math.max(#list, 1) * ROW_HEIGHT
     rowParent:SetHeight(rowsHeight)
     tableFrame:SetHeight(HEADER_HEIGHT + 4 + rowsHeight)
     sideScroll:SetHeight(HEADER_HEIGHT + 4 + rowsHeight)
-    host:SetHeight(TABLE_TOP + HEADER_HEIGHT + 4 + rowsHeight)
+    host:SetHeight(TABLE_TOP + HEADER_HEIGHT + 4 + rowsHeight + bottom)
 
     local dungeon = CastAheadWindow.Dungeon()
     local total = dungeon and #(CastAheadData[dungeon] or {}) or 0
     local starred = 0
     for i = 1, #list do
-        if list[i].prio then starred = starred + 1 end
+        if Starred(list[i]) then starred = starred + 1 end
     end
     local dungeons = 0
     for _ in pairs(CastAheadData) do dungeons = dungeons + 1 end
@@ -696,6 +765,10 @@ local function Build(page)
     rowParent:SetSize(1, 1)
 
     headers, rows = {}, {}
+    -- A resized window may move the edit panel between the right and the bottom.
+    host:HookScript("OnSizeChanged", function()
+        if editor and editor:IsShown() then Refresh() end
+    end)
     if sortDescending == nil then sortDescending = true end
     RebuildTable()
 end

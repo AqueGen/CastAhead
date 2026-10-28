@@ -6572,6 +6572,13 @@ end)()
     check(CastAheadUI.OverrideSummary({ spell = 1 }) == "Bell, Early 6s", "overrides: sound and warning listed")
     check(CastAheadUI.OverrideSummary({ spell = 2 }) == "Early off", "overrides: a ticked sound with no pick is not listed")
     check(CastAheadUI.OverrideSummary({ spell = 9 }) == "", "overrides: nothing own, nothing listed")
+    CastAheadDB.spellImportant = { [1] = false }
+    CastAheadDB.spellMute = { [1] = true, [2] = true }
+    check(not CastAheadMatch.Important({ spell = 1, prio = "AOE" }), "overrides: an unstarred curated cast is not important")
+    check(CastAheadMatch.Important({ spell = 9, prio = "AOE" }), "overrides: without a star of its own the curated set decides")
+    check(C.AllMuted({ { spell = 1 }, { spell = 2 } }), "overrides: a bar of muted casts is silent")
+    check(not C.AllMuted({ { spell = 1 }, { spell = 9 } }), "overrides: one unmuted candidate keeps the call")
+    check(CastAheadUI.OverrideSummary({ spell = 1 }) == "Not important, Muted, Bell, Early 6s", "overrides: every own setting listed")
     CastAheadDB = saved
 end)()
 

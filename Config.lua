@@ -202,6 +202,27 @@ function C.SpellLead(spellID)
     return own and math.max(0, math.min(C.LEAD_MAX, own)) or nil
 end
 
+-- The player's own star for a cast: true or false when set on the Casts page,
+-- nil to follow the curated set.
+function C.SpellImportant(spellID)
+    local own = CastAheadDB and CastAheadDB.spellImportant and CastAheadDB.spellImportant[spellID]
+    if own == nil then return nil end
+    return own == true
+end
+
+function C.SpellMuted(spellID)
+    return CastAheadDB and CastAheadDB.spellMute and CastAheadDB.spellMute[spellID] == true or false
+end
+
+-- A bar is silent only when every spell it may be is muted.
+function C.AllMuted(candidates)
+    if not candidates or #candidates == 0 then return false end
+    for _, row in ipairs(candidates) do
+        if not C.SpellMuted(row.spell) then return false end
+    end
+    return true
+end
+
 function C.LeadFor(candidates)
     local global = C.Lead()
     if not candidates or #candidates == 0 then return global end
