@@ -669,12 +669,6 @@ local function CreateRow(parent, index)
             text:SetJustifyH(column.justify or "LEFT")
             text:SetWordWrap(false)
             row.cells[column.key] = text
-            if column.key == "cd" then
-                -- A "~" inside the text sits at the top of the line, so it gets
-                -- its own font string, lowered to the middle.
-                row.approx = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-                row.approx:SetText("|cffff8800~|r")
-            end
             if column.key == "mob" then
                 -- It takes the mouse over the cell, so a click is handed on to the row.
                 local hover = CreateFrame("Button", nil, row)
@@ -690,6 +684,12 @@ local function CreateRow(parent, index)
                     row:UnlockHighlight()
                     HideMobModel()
                 end)
+            end
+            if column.key == "cd" then
+                -- A "~" inside the text sits at the top of the line, so it gets
+                -- its own font string, lowered to the middle.
+                row.approx = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                row.approx:SetText("|cffff8800~|r")
             end
             if column.key == "prio" then
                 local star = CreateFrame("Button", nil, row)
