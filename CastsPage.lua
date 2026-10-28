@@ -140,11 +140,6 @@ local COLUMNS = {
             -- Neither curated nor loud enough in the logs to earn a verdict:
             -- say so, rather than leave a cell that looks like a glitch.
             if not advice then return "|cff555555-|r" end
-            -- Uncurated rows keep their statistical verdict but in grey: only
-            -- starred casts are shown in a run, so only they earn the colour.
-            if not Starred(e) then
-                return "|cff777777" .. advice.label .. "|r"
-            end
             return string.format("|cff%02x%02x%02x%s|r",
                 advice.r * 255, advice.g * 255, advice.b * 255, advice.label)
         end,
@@ -194,18 +189,6 @@ local COLUMNS = {
     { key = "cc", dev = true, header = "Stop", width = 40, justify = "RIGHT",
       text = function(e) return (e.cc or 0) > 0 and string.format("%d%%", e.cc * 100) or "-" end,
       sort = function(e) return e.cc or 0 end },
-    -- What combat does with the cast once the global settings apply.
-    { key = "combat", header = "In combat", width = 70,
-      text = function(e)
-          if not CastAheadMatch.Advice(e) then return "|cff555555-|r" end
-          local shown, loud = RunState(e)
-          if not shown then return "|cff777777Hidden|r" end
-          return loud and "|cff40dd60Call|r" or "|cffffd100Silent|r"
-      end,
-      sort = function(e)
-          local shown, loud = RunState(e)
-          return (shown and 1 or 0) + (loud and 1 or 0)
-      end },
     -- Only what differs from the global settings; a click on the row opens the panel.
     { key = "overrides", header = "Overrides", width = 80,
       text = function(e)
@@ -300,11 +283,9 @@ local HEADER_TIPS = {
     prio = { "Important",
         "Starred casts are the ones worth reacting to. |cffffd100Only important casts|r in the General tab hides everything else. Click a cell to star or unstar a cast." },
     advice = { "What to do",
-        "The call made when this cast starts. Grey means the cast is tracked but has no call: it is rare in the logs and not starred." },
+        "The call made when this cast starts. A dash means the cast is tracked but has no call: it is rare in the logs and not starred." },
     spell = { "Spell",
         "The cast being tracked. Hover a row for the spell tooltip." },
-    combat = { "In combat",
-        "What this cast gets in a run once the General settings apply. |cff40dd60Call|r: icon and call. |cffffd100Silent|r: icon, no sound. |cff777777Hidden|r: nothing at all - no nameplate icon, centre call, timeline or sound. Hover a row for the reason." },
     overrides = { "Overrides",
         "A tick when any setting of the cast differs from the global ones: its star, mute, its own sound or early warning. Hover a row for the details, click it to change them." },
     mob = { "Caster",
@@ -777,6 +758,42 @@ local function RebuildTable()
     end
 end
 
+-- The table reads in blocks by what combat does with each cast, so the
+-- outcome shows by where a row sits.
+local SECTIONS = {
+    { key = "call", title = "In combat with a call" },
+    { key = "silent", title = "In combat without sound", why = "muted, or Sound is off in General" },
+    { key = "hidden", title = "Hidden in combat",
+      why = "switched off, no star with Important casts only, or not for your role - hover a row" },
+}
+local SECTION_H = 26
+local sectionRows = {}
+
+local function SectionOf(entry)
+    if not CastAheadMatch.Advice(entry) then return "hidden" end
+    local shown, loud = RunState(entry)
+    if not shown then return "hidden" end
+    return loud and "call" or "silent"
+end
+
+local function SectionRow(i)
+    local s = sectionRows[i]
+    if s then return s end
+    s = CreateFrame("Frame", nil, rowParent)
+    s:SetHeight(SECTION_H)
+    s.text = s:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    s.text:SetPoint("BOTTOMLEFT", s, "BOTTOMLEFT", 4, 5)
+    s.why = s:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    s.why:SetPoint("LEFT", s.text, "RIGHT", 12, 0)
+    local line = s:CreateTexture(nil, "ARTWORK")
+    line:SetPoint("BOTTOMLEFT")
+    line:SetPoint("BOTTOMRIGHT")
+    line:SetHeight(1)
+    line:SetColorTexture(1, 0.82, 0, 0.3)
+    sectionRows[i] = s
+    return s
+end
+
 -- Refresh ------------------------------------------------------------------
 
 function Refresh()
@@ -795,14 +812,34 @@ function Refresh()
         end
     end
 
-    local editing = false
-    for i = 1, math.max(#list, #rows) do
-        local entry = list[i]
-        if entry and not rows[i] then
-            rows[i] = CreateRow(rowParent, i)
+    local groups = { call = {}, silent = {}, hidden = {} }
+    for _, entry in ipairs(list) do
+        local group = groups[SectionOf(entry)]
+        group[#group + 1] = entry
+    end
+
+    local editing, y, n, shownSections = false, 0, 0, 0
+    for _, section in ipairs(SECTIONS) do
+        local items = groups[section.key]
+        if #items > 0 then
+            shownSections = shownSections + 1
+            local s = SectionRow(shownSections)
+            s:ClearAllPoints()
+            s:SetPoint("TOPLEFT", rowParent, "TOPLEFT", 0, -y)
+            s:SetPoint("TOPRIGHT", rowParent, "TOPRIGHT", 0, -y)
+            s.text:SetText(string.format("%s (%d)", section.title, #items))
+            s.why:SetText(section.why or "")
+            s:Show()
+            y = y + SECTION_H
         end
-        local row = rows[i]
-        if entry then
+        for _, entry in ipairs(items) do
+            n = n + 1
+            if not rows[n] then rows[n] = CreateRow(rowParent, n) end
+            local row = rows[n]
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", rowParent, "TOPLEFT", 0, -y)
+            y = y + ROW_HEIGHT
+            row:SetAlpha(section.key == "hidden" and 0.5 or 1)
             row.entry = entry
             row.icon:SetTexture((C_Spell.GetSpellInfo(entry.spell) or {}).iconID or 136243)
             -- Rows resting on almost no observations are shown, but muted: the
@@ -831,12 +868,15 @@ function Refresh()
             row.check:SetScript("OnClick", function(self)
                 SetDisabled(entry.spell, not self:GetChecked())
                 if CastAheadCore and CastAheadCore.Reapply then CastAheadCore.Reapply() end
+                Refresh()
             end)
             row:Show()
-        else
-            row.entry = nil
-            row:Hide()
         end
+    end
+    for i = shownSections + 1, #sectionRows do sectionRows[i]:Hide() end
+    for i = n + 1, #rows do
+        rows[i].entry = nil
+        rows[i]:Hide()
     end
 
     -- The cast being edited left the table (another dungeon, a search).
@@ -845,7 +885,7 @@ function Refresh()
     local bottom
     bottom, tableClipped = LayoutEditor()
 
-    local rowsHeight = math.max(#list, 1) * ROW_HEIGHT
+    local rowsHeight = math.max(y, ROW_HEIGHT)
     rowParent:SetHeight(rowsHeight)
     tableFrame:SetHeight(HEADER_HEIGHT + 4 + rowsHeight)
     sideScroll:SetHeight(HEADER_HEIGHT + 4 + rowsHeight)
