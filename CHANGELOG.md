@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.25.0](https://github.com/AqueGen/CastAhead/compare/v0.24.1...v0.25.0) (2026-10-28)
+
+
+### Features
+
+* apply the shared window style to the settings window ([#110](https://github.com/AqueGen/CastAhead/issues/110)) ([46fc459](https://github.com/AqueGen/CastAhead/commit/46fc4591a7f651f861fea8e9ef32cce6884460e1))
+
+
+### Bug Fixes
+
+* settings fit the window at its minimum width ([#112](https://github.com/AqueGen/CastAhead/issues/112)) ([489a36f](https://github.com/AqueGen/CastAhead/commit/489a36f4aaf7c93cd2e125249d34473f7fa0dc80))
+
 ## [0.24.1](https://github.com/AqueGen/CastAhead/compare/v0.24.0...v0.24.1) (2026-10-28)
 
 
