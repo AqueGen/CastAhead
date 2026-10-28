@@ -6779,5 +6779,38 @@ end)()
     CastAheadDB = saved
 end)()
 
+-- "Show in BigWigs bars": confident predictions go to BigWigs over its
+-- message bus; two mobs on one spell share one bar, owned by the sooner one.
+;(function()
+    local savedDB, savedLoader = CastAheadDB, BigWigsLoader
+    local sent = {}
+    BigWigsLoader = { SendMessage = function(_, msg, _, a, b, c) sent[#sent + 1] = { msg = msg, a = a, b = b, c = c } end }
+    CastAheadDB = { bigwigsBars = true }
+    local TL, now = CastAheadTimeline, GetTime()
+    local row, advice = { spell = 100, name = "Big" }, CastAheadMatch.ADVICE.AOE
+    local first, second = {}, {}
+    TL.Sync(first, now + 10, row, advice, true)
+    check(#sent == 1 and sent[1].msg == "BigWigs_StartBar" and type(sent[1].b) == "string" and sent[1].b:find("Big", 1, true)
+        and math.abs(sent[1].c - 10) < 0.01, "bigwigs: a confident prediction starts a bar named by its call and spell")
+    TL.Sync(first, now + 10.5, row, advice, true)
+    check(#sent == 1, "bigwigs: a small retime leaves the bar alone")
+    TL.Sync(second, now + 15, row, advice, true)
+    check(#sent == 1, "bigwigs: a later prediction of the same spell does not take the bar")
+    TL.Cancel(second)
+    check(#sent == 1, "bigwigs: a mob that does not own the bar cannot stop it")
+    TL.Finish(first)
+    check(#sent == 2 and sent[2].msg == "BigWigs_StopBar" and sent[2].a == sent[1].b, "bigwigs: the cast starting stops its bar")
+    TL.Sync(first, now + 5, row, advice, false)
+    check(#sent == 2, "bigwigs: an unsure prediction gets no bar")
+    CastAheadDB.bigwigsBars = nil
+    TL.Sync(first, now + 10, row, advice, true)
+    check(#sent == 2, "bigwigs: off by default, nothing is sent")
+    BigWigsLoader = { SendMessage = function() error("changed") end }
+    CastAheadDB.bigwigsBars = true
+    local ok = pcall(TL.Sync, {}, now + 10, row, advice, true)
+    check(ok, "bigwigs: a changed BigWigs fails quietly")
+    CastAheadDB, BigWigsLoader = savedDB, savedLoader
+end)()
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)
