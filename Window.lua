@@ -237,12 +237,21 @@ function W.SpecBar(parent, x, y, onPick, roomFromParentLeft)
     return SPEC_BAR_H
 end
 
+-- The scale is only ever the player's choice. A window too big for the screen is capped in
+-- size instead: shrinking the scale to fit left the grip under a frame scaled below its
+-- parent, and the next StartSizing ran away from the cursor.
 function W.ApplyScale(target)
     target = target or frame
     if not target then return end
-    local wanted = CastAheadConfig.Number("uiScale", SCALE_DEFAULT, SCALE_MIN, SCALE_MAX) / 100
-    local fits = math.min(UIParent:GetWidth() / target:GetWidth(), UIParent:GetHeight() / target:GetHeight())
-    target:SetScale(math.min(wanted, fits))
+    local scale = CastAheadConfig.Number("uiScale", SCALE_DEFAULT, SCALE_MIN, SCALE_MAX) / 100
+    target:SetScale(scale)
+    local maxW, maxH = UIParent:GetWidth() / scale, UIParent:GetHeight() / scale
+    if target.SetResizeBounds and target:IsResizable() then
+        target:SetResizeBounds(W.MIN_W, W.MIN_H, maxW, maxH)
+    end
+    if target:GetWidth() > maxW or target:GetHeight() > maxH then
+        target:SetSize(math.min(target:GetWidth(), maxW), math.min(target:GetHeight(), maxH))
+    end
 end
 
 function W.Dungeon()
