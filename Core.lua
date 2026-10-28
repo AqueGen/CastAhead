@@ -510,7 +510,7 @@ local function PlayAdviceSound(advice, lead, candidates)
     if not CastAheadConfig.Enabled("sound") then return end
     -- The heads-up is a number of seconds now; 0 means the player does not
     -- want it at all.
-    if lead and CastAheadConfig.Lead() <= 0 and not CastAheadMatch.IsSave(advice) then return end
+    if lead and CastAheadConfig.LeadFor(candidates) <= 0 and not CastAheadMatch.IsSave(advice) then return end
     Alert(advice, lead, candidates, CastAheadConfig.Enabled("voice"))
 end
 
@@ -2899,7 +2899,7 @@ frame:SetScript("OnUpdate", function()
                         -- Not for a cast already going out: its own alert
                         -- fired at START, and "soon" is wrong for it anyway.
                         if not entry.casting and entry.track and not entry.track.warned then
-                            local lead = CastAheadConfig.Lead()
+                            local lead = CastAheadConfig.LeadFor(entry.candidates)
                             local first = entry.candidates and entry.candidates[1]
                             local saveLead = CastAheadSaves and CastAheadConfig.SaveCalls()
                                 and first and first.save and CastAheadConfig.SaveLead() or 0
@@ -3272,7 +3272,7 @@ function CastAheadCore.Test(instanceID, list)
                     if CastAheadTimeline then CastAheadTimeline.Finish(e.track) end
                 else
                     local remaining = e.endAt - t
-                    local lead = CastAheadConfig.Lead()
+                    local lead = CastAheadConfig.LeadFor({ e.row })
                     if lead > 0 and remaining <= lead and not e.warned then
                         e.warned = true
                         PlayAdviceSound(CastAheadMatch.Advice(e.row), true, { e.row })

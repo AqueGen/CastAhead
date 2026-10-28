@@ -1095,7 +1095,7 @@ CastAheadDB = { leadSeconds = 5 }   -- the heads-up is opt-in; most cases want i
 
 do
     local keys = table.concat(CastAheadUI.VisibleColumns(false), ",")
-    check(keys == "check,hear,icon,advice,spell,mob,cast,cd,sound", "outside Development mode the cast table shows 9 columns, got " .. keys)
+    check(keys == "check,hear,icon,advice,spell,mob,cast,cd,overrides","outside Development mode the cast table shows 9 columns, got " .. keys)
     check(#CastAheadUI.VisibleColumns(true) == 18, "Development mode shows every column")
     check(CastAheadUI.VisibleSortKey("n", false) == "advice", "a hidden sort column falls back to Do outside Development mode")
     check(CastAheadUI.VisibleSortKey("n", true) == "n", "Development mode keeps a development sort column")
@@ -6554,6 +6554,25 @@ end)();
     removePlate("nameplate4")
     panel.RegisterEvent, panel.UnregisterEvent = nil, nil
     CastAheadDB, InCombatLockdown, UIParent, W.Frame, W.Current, W.Show, C_NamePlate.GetNamePlateForUnit = unpack(saved, 1, 7)
+end)()
+
+;(function()
+    local saved = CastAheadDB
+    CastAheadDB = { leadSeconds = 3, spellLead = { [1] = 6, [2] = 0, [3] = 99 } }
+    local C = CastAheadConfig
+    check(C.LeadFor({ { spell = 9 } }) == 3, "lead: a cast without its own warning gets the global one")
+    check(C.LeadFor({ { spell = 1 } }) == 6, "lead: a cast's own warning beats the global one")
+    check(C.LeadFor({ { spell = 2 } }) == 0, "lead: a cast can switch its warning off")
+    check(C.LeadFor({ { spell = 3 } }) == C.LEAD_MAX, "lead: an own warning past the range is clamped")
+    check(C.LeadFor({ { spell = 2 }, { spell = 9 } }) == 3, "lead: of several candidates the longest wins")
+    check(C.LeadFor(nil) == 3, "lead: no candidates means the global one")
+    CastAheadDB.leadSeconds = 0
+    check(C.LeadFor({ { spell = 1 } }) == 6, "lead: an own warning works with the global one off")
+    CastAheadDB.spellSounds = { [1] = "Bell", [2] = "" }
+    check(CastAheadUI.OverrideSummary({ spell = 1 }) == "Bell, Early 6s", "overrides: sound and warning listed")
+    check(CastAheadUI.OverrideSummary({ spell = 2 }) == "Early off", "overrides: a ticked sound with no pick is not listed")
+    check(CastAheadUI.OverrideSummary({ spell = 9 }) == "", "overrides: nothing own, nothing listed")
+    CastAheadDB = saved
 end)()
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))

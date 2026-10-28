@@ -43,6 +43,24 @@ local function CategorySound(entry)
     return advice and CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[advice.sound or advice.key]
 end
 
+local function SetSpellLead(entry, seconds)
+    CastAheadDB = CastAheadDB or {}
+    CastAheadDB.spellLead = CastAheadDB.spellLead or {}
+    CastAheadDB.spellLead[entry.spell] = seconds
+end
+
+-- What this cast does differently from the global settings, in a few words;
+-- empty when nothing.
+local function OverrideSummary(entry)
+    local parts = {}
+    local sound = SpellSound(entry)
+    if sound and sound ~= "" then parts[#parts + 1] = sound end
+    local lead = CastAheadConfig.SpellLead(entry.spell)
+    if lead then parts[#parts + 1] = lead > 0 and string.format("Early %ds", lead) or "Early off" end
+    return table.concat(parts, ", ")
+end
+CastAheadUI.OverrideSummary = OverrideSummary
+
 local function SpellName(entry)
     local info = C_Spell.GetSpellInfo(entry.spell)
     return (info and info.name) or entry.name or tostring(entry.spell)
@@ -133,11 +151,14 @@ local COLUMNS = {
     { key = "cc", dev = true, header = "Stop", width = 40, justify = "RIGHT",
       text = function(e) return (e.cc or 0) > 0 and string.format("%d%%", e.cc * 100) or "-" end,
       sort = function(e) return e.cc or 0 end },
-    -- Inherit ticked: the category's alert (Sounds tab), shown greyed. Unticked:
-    -- the player's own pick for this one cast, ahead of the category's.
-    { key = "sound", header = "Sound override", width = 12 + 22 + 110,
-      text = function(e) return CastAheadMatch.Advice(e) and "" or "|cff555555-|r" end,
-      sort = function(e) return SpellSound(e) or "" end },
+    -- Only what differs from the global settings; a click opens the editor.
+    { key = "overrides", header = "Overrides", width = 130,
+      text = function(e)
+          if not CastAheadMatch.Advice(e) then return "|cff555555-|r" end
+          local summary = OverrideSummary(e)
+          return summary ~= "" and ("|cffffd100" .. summary .. "|r") or "|cff555555edit|r"
+      end,
+      sort = OverrideSummary },
 }
 
 local function SelectColumns(dev)
@@ -228,8 +249,8 @@ local HEADER_TIPS = {
         "The call made when this cast starts. Grey means the cast is tracked but has no call: it is rare in the logs and not starred." },
     spell = { "Spell",
         "The cast being tracked. Hover a row for the spell tooltip." },
-    sound = { "Sound override",
-        "Unticked, the cast is announced like its category (Sounds tab): the voice, or the sound chosen there. Tick to pick a sound for this one cast instead of the voice; it plays once the cast is identified as this spell." },
+    overrides = { "Overrides",
+        "Settings this one cast has of its own instead of the global ones: a sound in place of the voice, or its own early warning. Click a cell to change them." },
     mob = { "Caster",
         "Which creature casts it. In 12.1 a nameplate never reveals a creature's name or ID, so this comes from combat logs - the addon only guesses which of them is in front of you." },
     level = { "Mob level",
@@ -256,7 +277,148 @@ local HEADER_TIPS = {
 
 -- Widgets ------------------------------------------------------------------
 
-local Refresh
+local Refresh, ToggleEditor
+
+-- One cast's own settings. Unticked, a setting follows the global one, shown
+-- greyed so the player sees what the cast gets anyway.
+local editor
+
+local function CheckLabel(check, text)
+    local label = editor:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    label:SetPoint("LEFT", check, "RIGHT", 2, 0)
+    label:SetText(text)
+end
+
+local function PaintEditor()
+    local e = editor.entry
+    editor.title:SetText(SpellName(e) .. "  |cff9999ff" .. (e.mob or "?") .. "|r")
+    local own = SpellSound(e)
+    editor.ownSound:SetChecked(own ~= nil)
+    editor.sound:SetEnabled(own ~= nil)
+    editor.sound:GenerateMenu()
+    local lead = CastAheadConfig.SpellLead(e.spell)
+    editor.ownLead:SetChecked(lead ~= nil)
+    editor.lead:SetEnabled(lead ~= nil)
+    editor.lead.Repaint()
+end
+
+local function EditorChanged()
+    PaintEditor()
+    Refresh()
+end
+
+local function BuildEditor()
+    editor = CreateFrame("Frame", "CastAheadCastEditor", host)
+    editor:SetSize(320, 160)
+    editor:SetFrameStrata("DIALOG")
+    editor:SetClampedToScreen(true)
+    editor:EnableMouse(true)
+    editor:Hide()
+    tinsert(UISpecialFrames, "CastAheadCastEditor")
+    local edge = editor:CreateTexture(nil, "BACKGROUND")
+    edge:SetAllPoints()
+    edge:SetColorTexture(1, 1, 1, 0.25)
+    local bg = editor:CreateTexture(nil, "BORDER")
+    bg:SetPoint("TOPLEFT", 1, -1)
+    bg:SetPoint("BOTTOMRIGHT", -1, 1)
+    bg:SetColorTexture(0.05, 0.05, 0.07, 0.97)
+
+    editor.title = editor:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    editor.title:SetPoint("TOPLEFT", 10, -10)
+    editor.title:SetPoint("TOPRIGHT", -30, -10)
+    editor.title:SetJustifyH("LEFT")
+    editor.title:SetWordWrap(false)
+    local close = CreateFrame("Button", nil, editor, "UIPanelCloseButton")
+    close:SetPoint("TOPRIGHT", 0, 0)
+
+    editor.ownSound = CreateFrame("CheckButton", nil, editor, "MinimalCheckboxTemplate")
+    editor.ownSound:SetSize(WIDGET_HEIGHT, WIDGET_HEIGHT)
+    editor.ownSound:SetPoint("TOPLEFT", 8, -36)
+    CheckLabel(editor.ownSound, "Own sound")
+    editor.ownSound:SetScript("OnClick", function(self)
+        local e = editor.entry
+        SetSpellSound(e, self:GetChecked() and (SpellSound(e) or "") or nil)
+        EditorChanged()
+    end)
+    editor.sound = CreateFrame("DropdownButton", nil, editor, "WowStyle1DropdownTemplate")
+    editor.sound:SetSize(170, WIDGET_HEIGHT)
+    editor.sound:SetPoint("TOPRIGHT", -10, -36)
+    editor.sound:SetupMenu(function(_, root)
+        local e = editor.entry
+        if not (e and CastAheadOptions and CastAheadOptions.SoundMenu) then return end
+        CastAheadOptions.SoundMenu(root,
+            function()
+                local own = SpellSound(e)
+                if own == nil then return CategorySound(e) end
+                return own ~= "" and own or nil
+            end,
+            function(name)
+                SetSpellSound(e, name or "")
+                EditorChanged()
+            end,
+            CastAheadMatch.Advice(e))
+    end)
+
+    editor.ownLead = CreateFrame("CheckButton", nil, editor, "MinimalCheckboxTemplate")
+    editor.ownLead:SetSize(WIDGET_HEIGHT, WIDGET_HEIGHT)
+    editor.ownLead:SetPoint("TOPLEFT", editor.ownSound, "BOTTOMLEFT", 0, -10)
+    CheckLabel(editor.ownLead, "Own early warning")
+    editor.ownLead:SetScript("OnClick", function(self)
+        SetSpellLead(editor.entry, self:GetChecked() and CastAheadConfig.Lead() or nil)
+        EditorChanged()
+    end)
+    editor.lead = CastAheadOptions.BuildSlider(editor, {
+        min = 0, max = CastAheadConfig.LEAD_MAX,
+        low = "off", high = CastAheadConfig.LEAD_MAX .. "s",
+        width = 200,
+        point = { "TOPLEFT", editor.ownLead, "BOTTOMLEFT", 24, -2 },
+        read = function()
+            local e = editor.entry
+            return e and CastAheadConfig.SpellLead(e.spell) or CastAheadConfig.Lead()
+        end,
+        write = function(value)
+            SetSpellLead(editor.entry, value)
+            Refresh()
+        end,
+        caption = function(value)
+            local e = editor.entry
+            local suffix = value > 0 and string.format("%ds", value) or "off"
+            if e and CastAheadConfig.SpellLead(e.spell) then return "Early warning: " .. suffix end
+            return "|cff888888Early warning: global " .. suffix .. "|r"
+        end,
+    })
+
+    local reset = CastAheadWindow.Button(editor, "Reset", 70)
+    reset:SetPoint("BOTTOMRIGHT", -10, 10)
+    reset:SetScript("OnClick", function()
+        SetSpellSound(editor.entry, nil)
+        SetSpellLead(editor.entry, nil)
+        EditorChanged()
+    end)
+
+    -- A click anywhere else closes it, except inside the sound menu it opened.
+    editor:SetScript("OnShow", function(self) self:RegisterEvent("GLOBAL_MOUSE_DOWN") end)
+    editor:SetScript("OnHide", function(self) self:UnregisterEvent("GLOBAL_MOUSE_DOWN") end)
+    editor:SetScript("OnEvent", function(self)
+        if self:IsMouseOver() or (self.owner and self.owner:IsMouseOver()) then return end
+        local menus = Menu and Menu.GetManager and Menu.GetManager()
+        if menus and menus:IsAnyMenuOpen() then return end
+        self:Hide()
+    end)
+end
+
+function ToggleEditor(entry, owner)
+    if not editor then BuildEditor() end
+    if editor:IsShown() and editor.entry == entry then
+        editor:Hide()
+        return
+    end
+    editor.entry, editor.owner = entry, owner
+    editor:ClearAllPoints()
+    editor:SetPoint("TOPRIGHT", owner, "BOTTOMRIGHT", 0, -2)
+    PaintEditor()
+    editor:Show()
+end
 
 local function CreateHeader(parent, index, column)
     local button = CreateFrame("Button", nil, parent)
@@ -327,38 +489,21 @@ local function CreateRow(parent, index)
                     CastAheadCore.PreviewAdvice(CastAheadMatch.Advice(e), { e })
                 end
             end)
-        elseif column.key == "sound" then
-            row.override = CreateFrame("CheckButton", nil, row, "MinimalCheckboxTemplate")
-            row.override:SetSize(WIDGET_HEIGHT, WIDGET_HEIGHT)
-            row.override:SetPoint("LEFT", row, "LEFT", x + 12, 0)
-            row.override:SetScript("OnClick", function(self)
-                local e = row.entry
-                if not e then return end
-                if self:GetChecked() then
-                    SetSpellSound(e, SpellSound(e) or "")
-                else
-                    SetSpellSound(e, nil)
-                end
-                Refresh()
+        elseif column.key == "overrides" then
+            local cell = CreateFrame("Button", nil, row)
+            cell:SetPoint("TOPLEFT", row, "TOPLEFT", x, 0)
+            cell:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", x, 0)
+            cell:SetWidth(column.width)
+            cell:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
+            cell:SetScript("OnClick", function(self)
+                if row.entry and CastAheadMatch.Advice(row.entry) then ToggleEditor(row.entry, self) end
             end)
-            row.sound = CreateFrame("DropdownButton", nil, row, "WowStyle1DropdownTemplate")
-            row.sound:SetSize(column.width - 34, WIDGET_HEIGHT)
-            row.sound:SetPoint("LEFT", row, "LEFT", x + 34, 0)
-            row.sound:SetupMenu(function(_, root)
-                local e = row.entry
-                if not (e and CastAheadOptions and CastAheadOptions.SoundMenu) then return end
-                CastAheadOptions.SoundMenu(root,
-                    function()
-                        local own = SpellSound(e)
-                        if own == nil then return CategorySound(e) end
-                        return own ~= "" and own or nil
-                    end,
-                    function(name) SetSpellSound(e, name or "") end,
-                    CastAheadMatch.Advice(e))
-            end)
-            local dash = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            dash:SetPoint("LEFT", row, "LEFT", x + 12, 0)
-            row.cells[column.key] = dash
+            local text = cell:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            text:SetPoint("LEFT", cell, "LEFT", 4, 0)
+            text:SetPoint("RIGHT", cell, "RIGHT", -4, 0)
+            text:SetJustifyH("LEFT")
+            text:SetWordWrap(false)
+            row.cells[column.key] = text
         elseif column.key == "icon" then
             row.icon = row:CreateTexture(nil, "ARTWORK")
             row.icon:SetSize(16, 16)
@@ -471,14 +616,6 @@ function Refresh()
             row.approx:SetAlpha(alpha)
             -- Nothing to say for a row with no verdict - no speaker, no sound.
             row.hear:SetShown(CastAheadMatch.Advice(entry) ~= nil)
-            local hasAdvice = CastAheadMatch.Advice(entry) ~= nil
-            if row.sound then
-                row.override:SetShown(hasAdvice)
-                row.sound:SetShown(hasAdvice)
-                row.override:SetChecked(SpellSound(entry) ~= nil)
-                row.sound:SetEnabled(SpellSound(entry) ~= nil)
-                row.sound:GenerateMenu()
-            end
             row.check:SetChecked(not IsDisabled(entry.spell))
             row.check:SetScript("OnClick", function(self)
                 SetDisabled(entry.spell, not self:GetChecked())
