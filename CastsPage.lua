@@ -163,12 +163,12 @@ local COLUMNS = {
     { key = "cc", dev = true, header = "Stop", width = 40, justify = "RIGHT",
       text = function(e) return (e.cc or 0) > 0 and string.format("%d%%", e.cc * 100) or "-" end,
       sort = function(e) return e.cc or 0 end },
-    -- Only what differs from the global settings; a click opens the editor.
+    -- Only what differs from the global settings; a click on the row opens the panel.
     { key = "overrides", header = "Overrides", width = 130,
       text = function(e)
           if not CastAheadMatch.Advice(e) then return "|cff555555-|r" end
           local summary = OverrideSummary(e)
-          return summary ~= "" and ("|cffffd100" .. summary .. "|r") or "|cff555555edit|r"
+          return "|cffffd100" .. summary .. "|r"
       end,
       sort = OverrideSummary },
 }
@@ -262,7 +262,7 @@ local HEADER_TIPS = {
     spell = { "Spell",
         "The cast being tracked. Hover a row for the spell tooltip." },
     overrides = { "Overrides",
-        "Settings this one cast has of its own instead of the global ones: a sound in place of the voice, or its own early warning. Click a cell to change them." },
+        "Settings this one cast has of its own instead of the global ones: importance, mute, a sound in place of the voice, its own early warning. Click a row to change them." },
     mob = { "Caster",
         "Which creature casts it. In 12.1 a nameplate never reveals a creature's name or ID, so this comes from combat logs - the addon only guesses which of them is in front of you." },
     level = { "Mob level",
@@ -294,21 +294,35 @@ local Refresh, ToggleEditor
 -- One cast's own settings, docked right of the table when the page has room
 -- for it, else along the bottom. Unticked, a value setting follows the global
 -- one, shown greyed so the player sees what the cast gets anyway.
-local PANEL_W, PANEL_GAP = 280, 12
+local PANEL_W, PANEL_GAP, COL_W = 250, 12, 230
 local editor
 
 local function Reapply()
     if CastAheadCore and CastAheadCore.Reapply then CastAheadCore.Reapply() end
 end
 
-local function Check(parent, text, point)
+local function Check(parent, text, point, tip)
     local check = CreateFrame("CheckButton", nil, parent, "MinimalCheckboxTemplate")
     check:SetSize(WIDGET_HEIGHT, WIDGET_HEIGHT)
     check:SetPoint(unpack(point))
     check.label = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     check.label:SetPoint("LEFT", check, "RIGHT", 2, 0)
     check.label:SetText(text)
+    check:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(text)
+        GameTooltip:AddLine(tip, 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    check:SetScript("OnLeave", GameTooltip_Hide)
     return check
+end
+
+local function HasOverrides(entry)
+    for _, field in ipairs({ "spellImportant", "spellMute", "spellSounds", "spellLead" }) do
+        if CastAheadDB and CastAheadDB[field] and CastAheadDB[field][entry.spell] ~= nil then return true end
+    end
+    return false
 end
 
 local function PaintEditor()
@@ -316,7 +330,15 @@ local function PaintEditor()
     editor.title:SetText(SpellName(e))
     editor.mob:SetText("|cff9999ff" .. (e.mob or "?") .. "|r")
     editor.important:SetChecked(Starred(e))
-    editor.curated:SetText(e.prio and "|cff888888curated: important|r" or "|cff888888curated: not important|r")
+    -- The curated choice is worth a word only once the player overrode it.
+    local curated = ""
+    if CastAheadConfig.SpellImportant(e.spell) ~= nil then
+        curated = e.prio and "|cff888888curated: important|r" or "|cff888888curated: not important|r"
+    end
+    editor.curated:SetText(curated)
+    local resettable = HasOverrides(e)
+    editor.reset:SetEnabled(resettable)
+    editor.reset:SetAlpha(resettable and 1 or 0.4)
     editor.mute:SetChecked(CastAheadConfig.SpellMuted(e.spell))
     local own = SpellSound(e)
     editor.ownSound:SetChecked(own ~= nil)
@@ -338,11 +360,15 @@ end
 local function LayoutEditor()
     if not (editor and editor:IsShown()) then return 0 end
     local scroll, width = host:GetParent(), host:GetWidth()
-    local right = width - TableWidth() >= PANEL_W + PANEL_GAP
+    -- On the right it may cover the Overrides column: while the panel is open
+    -- that column only repeats what the panel shows.
+    local last = tableColumns[#tableColumns]
+    local covered = last.key == "overrides" and last.width + COLUMN_GAP or 0
+    local right = width - TableWidth() + covered >= PANEL_W + PANEL_GAP
     editor:ClearAllPoints()
     editor.colB:ClearAllPoints()
     -- The two halves side by side only where both fit, else one under the other.
-    local sideBySide = not right and width >= 2 * PANEL_W
+    local sideBySide = not right and width >= 2 * COL_W + 40
     if sideBySide then
         editor.colB:SetPoint("TOPLEFT", editor.colA, "TOPRIGHT", 20, 0)
     else
@@ -384,10 +410,11 @@ local function BuildEditor()
     close:SetScript("OnClick", function() ToggleEditor(nil) end)
 
     editor.colA = CreateFrame("Frame", nil, editor)
-    editor.colA:SetSize(260, 96)
+    editor.colA:SetSize(COL_W, 96)
     editor.colA:SetPoint("TOPLEFT", 10, -48)
     local a = editor.colA
-    editor.important = Check(a, "Important", { "TOPLEFT", a, "TOPLEFT", 0, 0 })
+    editor.important = Check(a, "Important", { "TOPLEFT", a, "TOPLEFT", 0, 0 },
+        "Counts for \"Important casts only\" in General. Starts as our curated choice.")
     editor.curated = a:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     editor.curated:SetPoint("LEFT", editor.important.label, "RIGHT", 8, 0)
     editor.important:SetScript("OnClick", function(self)
@@ -397,19 +424,21 @@ local function BuildEditor()
         Reapply()
         EditorChanged()
     end)
-    editor.mute = Check(a, "Mute: no call, the icon stays", { "TOPLEFT", a, "TOPLEFT", 0, -26 })
+    editor.mute = Check(a, "Mute", { "TOPLEFT", a, "TOPLEFT", 0, -26 },
+        "No call for this cast. Its icon and bar still show.")
     editor.mute:SetScript("OnClick", function(self)
         SetOwn("spellMute", editor.entry, self:GetChecked() or nil)
         EditorChanged()
     end)
-    editor.ownSound = Check(a, "Own sound", { "TOPLEFT", a, "TOPLEFT", 0, -52 })
+    editor.ownSound = Check(a, "Own sound", { "TOPLEFT", a, "TOPLEFT", 0, -52 },
+        "A sound in place of the voice for this cast. Unticked, it uses its category's choice from the Sounds tab.")
     editor.ownSound:SetScript("OnClick", function(self)
         local e = editor.entry
         SetSpellSound(e, self:GetChecked() and (SpellSound(e) or "") or nil)
         EditorChanged()
     end)
     editor.sound = CreateFrame("DropdownButton", nil, a, "WowStyle1DropdownTemplate")
-    editor.sound:SetSize(200, WIDGET_HEIGHT)
+    editor.sound:SetSize(190, WIDGET_HEIGHT)
     editor.sound:SetPoint("TOPLEFT", a, "TOPLEFT", 24, -76)
     editor.sound:SetupMenu(function(_, root)
         local e = editor.entry
@@ -428,9 +457,10 @@ local function BuildEditor()
     end)
 
     editor.colB = CreateFrame("Frame", nil, editor)
-    editor.colB:SetSize(260, 80)
+    editor.colB:SetSize(COL_W, 80)
     local b = editor.colB
-    editor.ownLead = Check(b, "Own early warning", { "TOPLEFT", b, "TOPLEFT", 0, 0 })
+    editor.ownLead = Check(b, "Own early warning", { "TOPLEFT", b, "TOPLEFT", 0, 0 },
+        "Seconds before this cast to announce it, 0 for none. Unticked, it uses the early warning from General.")
     editor.ownLead:SetScript("OnClick", function(self)
         SetSpellLead(editor.entry, self:GetChecked() and CastAheadConfig.Lead() or nil)
         EditorChanged()
@@ -438,7 +468,7 @@ local function BuildEditor()
     editor.lead = CastAheadOptions.BuildSlider(b, {
         min = 0, max = CastAheadConfig.LEAD_MAX,
         low = "off", high = CastAheadConfig.LEAD_MAX .. "s",
-        width = 200,
+        width = 180,
         point = { "TOPLEFT", editor.ownLead, "BOTTOMLEFT", 24, -2 },
         read = function()
             local e = editor.entry
@@ -456,8 +486,9 @@ local function BuildEditor()
         end,
     })
 
-    local reset = CastAheadWindow.Button(editor, "Reset", 70)
-    reset:SetPoint("RIGHT", close, "LEFT", -4, 0)
+    local reset = CastAheadWindow.Button(editor, "Reset", 60)
+    reset:SetPoint("RIGHT", close, "LEFT", -20, 0)
+    editor.reset = reset
     reset:SetScript("OnClick", function()
         local e = editor.entry
         for _, field in ipairs({ "spellImportant", "spellMute", "spellSounds", "spellLead" }) do
@@ -555,21 +586,6 @@ local function CreateRow(parent, index)
                     CastAheadCore.PreviewAdvice(CastAheadMatch.Advice(e), { e })
                 end
             end)
-        elseif column.key == "overrides" then
-            local cell = CreateFrame("Button", nil, row)
-            cell:SetPoint("TOPLEFT", row, "TOPLEFT", x, 0)
-            cell:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", x, 0)
-            cell:SetWidth(column.width)
-            cell:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
-            cell:SetScript("OnClick", function(self)
-                if row.entry and CastAheadMatch.Advice(row.entry) then ToggleEditor(row.entry, self) end
-            end)
-            local text = cell:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            text:SetPoint("LEFT", cell, "LEFT", 4, 0)
-            text:SetPoint("RIGHT", cell, "RIGHT", -4, 0)
-            text:SetJustifyH("LEFT")
-            text:SetWordWrap(false)
-            row.cells[column.key] = text
         elseif column.key == "icon" then
             row.icon = row:CreateTexture(nil, "ARTWORK")
             row.icon:SetSize(16, 16)
@@ -611,6 +627,10 @@ local function CreateRow(parent, index)
         GameTooltip:Show()
     end)
     row:SetScript("OnLeave", GameTooltip_Hide)
+    row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+    row:SetScript("OnClick", function(self)
+        if self.entry and CastAheadMatch.Advice(self.entry) then ToggleEditor(self.entry) end
+    end)
     return row
 end
 
