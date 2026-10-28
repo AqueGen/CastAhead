@@ -264,8 +264,7 @@ local function Announceable(candidates, interruptible)
     return CastAheadMatch.AnyShown(candidates, interruptible)
 end
 
--- On 2026-10-27, 25 of 25 focus cast starts gave a plain boolean from
--- UnitIsUnit("focus", plate); a Secret answer is still treated as "not ours".
+-- UnitIsUnit("focus", plate) answered a plain boolean in live keys; a Secret answer would silence focus kicks.
 local function KickVoiceAllowed(unit, candidates, advice)
     if not advice or advice.label ~= "KICK" or not CastAheadConfig.Enabled("kickImportantOnly") then
         return true

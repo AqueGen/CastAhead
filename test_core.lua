@@ -1345,6 +1345,8 @@ do
         cd = { 30.0 }, first = 5.0, kick = 0.5, cc = 0, kickable = true })
     table.insert(CastAheadData[1877], { spell = 982, npc = 13, mob = "Kicker", name = "Starred", cast = 3.5,
         cd = { 30.0 }, first = 5.0, kick = 0.5, cc = 0, kickable = true, prio = "KICK" })
+    table.insert(CastAheadData[1877], { spell = 984, npc = 13, mob = "Kicker", name = "Wide", cast = 8.5,
+        cd = { 30.0 }, first = 5.0, kick = 0, cc = 0, prio = "AOE" })
     table.insert(CastAheadData[1877], { spell = 983, npc = 13, mob = "Kicker", name = "Late", cast = 5.2,
         cd = { 30.0 }, first = 5.0, kick = 0, cc = 0 })
     local focusIs
@@ -1390,11 +1392,25 @@ do
         "kick voice: a late-kickable cast is voiced with the gate off")
 
     hostile.focus, focusIs = true, false
-    check(kickAlerts(open, 3.0, false, 20) == 1, "kick voice: other calls unaffected")
+    check(kickAlerts({ leadSeconds = 0 }, 8.5) == 1, "kick voice: other calls unaffected")
+
+    local function headsAlerts(length)
+        CastAheadDB = { importantOnly = false, leadSeconds = 5 }
+        enter()
+        castFor(length)
+        sounds, spoken, clips = 0, 0, 0
+        advance(30 - length - 3)
+        local n = Alerts()
+        reset()
+        return n
+    end
+    hostile.focus = nil
+    check(headsAlerts(2.0) == 0, "kick voice: heads-up obeys the gate (unimportant silent)")
+    check(headsAlerts(3.5) == 1, "kick voice: heads-up obeys the gate (important voiced)")
 
     UnitIsUnit = nil
     CastAheadDB = { leadSeconds = 5 }
-    for _ = 1, 3 do table.remove(CastAheadData[1877]) end
+    for _ = 1, 4 do table.remove(CastAheadData[1877]) end
 end
 
 -- An overdue prediction is drawn as "!" and stays put, instead of being
