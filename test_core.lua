@@ -4925,6 +4925,15 @@ do
     local f = CastAheadWindow.Frame()
     check(f and f.w == CastAheadWindow.MIN_W and f.h == CastAheadWindow.MIN_H, "a saved size below the minimum opens at the minimum")
     do
+        local GripSize = CastAheadWindow.GripSize
+        local w, h = GripSize(600, 420, 100, 50, 460, 420, 1500, 900)
+        check(w == 700 and h == 470, "dragging the grip right and down grows the window by the cursor's move")
+        w, h = GripSize(600, 420, -400, -300, 460, 420, 1500, 900)
+        check(w == 460 and h == 420, "dragging the grip past the minimum stops at the minimum")
+        w, h = GripSize(600, 420, 2000, 2000, 460, 420, 1000, 800)
+        check(w == 1000 and h == 800, "dragging the grip past the screen edge stops at the edge")
+    end
+    do
         local list
         for _, b in ipairs(made) do
             if rawget(b, "buttonText") == "Play list" then list = b end

@@ -240,6 +240,12 @@ end
 -- The scale is only ever the player's choice. A window too big for the screen is capped in
 -- size instead: shrinking the scale to fit left the grip under a frame scaled below its
 -- parent, and the next StartSizing ran away from the cursor.
+-- Size of the window while its grip is dragged: the start size plus how far the cursor
+-- moved right and down (in window units), kept between the minimum and the room left on screen.
+function W.GripSize(w0, h0, dx, dy, minW, minH, maxW, maxH)
+    return math.max(minW, math.min(w0 + dx, maxW)), math.max(minH, math.min(h0 + dy, maxH))
+end
+
 function W.ApplyScale(target)
     target = target or frame
     if not target then return end
@@ -523,14 +529,31 @@ local function Build()
     grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
     grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
     grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
-    grip:SetScript("OnMouseDown", function()
+    -- The grip sizes the window itself instead of StartSizing: in game StartSizing now
+    -- and then set a size of its own on the first frame (460x420 became 793x572 with the
+    -- cursor still on the grip), and the window ran off under the pointer.
+    grip:SetScript("OnMouseDown", function(self, button)
+        if button ~= "LeftButton" then return end
         local left, top = frame:GetLeft(), frame:GetTop()
         frame:ClearAllPoints()
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
-        frame:StartSizing("BOTTOMRIGHT")
+        local scale = frame:GetEffectiveScale()
+        local x0, y0 = GetCursorPosition()
+        local w0, h0 = frame:GetWidth(), frame:GetHeight()
+        -- Never past the screen's right or bottom edge
+        local maxW = UIParent:GetWidth() * UIParent:GetEffectiveScale() / scale - left
+        self:SetScript("OnUpdate", function(grabbed)
+            if not IsMouseButtonDown("LeftButton") then
+                grabbed:GetScript("OnMouseUp")(grabbed)
+                return
+            end
+            local x, y = GetCursorPosition()
+            frame:SetSize(W.GripSize(w0, h0, (x - x0) / scale, (y0 - y) / scale, W.MIN_W, W.MIN_H, maxW, top))
+        end)
     end)
-    grip:SetScript("OnMouseUp", function()
-        frame:StopMovingOrSizing()
+    grip:SetScript("OnMouseUp", function(self)
+        if not self:GetScript("OnUpdate") then return end
+        self:SetScript("OnUpdate", nil)
         local s = Saved()
         s.width, s.height = frame:GetWidth(), frame:GetHeight()
         Resized()
