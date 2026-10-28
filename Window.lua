@@ -2,13 +2,14 @@ CastAheadWindow = {}
 local W = CastAheadWindow
 
 W.THEME = {
-    bg = { 0.063, 0.075, 0.09, 0.97 },
+    bg = { 0.063, 0.075, 0.09, 0.99 },
     panel = { 0.082, 0.098, 0.125, 1 },
     border = { 0.235, 0.251, 0.282, 1 },
+    control = { 0.36, 0.38, 0.43, 1 },
     line = { 0.125, 0.145, 0.176, 1 },
     gold = { 1, 0.82, 0 },
     text = { 0.9, 0.9, 0.9 },
-    muted = { 0.545, 0.576, 0.627 },
+    muted = { 0.66, 0.68, 0.72 },
     selected = { 0.165, 0.192, 0.251, 1 },
 }
 W.MIN_W, W.MIN_H = 600, 420
@@ -55,7 +56,7 @@ function W.Button(parent, text, width, primary)
     b:SetSize(width, ENTRY_H)
     b:SetBackdrop(FLAT)
     b:SetBackdropColor(unpack(T.panel))
-    b:SetBackdropBorderColor(unpack(primary and T.gold or T.border))
+    b:SetBackdropBorderColor(unpack(primary and T.gold or T.control))
     b.label = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     b.label:SetPoint("CENTER")
     b.label:SetTextColor(unpack(primary and T.gold or T.text))
@@ -303,6 +304,7 @@ end
 local function Entry(page)
     if page.entry then return end
     local b = W.Button(menu, page.label or page.name, MENU_W - 2 * PAD, false)
+    b:SetBackdropBorderColor(unpack(T.border))
     b.label:ClearAllPoints()
     b.label:SetPoint("LEFT", b, "LEFT", PAD, 0)
     b.bar = b:CreateTexture(nil, "OVERLAY")

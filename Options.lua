@@ -7,38 +7,22 @@ local FLAT = CastAheadWindow.FLAT
 local COL_W, COL_GAP, COL_X = 250, 8, 8
 local SLIDER_W = COL_W - 40
 
-function CastAheadOptions.Flow(width, colWidth, gap, heights)
-    local columns = math.max(1, math.floor((width + gap) / (colWidth + gap)))
-    local bottoms = {}
-    for c = 1, columns do bottoms[c] = 0 end
-    local positions, total = {}, 0
-    for i, h in ipairs(heights) do
-        local c = 1
-        for k = 2, columns do
-            if bottoms[k] < bottoms[c] then c = k end
-        end
-        positions[i] = { x = (c - 1) * (colWidth + gap), y = bottoms[c] }
-        bottoms[c] = bottoms[c] + h + gap
-        total = math.max(total, bottoms[c] - gap)
-    end
-    return positions, total
-end
-
+-- Shown groups stack in one column, each as wide as the page; a hidden one
+-- leaves no gap. Controls inside keep COL_W-based widths from the left edge.
 function CastAheadOptions.RelayoutGroups(panel)
-    local shown, heights = {}, {}
-    for _, g in ipairs(panel.groups) do
-        if g:IsShown() then
-            shown[#shown + 1] = g
-            heights[#heights + 1] = g:GetHeight() + (g.flowPad or 0)
-        end
-    end
-    local pos, total = CastAheadOptions.Flow(panel:GetWidth() - COL_X, COL_W, COL_GAP, heights)
     local top = panel.flowTop or 6
     if type(top) == "function" then top = top() end
-    for i, g in ipairs(shown) do
-        g:ClearAllPoints()
-        g:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X + pos[i].x, -(top + pos[i].y + (g.flowPad or 0)))
+    local y = 0
+    for _, g in ipairs(panel.groups) do
+        if g:IsShown() then
+            local pad = g.flowPad or 0
+            g:ClearAllPoints()
+            g:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -(top + y + pad))
+            g:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -COL_X, -(top + y + pad))
+            y = y + pad + g:GetHeight() + COL_GAP
+        end
     end
+    local total = math.max(y - COL_GAP, 0)
     panel:SetHeight(top + total + (panel.flowBottom and panel.flowBottom(top + total) or 0) + 12)
 end
 
@@ -701,12 +685,12 @@ local function BuildButtonList(panel, store, key, title, emptyText)
         text:SetJustifyH("LEFT")
         text:SetWordWrap(false)
         local remove = CastAheadWindow.Button(group, "X", 20)
-        remove:SetPoint("TOPRIGHT", group, "TOPRIGHT", -8, y)
+        remove:SetPoint("TOPRIGHT", group, "TOPLEFT", COL_W - 8, y)
         remove:SetScript("OnClick", function() Remove(i) end)
         local function Arrow(dir, x, step, tip)
             local b = CreateFrame("Button", nil, group)
             b:SetSize(22, 22)
-            b:SetPoint("TOPRIGHT", group, "TOPRIGHT", x, y + 1)
+            b:SetPoint("TOPRIGHT", group, "TOPLEFT", COL_W + x, y + 1)
             local file = "Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-"
             b:SetNormalTexture(file .. "Up")
             b:SetPushedTexture(file .. "Down")
