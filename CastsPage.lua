@@ -73,6 +73,20 @@ local function OverrideSummary(entry)
 end
 CastAheadUI.OverrideSummary = OverrideSummary
 
+-- The same overrides as one small icon each, always in the same order, so
+-- the column keeps one width however many there are.
+local function OverrideIcons(entry)
+    local icons = {}
+    local own = CastAheadConfig.SpellImportant(entry.spell)
+    if own == true then icons[#icons + 1] = "|A:auctionhouse-icon-favorite:14:14|a" end
+    if own == false then icons[#icons + 1] = "|A:auctionhouse-icon-favorite:14:14:0:0:110:110:110|a" end
+    if CastAheadConfig.SpellMuted(entry.spell) then icons[#icons + 1] = "|A:voicechat-icon-speaker-mute:14:14|a" end
+    local sound = SpellSound(entry)
+    if sound and sound ~= "" then icons[#icons + 1] = "|A:chatframe-button-icon-speaker-on:14:14|a" end
+    if CastAheadConfig.SpellLead(entry.spell) then icons[#icons + 1] = "|A:auctionhouse-icon-clock:14:14|a" end
+    return table.concat(icons, " ")
+end
+
 local function SpellName(entry)
     local info = C_Spell.GetSpellInfo(entry.spell)
     return (info and info.name) or entry.name or tostring(entry.spell)
@@ -164,11 +178,10 @@ local COLUMNS = {
       text = function(e) return (e.cc or 0) > 0 and string.format("%d%%", e.cc * 100) or "-" end,
       sort = function(e) return e.cc or 0 end },
     -- Only what differs from the global settings; a click on the row opens the panel.
-    { key = "overrides", header = "Overrides", width = 130,
+    { key = "overrides", header = "Overrides", width = 80,
       text = function(e)
           if not CastAheadMatch.Advice(e) then return "|cff555555-|r" end
-          local summary = OverrideSummary(e)
-          return "|cffffd100" .. summary .. "|r"
+          return OverrideIcons(e)
       end,
       sort = OverrideSummary },
 }
@@ -262,7 +275,7 @@ local HEADER_TIPS = {
     spell = { "Spell",
         "The cast being tracked. Hover a row for the spell tooltip." },
     overrides = { "Overrides",
-        "Settings this one cast has of its own instead of the global ones: importance, mute, a sound in place of the voice, its own early warning. Click a row to change them." },
+        "Settings this one cast has of its own instead of the global ones, one icon each: star - marked important (grey: not important), crossed speaker - muted, speaker - its own sound, clock - its own early warning. Hover a row for the details, click it to change them." },
     mob = { "Caster",
         "Which creature casts it. In 12.1 a nameplate never reveals a creature's name or ID, so this comes from combat logs - the addon only guesses which of them is in front of you." },
     level = { "Mob level",
@@ -676,6 +689,8 @@ local function CreateRow(parent, index)
         GameTooltip:SetSpellByID(e.spell)
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine(string.format("%s (npc %d)", e.mob or "?", e.npc or 0), 0.6, 0.6, 1)
+        local own = OverrideSummary(e)
+        if own ~= "" then GameTooltip:AddLine("Own settings: " .. own, 1, 0.82, 0) end
         GameTooltip:AddLine(string.format("%d observations in the logs", e.n or 0), 0.7, 0.7, 0.7)
         GameTooltip:AddLine(string.format("Interrupted: %d%% of casts. Stopped another way: %d%%.",
             (e.kick or 0) * 100, (e.cc or 0) * 100), 0.7, 0.7, 0.7)
