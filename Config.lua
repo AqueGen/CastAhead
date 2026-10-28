@@ -201,6 +201,24 @@ function C.Lead()
     return seconds
 end
 
+-- A cast's own early warning (Casts page) wins over the global one, even when
+-- the global one is off. With several candidates the longest wins, so none of
+-- them is announced late.
+function C.SpellLead(spellID)
+    local own = CastAheadDB and CastAheadDB.spellLead and tonumber(CastAheadDB.spellLead[spellID])
+    return own and math.max(0, math.min(C.LEAD_MAX, own)) or nil
+end
+
+function C.LeadFor(candidates)
+    local global = C.Lead()
+    if not candidates or #candidates == 0 then return global end
+    local best = 0
+    for _, row in ipairs(candidates) do
+        best = math.max(best, C.SpellLead(row.spell) or global)
+    end
+    return best
+end
+
 -- Run once, the moment the saved variables arrive: by PLAYER_LOGIN the
 -- minimap icon has already created the table, and a fresh install would
 -- read as an old profile. Older profile shapes exist and each would
