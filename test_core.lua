@@ -1412,6 +1412,20 @@ do
     check(headsAlerts(2.0) == 0, "kick voice: heads-up obeys the gate (unimportant silent)")
     check(headsAlerts(3.5) == 1, "kick voice: heads-up obeys the gate (important voiced)")
 
+    local realPlay, heard = PlaySoundFile, {}
+    PlaySoundFile = function(path, ...) heard[#heard + 1] = path return realPlay(path, ...) end
+    hostile.focus = nil
+    kickAlerts({ importantOnly = false, leadSeconds = 0 }, 3.5)
+    check(heard[1] and heard[1]:find("KICK_IMPORTANT%.ogg$"), "kick voice: important kick clip when the switch is on")
+    heard = {}
+    kickAlerts({ importantOnly = false, leadSeconds = 0, kickImportantOnly = false }, 2.0)
+    check(heard[1] and heard[1]:find("KICK%.ogg$") and not heard[1]:find("IMPORTANT"),
+        "kick voice: interrupt clip when the switch is off")
+    heard = {}
+    headsAlerts(3.5)
+    check(heard[1] and heard[1]:find("KICK_IMPORTANT_soon%.ogg$"), "kick voice: heads-up uses the important kick clip")
+    PlaySoundFile = realPlay
+
     UnitIsUnit = nil
     CastAheadDB = { leadSeconds = 5 }
     for _ = 1, 4 do table.remove(CastAheadData[1877]) end

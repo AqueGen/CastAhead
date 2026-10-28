@@ -399,10 +399,10 @@ end
 -- consistent voice. `CastAheadDB.voiceTTS` prefers the game's voice instead.
 local SOUND_ROOT = "Interface\\AddOns\\CastAhead\\Sounds\\"
 
-local function PlayClip(advice, lead)
-    if not (PlaySoundFile and advice.file) then return false end
+local function PlayClip(file, lead)
+    if not (PlaySoundFile and file) then return false end
     local lang = CastAheadDB and CastAheadDB.voiceLang or "en"
-    local path = SOUND_ROOT .. lang .. "\\" .. advice.file .. (lead and "_soon" or "") .. ".ogg"
+    local path = SOUND_ROOT .. lang .. "\\" .. file .. (lead and "_soon" or "") .. ".ogg"
     local ok, willPlay = pcall(PlaySoundFile, path, CastAheadConfig.SoundChannel())
     return ok and willPlay == true
 end
@@ -448,7 +448,11 @@ end
 local ttsHintShown = false
 
 local function Voice(advice, lead)
-    local text = lead and (advice.say .. " soon") or advice.say
+    local file, say = advice.file, advice.say
+    if advice.label == "KICK" and CastAheadConfig.Enabled("kickImportantOnly") then
+        file, say = "KICK_IMPORTANT", "important kick"
+    end
+    local text = lead and (say .. " soon") or say
     if CastAheadDB and CastAheadDB.voiceTTS then
         -- The player prefers the game's voice; the clip covers for it when it
         -- cannot speak (alerts disabled in the game options) - and says so
@@ -459,9 +463,9 @@ local function Voice(advice, lead)
             print("|cff33ff99CastAhead|r the game's TTS voice could not speak - enable Combat Audio Alerts"
                 .. " (Options > Accessibility) and give its categories volume. Playing the clip instead.")
         end
-        return PlayClip(advice, lead)
+        return PlayClip(file, lead)
     end
-    return PlayClip(advice, lead) or Speak(text)
+    return PlayClip(file, lead) or Speak(text)
 end
 
 -- The player's own pick for this spell, else for this category, from
