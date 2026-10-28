@@ -186,6 +186,13 @@ function C.SaveLead()
     return C.Number("saveLeadSeconds", 0, 0, C.SAVE_LEAD_MAX)
 end
 
+C.BURST_LEAD_MAX = 10
+
+-- Seconds of "burst soon" before a burst window; 0 leaves only "burst now".
+function C.BurstLead()
+    return C.Number("burstLeadSeconds", 0, 0, C.BURST_LEAD_MAX)
+end
+
 function C.Lead()
     local seconds = tonumber(C.Get("leadSeconds"))
     if not seconds then return C.LEAD_DEFAULT end

@@ -49,7 +49,7 @@ In Heroic and Mythic, with "Defensive calls in raids" on under "Raid (experiment
 
 ## Burst windows (alpha)
 
-With "Burst windows" on under "Raid (experimental)", CastAhead says "burst soon" five seconds before a boss phase worth bursting into and "burst now" when it starts. The phases come from top-player runs and are kept only where at least three specs agree; a boss without one gets no call: burst on the pull, then on cooldown. Healers get their own moments for group-healing cooldowns. A phase the boss starts at a health mark is called on the game's own boss warning instead. A defensive call within two seconds of a burst call goes first. The Guide pages show every boss's phases, key bosses in the Dungeon Guide and raid bosses in the Raid Guide.
+With "Burst windows" on under "Raid (experimental)", CastAhead says "burst now" when a boss phase worth bursting into starts. The "Burst soon" slider under it adds a heads-up up to 10 seconds earlier; it is off by default. The phases come from top-player runs and are kept only where at least three specs agree; a boss without one gets no call: burst on the pull, then on cooldown. Healers get their own moments for group-healing cooldowns. A phase the boss starts at a health mark is called on the game's own boss warning instead. A defensive call within two seconds of a burst call goes first. The Guide pages show every boss's phases, key bosses in the Dungeon Guide and raid bosses in the Raid Guide.
 
 ## Reporting a wrong call
 

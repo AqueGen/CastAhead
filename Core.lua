@@ -2860,6 +2860,40 @@ local function ShowCenterSample(on)
     return true
 end
 
+-- The settings' per-feature Test buttons: one defensive call or one burst
+-- window through the real schedule, centre block and sounds. Outside a
+-- dungeon the main ticker sleeps until the centre shows, so this frame ticks
+-- until the sample ends.
+local featureTest = { frame = CreateFrame("Frame"), untilAt = 0 }
+
+local function FeatureTest(kind)
+    local now = GetTime()
+    local endAt
+    if kind == "defensive" and CastAheadSaves and CastAheadConfig.SaveCalls() then
+        endAt = now + 6
+        CastAheadSaves.Schedule("demo:def", 0, now + 1, endAt, CastAheadMatch.ADVICE.DEFENSIVE)
+    elseif kind == "burst" and CastAheadBurst and CastAheadBurst.Demo and CastAheadConfig.BurstCalls() then
+        endAt = CastAheadBurst.Demo(now)
+    end
+    if not endAt then return false end
+    featureTest.untilAt = math.max(featureTest.untilAt, endAt)
+    featureTest.frame:SetScript("OnUpdate", function()
+        local t = GetTime()
+        if CastAheadSaves and CastAheadConfig.SaveCalls() then CastAheadSaves.Tick(t) end
+        if CastAheadBurst then CastAheadBurst.Tick(t) end
+        UpdateCenter(t)
+        if t >= featureTest.untilAt then featureTest.frame:SetScript("OnUpdate", nil) end
+    end)
+    return true
+end
+
+local function StopFeatureTests()
+    featureTest.frame:SetScript("OnUpdate", nil)
+    featureTest.untilAt = 0
+    if CastAheadSaves then CastAheadSaves.CancelPrefix("demo:") end
+    if CastAheadBurst and CastAheadBurst.ClearDemo then CastAheadBurst.ClearDemo() end
+end
+
 frame:SetScript("OnUpdate", function()
     if not (dungeon or inEncounter or (center and center:IsShown())) then return end
     local now = GetTime()
@@ -2997,6 +3031,8 @@ CastAheadCore.CENTER_Y = CENTER_Y
 CastAheadCore.CenterFrame = CenterFrame
 CastAheadCore.DropCenter = DropCenter
 CastAheadCore.Announce = PlayAdviceSound
+CastAheadCore.FeatureTest = FeatureTest
+CastAheadCore.StopFeatureTests = StopFeatureTests
 CastAheadCore.AdviceFile = AdviceFile
 CastAheadCore.ReapplyData = function() extrasMerged = false; MergeCuration() end
 CastAheadCore.LastCandidates = LastCandidates   -- replay harness only
@@ -3102,6 +3138,10 @@ function CastAheadCore.Testing()
     return demo ~= nil
 end
 
+function CastAheadCore.TestingAll()
+    return demo ~= nil and demo.all == true
+end
+
 -- Lay out each plate's own icons against each other, the way a live plate is
 -- laid out - otherwise the test drive shows a spacing the game never uses.
 -- Run again whenever a call finishes: the survivors have to close up against
@@ -3157,7 +3197,11 @@ end
 -- hearing each cast's sound rather than judging the layout.
 function CastAheadCore.Test(instanceID, list)
     if CastAheadSetup and CastAheadSetup.Active() then CastAheadSetup.Leave() end
-    if demo then StopTest() return end
+    if demo then
+        StopTest()
+        CastAheadCore.StopFeatureTests()
+        return
+    end
     local id = instanceID
     if not (id and CastAheadData[id]) then
         id = select(8, GetInstanceInfo())
@@ -3211,7 +3255,7 @@ function CastAheadCore.Test(instanceID, list)
             units[#units + 1] = token
         end
     end
-    demo = { frame = CreateFrame("Frame"), entries = {}, state = { bars = {} } }
+    demo = { frame = CreateFrame("Frame"), entries = {}, state = { bars = {} }, all = not list }
     -- One call at a time: the one counting down and the one going out.
     local spacing = CastAheadConfig.Lead() + 3
     local gap = list and spacing or nil
@@ -3251,6 +3295,11 @@ function CastAheadCore.Test(instanceID, list)
     print(string.format("|cff33ff99CastAhead|r test: %d call(s) from %s on %d plate(s) (again to stop)",
         total, tostring(rows.name or id), plates))
     if CastAheadUI and CastAheadUI.RefreshTest then CastAheadUI.RefreshTest() end
+    -- The whole-addon run: features that are switched on join with a sample each.
+    if not list then
+        CastAheadCore.FeatureTest("defensive")
+        CastAheadCore.FeatureTest("burst")
+    end
     demo.frame:SetScript("OnUpdate", function()
         if not demo then return end
         local t = GetTime()

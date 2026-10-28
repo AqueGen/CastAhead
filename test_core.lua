@@ -332,6 +332,7 @@ dofile("CastsPage.lua")
 dofile("SavesPage.lua")
 dofile("UI.lua")
 dofile("Core.lua")
+dofile("Kicks.lua")
 dofile("Setup.lua")
 dofile("Recorder.lua")
 dofile("ReportWindow.lua")
@@ -4770,7 +4771,7 @@ do
             if page:find(gone, 1, true) then found[#found + 1] = gone end
         end
         check(#found == 0, "General builds no size or position control, found " .. table.concat(found, ","))
-        check(sliders == 1 and dropdowns == 0, "General keeps only the early-warning slider and no dropdown, got "
+        check(sliders == 2 and dropdowns == 0, "General keeps only the early-warning and burst-soon sliders and no dropdown, got "
             .. sliders .. "/" .. dropdowns)
         check(page:find("|Show icons on nameplates|", 1, true) and page:find("|Full labels|", 1, true)
             and page:find("|Show the centre call|", 1, true), "General keeps the nameplate and centre call switches")
@@ -4807,7 +4808,7 @@ do
         check(raidSaves.text.color == "muted" and bursts.text.color == "muted", "and their labels are greyed")
         check(raidSaves.motionWhileDisabled == true and bursts.motionWhileDisabled == true,
             "the children keep their tooltips while disabled")
-        check(offHeight == 166, "the Features group keeps the four-row height, got " .. tostring(offHeight))
+        check(offHeight == 370, "the Features group keeps its height with the burst slider, got " .. tostring(offHeight))
         CastAheadDB = { raidMode = true }
         CastAheadOptions.ShowPanel(host, "General")
         check(raidSaves.enabled == true and bursts.enabled == true, "with the raid switch on its two children are enabled")
@@ -4934,7 +4935,7 @@ do
         titleAdded[#titleAdded + 1] = text
         return { SetScript = function() end, SetText = function() end }
     end)
-    check(titleAdded[1] == "Test drive" and #titleAdded == 1, "the title bar keeps only Test drive, got " .. table.concat(titleAdded, ","))
+    check(titleAdded[1] == "Test drive all" and #titleAdded == 1, "the title bar keeps only Test drive all, got " .. table.concat(titleAdded, ","))
     CastAheadUI.ShowTab("Casts")
     local f = CastAheadWindow.Frame()
     check(f and f.w == 600 and f.h == 420, "a saved size below the minimum opens at the minimum")
@@ -5203,6 +5204,13 @@ do
             B.Tick(now)
         end
     end
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    run(31)
+    check(table.concat(heard, ",") == "BURST", "burst: with the default lead of 0 only burst now plays, heard "
+        .. table.concat(heard, ","))
+    B.OnEncounter("ENCOUNTER_END", 3492, 15, now)
+    heard = {}
+    CastAheadDB = { raidMode = true, burstCalls = true, burstLeadSeconds = 5 }
     local function Heard() return table.concat(heard, ",") end
 
     local t0 = now
@@ -5259,7 +5267,7 @@ do
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
     run(40)
     check(#heard == 0, "burst: burst windows stay silent while the raid switch is off")
-    CastAheadDB = { raidMode = true, burstCalls = true }
+    CastAheadDB = { raidMode = true, burstCalls = true, burstLeadSeconds = 5 }
 
     B.OnEncounter("ENCOUNTER_START", 3492, 16, now)
     run(40)
@@ -5316,6 +5324,22 @@ do
     B.Tick(now)
     B.Pending(now)
     check(specLookups == 0, "burst: no windows, no spec lookups per frame")
+    GetSpecialization = function() return 1 end
+
+    -- The settings' Test button: a sample window outside any encounter.
+    heard = {}
+    IsEncounterInProgress = function() return false end
+    local demoEnd = B.Demo(now)
+    run(1)
+    check(Heard() == "SOON", "burst demo: burst soon plays outside an encounter, heard " .. Heard())
+    run(demoEnd - now)
+    check(Heard() == "SOON,BURST", "burst demo: then burst now, heard " .. Heard())
+    B.Demo(now)
+    B.ClearDemo()
+    run(10)
+    check(Heard() == "SOON,BURST", "burst demo: cleared before it fires stays silent, heard " .. Heard())
+    IsEncounterInProgress = nil
+
     S.Cancel("test:save1")
     S.Cancel("test:save2")
     S.Cancel("test:save3")
@@ -5339,7 +5363,7 @@ do
     GetSpecialization = function() return 1 end
     GetSpecializationRole = function() return "DAMAGER" end
     CastAheadBurstWindows = { [3492] = { [15] = { { release = 30 } } } }
-    CastAheadDB = { raidMode = true, burstCalls = true, centerText = true, saveCalls = true }
+    CastAheadDB = { raidMode = true, burstCalls = true, centerText = true, saveCalls = true, burstLeadSeconds = 5 }
     GetInstanceInfo = function() return "Abyss", "raid", 15, "", 0, 0, false, 9999 end
     fire("PLAYER_ENTERING_WORLD")
 
@@ -5515,7 +5539,7 @@ do
     CastAheadBurstWindows = {
         [3492] = { [15] = { name = "Ula'tek", { release = 30 }, { release = 70, role = "HEALER" } } },
         [3101] = { [8] = { name = "Kystia Manaheart", { event = 610, target = "Light Infusion" } } } }
-    CastAheadDB = { raidMode = true, burstCalls = true }
+    CastAheadDB = { raidMode = true, burstCalls = true, burstLeadSeconds = 5 }
     local function run(seconds)
         for _ = 1, seconds * 2 do
             now = now + 0.5
@@ -6263,6 +6287,9 @@ end
         check(f.centerX and f.centerX.center and f.centerY.center and f.nudgeX and not f.nudgeX.center,
             "panel: only the centre's X and Y carry Center buttons")
         check(height and height <= 728, "panel: the panel fits under the top-right corner at UI scale 1, got " .. tostring(height))
+        check(f.kickX and f.kickX.label.value == "X (px)" and f.kickY and f.kickY.label.value == "Y (px)"
+            and f.kickScale and f.kickScale.label.value == "Size (%)" and panel.kickGrow,
+            "panel: the kicks block has X, Y, Size and the grow button")
         do
             local function inside(widget, box)
                 while widget do
@@ -6632,6 +6659,69 @@ end)();
     removePlate("nameplate4")
     panel.RegisterEvent, panel.UnregisterEvent = nil, nil
     CastAheadDB, InCombatLockdown, UIParent, W.Frame, W.Current, W.Show, C_NamePlate.GetNamePlateForUnit = unpack(saved, 1, 7)
+end)()
+
+;(function()
+    local K = CastAheadKicks
+    local saved = { IsInGroup, IsInRaid, UnitClass, UnitName, CastAheadConfig.Get("kickSpike") }
+    local group, raid = false, false
+    IsInGroup = function() return group end
+    IsInRaid = function() return raid end
+    UnitClass = function() return "Warrior", "WARRIOR" end
+    UnitName = function() return "Me" end
+    CastAheadConfig.Set("kickSpike", true)
+    K.Paint()
+    check(not K.panel.shown, "kicks: solo hides the panel")
+    group = true
+    K.Paint()
+    check(K.panel.shown, "kicks: a party shows the panel")
+    raid = true
+    K.Paint()
+    check(not K.panel.shown, "kicks: a raid group hides the panel")
+    K.Demo(true)
+    check(K.panel.shown, "kicks: the demo shows even in a raid group")
+    K.Demo(false)
+    check(not K.panel.shown, "kicks: ending the demo in a raid group hides the panel again")
+    IsInGroup, IsInRaid, UnitClass, UnitName = saved[1], saved[2], saved[3], saved[4]
+    CastAheadConfig.Set("kickSpike", saved[5])
+end)()
+
+;(function()
+    local K = CastAheadKicks
+    local saved = { UnitExists, UnitClass, UnitName, C_DamageMeter, Enum, CastAheadConfig.Get("kickSpike"), IsInGroup, IsInRaid }
+    IsInGroup = function() return true end
+    IsInRaid = function() return false end
+    local classes = { player = "MAGE", party1 = "WARRIOR", party2 = "ROGUE", party3 = "ROGUE", party4 = "MAGE" }
+    UnitExists = function(unit) return classes[unit] ~= nil end
+    UnitClass = function(unit) return classes[unit], classes[unit] end
+    UnitName = function(unit) return unit end
+    Enum = setmetatable({ DamageMeterType = { Interrupts = 5 }, DamageMeterSessionType = { Current = 1 } },
+        { __index = saved[5] })
+    local sources = {
+        { classFilename = "WARRIOR", totalAmount = 2 },
+        { classFilename = "ROGUE", totalAmount = 1 },
+        { classFilename = "MAGE", isLocalPlayer = true, totalAmount = 4 },
+        { classFilename = "MAGE", totalAmount = 3 },
+    }
+    C_DamageMeter = { GetCombatSessionFromType = function() return { combatSources = sources } end }
+    CastAheadConfig.Set("kickSpike", true)
+    K.Roster()
+    local function count(unit)
+        for _, m in ipairs(K.Members()) do
+            if m.unit == unit then return m.counted and m.count end
+        end
+    end
+    K.OnEvent("DAMAGE_METER_COMBAT_SESSION_UPDATED", 5)
+    check(count("party1") == 2, "kicks: the only warrior takes the warrior's meter count")
+    check(not count("party2") and not count("party3"), "kicks: two rogues, neither takes the count")
+    check(not count("player"), "kicks: your own row keeps the timer, no count")
+    check(count("party4") == 3, "kicks: the other mage takes the count when you are a mage too")
+    K.OnEvent("PLAYER_REGEN_DISABLED")
+    check(not count("party1"), "kicks: a new pull clears the counts")
+    UnitExists, UnitClass, UnitName, C_DamageMeter, Enum = saved[1], saved[2], saved[3], saved[4], saved[5]
+    CastAheadConfig.Set("kickSpike", saved[6])
+    K.Roster()
+    IsInGroup, IsInRaid = saved[7], saved[8]
 end)()
 
 ;(function()
