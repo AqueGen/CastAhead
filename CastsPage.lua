@@ -56,11 +56,7 @@ local function FormatRotation(entry)
     for i = 1, #entry.cd do
         parts[i] = string.format("%.1f", entry.cd[i])
     end
-    local text = table.concat(parts, " / ") .. "s"
-    if entry.approx then
-        text = "|cffff8800~|r" .. text
-    end
-    return text, entry.cd[1]
+    return table.concat(parts, " / ") .. "s", entry.cd[1]
 end
 
 -- One definition per column drives the header, the cell and the sort, so a
@@ -375,6 +371,12 @@ local function CreateRow(parent, index)
             text:SetJustifyH(column.justify or "LEFT")
             text:SetWordWrap(false)
             row.cells[column.key] = text
+            if column.key == "cd" then
+                -- A "~" inside the text sits at the top of the line, so it gets
+                -- its own font string, lowered to the middle.
+                row.approx = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                row.approx:SetText("|cffff8800~|r")
+            end
         end
     end
 
@@ -462,6 +464,11 @@ function Refresh()
                 end
             end
             row.icon:SetAlpha(alpha)
+            local cd = row.cells.cd
+            row.approx:SetShown(entry.approx and CastAheadMatch.HasSchedule(entry) or false)
+            row.approx:ClearAllPoints()
+            row.approx:SetPoint("RIGHT", cd, "RIGHT", -cd:GetStringWidth() - 1, -3)
+            row.approx:SetAlpha(alpha)
             -- Nothing to say for a row with no verdict - no speaker, no sound.
             row.hear:SetShown(CastAheadMatch.Advice(entry) ~= nil)
             local hasAdvice = CastAheadMatch.Advice(entry) ~= nil
