@@ -70,8 +70,37 @@ local function Severity(advice)
     return levels.Medium
 end
 
-function T.Cancel(track)
-    if not track or not track.timelineEventID then return end
+-- BigWigs hides the game's timeline by default and leaves addon events out of
+-- its own bars (BigWigs_Plugins/Timeline.lua skips source Script), so with it
+-- nothing of ours shows. "Show in BigWigs bars" sends the same predictions to
+-- its bars over its message bus. That bus is not a documented API, so every
+-- call is guarded: if BigWigs changes it, only the bar is lost.
+local function BigWigsOn()
+    return CastAheadConfig.Get("bigwigsBars") == true and type(BigWigsLoader) == "table"
+        and type(BigWigsLoader.SendMessage) == "function"
+end
+
+local function SendBigWigs(...)
+    if type(BigWigsLoader) == "table" and type(BigWigsLoader.SendMessage) == "function" then
+        pcall(BigWigsLoader.SendMessage, BigWigsLoader, ...)
+    end
+end
+
+-- BigWigs keys a bar by its text, so two mobs on the same spell would share one
+-- bar: it goes to the sooner prediction, and only its owner may stop it.
+local barOwners = {}
+
+local function StopBar(track)
+    if not track.barText then return end
+    if barOwners[track.barText] == track then
+        SendBigWigs("BigWigs_StopBar", nil, track.barText)
+        barOwners[track.barText] = nil
+    end
+    track.barText, track.barTargetAt = nil, nil
+end
+
+local function CancelEvent(track)
+    if not track.timelineEventID then return end
     if C_EncounterTimeline and C_EncounterTimeline.CancelScriptEvent then
         -- Only ever our own id. CancelAllScriptEvents would take out every other
         -- addon's events too.
@@ -82,10 +111,18 @@ function T.Cancel(track)
     track.timelineTargetAt = nil
 end
 
+function T.Cancel(track)
+    if not track then return end
+    CancelEvent(track)
+    StopBar(track)
+end
+
 -- The cast we predicted has started: let the event resolve rather than yanking
 -- it off the timeline.
 function T.Finish(track)
-    if not track or not track.timelineEventID then return end
+    if not track then return end
+    StopBar(track)
+    if not track.timelineEventID then return end
     if C_EncounterTimeline and C_EncounterTimeline.FinishScriptEvent then
         pcall(C_EncounterTimeline.FinishScriptEvent, track.timelineEventID)
     end
@@ -94,17 +131,41 @@ function T.Finish(track)
     track.timelineTargetAt = nil
 end
 
+local function SyncBar(track, targetAt, row, advice, remaining)
+    if not BigWigsOn() then
+        StopBar(track)
+        return
+    end
+    if track.barText and barOwners[track.barText] == track and track.barTargetAt
+        and math.abs(track.barTargetAt - targetAt) < RETIME_THRESHOLD then
+        return
+    end
+    StopBar(track)
+    local info = C_Spell.GetSpellInfo(row.spell)
+    local name = (info and info.name) or row.name or ""
+    local text = TimelineName(advice, info, row)
+    if name ~= "" and name ~= text then text = text .. ": " .. name end
+    local owner = barOwners[text]
+    if owner and owner.barText == text and owner.barTargetAt and owner.barTargetAt <= targetAt then return end
+    if owner then owner.barText, owner.barTargetAt = nil, nil end
+    local icon = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(row.spell)) or (info and info.iconID) or 136243
+    SendBigWigs("BigWigs_StartBar", nil, nil, text, remaining, icon)
+    barOwners[text] = track
+    track.barText, track.barTargetAt = text, targetAt
+end
+
 -- `confident` is decided by the caller: one candidate, a real measured schedule,
 -- and enough observations behind it.
 function T.Sync(track, targetAt, row, advice, confident)
     if not track then return end
-    if not (confident and targetAt and row and Available()) then
+    local remaining = confident and targetAt and row and targetAt - GetTime()
+    if not remaining or remaining <= 0 then
         T.Cancel(track)
         return
     end
-    local remaining = targetAt - GetTime()
-    if remaining <= 0 then
-        T.Cancel(track)
+    SyncBar(track, targetAt, row, advice, remaining)
+    if not Available() then
+        CancelEvent(track)
         return
     end
     -- Already showing this cast at almost this time: leave it be, or the icon
@@ -114,7 +175,7 @@ function T.Sync(track, targetAt, row, advice, confident)
         and math.abs(track.timelineTargetAt - targetAt) < RETIME_THRESHOLD then
         return
     end
-    T.Cancel(track)
+    CancelEvent(track)
 
     local info = C_Spell.GetSpellInfo(row.spell)
     local icon = C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(row.spell)
