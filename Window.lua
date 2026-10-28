@@ -32,7 +32,6 @@ local RAID_DEFAULT = 15
 local MOVED = { Bursts = "RaidGuide", RaidDefensives = "RaidGuide" }
 
 local frame, titleBar, titleAnchor, scaleDrop, menu, content, grid, raidGrid, scroll, footerText, footerHint
-local sizing = false
 local pages, order, headers, dungeonButtons, raidButtons = {}, {}, {}, {}, {}
 local current, dungeon, picked, raidDifficulty, raidPicked
 
@@ -466,7 +465,7 @@ local function Build()
         raidButtons[i] = b
     end
     content:SetScript("OnSizeChanged", function(_, width)
-        if not sizing then LayoutGrid(width) end
+        LayoutGrid(width)
     end)
 
     scroll = CreateFrame("ScrollFrame", nil, content, "UIPanelScrollFrameTemplate")
@@ -476,7 +475,7 @@ local function Build()
         end
     end
     scroll:SetScript("OnSizeChanged", function(_, width)
-        if not sizing then FitHosts(width) end
+        FitHosts(width)
     end)
 
     local function Resized()
@@ -495,12 +494,10 @@ local function Build()
         local left, top = frame:GetLeft(), frame:GetTop()
         frame:ClearAllPoints()
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
-        sizing = true
         frame:StartSizing("BOTTOMRIGHT")
     end)
     grip:SetScript("OnMouseUp", function()
         frame:StopMovingOrSizing()
-        sizing = false
         local s = Saved()
         s.width, s.height = frame:GetWidth(), frame:GetHeight()
         Resized()
