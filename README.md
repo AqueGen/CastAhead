@@ -10,6 +10,17 @@ Predicts trash casts in Mythic+ and tells you what to do about them. On top of t
 - **Filters to what you can act on.** By default only hand-picked important casts, and only the ones your role can answer.
 - **Feeds Blizzard's encounter timeline** with predictions confident enough to be shown as exact.
 
+## Kick calls and focus
+
+By default the kick call plays only for important casts (the starred ones on the Casts page) and says "important kick". If your focus is a live enemy, only your focus gets the call; its raid mark does not matter. With no focus, a friendly one or a dead one, every mob does. "Kick voice only on important casts" in General - Sound turns this off and brings back "interrupt" on every kickable cast.
+
+## What it cannot do
+
+The game hides the name of a hostile cast while it is going out, so CastAhead works out which cast it is from what it can see: the mob's level and power type, cast or channel, whether the cast has a target, and the cast's length once it finishes. That has two consequences:
+
+- A mob's first cast is often not recognised. Once the mob finishes one cast, CastAhead knows its schedule and calls its next casts as they start.
+- A cast that is kicked never finishes, so it tells CastAhead nothing. A mob whose casts are always kicked may stay unrecognised for the whole pull.
+
 ## Commands
 
 | Command | What it does |
