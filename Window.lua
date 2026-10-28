@@ -12,7 +12,8 @@ W.THEME = {
     muted = { 0.66, 0.68, 0.72 },
     selected = { 0.165, 0.192, 0.251, 1 },
 }
-W.MIN_W, W.MIN_H = 460, 420
+-- 580 keeps a four-spec bar (druid) and a Sounds row whole; the title bar alone needs about 430
+W.MIN_W, W.MIN_H = 580, 420
 W.ICON = "Interface\\AddOns\\CastAhead\\Media\\icon"
 
 local T = W.THEME
@@ -251,7 +252,9 @@ function W.ApplyScale(target)
     if not target then return end
     local scale = CastAheadConfig.Number("uiScale", SCALE_DEFAULT, SCALE_MIN, SCALE_MAX) / 100
     target:SetScale(scale)
-    local maxW, maxH = UIParent:GetWidth() / scale, UIParent:GetHeight() / scale
+    -- A small screen at a large scale must not push the cap under the minimum
+    local maxW = math.max(UIParent:GetWidth() / scale, W.MIN_W)
+    local maxH = math.max(UIParent:GetHeight() / scale, W.MIN_H)
     if target.SetResizeBounds and target:IsResizable() then
         target:SetResizeBounds(W.MIN_W, W.MIN_H, maxW, maxH)
     end

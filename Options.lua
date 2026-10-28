@@ -397,7 +397,6 @@ function BuildGeneral(panel)
     -- while the entries cannot be seen, and says what to do; the BigWigs
     -- switch only with BigWigs installed.
     local timelineOff = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    timelineOff:SetWidth(520)
     timelineOff:SetJustifyH("LEFT")
     timelineOff:SetTextColor(1, 0.5, 0.2)
     local _, leadLabel = BuildSlider(panel, {
@@ -428,12 +427,15 @@ function BuildGeneral(panel)
         end
         timelineOff:ClearAllPoints()
         timelineOff:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 4, -2)
+        timelineOff:SetPoint("RIGHT", what, "RIGHT", -10, 0) -- wraps to the box at any window width
         timelineOff:SetText(text or "")
         timelineOff:SetShown(text ~= nil)
         leadLabel:ClearAllPoints()
         leadLabel:SetPoint("TOPLEFT", text and timelineOff or last, "BOTTOMLEFT", text and 2 or 6, -10)
         local switches = bigWigs and 4 or 3
         what:SetHeight(26 + switches * 26 + (text and timelineOff:GetStringHeight() + 2 or 0) + 92)
+        -- The boxes below were placed for the old height
+        panel:Relayout()
     end
     PaintTimelineOff()
     table.insert(refreshers, PaintTimelineOff)
