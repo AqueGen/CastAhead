@@ -66,7 +66,7 @@ end
 -- One definition per column drives the header, the cell and the sort, so a
 -- header can never end up over the wrong values.
 local COLUMNS = {
-    { key = "check", width = 22 },
+    { key = "check", header = "Enabled", width = 52 },
     -- Speaker: plays the row's voice line / alert on demand, so the calls can
     -- be auditioned outside a pull.
     { key = "hear", width = 18 },
@@ -233,7 +233,7 @@ local HEADER_TIPS = {
     spell = { "Spell",
         "The cast being tracked. Hover a row for the spell tooltip." },
     sound = { "Sound override",
-        "Ticked, the cast is announced like its category (Sounds tab): the voice, or the sound chosen there. Untick to pick a sound for this one cast instead of the voice; it plays once the cast is identified as this spell." },
+        "Unticked, the cast is announced like its category (Sounds tab): the voice, or the sound chosen there. Tick to pick a sound for this one cast instead of the voice; it plays once the cast is identified as this spell." },
     mob = { "Caster",
         "Which creature casts it. In 12.1 a nameplate never reveals a creature's name or ID, so this comes from combat logs - the addon only guesses which of them is in front of you." },
     level = { "Mob level",
@@ -318,7 +318,7 @@ local function CreateRow(parent, index)
         if column.key == "check" then
             row.check = CreateFrame("CheckButton", nil, row, "MinimalCheckboxTemplate")
             row.check:SetSize(WIDGET_HEIGHT, WIDGET_HEIGHT)
-            row.check:SetPoint("LEFT", row, "LEFT", x, 0)
+            row.check:SetPoint("LEFT", row, "LEFT", x + (column.width - WIDGET_HEIGHT) / 2, 0)
         elseif column.key == "hear" then
             row.hear = CreateFrame("Button", nil, row)
             row.hear:SetSize(16, 16)
@@ -332,16 +332,16 @@ local function CreateRow(parent, index)
                 end
             end)
         elseif column.key == "sound" then
-            row.inherit = CreateFrame("CheckButton", nil, row, "MinimalCheckboxTemplate")
-            row.inherit:SetSize(WIDGET_HEIGHT, WIDGET_HEIGHT)
-            row.inherit:SetPoint("LEFT", row, "LEFT", x + 12, 0)
-            row.inherit:SetScript("OnClick", function(self)
+            row.override = CreateFrame("CheckButton", nil, row, "MinimalCheckboxTemplate")
+            row.override:SetSize(WIDGET_HEIGHT, WIDGET_HEIGHT)
+            row.override:SetPoint("LEFT", row, "LEFT", x + 12, 0)
+            row.override:SetScript("OnClick", function(self)
                 local e = row.entry
                 if not e then return end
                 if self:GetChecked() then
-                    SetSpellSound(e, nil)
-                else
                     SetSpellSound(e, SpellSound(e) or "")
+                else
+                    SetSpellSound(e, nil)
                 end
                 Refresh()
             end)
@@ -466,9 +466,9 @@ function Refresh()
             row.hear:SetShown(CastAheadMatch.Advice(entry) ~= nil)
             local hasAdvice = CastAheadMatch.Advice(entry) ~= nil
             if row.sound then
-                row.inherit:SetShown(hasAdvice)
+                row.override:SetShown(hasAdvice)
                 row.sound:SetShown(hasAdvice)
-                row.inherit:SetChecked(SpellSound(entry) == nil)
+                row.override:SetChecked(SpellSound(entry) ~= nil)
                 row.sound:SetEnabled(SpellSound(entry) ~= nil)
                 row.sound:GenerateMenu()
             end
