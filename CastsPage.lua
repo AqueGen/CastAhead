@@ -341,16 +341,22 @@ local function LayoutEditor()
     local right = width - TableWidth() >= PANEL_W + PANEL_GAP
     editor:ClearAllPoints()
     editor.colB:ClearAllPoints()
+    -- The two halves side by side only where both fit, else one under the other.
+    local sideBySide = not right and width >= 2 * PANEL_W
+    if sideBySide then
+        editor.colB:SetPoint("TOPLEFT", editor.colA, "TOPRIGHT", 20, 0)
+    else
+        editor.colB:SetPoint("TOPLEFT", editor.colA, "BOTTOMLEFT", 0, -10)
+    end
+    local height = sideBySide and 156 or 250
     if right then
         editor:SetPoint("TOPLEFT", scroll, "TOPLEFT", width - PANEL_W, -TABLE_TOP)
-        editor:SetSize(PANEL_W, 270)
-        editor.colB:SetPoint("TOPLEFT", editor.colA, "BOTTOMLEFT", 0, -10)
+        editor:SetSize(PANEL_W, height)
         return 0
     end
     editor:SetPoint("BOTTOMLEFT", scroll, "BOTTOMLEFT", 0, 0)
-    editor:SetSize(width, 150)
-    editor.colB:SetPoint("TOPLEFT", editor.colA, "TOPRIGHT", 20, 0)
-    return 150
+    editor:SetSize(width, height)
+    return height
 end
 
 local function BuildEditor()
@@ -368,7 +374,7 @@ local function BuildEditor()
 
     editor.title = editor:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     editor.title:SetPoint("TOPLEFT", 10, -10)
-    editor.title:SetPoint("TOPRIGHT", -30, -10)
+    editor.title:SetPoint("TOPRIGHT", -110, -10)
     editor.title:SetJustifyH("LEFT")
     editor.title:SetWordWrap(false)
     editor.mob = editor:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -451,7 +457,7 @@ local function BuildEditor()
     })
 
     local reset = CastAheadWindow.Button(editor, "Reset", 70)
-    reset:SetPoint("BOTTOMRIGHT", -10, 10)
+    reset:SetPoint("RIGHT", close, "LEFT", -4, 0)
     reset:SetScript("OnClick", function()
         local e = editor.entry
         for _, field in ipairs({ "spellImportant", "spellMute", "spellSounds", "spellLead" }) do
