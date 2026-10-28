@@ -557,6 +557,33 @@ function ToggleEditor(entry)
     Refresh()
 end
 
+local mobModel
+
+local function ShowMobModel(owner, entry)
+    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    GameTooltip:AddLine(string.format("%s (npc %d)", entry.mob or "?", entry.npc or 0), 0.6, 0.6, 1)
+    GameTooltip:Show()
+    if not entry.npc then return end
+    if not mobModel then
+        mobModel = CreateFrame("PlayerModel", nil, UIParent)
+        mobModel:SetSize(200, 200)
+        mobModel:SetFrameStrata("TOOLTIP")
+        local bg = mobModel:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        bg:SetColorTexture(0, 0, 0, 0.85)
+    end
+    mobModel:ClearAllPoints()
+    mobModel:SetPoint("TOPLEFT", GameTooltip, "BOTTOMLEFT", 0, -2)
+    mobModel:ClearModel()
+    mobModel:SetCreature(entry.npc)
+    mobModel:Show()
+end
+
+local function HideMobModel()
+    GameTooltip:Hide()
+    if mobModel then mobModel:Hide() end
+end
+
 local function CreateHeader(parent, index, column)
     local button = CreateFrame("Button", nil, parent)
     button:SetSize(column.width, HEADER_HEIGHT)
@@ -642,6 +669,22 @@ local function CreateRow(parent, index)
             text:SetJustifyH(column.justify or "LEFT")
             text:SetWordWrap(false)
             row.cells[column.key] = text
+            if column.key == "mob" then
+                -- It takes the mouse over the cell, so a click is handed on to the row.
+                local hover = CreateFrame("Button", nil, row)
+                hover:SetPoint("TOPLEFT", row, "TOPLEFT", x, 0)
+                hover:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", x, 0)
+                hover:SetWidth(column.width)
+                hover:SetScript("OnClick", function() row:Click() end)
+                hover:SetScript("OnEnter", function(self)
+                    row:LockHighlight()
+                    if row.entry then ShowMobModel(self, row.entry) end
+                end)
+                hover:SetScript("OnLeave", function()
+                    row:UnlockHighlight()
+                    HideMobModel()
+                end)
+            end
             if column.key == "cd" then
                 -- A "~" inside the text sits at the top of the line, so it gets
                 -- its own font string, lowered to the middle.
