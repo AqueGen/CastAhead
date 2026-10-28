@@ -12,7 +12,7 @@ W.THEME = {
     muted = { 0.66, 0.68, 0.72 },
     selected = { 0.165, 0.192, 0.251, 1 },
 }
-W.MIN_W, W.MIN_H = 600, 420
+W.MIN_W, W.MIN_H = 460, 420
 W.ICON = "Interface\\AddOns\\CastAhead\\Media\\icon"
 
 local T = W.THEME
@@ -287,15 +287,21 @@ local function PaintDungeons()
     end
 end
 
+-- Up to PER_ROW buttons a row, fewer when the window is narrow, so a dungeon name keeps
+-- room for itself; the grid grows a row and the page below follows its bottom edge.
+local GRID_BUTTON_MIN = 140
 local function LayoutGrid(width)
-    local w = (width - (PER_ROW - 1) * GAP) / PER_ROW
+    local perRow = math.max(1, math.min(PER_ROW, math.floor((width + GAP) / (GRID_BUTTON_MIN + GAP))))
+    local w = (width - (perRow - 1) * GAP) / perRow
     for _, set in ipairs({ { dungeonButtons, grid }, { raidButtons, raidGrid } }) do
         for i, b in ipairs(set[1]) do
             b:SetWidth(w)
             b:ClearAllPoints()
-            b:SetPoint("TOPLEFT", set[2], "TOPLEFT", ((i - 1) % PER_ROW) * (w + GAP),
-                -math.floor((i - 1) / PER_ROW) * (ENTRY_H + GAP))
+            b:SetPoint("TOPLEFT", set[2], "TOPLEFT", ((i - 1) % perRow) * (w + GAP),
+                -math.floor((i - 1) / perRow) * (ENTRY_H + GAP))
         end
+        local rows = math.max(math.ceil(#set[1] / perRow), 1)
+        set[2]:SetHeight(rows * ENTRY_H + (rows - 1) * GAP)
     end
 end
 

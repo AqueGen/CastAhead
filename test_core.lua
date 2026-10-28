@@ -4923,7 +4923,7 @@ do
     check(titleAdded[1] == "Test drive all" and #titleAdded == 1, "the title bar keeps only Test drive all, got " .. table.concat(titleAdded, ","))
     CastAheadUI.ShowTab("Casts")
     local f = CastAheadWindow.Frame()
-    check(f and f.w == 600 and f.h == 420, "a saved size below the minimum opens at the minimum")
+    check(f and f.w == CastAheadWindow.MIN_W and f.h == CastAheadWindow.MIN_H, "a saved size below the minimum opens at the minimum")
     do
         local list
         for _, b in ipairs(made) do
