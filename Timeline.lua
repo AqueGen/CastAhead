@@ -75,9 +75,24 @@ end
 -- nothing of ours shows. "Show in BigWigs bars" sends the same predictions to
 -- its bars over its message bus. That bus is not a documented API, so every
 -- call is guarded: if BigWigs changes it, only the bar is lost.
+-- A sub-option of feeding the timeline, so it follows that switch too.
 local function BigWigsOn()
-    return CastAheadConfig.Get("bigwigsBars") == true and type(BigWigsLoader) == "table"
-        and type(BigWigsLoader.SendMessage) == "function"
+    return CastAheadConfig.Get("bigwigsBars") == true and CastAheadConfig.Enabled("timeline")
+        and type(BigWigsLoader) == "table" and type(BigWigsLoader.SendMessage) == "function"
+end
+
+-- BigWigs enables its core, and with it the bars, only inside an instance it
+-- has modules for; elsewhere the messages reach nothing.
+local function BigWigsLive()
+    return type(BigWigs) == "table" and type(BigWigs.IsEnabled) == "function" and BigWigs:IsEnabled() == true
+end
+
+-- For the samples (test drive, Size and position), which run anywhere: say
+-- why no BigWigs bars appear outside an instance.
+function T.NoteBigWigsAsleep()
+    if BigWigsOn() and not BigWigsLive() then
+        print("|cff33ff99CastAhead|r BigWigs bars show only where BigWigs is running, inside a dungeon or raid.")
+    end
 end
 
 local function SendBigWigs(...)
@@ -86,16 +101,19 @@ local function SendBigWigs(...)
     end
 end
 
--- BigWigs keys a bar by its text, so two mobs on the same spell would share one
--- bar: it goes to the sooner prediction, and only its owner may stop it.
-local barOwners = {}
+-- BigWigs finds a bar by its module and text. Each track passes its own table
+-- as the module, so two mobs on the same spell get a bar each, the way the
+-- timeline shows an icon each. With no option key BigWigs colours the bar by
+-- its defaults and never reads the module; `name` is for anything else that
+-- listens to these messages.
+local function BarModule(track)
+    track.barModule = track.barModule or { name = "CastAhead" }
+    return track.barModule
+end
 
 local function StopBar(track)
     if not track.barText then return end
-    if barOwners[track.barText] == track then
-        SendBigWigs("BigWigs_StopBar", nil, track.barText)
-        barOwners[track.barText] = nil
-    end
+    SendBigWigs("BigWigs_StopBar", BarModule(track), track.barText)
     track.barText, track.barTargetAt = nil, nil
 end
 
@@ -132,12 +150,13 @@ function T.Finish(track)
 end
 
 local function SyncBar(track, targetAt, row, advice, remaining)
-    if not BigWigsOn() then
+    -- Nothing is recorded while BigWigs is not running, so the bar is sent
+    -- once it is rather than counted as already shown.
+    if not (BigWigsOn() and BigWigsLive()) then
         StopBar(track)
         return
     end
-    if track.barText and barOwners[track.barText] == track and track.barTargetAt
-        and math.abs(track.barTargetAt - targetAt) < RETIME_THRESHOLD then
+    if track.barText and track.barTargetAt and math.abs(track.barTargetAt - targetAt) < RETIME_THRESHOLD then
         return
     end
     StopBar(track)
@@ -145,12 +164,9 @@ local function SyncBar(track, targetAt, row, advice, remaining)
     local name = (info and info.name) or row.name or ""
     local text = TimelineName(advice, info, row)
     if name ~= "" and name ~= text then text = text .. ": " .. name end
-    local owner = barOwners[text]
-    if owner and owner.barText == text and owner.barTargetAt and owner.barTargetAt <= targetAt then return end
-    if owner then owner.barText, owner.barTargetAt = nil, nil end
     local icon = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(row.spell)) or (info and info.iconID) or 136243
-    SendBigWigs("BigWigs_StartBar", nil, nil, text, remaining, icon)
-    barOwners[text] = track
+    -- An overdue prediction waits at zero as long as the timeline's does.
+    SendBigWigs("BigWigs_StartBar", BarModule(track), nil, text, remaining, icon, QUEUE_GRACE)
     track.barText, track.barTargetAt = text, targetAt
 end
 
