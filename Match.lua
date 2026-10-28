@@ -417,13 +417,12 @@ M.PlayerCanHandle = function() return true end
 -- The player's own star (true/false), nil when they left it to the curated set.
 M.OwnImportant = function() return nil end
 
--- "Important" means a human curated this cast into the priority set, and the
--- player can act on it. Kept as functions here so the display filter and the
--- sound gate agree on the meaning.
-function M.Important(row)
+-- "Important" means the player's own star when they set one, else a human
+-- curated this cast into the priority set and the player can act on it. Kept
+-- as functions here so the display filter, the sound gate and the Casts page
+-- agree on the meaning.
+function M.Curated(row)
     if M.IsSave(M.Advice(row)) then return true end
-    local own = M.OwnImportant(row.spell)
-    if own ~= nil then return own and M.Advice(row) ~= nil end
     if not row.prio then return false end
     local hides = M.ROLE_HIDES[M.PlayerRole()]
     if hides and hides[row.prio] then return false end
@@ -431,6 +430,12 @@ function M.Important(row)
         return false
     end
     return true
+end
+
+function M.Important(row)
+    local own = M.OwnImportant(row.spell)
+    if own ~= nil then return own and M.Advice(row) ~= nil end
+    return M.Curated(row)
 end
 
 function M.AnyImportant(candidates)
