@@ -403,11 +403,12 @@ local function CreateRow(parent, index)
             text:SetWordWrap(false)
             row.cells[column.key] = text
             if column.key == "mob" then
-                local hover = CreateFrame("Frame", nil, row)
+                -- It takes the mouse over the cell, so a click is handed on to the row.
+                local hover = CreateFrame("Button", nil, row)
                 hover:SetPoint("TOPLEFT", row, "TOPLEFT", x, 0)
                 hover:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", x, 0)
                 hover:SetWidth(column.width)
-                hover:EnableMouseMotion(true)
+                hover:SetScript("OnClick", function() row:Click() end)
                 hover:SetScript("OnEnter", function(self)
                     if row.entry then ShowMobModel(self, row.entry) end
                 end)
