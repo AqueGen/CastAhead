@@ -420,11 +420,12 @@ M.OwnImportant = function() return nil end
 M.ImportantOnly = function() return false end
 
 -- The cast's call is one this character can act on: its role, and the
--- dispels it knows. Curated casts are judged by their curated category,
--- the rest by the call the logs gave them.
-function M.FitsPlayer(row)
-    local advice = M.Advice(row)
-    local key = row.prio or (advice and advice.key)
+-- dispels it knows. Judged by the call the cast actually makes - a dispel
+-- refined to the school it left, a cast the game just declared
+-- interruptible - and by its curated category only when it makes none.
+function M.FitsPlayer(row, interruptible)
+    local advice = M.Advice(row, interruptible)
+    local key = (advice and advice.key) or row.prio
     if not key then return true end
     local hides = M.ROLE_HIDES[M.PlayerRole()]
     if hides and hides[key] then return false end
@@ -467,16 +468,18 @@ end
 -- that is the important set; without it, everything this character can act
 -- on ("My role only"), plus whatever the player starred and every defensive
 -- call.
-function M.Shown(row)
+function M.Shown(row, interruptible)
     if M.ImportantOnly() then return M.Important(row) end
     if M.OwnImportant(row.spell) == true then return M.Advice(row) ~= nil end
-    return M.IsSave(M.Advice(row)) or M.FitsPlayer(row)
+    return M.IsSave(M.Advice(row, interruptible)) or M.FitsPlayer(row, interruptible)
 end
 
-function M.AnyShown(candidates)
+-- `interruptible` is what the game says about the cast going out now, when
+-- there is one; it can turn a statistical verdict into a kick.
+function M.AnyShown(candidates, interruptible)
     if not candidates then return false end
     for i = 1, #candidates do
-        if M.Shown(candidates[i]) then return true end
+        if M.Shown(candidates[i], interruptible) then return true end
     end
     return false
 end

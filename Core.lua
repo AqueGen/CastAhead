@@ -259,9 +259,9 @@ CastAheadMatch.ImportantOnly = ImportantOnly
 
 -- What a run shows and calls: "Important casts only" and "My role only"
 -- each trim it on their own (Match.Shown).
-local function Announceable(candidates)
+local function Announceable(candidates, interruptible)
     if not candidates or #candidates == 0 then return not ImportantOnly() end
-    return CastAheadMatch.AnyShown(candidates)
+    return CastAheadMatch.AnyShown(candidates, interruptible)
 end
 
 -- Only a prediction this solid is worth putting on Blizzard's timeline: one
@@ -1803,7 +1803,7 @@ local function OnCastStart(unit, channel)
     end
     -- Sound fires once, on the cast that needs answering - not on the timer
     -- that led up to it.
-    if state.casting and Announceable(state.casting.candidates) then
+    if state.casting and Announceable(state.casting.candidates, state.interruptible) then
         PlayAdviceSound(CastAheadMatch.ConsensusAdvice(state.casting.candidates, state.interruptible),
             nil, state.casting.candidates)
     end
@@ -2286,7 +2286,7 @@ local function RecordStart(unit, channel)
     local state = plates[unit]
     if not (state and state.castStartAt == GetTime()) then return end
     local casting = state and state.casting
-    local advice = casting and Announceable(casting.candidates)
+    local advice = casting and Announceable(casting.candidates, state.interruptible)
         and CastAheadMatch.ConsensusAdvice(casting.candidates, state.interruptible)
     local target = state and state.spellTarget
     Record("START", unit, channel and 1 or 0, casting and casting.row and casting.row.spell or "-",
@@ -2526,7 +2526,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
                 local before = CastAheadMatch.ConsensusAdvice(state.casting.candidates, was)
                 local advice = CastAheadMatch.ConsensusAdvice(state.casting.candidates, state.interruptible)
                 if advice and advice.label == "KICK" and advice ~= before
-                    and Announceable(state.casting.candidates) then
+                    and Announceable(state.casting.candidates, state.interruptible) then
                     PlayAdviceSound(advice, nil, state.casting.candidates)
                 end
             end
@@ -2706,7 +2706,7 @@ local function CenterPick(now)
     for i = #centerPicks, 1, -1 do centerPicks[i] = nil end
     for unit, state in pairs(plates) do
         local c = state.casting
-        if c and c.endAt and c.endAt > now and Announceable(c.candidates) then
+        if c and c.endAt and c.endAt > now and Announceable(c.candidates, state.interruptible) then
             local advice = CastAheadMatch.ConsensusAdvice(c.candidates, state.interruptible)
             if advice then
                 centerPicks[#centerPicks + 1] = { endAt = c.endAt, advice = advice, row = c.row,
@@ -3568,7 +3568,7 @@ function ProbeCall(row, unit)
     local state = plates[unit]
     local casting = state and state.casting
     row.claimed = casting and casting.row and casting.row.spell or "-"
-    local advice = casting and Announceable(casting.candidates)
+    local advice = casting and Announceable(casting.candidates, state.interruptible)
         and CastAheadMatch.ConsensusAdvice(casting.candidates, state.interruptible)
     row.call = advice and advice.key or "-"
 end
