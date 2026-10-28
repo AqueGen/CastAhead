@@ -265,16 +265,23 @@ local function Announceable(candidates, interruptible)
 end
 
 -- UnitIsUnit("focus", plate) answered a plain boolean in live keys; a Secret answer would silence focus kicks.
+local function FocusState(unit)
+    if not (UnitExists("focus") and UnitCanAttack("player", "focus") and not UnitIsDead("focus")) then
+        return "none"
+    end
+    if not unit then return "other" end
+    local same = UnitIsUnit("focus", unit)
+    if issecretvalue and issecretvalue(same) then return "secret" end
+    return same == true and "this" or "other"
+end
+
 local function KickVoiceAllowed(unit, candidates, advice)
     if not advice or advice.label ~= "KICK" or not CastAheadConfig.Enabled("kickImportantOnly") then
         return true
     end
     if not CastAheadMatch.AnyImportant(candidates) then return false end
-    if not (UnitExists("focus") and UnitCanAttack("player", "focus") and not UnitIsDead("focus")) then return true end
-    if not unit then return false end
-    local same = UnitIsUnit("focus", unit)
-    if issecretvalue and issecretvalue(same) then return false end
-    return same == true
+    local focus = FocusState(unit)
+    return focus == "none" or focus == "this"
 end
 
 -- Only a prediction this solid is worth putting on Blizzard's timeline: one
@@ -536,6 +543,46 @@ local function PlayAdviceSound(advice, lead, candidates)
     -- want it at all.
     if lead and CastAheadConfig.LeadFor(candidates) <= 0 and not CastAheadMatch.IsSave(advice) then return end
     Alert(advice, lead, candidates, CastAheadConfig.Enabled("voice"))
+end
+
+local function KickTrace(unit, kind, state, candidates, spell, interruptible, advice)
+    if not CastAheadConfig.Dev() then return end
+    local isKick = advice and (advice.label == "KICK" or advice.key == "KICK")
+    local hasKickRow = false
+    for _, row in ipairs(candidates or {}) do
+        if row.prio == "KICK" then hasKickRow = true end
+    end
+    local now = GetTime()
+    if not candidates then
+        if state.kickTraceAt and now - state.kickTraceAt < 2 then return end
+        state.kickTraceAt = now
+    elseif not (isKick or hasKickRow) then
+        return
+    end
+    local focus = FocusState(unit)
+    local reason
+    if not candidates then
+        reason = "skip:unclaimed"
+    elseif not Announceable(candidates, interruptible) then
+        reason = "skip:not-shown"
+    elseif not (advice and advice.label == "KICK") then
+        reason = "skip:not-kick"
+    elseif CastAheadConfig.Enabled("kickImportantOnly") and not CastAheadMatch.AnyImportant(candidates) then
+        reason = "skip:gate:not-important"
+    elseif CastAheadConfig.Enabled("kickImportantOnly") and focus == "other" then
+        reason = "skip:gate:focus-other"
+    elseif CastAheadConfig.Enabled("kickImportantOnly") and focus == "secret" then
+        reason = "skip:gate:focus-secret"
+    elseif not CastAheadConfig.Enabled("sound") or CastAheadConfig.AllMuted(candidates) then
+        reason = "skip:sound-off"
+    else
+        reason = "played"
+    end
+    local important = candidates and (CastAheadMatch.AnyImportant(candidates) and "yes" or "no") or "-"
+    print("|cff33ff99CastAhead|r kick voice: " .. unit .. " " .. kind
+        .. " claimed=" .. (candidates and tostring(spell) or "-")
+        .. " advice=" .. (advice and advice.key or "-")
+        .. " important=" .. important .. " focus=" .. focus .. " -> " .. reason)
 end
 
 -- Creature identity ---------------------------------------------------------
@@ -1818,6 +1865,11 @@ local function OnCastStart(unit, channel)
             endAt = now + CastAheadMatch.BestGuess(candidates).cast,
         }
     end
+    if CastAheadConfig.Dev() then
+        local c = state.casting
+        KickTrace(unit, channel and "chan" or "cast", state, c and c.candidates, c and c.row.spell,
+            state.interruptible, c and CastAheadMatch.ConsensusAdvice(c.candidates, state.interruptible))
+    end
     -- Sound fires once, on the cast that needs answering - not on the timer
     -- that led up to it.
     if state.casting and Announceable(state.casting.candidates, state.interruptible) then
@@ -2555,6 +2607,10 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
                 -- every kickable cast is announced twice.
                 local before = CastAheadMatch.ConsensusAdvice(state.casting.candidates, was)
                 local advice = CastAheadMatch.ConsensusAdvice(state.casting.candidates, state.interruptible)
+                if advice and advice.label == "KICK" and advice ~= before then
+                    KickTrace(unit, "late", state, state.casting.candidates, state.casting.row.spell,
+                        state.interruptible, advice)
+                end
                 if advice and advice.label == "KICK" and advice ~= before
                     and Announceable(state.casting.candidates, state.interruptible)
                     and KickVoiceAllowed(unit, state.casting.candidates, advice) then
@@ -2980,6 +3036,10 @@ frame:SetScript("OnUpdate", function()
                                 if isSave and remaining <= saveLead or not isSave and remaining <= lead then
                                     entry.track.warned = true
                                     Record("HEADS", unit, heads and heads.key or "-", Ids(entry.candidates))
+                                    if heads and heads.label == "KICK" then
+                                        KickTrace(unit, "soon", state, entry.candidates,
+                                            CastAheadMatch.BestGuess(entry.candidates).spell, nil, heads)
+                                    end
                                     if KickVoiceAllowed(unit, entry.candidates, heads) then
                                         PlayAdviceSound(heads, true, entry.candidates)
                                     end

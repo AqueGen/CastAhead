@@ -1426,6 +1426,41 @@ do
     check(heard[1] and heard[1]:find("KICK_IMPORTANT_soon%.ogg$"), "kick voice: heads-up uses the important kick clip")
     PlaySoundFile = realPlay
 
+    date = date or os.date
+    UnitGUID = UnitGUID or function() return "Player-1" end
+    local realPrint, traced = print, {}
+    local function traceRun(dev, length, claimed)
+        traced = {}
+        print = function(text) if tostring(text):find("kick voice:", 1, true) then traced[#traced + 1] = text end end
+        local settings = { importantOnly = false, leadSeconds = 0, devMode = dev or nil }
+        if claimed then
+            kickAlerts(settings, length)
+        else
+            CastAheadDB = settings
+            enter()
+            fire("UNIT_SPELLCAST_START", unit)
+            advance(0.1)
+            fire("UNIT_SPELLCAST_STOP", unit)
+            reset()
+        end
+        print = realPrint
+        return traced[#traced]
+    end
+    hostile.focus, focusIs = nil, nil
+    check(traceRun(false, 3.5, true) == nil, "kick trace: nothing printed without Development mode")
+    local line = traceRun(true, 3.5, true)
+    check(line and line:find("claimed=982", 1, true) and line:find("focus=none", 1, true)
+        and line:find("-> played", 1, true), "kick trace: important claimed kick plays, got " .. tostring(line))
+    hostile.focus, focusIs = true, false
+    line = traceRun(true, 3.5, true)
+    check(line and line:find("-> skip:gate:focus-other", 1, true), "kick trace: other focus skips, got " .. tostring(line))
+    hostile.focus, focusIs = nil, nil
+    line = traceRun(true, 0, false)
+    check(line and line:find("-> skip:unclaimed", 1, true), "kick trace: unclaimed start skips, got " .. tostring(line))
+    CastAheadDB = {}
+    CastAheadCore.ApplyDevMode()
+    CastAheadCore.Probe("clear")
+
     UnitIsUnit = nil
     CastAheadDB = { leadSeconds = 5 }
     for _ = 1, 4 do table.remove(CastAheadData[1877]) end
