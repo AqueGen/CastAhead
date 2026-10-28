@@ -151,16 +151,6 @@ local SWITCHES = {
         tip = "In raids, call a defensive for a dangerous boss debuff on you, timed to when its damage hits in top-player fights. Does not need the dungeon switch." },
     burstCalls = { label = "Burst windows", defaultOff = true,
         tip = "On bosses with a phase worth bursting into, say \"burst now\" when it starts, with a countdown in the centre block, and \"burst soon\" ahead of it if the slider below is set. Healers get their own phases for group-healing cooldowns. On every other boss it stays silent: press on cooldown." },
-    kickSpike = { label = "Kicks and CC (experimental)", defaultOff = true,
-        tip = "A panel with each party member's interrupt and its cooldown, and below it a bar for every stun, fear or incapacitate on enemy nameplates. Shown only in a party of up to five, not solo or in a raid group. Drag it to move it. Another player's kick shows only when it lands, unless the game lets the addon read their cast; a missed kick stays hidden. Same as /ca kicks." },
-    kickRows = { label = "Kick rows",
-        tip = "The party's interrupts and their cooldowns at the top of the panel." },
-    kickDefs = { label = "Party defensives",
-        tip = "A bar while a big group cooldown or an external is up: Rallying Cry, Anti-Magic Zone, Darkness, Pain Suppression and the like, on you or on a party member. It shows what is up now, not when it comes back." },
-    kickCC = { label = "Crowd control bars",
-        tip = "A bar for every stun, fear or incapacitate on enemy nameplates, under the kick rows." },
-    kickProbe = { label = "Record kick data",
-        tip = "While recording, write to the key journal whether the game let the addon read who kicked, party casts and the meter's interrupts." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
         tip = "A panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. Only while recording. The key bindings and /ca mark work without it." },
 }
@@ -451,7 +441,7 @@ function BuildGeneral(panel)
     local centre = BuildGroup(panel, "Centre call", 70)
     BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 }, OutputChanged)
 
-    local features = BuildGroup(panel, "Features", 370)
+    local features = BuildGroup(panel, "Features", 230)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", features, "TOPLEFT", 10, -26 }, function()
         SaveRefresh()
         CastAheadOptions.RefreshDefensives()
@@ -500,27 +490,6 @@ function BuildGeneral(panel)
         end,
     })
     table.insert(refreshers, PaintRaid)
-    local kickRows, kickDefs, kickCC
-    local function PaintKicks()
-        local on = SwitchOn("kickSpike")
-        local color = on and { 1, 1, 1 } or T.muted
-        for _, child in ipairs({ kickRows, kickDefs, kickCC }) do
-            child:SetEnabled(on)
-            child.text:SetTextColor(unpack(color))
-        end
-    end
-    local function KicksChanged()
-        if CastAheadKicks then CastAheadKicks.Apply() end
-        PaintKicks()
-    end
-    local kicks = BuildSwitch(panel, "kickSpike", { "TOPLEFT", burstSoon, "BOTTOMLEFT", -28, -20 }, KicksChanged)
-    kickRows = BuildSwitch(panel, "kickRows", { "TOPLEFT", kicks, "BOTTOMLEFT", 16, -4 }, KicksChanged)
-    kickDefs = BuildSwitch(panel, "kickDefs", { "TOPLEFT", kickRows, "BOTTOMLEFT", 0, -4 }, KicksChanged)
-    kickCC = BuildSwitch(panel, "kickCC", { "TOPLEFT", kickDefs, "BOTTOMLEFT", 0, -4 }, KicksChanged)
-    for _, child in ipairs({ kickRows, kickDefs, kickCC }) do
-        if child.SetMotionScriptsWhileDisabled then child:SetMotionScriptsWhileDisabled(true) end
-    end
-    table.insert(refreshers, PaintKicks)
 
     -- A Test button at the right end of a feature's row shows that feature alone.
     local function TestButton(switch, indent, tip, run)
@@ -541,12 +510,6 @@ function BuildGeneral(panel)
         function() return CastAheadCore.FeatureTest("defensive") end)
     TestButton(bursts, 16, "A sample \"burst soon\", then \"burst now\" with its countdown.",
         function() return CastAheadCore.FeatureTest("burst") end)
-    TestButton(kicks, 0, "A made-up key group whose kicks go on cooldown in turn, and sample crowd control bars - whichever of the two is switched on below. Press again to stop.",
-        function()
-            if not (CastAheadKicks and CastAheadKicks.Active()) then return false end
-            CastAheadKicks.Demo(not CastAheadKicks.Demoing())
-            return true
-        end)
 
     local extra = BuildGroup(panel, "Advanced", 97)
     local dev = BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
@@ -588,14 +551,13 @@ function BuildDevelopment(panel)
     end)
 
     panel.flowTop = function() return 6 + intro:GetStringHeight() + 12 end
-    local recording = BuildGroup(panel, "Recording", 128)
+    local recording = BuildGroup(panel, "Recording", 100)
     local recordAll = BuildSwitch(panel, "recordAll", { "TOPLEFT", recording, "TOPLEFT", 10, -26 }, function()
         if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
     end)
-    local markPanel = BuildSwitch(panel, "showMarkPanel", { "TOPLEFT", recordAll, "BOTTOMLEFT", 0, -4 }, function()
+    BuildSwitch(panel, "showMarkPanel", { "TOPLEFT", recordAll, "BOTTOMLEFT", 0, -4 }, function()
         if CastAheadReport then CastAheadReport.Refresh() end
     end)
-    BuildSwitch(panel, "kickProbe", { "TOPLEFT", markPanel, "BOTTOMLEFT", 0, -4 })
 
     local group = BuildGroup(panel, "Recorded enemy data", 62)
     local show = DevButton(panel, "Show", 70, { "TOPLEFT", group, "TOPLEFT", 16, -28 },

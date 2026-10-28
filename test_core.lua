@@ -332,7 +332,6 @@ dofile("CastsPage.lua")
 dofile("SavesPage.lua")
 dofile("UI.lua")
 dofile("Core.lua")
-dofile("Kicks.lua")
 dofile("Setup.lua")
 dofile("Recorder.lua")
 dofile("ReportWindow.lua")
@@ -4793,7 +4792,7 @@ do
         check(raidSaves.text.color == "muted" and bursts.text.color == "muted", "and their labels are greyed")
         check(raidSaves.motionWhileDisabled == true and bursts.motionWhileDisabled == true,
             "the children keep their tooltips while disabled")
-        check(offHeight == 370, "the Features group keeps its height with the burst slider, got " .. tostring(offHeight))
+        check(offHeight == 230, "the Features group keeps its height with the burst slider, got " .. tostring(offHeight))
         CastAheadDB = { raidMode = true }
         CastAheadOptions.ShowPanel(host, "General")
         check(raidSaves.enabled == true and bursts.enabled == true, "with the raid switch on its two children are enabled")
@@ -6281,9 +6280,6 @@ end
         check(f.centerX and f.centerX.center and f.centerY.center and f.nudgeX and not f.nudgeX.center,
             "panel: only the centre's X and Y carry Center buttons")
         check(height and height <= 728, "panel: the panel fits under the top-right corner at UI scale 1, got " .. tostring(height))
-        check(f.kickX and f.kickX.label.value == "X (px)" and f.kickY and f.kickY.label.value == "Y (px)"
-            and f.kickScale and f.kickScale.label.value == "Size (%)" and panel.kickGrow,
-            "panel: the kicks block has X, Y, Size and the grow button")
         do
             local function inside(widget, box)
                 while widget do
@@ -6653,69 +6649,6 @@ end)();
     removePlate("nameplate4")
     panel.RegisterEvent, panel.UnregisterEvent = nil, nil
     CastAheadDB, InCombatLockdown, UIParent, W.Frame, W.Current, W.Show, C_NamePlate.GetNamePlateForUnit = unpack(saved, 1, 7)
-end)()
-
-;(function()
-    local K = CastAheadKicks
-    local saved = { IsInGroup, IsInRaid, UnitClass, UnitName, CastAheadConfig.Get("kickSpike") }
-    local group, raid = false, false
-    IsInGroup = function() return group end
-    IsInRaid = function() return raid end
-    UnitClass = function() return "Warrior", "WARRIOR" end
-    UnitName = function() return "Me" end
-    CastAheadConfig.Set("kickSpike", true)
-    K.Paint()
-    check(not K.panel.shown, "kicks: solo hides the panel")
-    group = true
-    K.Paint()
-    check(K.panel.shown, "kicks: a party shows the panel")
-    raid = true
-    K.Paint()
-    check(not K.panel.shown, "kicks: a raid group hides the panel")
-    K.Demo(true)
-    check(K.panel.shown, "kicks: the demo shows even in a raid group")
-    K.Demo(false)
-    check(not K.panel.shown, "kicks: ending the demo in a raid group hides the panel again")
-    IsInGroup, IsInRaid, UnitClass, UnitName = saved[1], saved[2], saved[3], saved[4]
-    CastAheadConfig.Set("kickSpike", saved[5])
-end)()
-
-;(function()
-    local K = CastAheadKicks
-    local saved = { UnitExists, UnitClass, UnitName, C_DamageMeter, Enum, CastAheadConfig.Get("kickSpike"), IsInGroup, IsInRaid }
-    IsInGroup = function() return true end
-    IsInRaid = function() return false end
-    local classes = { player = "MAGE", party1 = "WARRIOR", party2 = "ROGUE", party3 = "ROGUE", party4 = "MAGE" }
-    UnitExists = function(unit) return classes[unit] ~= nil end
-    UnitClass = function(unit) return classes[unit], classes[unit] end
-    UnitName = function(unit) return unit end
-    Enum = setmetatable({ DamageMeterType = { Interrupts = 5 }, DamageMeterSessionType = { Current = 1 } },
-        { __index = saved[5] })
-    local sources = {
-        { classFilename = "WARRIOR", totalAmount = 2 },
-        { classFilename = "ROGUE", totalAmount = 1 },
-        { classFilename = "MAGE", isLocalPlayer = true, totalAmount = 4 },
-        { classFilename = "MAGE", totalAmount = 3 },
-    }
-    C_DamageMeter = { GetCombatSessionFromType = function() return { combatSources = sources } end }
-    CastAheadConfig.Set("kickSpike", true)
-    K.Roster()
-    local function count(unit)
-        for _, m in ipairs(K.Members()) do
-            if m.unit == unit then return m.counted and m.count end
-        end
-    end
-    K.OnEvent("DAMAGE_METER_COMBAT_SESSION_UPDATED", 5)
-    check(count("party1") == 2, "kicks: the only warrior takes the warrior's meter count")
-    check(not count("party2") and not count("party3"), "kicks: two rogues, neither takes the count")
-    check(not count("player"), "kicks: your own row keeps the timer, no count")
-    check(count("party4") == 3, "kicks: the other mage takes the count when you are a mage too")
-    K.OnEvent("PLAYER_REGEN_DISABLED")
-    check(not count("party1"), "kicks: a new pull clears the counts")
-    UnitExists, UnitClass, UnitName, C_DamageMeter, Enum = saved[1], saved[2], saved[3], saved[4], saved[5]
-    CastAheadConfig.Set("kickSpike", saved[6])
-    K.Roster()
-    IsInGroup, IsInRaid = saved[7], saved[8]
 end)()
 
 ;(function()

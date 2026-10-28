@@ -17,8 +17,7 @@ local TIMELINE_LEAD = 5
 local HINT = "Change the numbers here; the icons and the centre call show the result."
 local TIMELINE_NOTE = "Move it in the game's Edit Mode: Esc > Edit Mode."
 local RESET_KEYS = { "anchor", "grow", "offsetX", "nudgeX", "nudgeY", "iconSize", "labelScale", "timeScale",
-                     "iconGap", "fixedSpacing", "strata", "centerX", "centerY", "centerScale", "centerTextScale",
-                     "kickX", "kickY", "kickScale", "kickGrow" }
+                     "iconGap", "fixedSpacing", "strata", "centerX", "centerY", "centerScale", "centerTextScale" }
 local PANEL_W, PAD, ROW_H, LABEL_W = 310, 12, 24, 92
 local HALF_SCREEN_FALLBACK = 1000
 local GUESS = "Sample size is a guess until a real nameplate is seen."
@@ -225,28 +224,11 @@ local FIELDS = {
     centerTextScale = Ranged("centerTextScale", C.CENTER_TEXT_DEFAULT, C.CENTER_TEXT_MIN, C.CENTER_TEXT_MAX, 1, true),
 }
 
--- The party kicks and CC panel: its starting corner from the screen centre, and its size.
-local function KickAxis(key, default, getter)
-    return {
-        step = 1, kicks = true,
-        read = function() return CastAheadConfig.Number(key, default, -4000, 4000) end,
-        write = function(v) CastAheadConfig.Set(key, Clamp(v, HalfScreen(getter))) end,
-    }
-end
-if CastAheadKicks then
-    local K = CastAheadKicks
-    FIELDS.kickX = KickAxis("kickX", K.X_DEFAULT, "GetWidth")
-    FIELDS.kickY = KickAxis("kickY", K.Y_DEFAULT, "GetHeight")
-    FIELDS.kickScale = Ranged("kickScale", K.SCALE_DEFAULT, K.SCALE_MIN, K.SCALE_MAX, 5)
-    FIELDS.kickScale.kicks = true
-end
-
 local function Refresh()
     if not panel.fields then return end
     for key, field in pairs(panel.fields) do
         if not field.box:HasFocus() then field.box:SetText(tostring(Round(FIELDS[key].read()))) end
     end
-    if panel.kickGrow then panel.kickGrow:SetText(CastAheadKicks.GrowsUp() and "Up" or "Down") end
     for key, widgets in pairs(blocks) do
         local on = CastAheadConfig.Enabled(key)
         if lit[key] ~= on then
@@ -259,9 +241,7 @@ end
 CastAheadSetup.Refresh = Refresh
 
 local function Apply(key)
-    if FIELDS[key].kicks then
-        CastAheadKicks.Apply()
-    elseif FIELDS[key].center then
+    if FIELDS[key].center then
         CastAheadCore.ResizeCenter()
     else
         CastAheadCore.Reapply()
@@ -313,25 +293,7 @@ local function CancelTimeline()
     for _, track in pairs(tracks) do CastAheadTimeline.Cancel(track) end
 end
 
--- The kicks panel shows its demo group while this panel is open, so there is something to place.
-local kicksDemo = false
-
-local function KicksSample(on)
-    if not CastAheadKicks then return end
-    CastAheadKicks.Apply()
-    local want = on and CastAheadKicks.Active()
-    CastAheadKicks.SetEditing(want)
-    if want and not CastAheadKicks.Demoing() then
-        CastAheadKicks.Demo(true)
-        kicksDemo = true
-    elseif not want and kicksDemo then
-        CastAheadKicks.Demo(false)
-        kicksDemo = false
-    end
-end
-
 local function Outputs()
-    KicksSample(true)
     CastAheadCore.Reapply()
     CastAheadCore.ShowCenterSample(true)
     if CastAheadConfig.Enabled("timeline") then FeedTimeline(GetTime()) else CancelTimeline() end
@@ -464,26 +426,6 @@ local function BuildBody(W, T)
     panel.note = note
     y = 8 + note:GetStringHeight()
     Close(line)
-
-    -- A column of its own left of the panel, so the panel still fits a 768 px tall screen.
-    if not FIELDS.kickX then return end
-    local kicks = Box("kickSpike", "Party kicks and CC")
-    kicks:SetPoint("TOPRIGHT", panel, "TOPLEFT", -BOX_GAP, 0)
-    panel.kicksBox = kicks
-    Number("kickX", "X (px)")
-    Number("kickY", "Y (px)")
-    Number("kickScale", "Size (%)")
-    Label("Direction")
-    local grow = W.Button(content, "Down", 70)
-    grow:SetPoint("TOPLEFT", content, "TOPLEFT", LABEL_W, -y)
-    grow:SetScript("OnClick", function()
-        CastAheadConfig.Set("kickGrow", not CastAheadKicks.GrowsUp() and "UP" or nil)
-        CastAheadKicks.Apply()
-        Refresh()
-    end)
-    panel.kickGrow = grow
-    y = y + ROW_H
-    Close(kicks)
 end
 
 local function Build()
@@ -526,7 +468,6 @@ StaticPopupDialogs.CASTAHEAD_SETUP_RESET = {
     button2 = NO or "No",
     OnAccept = function()
         for _, key in ipairs(RESET_KEYS) do CastAheadConfig.Set(key, nil) end
-        if CastAheadKicks then CastAheadKicks.Apply() end
         CastAheadCore.Reapply()
         CastAheadCore.ResizeCenter()
         Refresh()
@@ -570,7 +511,6 @@ function CastAheadSetup.Enter()
     CastAheadCore.ShowCenterSample(true)
     FeedTimeline(GetTime())
     if CastAheadTimeline then CastAheadTimeline.NoteBigWigsAsleep() end
-    KicksSample(true)
     for _, event in ipairs(EVENTS) do panel:RegisterEvent(event) end
     panel:EnableKeyboard(true)
     if not panel.fields then Build() end
@@ -592,7 +532,6 @@ function CastAheadSetup.Leave()
     CastAheadCore.Reapply()
     CastAheadCore.ShowCenterSample(false)
     CancelTimeline()
-    KicksSample(false)
     if StaticPopup_Hide then StaticPopup_Hide("CASTAHEAD_SETUP_RESET") end
     panel:Hide()
     if page then CastAheadWindow.Show(page) end
