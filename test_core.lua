@@ -6783,10 +6783,13 @@ end)()
 -- message bus, one bar per mob, only while BigWigs is running.
 ;(function()
     local savedDB, savedLoader, savedBigWigs = CastAheadDB, BigWigsLoader, BigWigs
-    local sent, running = {}, true
+    local savedFeature = C_EncounterTimeline and C_EncounterTimeline.IsFeatureEnabled
+    local sent, running, gameTimeline = {}, true, false
     BigWigsLoader = { SendMessage = function(_, msg, module, ...) sent[#sent + 1] = { msg = msg, module = module, args = { ... } } end }
     BigWigs = { IsEnabled = function() return running end }
-    CastAheadDB = { bigwigsBars = true }
+    C_EncounterTimeline = C_EncounterTimeline or {}
+    C_EncounterTimeline.IsFeatureEnabled = function() return gameTimeline end
+    CastAheadDB = {}
     local TL, now = CastAheadTimeline, GetTime()
     local row, advice = { spell = 100, name = "Big" }, CastAheadMatch.ADVICE.AOE
     local first, second = {}, {}
@@ -6809,15 +6812,19 @@ end)()
     TL.Sync(first, now + 5, row, advice, false)
     check(#sent == 4, "bigwigs: an unsure prediction gets no bar")
     TL.Sync(first, now + 10, row, advice, true)
-    CastAheadDB.bigwigsBars = nil
+    CastAheadDB.bigwigsBars = false
     TL.Sync(first, now + 10, row, advice, true)
     check(#sent == 6 and sent[6].msg == "BigWigs_StopBar", "bigwigs: switching it off takes the bar down")
     TL.Sync(first, now + 12, row, advice, true)
-    check(#sent == 6, "bigwigs: off by default, nothing is sent")
-    CastAheadDB = { bigwigsBars = true, timeline = false }
+    check(#sent == 6, "bigwigs: switched off, nothing is sent")
+    CastAheadDB = { timeline = false }
     TL.Sync({}, now + 10, row, advice, true)
     check(#sent == 6, "bigwigs: it follows the Feed the Blizzard timeline switch")
-    CastAheadDB = { bigwigsBars = true }
+    CastAheadDB = {}
+    gameTimeline = true
+    TL.Sync({}, now + 10, row, advice, true)
+    check(#sent == 6, "bigwigs: with the game's timeline showing, no bars on top of it")
+    gameTimeline = false
     running = false
     local early = {}
     TL.Sync(early, now + 10, row, advice, true)
@@ -6829,6 +6836,7 @@ end)()
     local ok = pcall(TL.Sync, {}, now + 10, row, advice, true)
     check(ok, "bigwigs: a changed BigWigs fails quietly")
     CastAheadDB, BigWigsLoader, BigWigs = savedDB, savedLoader, savedBigWigs
+    C_EncounterTimeline.IsFeatureEnabled = savedFeature
 end)()
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))

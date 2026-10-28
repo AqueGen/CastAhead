@@ -75,9 +75,13 @@ end
 -- nothing of ours shows. "Show in BigWigs bars" sends the same predictions to
 -- its bars over its message bus. That bus is not a documented API, so every
 -- call is guarded: if BigWigs changes it, only the bar is lost.
--- A sub-option of feeding the timeline, so it follows that switch too.
+-- On by default, as a stand-in for the timeline: it follows that switch, and
+-- runs only while the game's timeline is off, so a player who turned
+-- BigWigs' Blizzard timeline back on does not see every prediction twice.
 local function BigWigsOn()
-    return CastAheadConfig.Get("bigwigsBars") == true and CastAheadConfig.Enabled("timeline")
+    local gameTimeline = C_EncounterTimeline and C_EncounterTimeline.IsFeatureEnabled
+        and C_EncounterTimeline.IsFeatureEnabled()
+    return CastAheadConfig.Enabled("bigwigsBars") and CastAheadConfig.Enabled("timeline") and not gameTimeline
         and type(BigWigsLoader) == "table" and type(BigWigsLoader.SendMessage) == "function"
 end
 
