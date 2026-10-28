@@ -408,12 +408,15 @@ local function CreateRow(parent, index)
                 hover:SetPoint("TOPLEFT", row, "TOPLEFT", x, 0)
                 hover:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", x, 0)
                 hover:SetWidth(column.width)
-                hover:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
                 hover:SetScript("OnClick", function() row:Click() end)
                 hover:SetScript("OnEnter", function(self)
+                    row:LockHighlight()
                     if row.entry then ShowMobModel(self, row.entry) end
                 end)
-                hover:SetScript("OnLeave", HideMobModel)
+                hover:SetScript("OnLeave", function()
+                    row:UnlockHighlight()
+                    HideMobModel()
+                end)
             end
         end
     end
