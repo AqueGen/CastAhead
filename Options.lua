@@ -397,27 +397,10 @@ function BuildGeneral(panel)
     -- while the entries cannot be seen, and says what to do; the BigWigs
     -- switch only with BigWigs installed.
     local timelineOff = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    timelineOff:SetWidth(COL_W - 30)
+    timelineOff:SetWidth(520)
     timelineOff:SetJustifyH("LEFT")
     timelineOff:SetTextColor(1, 0.5, 0.2)
-    function PaintTimelineOff()
-        local off = C_EncounterTimeline and C_EncounterTimeline.IsFeatureEnabled
-            and not C_EncounterTimeline.IsFeatureEnabled()
-        local bigWigs = type(BigWigsLoader) == "table"
-        bigwigs:SetShown(bigWigs)
-        timelineOff:ClearAllPoints()
-        timelineOff:SetPoint("TOPLEFT", bigWigs and bigwigs or timeline, "BOTTOMLEFT", 4, -2)
-        local text = " "
-        if off and bigWigs and not CastAheadConfig.Enabled("bigwigsBars") then
-            text = "BigWigs has the game's timeline off: tick Show in BigWigs bars, or turn on its Blizzard timeline."
-        elseif off and not bigWigs then
-            text = "The game's timeline is switched off."
-        end
-        timelineOff:SetText(text)
-    end
-    PaintTimelineOff()
-    table.insert(refreshers, PaintTimelineOff)
-    BuildSlider(panel, {
+    local _, leadLabel = BuildSlider(panel, {
         key = "leadSeconds",
         default = CastAheadConfig.LEAD_DEFAULT,
         min = 0, max = CastAheadConfig.LEAD_MAX,
@@ -429,6 +412,31 @@ function BuildGeneral(panel)
                 or "Early warning: off"
         end,
     })
+    -- The box is as tall as what it holds: the warning line takes room only while it
+    -- has something to say, and the slider moves up under the switches when it does not
+    function PaintTimelineOff()
+        local off = C_EncounterTimeline and C_EncounterTimeline.IsFeatureEnabled
+            and not C_EncounterTimeline.IsFeatureEnabled()
+        local bigWigs = type(BigWigsLoader) == "table"
+        bigwigs:SetShown(bigWigs)
+        local last = bigWigs and bigwigs or timeline
+        local text
+        if off and bigWigs and not CastAheadConfig.Enabled("bigwigsBars") then
+            text = "BigWigs has the game's timeline off: tick Show in BigWigs bars, or turn on its Blizzard timeline."
+        elseif off and not bigWigs then
+            text = "The game's timeline is switched off."
+        end
+        timelineOff:ClearAllPoints()
+        timelineOff:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 4, -2)
+        timelineOff:SetText(text or "")
+        timelineOff:SetShown(text ~= nil)
+        leadLabel:ClearAllPoints()
+        leadLabel:SetPoint("TOPLEFT", text and timelineOff or last, "BOTTOMLEFT", text and 2 or 6, -10)
+        local switches = bigWigs and 4 or 3
+        what:SetHeight(26 + switches * 26 + (text and timelineOff:GetStringHeight() + 2 or 0) + 92)
+    end
+    PaintTimelineOff()
+    table.insert(refreshers, PaintTimelineOff)
 
     local audio = BuildGroup(panel, "Sound", 100)
     local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 }, RedrawAndSaves)
