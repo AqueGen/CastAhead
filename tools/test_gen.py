@@ -19,6 +19,14 @@ def test_the_curated_flag_sits_between_the_game_and_the_log():
     assert choose_targeted([23, 23], [5, 5], False, False) is True
 
 
+def test_a_stray_game_reading_yields_to_a_majority_the_other_sources_confirm():
+    assert choose_targeted([129, 0], [15, 1], False, False) is False
+    assert choose_targeted([99, 99], [18, 17], False, True) is True
+    assert choose_targeted([15, 0], [16, 1], False) is False
+    assert choose_targeted([40, 0], [10, 5], False, False) == MIXED
+    assert choose_targeted([40, 0], [15, 1], True) == MIXED
+
+
 def test_targeted_needs_a_clear_majority_and_samples():
     assert targeted(None) is None
     assert targeted([4, 4]) is None

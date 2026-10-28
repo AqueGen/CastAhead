@@ -35,6 +35,7 @@ APPROX_SUPPORT = 0.5    # fewer intervals than this share fit the schedule -> ap
 ROTATION_GAIN = 0.10    # a rotation must predict this much more than one flat cooldown
 MIN_TARGET_SAMPLES = 5
 MIN_GAME_TARGET_SAMPLES = 3
+GAME_MAJORITY = 0.85    # the probe join can swap the readings of two casts ~1 s apart
 TARGET_MARGIN = 0.05    # a spell with a target on more than 5% and fewer than 95% of casts is left unknown
 MIXED = "mixed"
 FRESH_RUN = re.compile(r"#0\+*$")
@@ -180,7 +181,14 @@ def choose_targeted(logged, observed, channel, curated=None):
     curated flag is a game reading too; the log names a creature as the target of a cast
     the game shows without one (Devour)."""
     if observed and observed[0] >= MIN_GAME_TARGET_SAMPLES:
-        return targeted(observed, MIN_GAME_TARGET_SAMPLES)
+        said = targeted(observed, MIN_GAME_TARGET_SAMPLES)
+        if said == MIXED:
+            share = observed[1] / observed[0]
+            lean = True if share >= GAME_MAJORITY else False if share <= 1 - GAME_MAJORITY else None
+            other = curated if curated is not None else None if channel else targeted(logged)
+            if lean is not None and other is lean:
+                return lean
+        return said
     if curated is not None:
         return curated
     return None if channel else targeted(logged)
