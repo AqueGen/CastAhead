@@ -223,8 +223,10 @@ local function OnMeter(meterType)
     for i, s in ipairs(sources) do
         local amount, guid = s.totalAmount, s.sourceGUID
         fields[i] = tostring(s.classFilename or "?") .. ":" .. K.State(s.specIconID) .. ":" .. K.State(amount) .. ":" .. K.State(guid)
-        -- The count may be secret: only the row's font string reads it.
-        local m = K.MemberFor(s)
+        -- The count may be secret: only the row's font string reads it. The
+        -- demo counts its made-up members itself, with arithmetic a secret
+        -- count would break.
+        local m = not demo and K.MemberFor(s)
         if m and m.unit ~= "player" then m.count, m.counted = amount, true end
         if not Secret(amount) and not Secret(guid) and guid and type(amount) == "number" then
             local last = meterSeen[guid] or 0
