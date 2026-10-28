@@ -1340,6 +1340,97 @@ check(Alerts() == 1, string.format("one KICK call per cast, not one per event, g
 fire("UNIT_SPELLCAST_STOP", unit)
 reset()
 
+do
+    table.insert(CastAheadData[1877], { spell = 981, npc = 13, mob = "Kicker", name = "Plain", cast = 2.0,
+        cd = { 30.0 }, first = 5.0, kick = 0.5, cc = 0, kickable = true })
+    table.insert(CastAheadData[1877], { spell = 982, npc = 13, mob = "Kicker", name = "Starred", cast = 3.5,
+        cd = { 30.0 }, first = 5.0, kick = 0.5, cc = 0, kickable = true, prio = "KICK" })
+    table.insert(CastAheadData[1877], { spell = 984, npc = 13, mob = "Kicker", name = "Wide", cast = 8.5,
+        cd = { 30.0 }, first = 5.0, kick = 0, cc = 0, prio = "AOE" })
+    table.insert(CastAheadData[1877], { spell = 983, npc = 13, mob = "Kicker", name = "Late", cast = 5.2,
+        cd = { 30.0 }, first = 5.0, kick = 0, cc = 0 })
+    local focusIs
+    UnitIsUnit = function() return focusIs end
+    local function kickAlerts(settings, length, late, gap)
+        CastAheadDB = settings
+        enter()
+        castFor(length)
+        advance((gap or 30) - length)
+        sounds, spoken, clips = 0, 0, 0
+        fire("UNIT_SPELLCAST_START", unit)
+        if late then fire("UNIT_SPELLCAST_INTERRUPTIBLE", unit) end
+        advance(0.1)
+        local n = Alerts()
+        fire("UNIT_SPELLCAST_STOP", unit)
+        reset()
+        hostile.focus = nil
+        return n
+    end
+    local open = { importantOnly = false, leadSeconds = 0 }
+
+    check(kickAlerts(open, 2.0) == 0, "kick voice: unimportant kick is silent")
+    check(kickAlerts(open, 3.5) == 1, "kick voice: important kick is voiced")
+    check(kickAlerts({ importantOnly = false, leadSeconds = 0, kickImportantOnly = false }, 2.0) == 1,
+        "kick voice: switch off voices every kick")
+
+    hostile.focus, focusIs = true, false
+    check(kickAlerts(open, 3.5) == 0, "kick voice: hostile focus elsewhere silences")
+    hostile.focus, focusIs = true, true
+    check(kickAlerts(open, 3.5) == 1, "kick voice: focus on this plate voices")
+
+    hostile.focus, focusIs = true, "SECRET"
+    issecretvalue = function(v) return v == "SECRET" end
+    local ok, secretAlerts = pcall(kickAlerts, open, 3.5)
+    issecretvalue = nil
+    check(ok and secretAlerts == 0, "kick voice: secret focus answer silences")
+
+    hostile.focus, focusIs = false, false
+    check(kickAlerts(open, 3.5) == 1, "kick voice: friendly focus falls back to all mobs")
+
+    hostile.focus, focusIs, dead.focus = true, false, true
+    check(kickAlerts(open, 3.5) == 1, "kick voice: dead focus falls back to all mobs")
+    dead.focus = nil
+
+    check(kickAlerts(open, 5.2, true) == 0, "kick voice: turning interruptible obeys the gate")
+    check(kickAlerts({ importantOnly = false, leadSeconds = 0, kickImportantOnly = false }, 5.2, true) == 1,
+        "kick voice: a late-kickable cast is voiced with the gate off")
+
+    hostile.focus, focusIs = true, false
+    check(kickAlerts({ leadSeconds = 0 }, 8.5) == 1, "kick voice: other calls unaffected")
+
+    local function headsAlerts(length)
+        CastAheadDB = { importantOnly = false, leadSeconds = 5 }
+        enter()
+        castFor(length)
+        sounds, spoken, clips = 0, 0, 0
+        advance(30 - length - 3)
+        local n = Alerts()
+        reset()
+        return n
+    end
+    hostile.focus = nil
+    check(headsAlerts(2.0) == 0, "kick voice: heads-up obeys the gate (unimportant silent)")
+    check(headsAlerts(3.5) == 1, "kick voice: heads-up obeys the gate (important voiced)")
+
+    local realPlay, heard = PlaySoundFile, {}
+    PlaySoundFile = function(path, ...) heard[#heard + 1] = path return realPlay(path, ...) end
+    hostile.focus = nil
+    kickAlerts({ importantOnly = false, leadSeconds = 0 }, 3.5)
+    check(heard[1] and heard[1]:find("KICK_IMPORTANT%.ogg$"), "kick voice: important kick clip when the switch is on")
+    heard = {}
+    kickAlerts({ importantOnly = false, leadSeconds = 0, kickImportantOnly = false }, 2.0)
+    check(heard[1] and heard[1]:find("KICK%.ogg$") and not heard[1]:find("IMPORTANT"),
+        "kick voice: interrupt clip when the switch is off")
+    heard = {}
+    headsAlerts(3.5)
+    check(heard[1] and heard[1]:find("KICK_IMPORTANT_soon%.ogg$"), "kick voice: heads-up uses the important kick clip")
+    PlaySoundFile = realPlay
+
+    UnitIsUnit = nil
+    CastAheadDB = { leadSeconds = 5 }
+    for _ = 1, 4 do table.remove(CastAheadData[1877]) end
+end
+
 -- An overdue prediction is drawn as "!" and stays put, instead of being
 -- rebuilt with a countdown every frame.
 enter()

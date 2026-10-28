@@ -264,6 +264,19 @@ local function Announceable(candidates, interruptible)
     return CastAheadMatch.AnyShown(candidates, interruptible)
 end
 
+-- UnitIsUnit("focus", plate) answered a plain boolean in live keys; a Secret answer would silence focus kicks.
+local function KickVoiceAllowed(unit, candidates, advice)
+    if not advice or advice.label ~= "KICK" or not CastAheadConfig.Enabled("kickImportantOnly") then
+        return true
+    end
+    if not CastAheadMatch.AnyImportant(candidates) then return false end
+    if not (UnitExists("focus") and UnitCanAttack("player", "focus") and not UnitIsDead("focus")) then return true end
+    if not unit then return false end
+    local same = UnitIsUnit("focus", unit)
+    if issecretvalue and issecretvalue(same) then return false end
+    return same == true
+end
+
 -- Only a prediction this solid is worth putting on Blizzard's timeline: one
 -- candidate, enough observations behind its time - a measured schedule for a
 -- repeat cast, a measured opening for a first cast projected from the mob's
@@ -386,10 +399,10 @@ end
 -- consistent voice. `CastAheadDB.voiceTTS` prefers the game's voice instead.
 local SOUND_ROOT = "Interface\\AddOns\\CastAhead\\Sounds\\"
 
-local function PlayClip(advice, lead)
-    if not (PlaySoundFile and advice.file) then return false end
+local function PlayClip(file, lead)
+    if not (PlaySoundFile and file) then return false end
     local lang = CastAheadDB and CastAheadDB.voiceLang or "en"
-    local path = SOUND_ROOT .. lang .. "\\" .. advice.file .. (lead and "_soon" or "") .. ".ogg"
+    local path = SOUND_ROOT .. lang .. "\\" .. file .. (lead and "_soon" or "") .. ".ogg"
     local ok, willPlay = pcall(PlaySoundFile, path, CastAheadConfig.SoundChannel())
     return ok and willPlay == true
 end
@@ -435,7 +448,11 @@ end
 local ttsHintShown = false
 
 local function Voice(advice, lead)
-    local text = lead and (advice.say .. " soon") or advice.say
+    local file, say = advice.file, advice.say
+    if advice.label == "KICK" and CastAheadConfig.Enabled("kickImportantOnly") then
+        file, say = "KICK_IMPORTANT", "important kick"
+    end
+    local text = lead and (say .. " soon") or say
     if CastAheadDB and CastAheadDB.voiceTTS then
         -- The player prefers the game's voice; the clip covers for it when it
         -- cannot speak (alerts disabled in the game options) - and says so
@@ -446,9 +463,9 @@ local function Voice(advice, lead)
             print("|cff33ff99CastAhead|r the game's TTS voice could not speak - enable Combat Audio Alerts"
                 .. " (Options > Accessibility) and give its categories volume. Playing the clip instead.")
         end
-        return PlayClip(advice, lead)
+        return PlayClip(file, lead)
     end
-    return PlayClip(advice, lead) or Speak(text)
+    return PlayClip(file, lead) or Speak(text)
 end
 
 -- The player's own pick for this spell, else for this category, from
@@ -1804,8 +1821,10 @@ local function OnCastStart(unit, channel)
     -- Sound fires once, on the cast that needs answering - not on the timer
     -- that led up to it.
     if state.casting and Announceable(state.casting.candidates, state.interruptible) then
-        PlayAdviceSound(CastAheadMatch.ConsensusAdvice(state.casting.candidates, state.interruptible),
-            nil, state.casting.candidates)
+        local advice = CastAheadMatch.ConsensusAdvice(state.casting.candidates, state.interruptible)
+        if KickVoiceAllowed(unit, state.casting.candidates, advice) then
+            PlayAdviceSound(advice, nil, state.casting.candidates)
+        end
     end
     -- Repaint either way: an unrecognised cast must not leave the previous
     -- countdown on screen as if nothing were happening.
@@ -2537,7 +2556,8 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
                 local before = CastAheadMatch.ConsensusAdvice(state.casting.candidates, was)
                 local advice = CastAheadMatch.ConsensusAdvice(state.casting.candidates, state.interruptible)
                 if advice and advice.label == "KICK" and advice ~= before
-                    and Announceable(state.casting.candidates, state.interruptible) then
+                    and Announceable(state.casting.candidates, state.interruptible)
+                    and KickVoiceAllowed(unit, state.casting.candidates, advice) then
                     PlayAdviceSound(advice, nil, state.casting.candidates)
                 end
             end
@@ -2960,7 +2980,9 @@ frame:SetScript("OnUpdate", function()
                                 if isSave and remaining <= saveLead or not isSave and remaining <= lead then
                                     entry.track.warned = true
                                     Record("HEADS", unit, heads and heads.key or "-", Ids(entry.candidates))
-                                    PlayAdviceSound(heads, true, entry.candidates)
+                                    if KickVoiceAllowed(unit, entry.candidates, heads) then
+                                        PlayAdviceSound(heads, true, entry.candidates)
+                                    end
                                 end
                             end
                         end

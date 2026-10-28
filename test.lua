@@ -345,6 +345,12 @@ check(M.ADVICE.DEFENSIVE and M.ADVICE.DEFENSIVE.say == "defensive" and M.ADVICE.
     "one defensive call, spoken as defensive")
 check(M.ADVICE.SMALL == nil and M.ADVICE.BIG == nil, "no small or big defensive call")
 
+for _, name in ipairs({ "KICK_IMPORTANT", "KICK_IMPORTANT_soon" }) do
+    local f = io.open("Sounds/en/" .. name .. ".ogg", "rb")
+    check(f ~= nil, "voice clip missing: Sounds/en/" .. name .. ".ogg")
+    if f then f:close() end
+end
+
 -- Every verdict has both voice clips on disk (tools/voice.py renders them);
 -- a missing one would silently drop to the game voice or the beep.
 for key, advice in pairs(M.ADVICE) do
