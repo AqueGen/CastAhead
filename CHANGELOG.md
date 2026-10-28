@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.23.0](https://github.com/AqueGen/CastAhead/compare/v0.22.1...v0.23.0) (2026-10-28)
+
+
+### Features
+
+* **casts:** cast settings panel, outcome blocks and a What's new notice ([#101](https://github.com/AqueGen/CastAhead/issues/101)) ([2cef5f4](https://github.com/AqueGen/CastAhead/commit/2cef5f4ad8add5f90743e8553d6e230d9da1c4a0))
+* **casts:** show the mob's 3D model when hovering its name ([#102](https://github.com/AqueGen/CastAhead/issues/102)) ([bf6383f](https://github.com/AqueGen/CastAhead/commit/bf6383faadadbc89cf559f1e1280224b28585a30))
+* show the addon as CastAhead ([#99](https://github.com/AqueGen/CastAhead/issues/99)) ([482efd0](https://github.com/AqueGen/CastAhead/commit/482efd0309099d1958b05de294c6a9f9725e91bf))
+* Test button per feature and a Burst soon slider ([#98](https://github.com/AqueGen/CastAhead/issues/98)) ([a723a1c](https://github.com/AqueGen/CastAhead/commit/a723a1cd051b0177844baa57632baba3d689ddc8))
+
+
+### Bug Fixes
+
+* **saves:** widen the Lead column so the raid header fits ([#105](https://github.com/AqueGen/CastAhead/issues/105)) ([174f94d](https://github.com/AqueGen/CastAhead/commit/174f94d923cb86a088102dda9dd0f0cbd91ee1c2))
+* **window:** lay the window out live while it is resized ([#103](https://github.com/AqueGen/CastAhead/issues/103)) ([1a140bc](https://github.com/AqueGen/CastAhead/commit/1a140bc24e29b28a3f8ebd53a3658e99363e4b70))
+
 ## [0.22.1](https://github.com/AqueGen/CastAhead/compare/v0.22.0...v0.22.1) (2026-10-26)
 
 
