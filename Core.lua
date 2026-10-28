@@ -3138,10 +3138,6 @@ function CastAheadCore.Testing()
     return demo ~= nil
 end
 
-function CastAheadCore.TestingAll()
-    return demo ~= nil and demo.all == true
-end
-
 -- Lay out each plate's own icons against each other, the way a live plate is
 -- laid out - otherwise the test drive shows a spacing the game never uses.
 -- Run again whenever a call finishes: the survivors have to close up against
@@ -3256,7 +3252,7 @@ function CastAheadCore.Test(instanceID, list)
             units[#units + 1] = token
         end
     end
-    demo = { frame = CreateFrame("Frame"), entries = {}, state = { bars = {} }, all = not list }
+    demo = { frame = CreateFrame("Frame"), entries = {}, state = { bars = {} } }
     -- One call at a time: the one counting down and the one going out.
     local spacing = CastAheadConfig.Lead() + 3
     local gap = list and spacing or nil
