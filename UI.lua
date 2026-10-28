@@ -1,5 +1,4 @@
 local testButton
-local kicksByTest = false
 local DUNGEON_PAGES = { Casts = true, Saves = true, Guide = true, RaidGuide = true, RaidSaves = true }
 
 -- Stored as nil when on, false when off, so a fresh profile defaults to on.
@@ -45,12 +44,6 @@ function CastAheadUI.RefreshTest()
     local running = CastAheadCore and CastAheadCore.Testing and CastAheadCore.Testing()
     if testButton then testButton:SetText(running and "Stop test" or "Test drive all") end
     if CastAheadUI.RefreshPlayList then CastAheadUI.RefreshPlayList(running) end
-    -- Test drive all runs the kick demo too; only the demo it started is stopped with it.
-    local all = running and CastAheadCore.TestingAll and CastAheadCore.TestingAll() or false
-    if CastAheadKicks and (all or kicksByTest) then
-        CastAheadKicks.Demo(all)
-        kicksByTest = all
-    end
 end
 
 function CastAheadUI.RefreshTabs()
@@ -127,16 +120,6 @@ SlashCmdList.CASTAHEAD = function(msg)
     end
     if word == "report" then
         if CastAheadReport then CastAheadReport.Toggle() end
-        return
-    end
-    if word == "kicks" then
-        if not CastAheadKicks then return end
-        if msg:match("^%s*%a+%s+demo") then
-            if not CastAheadKicks.Active() then CastAheadKicks.Toggle() end
-            CastAheadKicks.Demo(not CastAheadKicks.Demoing())
-        else
-            CastAheadKicks.Toggle()
-        end
         return
     end
     if word == "journal" then

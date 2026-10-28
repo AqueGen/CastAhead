@@ -36,7 +36,6 @@ Burst.lua
 BossAdapter.lua
 Timeline.lua
 Core.lua
-Kicks.lua
 Setup.lua
 Recorder.lua
 Window.lua
