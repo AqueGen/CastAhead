@@ -133,6 +133,8 @@ local SWITCHES = {
         tip = "Master switch for everything the addon plays." },
     voice = { label = "Voice",
         tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"interrupt\"." },
+    kickImportantOnly = { label = "Kick voice only on important casts",
+        tip = "Say \"interrupt\" only for casts marked with a star, and only on your focus when it is an enemy. Icons still show every kick." },
     fixedSpacing = { label = "Fixed spacing", defaultOff = true,
         tip = "Space the icons evenly: each step is the icon width plus the Gap, however long the words under the icons are. Every row looks the same; two long words side by side may overlap." },
     fullLabels = { label = "Full labels", defaultOff = true,
@@ -430,9 +432,10 @@ function BuildGeneral(panel)
     PaintTimelineOff()
     table.insert(refreshers, PaintTimelineOff)
 
-    local audio = BuildGroup(panel, "Sound", 100)
+    local audio = BuildGroup(panel, "Sound", 126)
     local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 }, RedrawAndSaves)
-    BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 }, RedrawAndSaves)
+    local voice = BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 }, RedrawAndSaves)
+    BuildSwitch(panel, "kickImportantOnly", { "TOPLEFT", voice, "BOTTOMLEFT", 0, -4 })
 
     local plates = BuildGroup(panel, "Nameplate icons", 100)
     local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 }, OutputChanged)

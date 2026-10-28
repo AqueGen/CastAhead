@@ -264,6 +264,20 @@ local function Announceable(candidates, interruptible)
     return CastAheadMatch.AnyShown(candidates, interruptible)
 end
 
+-- On 2026-10-27, 25 of 25 focus cast starts gave a plain boolean from
+-- UnitIsUnit("focus", plate); a Secret answer is still treated as "not ours".
+local function KickVoiceAllowed(unit, candidates, advice)
+    if not advice or advice.label ~= "KICK" or not CastAheadConfig.Enabled("kickImportantOnly") then
+        return true
+    end
+    if not CastAheadMatch.AnyImportant(candidates) then return false end
+    if not (UnitExists("focus") and UnitCanAttack("player", "focus")) then return true end
+    if not unit then return false end
+    local same = UnitIsUnit("focus", unit)
+    if issecretvalue and issecretvalue(same) then return false end
+    return same == true
+end
+
 -- Only a prediction this solid is worth putting on Blizzard's timeline: one
 -- candidate, enough observations behind its time - a measured schedule for a
 -- repeat cast, a measured opening for a first cast projected from the mob's
@@ -1804,8 +1818,10 @@ local function OnCastStart(unit, channel)
     -- Sound fires once, on the cast that needs answering - not on the timer
     -- that led up to it.
     if state.casting and Announceable(state.casting.candidates, state.interruptible) then
-        PlayAdviceSound(CastAheadMatch.ConsensusAdvice(state.casting.candidates, state.interruptible),
-            nil, state.casting.candidates)
+        local advice = CastAheadMatch.ConsensusAdvice(state.casting.candidates, state.interruptible)
+        if KickVoiceAllowed(unit, state.casting.candidates, advice) then
+            PlayAdviceSound(advice, nil, state.casting.candidates)
+        end
     end
     -- Repaint either way: an unrecognised cast must not leave the previous
     -- countdown on screen as if nothing were happening.
@@ -2537,7 +2553,8 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
                 local before = CastAheadMatch.ConsensusAdvice(state.casting.candidates, was)
                 local advice = CastAheadMatch.ConsensusAdvice(state.casting.candidates, state.interruptible)
                 if advice and advice.label == "KICK" and advice ~= before
-                    and Announceable(state.casting.candidates, state.interruptible) then
+                    and Announceable(state.casting.candidates, state.interruptible)
+                    and KickVoiceAllowed(unit, state.casting.candidates, advice) then
                     PlayAdviceSound(advice, nil, state.casting.candidates)
                 end
             end
@@ -2960,7 +2977,9 @@ frame:SetScript("OnUpdate", function()
                                 if isSave and remaining <= saveLead or not isSave and remaining <= lead then
                                     entry.track.warned = true
                                     Record("HEADS", unit, heads and heads.key or "-", Ids(entry.candidates))
-                                    PlayAdviceSound(heads, true, entry.candidates)
+                                    if KickVoiceAllowed(unit, entry.candidates, heads) then
+                                        PlayAdviceSound(heads, true, entry.candidates)
+                                    end
                                 end
                             end
                         end
