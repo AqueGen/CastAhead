@@ -51,11 +51,9 @@ end
 
 local function SetSpellLead(entry, seconds) SetOwn("spellLead", entry, seconds) end
 
--- Starred by the player, else by the curated set.
+-- Starred by the player, else curated and fit for this character.
 local function Starred(entry)
-    local own = CastAheadConfig.SpellImportant(entry.spell)
-    if own ~= nil then return own end
-    return entry.prio ~= nil
+    return CastAheadMatch.Important(entry)
 end
 
 -- What this cast does differently from the global settings, in a few words;
@@ -66,7 +64,7 @@ local function OverrideSummary(entry)
     if own ~= nil then parts[#parts + 1] = own and "Important" or "Not important" end
     if CastAheadConfig.SpellMuted(entry.spell) then parts[#parts + 1] = "Muted" end
     local sound = SpellSound(entry)
-    if sound and sound ~= "" then parts[#parts + 1] = sound end
+    if sound then parts[#parts + 1] = sound ~= "" and sound or "Own sound: voice" end
     local lead = CastAheadConfig.SpellLead(entry.spell)
     if lead then parts[#parts + 1] = lead > 0 and string.format("Early %ds", lead) or "Early off" end
     return table.concat(parts, ", ")
@@ -85,8 +83,11 @@ end
 local function RunState(entry)
     if IsDisabled(entry.spell) then return false, false, "Switched off here: no icon, no call." end
     if CastAheadConfig.Enabled("importantOnly") and not CastAheadMatch.Important(entry) then
-        if Starred(entry) then
-            return false, false, "Hidden in a run: \"My role only\" in General, your character cannot act on it."
+        if CastAheadConfig.SpellImportant(entry.spell) == false then
+            return false, false, "Hidden in a run: you marked it not important, and \"Important casts only\" is on in General."
+        end
+        if entry.prio then
+            return false, false, "Hidden in a run: \"My role only\" in General, your character cannot act on it. Star it to show it anyway."
         end
         return false, false, "Hidden in a run: not important, and \"Important casts only\" is on in General."
     end
@@ -353,7 +354,7 @@ local function PaintEditor()
     -- The curated choice is worth a word only once the player overrode it.
     local curated = ""
     if CastAheadConfig.SpellImportant(e.spell) ~= nil then
-        curated = e.prio and "|cff888888curated: important|r" or "|cff888888curated: not important|r"
+        curated = CastAheadMatch.Curated(e) and "|cff888888curated: important|r" or "|cff888888curated: not important|r"
     end
     editor.curated:SetText(curated)
     local resettable = HasOverrides(e)
@@ -377,7 +378,7 @@ end
 
 -- The player's star; matching the curated choice stores nothing.
 function SetImportant(entry, on)
-    if on == (entry.prio ~= nil) then on = nil end
+    if on == CastAheadMatch.Curated(entry) then on = nil end
     SetOwn("spellImportant", entry, on)
     Reapply()
     if editor and editor:IsShown() then PaintEditor() end
@@ -423,9 +424,8 @@ local function LayoutEditor()
         editor.colB:SetPoint("TOPLEFT", editor.colA, "BOTTOMLEFT", 0, -10)
     end
     local height = sideBySide and 156 or 236
-    -- Pinned to the scroll frame's edges, not to the page width: while the
-    -- window is dragged to a new size the page keeps its old width until the
-    -- mouse is released, and an offset from it left the panel behind.
+    -- Pinned to the scroll frame's edges rather than an offset from the page
+    -- width, so the panel moves with the window edge while it is resized.
     if right then
         editor:SetPoint("TOPRIGHT", scroll, "TOPRIGHT", 0, -TABLE_TOP)
         editor:SetSize(PANEL_W, height)

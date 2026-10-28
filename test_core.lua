@@ -6660,12 +6660,18 @@ end)()
     check(C.LeadFor({ { spell = 1 } }) == 6, "lead: an own warning works with the global one off")
     CastAheadDB.spellSounds = { [1] = "Bell", [2] = "" }
     check(CastAheadUI.OverrideSummary({ spell = 1 }) == "Bell, Early 6s", "overrides: sound and warning listed")
-    check(CastAheadUI.OverrideSummary({ spell = 2 }) == "Early off", "overrides: a ticked sound with no pick is not listed")
+    check(CastAheadUI.OverrideSummary({ spell = 2 }) == "Own sound: voice, Early off", "overrides: a ticked sound with no pick is listed as the voice")
     check(CastAheadUI.OverrideSummary({ spell = 9 }) == "", "overrides: nothing own, nothing listed")
     CastAheadDB.spellImportant = { [1] = false }
     CastAheadDB.spellMute = { [1] = true, [2] = true }
     check(not CastAheadMatch.Important({ spell = 1, prio = "AOE" }), "overrides: an unstarred curated cast is not important")
     check(CastAheadMatch.Important({ spell = 9, prio = "AOE" }), "overrides: without a star of its own the curated set decides")
+    local role = CastAheadMatch.PlayerRole
+    CastAheadMatch.PlayerRole = function() return "DAMAGER" end
+    check(not CastAheadMatch.Important({ spell = 9, prio = "TANK" }), "overrides: a tank buster is not a dps player's call")
+    CastAheadDB.spellImportant[7] = true
+    check(CastAheadMatch.Important({ spell = 7, prio = "TANK" }), "overrides: a starred tank buster is shown to a dps player too")
+    CastAheadMatch.PlayerRole = role
     check(C.AllMuted({ { spell = 1 }, { spell = 2 } }), "overrides: a bar of muted casts is silent")
     check(not C.AllMuted({ { spell = 1 }, { spell = 9 } }), "overrides: one unmuted candidate keeps the call")
     check(CastAheadUI.OverrideSummary({ spell = 1 }) == "Not important, Muted, Bell, Early 6s", "overrides: every own setting listed")
