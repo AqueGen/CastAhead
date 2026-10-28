@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.0](https://github.com/AqueGen/CastAhead/compare/v0.23.0...v0.24.0) (2026-10-28)
+
+
+### Features
+
+* Show in BigWigs bars, and say when the game's timeline is off ([#106](https://github.com/AqueGen/CastAhead/issues/106)) ([bec3eaf](https://github.com/AqueGen/CastAhead/commit/bec3eaf4443cc9fd9c37b31209a28143ba7552a5))
+
 ## [0.23.0](https://github.com/AqueGen/CastAhead/compare/v0.22.1...v0.23.0) (2026-10-28)
 
 
