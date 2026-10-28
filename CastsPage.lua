@@ -394,13 +394,17 @@ local function LayoutEditor()
         editor.colB:SetPoint("TOPLEFT", editor.colA, "BOTTOMLEFT", 0, -10)
     end
     local height = sideBySide and 156 or 236
+    -- Pinned to the scroll frame's edges, not to the page width: while the
+    -- window is dragged to a new size the page keeps its old width until the
+    -- mouse is released, and an offset from it left the panel behind.
     if right then
-        editor:SetPoint("TOPLEFT", scroll, "TOPLEFT", width - PANEL_W, -TABLE_TOP)
+        editor:SetPoint("TOPRIGHT", scroll, "TOPRIGHT", 0, -TABLE_TOP)
         editor:SetSize(PANEL_W, height)
         return 0, not fits
     end
     editor:SetPoint("BOTTOMLEFT", scroll, "BOTTOMLEFT", 0, 0)
-    editor:SetSize(width, height)
+    editor:SetPoint("BOTTOMRIGHT", scroll, "BOTTOMRIGHT", 0, 0)
+    editor:SetHeight(height)
     return height, false
 end
 
