@@ -21,7 +21,7 @@ local SAVE_COLUMNS = {
           end
           return #words > 0 and table.concat(words, ", ") or "|cff777777not heard|r"
       end },
-    { key = "lead", header = "Lead", width = 44, justify = "RIGHT",
+    { key = "lead", header = "Lead", width = 70, justify = "RIGHT",
       text = function(s) return s.lead and string.format("%.1fs", s.lead) or "-" end },
     { key = "ep", header = "Damage at +20", width = 90, justify = "RIGHT",
       text = function(s) return s.ep and (s.ep .. "%") or "-" end },
