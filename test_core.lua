@@ -464,7 +464,7 @@ check(#sb[71].def == 3 and sb[71].def[1] == 2 and sb[71].def[2] == 1 and sb[71].
 check(sb[72].small == nil, "the small list is gone after the join")
 check(sb[73].def and #sb[73].def == 0, "a spec the player emptied on purpose stays empty")
 check(sb[74].def == nil and sb[74].heal == nil, "a spec with only heal entries falls back to the shipped list")
-check(CastAheadDB.schema == 6, "the profile is stamped schema 6")
+check(CastAheadDB.schema == 7, "the profile is stamped schema 7")
 CastAheadDB = { schema = 3, saveCalls = true, smallCalls = false, bigCalls = false, healCalls = false }
 fire("ADDON_LOADED", "CastAhead")
 check(CastAheadDB.saveCalls == false and CastAheadDB.smallCalls == nil and CastAheadDB.bigCalls == nil
@@ -501,12 +501,24 @@ end
 CastAheadSaveButtons = {}
 CastAheadDB = nil
 fire("ADDON_LOADED", "CastAhead")
-check(CastAheadDB.schema == 6 and CastAheadDB.saveButtons == nil, "a new install is schema 6 with no saved lists")
+check(CastAheadDB.schema == 7 and CastAheadDB.saveButtons == nil, "a new install is schema 7 with no saved lists")
+
+CastAheadDB = { schema = 6, kickImportantOnly = false, sounds = { KICK = "CastAhead: interrupt", AOE = "CastAhead: stun" },
+    spellSounds = { [200] = "CastAhead: interrupt" } }
+fire("ADDON_LOADED", "CastAhead")
+check(CastAheadDB.kickFocusOnly == false and CastAheadDB.kickImportantOnly == nil,
+    "the old kick switch turned off turns the focus switch off, and the old key goes")
+check(CastAheadDB.sounds.KICK == "CastAhead: kick" and CastAheadDB.sounds.AOE == "CastAhead: stun"
+    and CastAheadDB.spellSounds[200] == "CastAhead: kick", "sound picks of the interrupt clip point at the kick clip")
+CastAheadDB = { schema = 6, kickImportantOnly = true }
+fire("ADDON_LOADED", "CastAhead")
+check(CastAheadDB.kickFocusOnly == nil and CastAheadDB.kickImportantOnly == nil,
+    "the old kick switch left on leaves the focus switch on its default")
 
 do
     CastAheadDB = { schema = 4, saveCalls = true, raidSaves = true }
     fire("ADDON_LOADED", "CastAhead")
-    check(CastAheadDB.schema == 6 and CastAheadDB.saveCalls == false and CastAheadDB.saveCallsNotice == true
+    check(CastAheadDB.schema == 7 and CastAheadDB.saveCalls == false and CastAheadDB.saveCallsNotice == true
         and CastAheadDB.raidSaves == false, "a schema 4 profile with defensive calls on is turned off once and flagged")
     CastAheadDB = { schema = 3, raidSaves = true }
     fire("ADDON_LOADED", "CastAhead")
@@ -519,7 +531,7 @@ do
     CastAheadDB.saveCalls = true
     CastAheadDB.saveCallsNotice = nil
     fire("ADDON_LOADED", "CastAhead")
-    check(CastAheadDB.schema == 6 and CastAheadDB.saveCalls == true and CastAheadDB.saveCallsNotice == nil,
+    check(CastAheadDB.schema == 7 and CastAheadDB.saveCalls == true and CastAheadDB.saveCallsNotice == nil,
         "migrating again changes nothing and raises no flag")
     CastAheadDB = nil
     fire("ADDON_LOADED", "CastAhead")
@@ -532,7 +544,7 @@ do
     end
     CastAheadDB = { schema = 5, burstCalls = true }
     fire("ADDON_LOADED", "CastAhead")
-    check(CastAheadDB.schema == 6 and CastAheadDB.raidMode == true and CastAheadDB.burstCalls == true,
+    check(CastAheadDB.schema == 7 and CastAheadDB.raidMode == true and CastAheadDB.burstCalls == true,
         "a schema 5 profile with burst windows on gets the raid switch on")
     CastAheadDB = { schema = 5, raidSaves = true }
     fire("ADDON_LOADED", "CastAhead")
@@ -1349,6 +1361,10 @@ do
         cd = { 30.0 }, first = 5.0, kick = 0, cc = 0, prio = "AOE" })
     table.insert(CastAheadData[1877], { spell = 983, npc = 13, mob = "Kicker", name = "Late", cast = 5.2,
         cd = { 30.0 }, first = 5.0, kick = 0, cc = 0 })
+    table.insert(CastAheadData[1877], { spell = 985, npc = 13, mob = "Kicker", name = "TwinStarred", cast = 6.5,
+        cd = { 30.0 }, first = 5.0, kick = 0.5, cc = 0, kickable = true, prio = "KICK" })
+    table.insert(CastAheadData[1877], { spell = 986, npc = 13, mob = "Kicker", name = "TwinPlain", cast = 6.5,
+        cd = { 30.0 }, first = 5.0, kick = 0.5, cc = 0, kickable = true })
     local focusIs
     UnitIsUnit = function() return focusIs end
     local function kickAlerts(settings, length, late, gap)
@@ -1368,15 +1384,19 @@ do
     end
     local open = { importantOnly = false, leadSeconds = 0 }
 
-    check(kickAlerts(open, 2.0) == 0, "kick voice: unimportant kick is silent")
-    check(kickAlerts(open, 3.5) == 1, "kick voice: important kick is voiced")
-    check(kickAlerts({ importantOnly = false, leadSeconds = 0, kickImportantOnly = false }, 2.0) == 1,
-        "kick voice: switch off voices every kick")
+    local anyMob = { importantOnly = false, leadSeconds = 0, kickFocusOnly = false }
 
-    hostile.focus, focusIs = true, false
-    check(kickAlerts(open, 3.5) == 0, "kick voice: hostile focus elsewhere silences")
-    hostile.focus, focusIs = true, true
-    check(kickAlerts(open, 3.5) == 1, "kick voice: focus on this plate voices")
+    check(kickAlerts(open, 2.0) == 1, "kick voice: a shown unstarred kick is voiced")
+    check(kickAlerts(open, 3.5) == 1, "kick voice: a starred kick is voiced")
+
+    for _, length in ipairs({ 2.0, 3.5 }) do
+        hostile.focus, focusIs = true, false
+        check(kickAlerts(open, length) == 0, "kick voice: hostile focus elsewhere silences, cast " .. length)
+        hostile.focus, focusIs = true, true
+        check(kickAlerts(open, length) == 1, "kick voice: focus on this plate voices, cast " .. length)
+        hostile.focus, focusIs = true, false
+        check(kickAlerts(anyMob, length) == 1, "kick voice: focus switch off voices every mob, cast " .. length)
+    end
 
     hostile.focus, focusIs = true, "SECRET"
     issecretvalue = function(v) return v == "SECRET" end
@@ -1391,15 +1411,18 @@ do
     check(kickAlerts(open, 3.5) == 1, "kick voice: dead focus falls back to all mobs")
     dead.focus = nil
 
-    check(kickAlerts(open, 5.2, true) == 0, "kick voice: turning interruptible obeys the gate")
-    check(kickAlerts({ importantOnly = false, leadSeconds = 0, kickImportantOnly = false }, 5.2, true) == 1,
-        "kick voice: a late-kickable cast is voiced with the gate off")
+    check(kickAlerts(open, 5.2, true) == 1, "kick voice: a cast turning interruptible is voiced")
+    hostile.focus, focusIs = true, false
+    check(kickAlerts(open, 5.2, true) == 0, "kick voice: turning interruptible obeys the focus switch")
+    hostile.focus, focusIs = true, false
+    check(kickAlerts(anyMob, 5.2, true) == 1, "kick voice: turning interruptible with the focus switch off is voiced")
 
     hostile.focus, focusIs = true, false
     check(kickAlerts({ leadSeconds = 0 }, 8.5) == 1, "kick voice: other calls unaffected")
 
-    local function headsAlerts(length)
+    local function headsAlerts(length, focusOff)
         CastAheadDB = { importantOnly = false, leadSeconds = 5 }
+        if focusOff then CastAheadDB.kickFocusOnly = false end
         enter()
         castFor(length)
         sounds, spoken, clips = 0, 0, 0
@@ -1408,22 +1431,33 @@ do
         reset()
         return n
     end
+    for _, length in ipairs({ 2.0, 3.5 }) do
+        hostile.focus = nil
+        check(headsAlerts(length) == 1, "kick voice: heads-up voiced with no focus, cast " .. length)
+        hostile.focus, focusIs = true, false
+        check(headsAlerts(length) == 0, "kick voice: heads-up obeys the focus switch, cast " .. length)
+        check(headsAlerts(length, true) == 1, "kick voice: heads-up with the focus switch off, cast " .. length)
+    end
     hostile.focus = nil
-    check(headsAlerts(2.0) == 0, "kick voice: heads-up obeys the gate (unimportant silent)")
-    check(headsAlerts(3.5) == 1, "kick voice: heads-up obeys the gate (important voiced)")
 
     local realPlay, heard = PlaySoundFile, {}
     PlaySoundFile = function(path, ...) heard[#heard + 1] = path return realPlay(path, ...) end
-    hostile.focus = nil
-    kickAlerts({ importantOnly = false, leadSeconds = 0 }, 3.5)
-    check(heard[1] and heard[1]:find("KICK_IMPORTANT%.ogg$"), "kick voice: important kick clip when the switch is on")
+    local function plainKick(path) return path and path:find("\\KICK%.ogg$") end
+    kickAlerts(open, 3.5)
+    check(heard[1] and heard[1]:find("KICK_IMPORTANT%.ogg$"), "kick voice: a starred kick plays the important kick clip")
     heard = {}
-    kickAlerts({ importantOnly = false, leadSeconds = 0, kickImportantOnly = false }, 2.0)
-    check(heard[1] and heard[1]:find("KICK%.ogg$") and not heard[1]:find("IMPORTANT"),
-        "kick voice: interrupt clip when the switch is off")
+    kickAlerts(open, 2.0)
+    check(plainKick(heard[1]), "kick voice: an unstarred kick plays the kick clip, got " .. tostring(heard[1]))
+    heard = {}
+    kickAlerts({ leadSeconds = 0 }, 6.5)
+    check(#heard == 1 and plainKick(heard[1]),
+        "kick voice: a starred and an unstarred candidate together play the kick clip, got " .. tostring(heard[1]))
     heard = {}
     headsAlerts(3.5)
     check(heard[1] and heard[1]:find("KICK_IMPORTANT_soon%.ogg$"), "kick voice: heads-up uses the important kick clip")
+    heard = {}
+    headsAlerts(2.0)
+    check(heard[1] and heard[1]:find("\\KICK_soon%.ogg$"), "kick voice: heads-up uses the kick clip")
     PlaySoundFile = realPlay
 
     date = date or os.date
@@ -1450,6 +1484,7 @@ do
     check(traceRun(false, 3.5, true) == nil, "kick trace: nothing printed without Development mode")
     local line = traceRun(true, 3.5, true)
     check(line and line:find("claimed=982", 1, true) and line:find("focus=none", 1, true)
+        and line:find("tier=important", 1, true)
         and line:find("-> played", 1, true), "kick trace: important claimed kick plays, got " .. tostring(line))
     hostile.focus, focusIs = true, false
     line = traceRun(true, 3.5, true)
@@ -1463,7 +1498,7 @@ do
 
     UnitIsUnit = nil
     CastAheadDB = { leadSeconds = 5 }
-    for _ = 1, 4 do table.remove(CastAheadData[1877]) end
+    for _ = 1, 6 do table.remove(CastAheadData[1877]) end
 end
 
 -- An overdue prediction is drawn as "!" and stays put, instead of being
@@ -2471,7 +2506,7 @@ advance(3.0)                           -- the tie comes round again on its 4.8s 
 fire("UNIT_SPELLCAST_START", unit)
 advance(0.5)
 local splitCenter = CenterFrameStub()
-check(splitCenter and splitCenter.shown and splitCenter.timeValue:find("Dodge or interrupt", 1, true),
+check(splitCenter and splitCenter.shown and splitCenter.timeValue:find("Dodge or kick", 1, true),
     "the centre call reads both answers for a disagreeing tie, got " .. tostring(splitCenter and splitCenter.timeValue))
 reset()
 table.remove(CastAheadData[1877])
@@ -3854,7 +3889,7 @@ do
             "the dungeon guide adds each of its bosses' burst lines, lists a boss with only burst data, keeps trash plain, got " .. with)
         CastAheadBurstWindows, CastAheadDB.raidMode, CastAheadDB.burstCalls = savedBurst, raidMode, bursts
     end
-    check(guide[3]:find("Zap|h from Abe (heard by: boss timer): defensive - |Hspell:104773|h|T2001:16|t Unending Resolve|h", 1, true) and guide[3]:find("(interrupt comes first)", 1, true),
+    check(guide[3]:find("Zap|h from Abe (heard by: boss timer): defensive - |Hspell:104773|h|T2001:16|t Unending Resolve|h", 1, true) and guide[3]:find("(kick comes first)", 1, true),
         "a guide line names the hit, the mob, how it is heard, the call, the first button and what wins")
     check(text:find("Burn|h from ground effect (heard by: debuff on you): defensive", 1, true), "a debuff-only hit says it lands on you")
     check(guide[3]:find("defensive - |Hspell:104773|h|T2001:16|t Unending Resolve|h", 1, true), "a button carries its icon inside a link")
@@ -4501,8 +4536,8 @@ do
     check(centreSaid and centreSaid:match("^Defensive"),
         "a kickable cast the game locked shows the defensive: " .. tostring(centreSaid))
     BigCast(false)
-    check(centreSaid and centreSaid:match("^Interrupt"),
-        "the same cast left kickable calls interrupt: " .. tostring(centreSaid))
+    check(centreSaid and centreSaid:match("^Kick"),
+        "the same cast left kickable calls kick: " .. tostring(centreSaid))
     CastAheadPriority[100] = "AOE"
     CastAheadCore.ReapplyData()
     CastAheadDB.saveCalls = nil
@@ -5924,7 +5959,7 @@ end
         end
         return n
     end
-    local SAMPLE_LINES = { ["Interrupt  2.4"] = true, ["Defensive  4.0"] = true, ["Burst now  6.0"] = true }
+    local SAMPLE_LINES = { ["Kick  2.4"] = true, ["Defensive  4.0"] = true, ["Burst now  6.0"] = true }
     local function sampleLines()
         local n = 0
         for i = 1, #allFrames do
@@ -6088,7 +6123,7 @@ end
     local kickIcon, burstIcon
     for i = 1, #allFrames do
         local f = allFrames[i]
-        if f.shown and f.timeValue == "Interrupt  2.4" then kickIcon = f.icon.textureValue end
+        if f.shown and f.timeValue == "Kick  2.4" then kickIcon = f.icon.textureValue end
         if f.shown and f.timeValue == "Burst now  6.0" then burstIcon = f.icon.textureValue end
     end
     check(kickIcon == textures[200], "setup: the interrupt sample shows a kick spell's icon, got " .. tostring(kickIcon))

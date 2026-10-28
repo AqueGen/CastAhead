@@ -275,11 +275,10 @@ local function FocusState(unit)
     return same == true and "this" or "other"
 end
 
-local function KickVoiceAllowed(unit, candidates, advice)
-    if not advice or advice.label ~= "KICK" or not CastAheadConfig.Enabled("kickImportantOnly") then
+local function KickVoiceAllowed(unit, advice)
+    if not advice or advice.label ~= "KICK" or not CastAheadConfig.Enabled("kickFocusOnly") then
         return true
     end
-    if not CastAheadMatch.AnyImportant(candidates) then return false end
     local focus = FocusState(unit)
     return focus == "none" or focus == "this"
 end
@@ -454,9 +453,9 @@ end
 -- test drive) goes through here so they cannot disagree.
 local ttsHintShown = false
 
-local function Voice(advice, lead)
+local function Voice(advice, lead, candidates)
     local file, say = advice.file, advice.say
-    if advice.label == "KICK" and CastAheadConfig.Enabled("kickImportantOnly") then
+    if advice.label == "KICK" and CastAheadMatch.AllImportant(candidates) then
         file, say = "KICK_IMPORTANT", "important kick"
     end
     local text = lead and (say .. " soon") or say
@@ -531,7 +530,7 @@ local function Alert(advice, lead, candidates, voice)
         PlayMedia(custom)
         return
     end
-    if voice and Voice(advice, lead) then return end
+    if voice and Voice(advice, lead, candidates) then return end
     Beep(advice)
 end
 
@@ -567,22 +566,20 @@ local function KickTrace(unit, kind, state, candidates, spell, interruptible, ad
         reason = "skip:not-shown"
     elseif not (advice and advice.label == "KICK") then
         reason = "skip:not-kick"
-    elseif CastAheadConfig.Enabled("kickImportantOnly") and not CastAheadMatch.AnyImportant(candidates) then
-        reason = "skip:gate:not-important"
-    elseif CastAheadConfig.Enabled("kickImportantOnly") and focus == "other" then
+    elseif CastAheadConfig.Enabled("kickFocusOnly") and focus == "other" then
         reason = "skip:gate:focus-other"
-    elseif CastAheadConfig.Enabled("kickImportantOnly") and focus == "secret" then
+    elseif CastAheadConfig.Enabled("kickFocusOnly") and focus == "secret" then
         reason = "skip:gate:focus-secret"
     elseif not CastAheadConfig.Enabled("sound") or CastAheadConfig.AllMuted(candidates) then
         reason = "skip:sound-off"
     else
         reason = "played"
     end
-    local important = candidates and (CastAheadMatch.AnyImportant(candidates) and "yes" or "no") or "-"
+    local tier = candidates and (CastAheadMatch.AllImportant(candidates) and "important" or "normal") or "-"
     print("|cff33ff99CastAhead|r kick voice: " .. unit .. " " .. kind
         .. " claimed=" .. (candidates and tostring(spell) or "-")
         .. " advice=" .. (advice and advice.key or "-")
-        .. " important=" .. important .. " focus=" .. focus .. " -> " .. reason)
+        .. " tier=" .. tier .. " focus=" .. focus .. " -> " .. reason)
 end
 
 -- Creature identity ---------------------------------------------------------
@@ -1874,7 +1871,7 @@ local function OnCastStart(unit, channel)
     -- that led up to it.
     if state.casting and Announceable(state.casting.candidates, state.interruptible) then
         local advice = CastAheadMatch.ConsensusAdvice(state.casting.candidates, state.interruptible)
-        if KickVoiceAllowed(unit, state.casting.candidates, advice) then
+        if KickVoiceAllowed(unit, advice) then
             PlayAdviceSound(advice, nil, state.casting.candidates)
         end
     end
@@ -2613,7 +2610,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
                 end
                 if advice and advice.label == "KICK" and advice ~= before
                     and Announceable(state.casting.candidates, state.interruptible)
-                    and KickVoiceAllowed(unit, state.casting.candidates, advice) then
+                    and KickVoiceAllowed(unit, advice) then
                     PlayAdviceSound(advice, nil, state.casting.candidates)
                 end
             end
@@ -3040,7 +3037,7 @@ frame:SetScript("OnUpdate", function()
                                         KickTrace(unit, "soon", state, entry.candidates,
                                             CastAheadMatch.BestGuess(entry.candidates).spell, nil, heads)
                                     end
-                                    if KickVoiceAllowed(unit, entry.candidates, heads) then
+                                    if KickVoiceAllowed(unit, heads) then
                                         PlayAdviceSound(heads, true, entry.candidates)
                                     end
                                 end

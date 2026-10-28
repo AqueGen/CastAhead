@@ -282,7 +282,7 @@ local HEADER_TIPS = {
     hear = { "Play the call",
         "Click to hear how this cast is announced, without waiting for a pull." },
     prio = { "Important",
-        "Starred casts are the ones worth reacting to. |cffffd100Only important casts|r in the General tab hides everything else. Click a cell to star or unstar a cast." },
+        "Starred casts are the ones worth reacting to. |cffffd100Important casts only|r in the General tab hides everything else. A starred kick says \"important kick\", any other kick \"kick\". Click a cell to star or unstar a cast." },
     advice = { "What to do",
         "The call made when this cast starts. A dash means the cast is tracked but has no call: it is rare in the logs and not starred." },
     spell = { "Spell",
@@ -464,7 +464,7 @@ local function BuildEditor()
     editor.colA:SetPoint("TOPLEFT", 10, -48)
     local a = editor.colA
     editor.important = Check(a, "Important", { "TOPLEFT", a, "TOPLEFT", 0, 0 },
-        "Counts for \"Important casts only\" in General. Starts as our curated choice.")
+        "Counts for \"Important casts only\" in General, and a kick on this cast says \"important kick\" instead of \"kick\". Starts as our curated choice.")
     editor.curated = a:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     editor.curated:SetPoint("LEFT", editor.important.label, "RIGHT", 8, 0)
     editor.important:SetScript("OnClick", function(self) SetImportant(editor.entry, self:GetChecked()) end)

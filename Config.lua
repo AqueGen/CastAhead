@@ -245,7 +245,7 @@ end
 -- read as an old profile. Older profile shapes exist and each would
 -- otherwise read as a reset: the per-context one (CastAheadDB.ctx.key), the
 -- flat one from before the early warning became a number.
-C.SCHEMA = 6
+C.SCHEMA = 7
 
 function C.Migrate()
     local existing = CastAheadDB ~= nil
@@ -346,6 +346,16 @@ function C.Migrate()
     if existing and (tonumber(CastAheadDB.schema) or 0) < 6
             and (CastAheadDB.burstCalls == true or CastAheadDB.raidSaves == true) then
         CastAheadDB.raidMode = true
+    end
+    if existing and (tonumber(CastAheadDB.schema) or 0) < 7 then
+        if CastAheadDB.kickImportantOnly == false then CastAheadDB.kickFocusOnly = false end
+        CastAheadDB.kickImportantOnly = nil
+        for _, field in ipairs({ "sounds", "spellSounds" }) do
+            local picks = CastAheadDB[field]
+            for key, name in pairs(type(picks) == "table" and picks or {}) do
+                if name == "CastAhead: interrupt" then picks[key] = "CastAhead: kick" end
+            end
+        end
     end
     CastAheadDB.schema = C.SCHEMA
 end

@@ -132,9 +132,9 @@ local SWITCHES = {
     sound = { label = "Sound",
         tip = "Master switch for everything the addon plays." },
     voice = { label = "Voice",
-        tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"interrupt\"." },
-    kickImportantOnly = { label = "Kick voice only on important casts",
-        tip = "Play the kick call only for important casts, and only on your focus when it is an enemy, whatever mark it has. It says \"important kick\". A mob's first cast is often not recognised: the call starts once the mob has finished one cast." },
+        tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"kick\"." },
+    kickFocusOnly = { label = "Kick calls only for my focus",
+        tip = "With an enemy focus, only its casts get the kick call; other mobs keep their icons. Without a focus every mob is called. A mob's first cast is often not recognised: calls start once it has finished one cast." },
     fixedSpacing = { label = "Fixed spacing", defaultOff = true,
         tip = "Space the icons evenly: each step is the icon width plus the Gap, however long the words under the icons are. Every row looks the same; two long words side by side may overlap." },
     fullLabels = { label = "Full labels", defaultOff = true,
@@ -435,7 +435,7 @@ function BuildGeneral(panel)
     local audio = BuildGroup(panel, "Sound", 126)
     local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 }, RedrawAndSaves)
     local voice = BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 }, RedrawAndSaves)
-    BuildSwitch(panel, "kickImportantOnly", { "TOPLEFT", voice, "BOTTOMLEFT", 0, -4 })
+    BuildSwitch(panel, "kickFocusOnly", { "TOPLEFT", voice, "BOTTOMLEFT", 0, -4 })
 
     local plates = BuildGroup(panel, "Nameplate icons", 100)
     local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 }, OutputChanged)

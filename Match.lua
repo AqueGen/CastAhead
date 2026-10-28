@@ -33,7 +33,7 @@ M.HEAVY_SINGLE = 0.15      -- single-target hits are mitigated harder
 -- `say` is spoken aloud by the addon; it has to name the response, not the
 -- spell, because that is what the player has to decide in the moment.
 M.ADVICE = {
-    KICK = { label = "KICK", say = "interrupt", r = 1.00, g = 0.20, b = 0.20 },
+    KICK = { label = "KICK", say = "kick", r = 1.00, g = 0.20, b = 0.20 },
     CC   = { label = "STUN", say = "stun", r = 0.70, g = 0.40, b = 1.00 },
     -- One target taking a large hit and the whole group taking one call for
     -- different answers - a personal cooldown versus everyone reacting - so
@@ -448,12 +448,12 @@ function M.Important(row)
     return M.Curated(row)
 end
 
-function M.AnyImportant(candidates)
-    if not candidates then return false end
+function M.AllImportant(candidates)
+    if not candidates or #candidates == 0 then return false end
     for i = 1, #candidates do
-        if M.Important(candidates[i]) then return true end
+        if not M.Important(candidates[i]) then return false end
     end
-    return false
+    return true
 end
 
 function M.OnlyImportant(rows)
