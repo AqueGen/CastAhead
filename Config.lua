@@ -242,6 +242,8 @@ C.SCHEMA = 6
 
 function C.Migrate()
     local existing = CastAheadDB ~= nil
+    -- A new install has nothing to be told about what changed.
+    C.newInstall = not existing
     CastAheadDB = CastAheadDB or {}
     if type(CastAheadDB.ctx) == "table" then
         -- The key context was the one that ever fired; the raid one is
