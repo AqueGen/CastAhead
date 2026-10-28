@@ -295,7 +295,7 @@ local Refresh, ToggleEditor
 -- for it, else along the bottom. Unticked, a value setting follows the global
 -- one, shown greyed so the player sees what the cast gets anyway.
 local PANEL_W, PANEL_GAP, COL_W = 250, 12, 230
-local editor
+local editor, tableClipped
 
 local function Reapply()
     if CastAheadCore and CastAheadCore.Reapply then CastAheadCore.Reapply() end
@@ -357,14 +357,33 @@ end
 
 -- Right of the table when it fits there, else a strip along the bottom. Both
 -- hang off the scroll frame, so they stay put while the table scrolls.
+-- `clip` cuts the table at that width, else it spans the page.
+local function FitTable(clip)
+    sideScroll:ClearAllPoints()
+    sideScroll:SetPoint("TOPLEFT", host, "TOPLEFT", 0, -TABLE_TOP)
+    if clip then
+        sideScroll:SetWidth(clip)
+        sideScroll:SetHorizontalScroll(0)
+    else
+        sideScroll:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, -TABLE_TOP)
+    end
+end
+
+-- Returns the height a bottom strip adds to the page, and whether the table
+-- was cut short for a panel on the right.
 local function LayoutEditor()
-    if not (editor and editor:IsShown()) then return 0 end
+    if not (editor and editor:IsShown()) then
+        FitTable(nil)
+        return 0, false
+    end
     local scroll, width = host:GetParent(), host:GetWidth()
-    -- On the right it may cover the Overrides column: while the panel is open
-    -- that column only repeats what the panel shows.
+    -- Short of room on the right, the table drops its Overrides column while
+    -- the panel is open: that column only repeats what the panel shows.
     local last = tableColumns[#tableColumns]
     local covered = last.key == "overrides" and last.width + COLUMN_GAP or 0
-    local right = width - TableWidth() + covered >= PANEL_W + PANEL_GAP
+    local fits = width - TableWidth() >= PANEL_W + PANEL_GAP
+    local right = fits or width - TableWidth() + covered >= PANEL_W + PANEL_GAP
+    FitTable(right and not fits and TableWidth() - covered or nil)
     editor:ClearAllPoints()
     editor.colB:ClearAllPoints()
     -- The two halves side by side only where both fit, else one under the other.
@@ -374,15 +393,15 @@ local function LayoutEditor()
     else
         editor.colB:SetPoint("TOPLEFT", editor.colA, "BOTTOMLEFT", 0, -10)
     end
-    local height = sideBySide and 156 or 250
+    local height = sideBySide and 156 or 236
     if right then
         editor:SetPoint("TOPLEFT", scroll, "TOPLEFT", width - PANEL_W, -TABLE_TOP)
         editor:SetSize(PANEL_W, height)
-        return 0
+        return 0, not fits
     end
     editor:SetPoint("BOTTOMLEFT", scroll, "BOTTOMLEFT", 0, 0)
     editor:SetSize(width, height)
-    return height
+    return height, false
 end
 
 local function BuildEditor()
@@ -721,7 +740,8 @@ function Refresh()
     -- The cast being edited left the table (another dungeon, a search).
     if editor and editor:IsShown() and not editing then editor:Hide() end
     -- A bottom strip covers the last rows, so the page grows by its height.
-    local bottom = LayoutEditor()
+    local bottom
+    bottom, tableClipped = LayoutEditor()
 
     local rowsHeight = math.max(#list, 1) * ROW_HEIGHT
     rowParent:SetHeight(rowsHeight)
@@ -744,7 +764,12 @@ function Refresh()
         summary = "|cffff3333Both outputs are off - nothing will be shown in combat|r"
     end
     CastAheadWindow.SetFooter(summary)
-    CastAheadWindow.SideHint(sideScroll, tableFrame)
+    -- A table cut for the panel has nothing to scroll sideways to.
+    if tableClipped then
+        CastAheadWindow.SetFooterHint("")
+    else
+        CastAheadWindow.SideHint(sideScroll, tableFrame)
+    end
 end
 
 local function Build(page)
@@ -776,6 +801,9 @@ local function Build(page)
     CastAheadUI.RefreshTest()
 
     sideScroll, tableFrame = CastAheadWindow.SideScroll(host, TABLE_TOP)
+    sideScroll:SetScript("OnSizeChanged", function(self)
+        if not tableClipped then CastAheadWindow.SideHint(self, tableFrame) end
+    end)
 
     headerStrip = CreateFrame("Frame", nil, tableFrame)
     headerStrip:SetHeight(HEADER_HEIGHT)
