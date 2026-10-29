@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.26.0](https://github.com/AqueGen/CastAhead/compare/v0.25.0...v0.26.0) (2026-10-29)
+
+
+### Features
+
+* the kick call says "kick" instead of "interrupt" ([#118](https://github.com/AqueGen/CastAhead/issues/118)) ([561d410](https://github.com/AqueGen/CastAhead/commit/561d4103296dbb03433b48b359a881d5782487cf))
+* "Kick calls only for my focus" in General - Sound, off by default: with an enemy focus only the focus gets kick calls; the What's new panel after the update can turn it on ([#118](https://github.com/AqueGen/CastAhead/issues/118)) ([561d410](https://github.com/AqueGen/CastAhead/commit/561d4103296dbb03433b48b359a881d5782487cf))
+* 24 more kickable casts are marked important ([#114](https://github.com/AqueGen/CastAhead/issues/114)) ([174bf3a](https://github.com/AqueGen/CastAhead/commit/174bf3af9dcfa7d44e1fb5d87abedf9b5d65824d))
+* General lists what the addon cannot do: often silent on a mob's first cast, about 5 to 8 wrong calls in 100 ([#116](https://github.com/AqueGen/CastAhead/issues/116)) ([e437696](https://github.com/AqueGen/CastAhead/commit/e437696a1ec58a3b98f3c1bd99e8aefc86d66a4b))
+
 ## [0.25.0](https://github.com/AqueGen/CastAhead/compare/v0.24.1...v0.25.0) (2026-10-28)
 
 
