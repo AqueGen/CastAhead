@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.26.0](https://github.com/AqueGen/CastAhead/compare/v0.25.0...v0.26.0) (2026-10-29)
+
+
+### Features
+
+* kick calls only for your focus, off by default, turned on from What's new ([#118](https://github.com/AqueGen/CastAhead/issues/118)) ([561d410](https://github.com/AqueGen/CastAhead/commit/561d4103296dbb03433b48b359a881d5782487cf))
+* kick voice only on important casts ([#114](https://github.com/AqueGen/CastAhead/issues/114)) ([174bf3a](https://github.com/AqueGen/CastAhead/commit/174bf3af9dcfa7d44e1fb5d87abedf9b5d65824d))
+* must kick or kick by the star, kick calls only for your focus ([#116](https://github.com/AqueGen/CastAhead/issues/116)) ([e437696](https://github.com/AqueGen/CastAhead/commit/e437696a1ec58a3b98f3c1bd99e8aefc86d66a4b))
+
 ## [0.25.0](https://github.com/AqueGen/CastAhead/compare/v0.24.1...v0.25.0) (2026-10-28)
 
 
