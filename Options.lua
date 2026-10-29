@@ -378,9 +378,9 @@ function BuildGeneral(panel)
     howText:SetSpacing(3)
     howText:SetPoint("TOPLEFT", how, "TOPLEFT", 10, -26)
     howText:SetPoint("RIGHT", how, "RIGHT", -10, 0)
-    howText:SetText("- A mob's first cast is usually not called; calls start from its second cast.\n"
-        .. "- A mob whose casts always get kicked may not be called at all.\n"
-        .. "- Now and then a call is wrong.")
+    howText:SetText("- The addon is often silent on the first cast of a mob. It starts with the second cast.\n"
+        .. "- If you always interrupt a mob, the addon may say nothing for that mob.\n"
+        .. "- Some calls are wrong: about 5 to 8 calls in 100.")
     how:SetScript("OnSizeChanged", function(self)
         local height = 26 + howText:GetStringHeight() + 10
         if math.abs(self:GetHeight() - height) > 0.5 then

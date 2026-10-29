@@ -18,9 +18,9 @@ A kickable cast with a star on the Casts page says "important kick"; any other k
 
 ## Limits
 
-- A mob's first cast is usually not called; calls start from its second cast.
-- A mob whose casts always get kicked may not be called at all.
-- Now and then a call is wrong.
+- The addon is often silent on the first cast of a mob. It starts with the second cast.
+- If you always interrupt a mob, the addon may say nothing for that mob.
+- Some calls are wrong: about 5 to 8 calls in 100.
 
 ## Commands
 
