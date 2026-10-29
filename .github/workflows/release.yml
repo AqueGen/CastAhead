@@ -1,26 +1,15 @@
-name: Package and Release (manual)
+name: Package and Release
 
-# Routine releases are driven by release-please.yml. This workflow is the
-# manual entry point for alpha/beta builds only - it must NOT trigger on tag
-# pushes, or it would race the packaging job in release-please.yml.
+# Stable releases: release-please.yml dispatches this workflow on the tag it
+# creates when the release PR merges. Run it by hand for a beta: it builds the
+# open release PR's branch, so the TOC version and the top CHANGELOG section
+# already describe the coming release. It must NOT trigger on tag pushes, or it
+# would race the packaging job in release-please.yml.
 on:
   workflow_dispatch:
     inputs:
-      release_type:
-        description: 'Release type'
-        required: true
-        default: 'beta'
-        type: choice
-        options:
-          - release
-          - beta
-          - alpha
-      version:
-        description: 'Version (e.g., 1.0.4-beta.1). Leave empty for auto from latest tag.'
-        required: false
-        type: string
       dry_run:
-        description: 'Dry run (no upload)'
+        description: 'Dry run (no tag, no upload)'
         required: false
         default: false
         type: boolean
@@ -36,52 +25,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.ref_type == 'tag' && github.ref || 'release-please--branches--main' }}
           fetch-depth: 0
 
       # Skipped when dispatched on a tag: release-please.yml dispatches this
       # workflow on the tag it just created, and that tag must not be recreated.
-      - name: Determine version for manual dispatch
+      - name: Determine beta version
         id: version
         if: github.ref_type != 'tag'
         run: |
-          if [ -n "${{ inputs.version }}" ]; then
-            VERSION="${{ inputs.version }}"
-          else
-            # Get latest tag and append release type suffix
-            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-            BASE_VERSION=${LATEST_TAG#v}
-
-            # Parse version components
-            MAJOR=$(echo $BASE_VERSION | cut -d. -f1)
-            MINOR=$(echo $BASE_VERSION | cut -d. -f2)
-            PATCH=$(echo $BASE_VERSION | cut -d. -f3 | cut -d- -f1)
-
-            # Increment patch for new version
-            NEW_PATCH=$((PATCH + 1))
-
-            case "${{ inputs.release_type }}" in
-              alpha)
-                VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}-alpha.1"
-                ;;
-              beta)
-                VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}-beta.1"
-                ;;
-              release)
-                VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
-                ;;
-            esac
+          BASE=$(jq -r '."."' .release-please-manifest.json)
+          if git rev-parse -q --verify "refs/tags/v${BASE}" >/dev/null; then
+            echo "::error::v${BASE} is already released - no open release PR to build a beta from"
+            exit 1
           fi
+          LAST=$(git tag -l "v${BASE}-beta.*" | sed 's/.*-beta\.//' | sort -n | tail -1)
+          VERSION="${BASE}-beta.$(( ${LAST:-0} + 1 ))"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "📦 Version: $VERSION"
+          echo "Version: $VERSION"
 
       # A dry run must leave nothing behind, so it does not tag either.
-      - name: Create tag for manual dispatch
+      - name: Create beta tag
         if: github.ref_type != 'tag' && !inputs.dry_run
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "v${VERSION}" -m "Release v${VERSION}"
+          git tag -a "v${VERSION}" -m "Beta v${VERSION}"
           git push origin "v${VERSION}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
