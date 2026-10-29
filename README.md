@@ -14,7 +14,7 @@ Predicts trash casts in Mythic+ and tells you what to do about them. On top of t
 
 A kickable cast with a star on the Casts page says "must kick"; any other kickable cast says "kick". When CastAhead is not sure a cast is a starred one, it says "kick". By default only starred casts are shown and called, so you mostly hear "must kick"; turn off "Important casts only" in General to hear "kick" on the rest.
 
-"Kick calls only for my focus" in General - Sound is on by default. While your focus is a live enemy, only its casts get the kick call, whatever its raid mark; the other mobs keep their icons. With no focus, a friendly one or a dead one, every mob is called. Turn it off to hear kick calls on every mob whatever your focus.
+"Kick calls only for my focus" in General - Sound is off by default, so every mob gets kick calls. Turn it on there or from the What's new panel after the update. While it is on and your focus is a live enemy, only its casts get the kick call, whatever its raid mark; the other mobs keep their icons. With no focus, a friendly one or a dead one, every mob is called.
 
 ## Limits
 

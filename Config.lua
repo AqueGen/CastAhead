@@ -348,7 +348,6 @@ function C.Migrate()
         CastAheadDB.raidMode = true
     end
     if existing and (tonumber(CastAheadDB.schema) or 0) < 7 then
-        if CastAheadDB.kickImportantOnly == false then CastAheadDB.kickFocusOnly = false end
         CastAheadDB.kickImportantOnly = nil
         for _, field in ipairs({ "sounds", "spellSounds" }) do
             local picks = CastAheadDB[field]

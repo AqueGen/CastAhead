@@ -506,14 +506,14 @@ check(CastAheadDB.schema == 7 and CastAheadDB.saveButtons == nil, "a new install
 CastAheadDB = { schema = 6, kickImportantOnly = false, sounds = { KICK = "CastAhead: interrupt", AOE = "CastAhead: stun" },
     spellSounds = { [200] = "CastAhead: interrupt" } }
 fire("ADDON_LOADED", "CastAhead")
-check(CastAheadDB.kickFocusOnly == false and CastAheadDB.kickImportantOnly == nil,
-    "the old kick switch turned off turns the focus switch off, and the old key goes")
+check(CastAheadDB.kickFocusOnly == nil and CastAheadDB.kickImportantOnly == nil,
+    "the old kick switch turned off goes, and the focus switch stays off")
 check(CastAheadDB.sounds.KICK == "CastAhead: kick" and CastAheadDB.sounds.AOE == "CastAhead: stun"
     and CastAheadDB.spellSounds[200] == "CastAhead: kick", "sound picks of the interrupt clip point at the kick clip")
 CastAheadDB = { schema = 6, kickImportantOnly = true }
 fire("ADDON_LOADED", "CastAhead")
 check(CastAheadDB.kickFocusOnly == nil and CastAheadDB.kickImportantOnly == nil,
-    "the old kick switch left on leaves the focus switch on its default")
+    "the old kick switch left on goes, and the focus switch stays off")
 
 do
     CastAheadDB = { schema = 4, saveCalls = true, raidSaves = true }
@@ -640,6 +640,13 @@ do
     check(noticeFrame.shown, "the notice shows again on request")
     noticeFrame.close.scripts.OnClick()
     check(not noticeFrame.shown, "Close hides the notice")
+    CastAheadDB, shownTab, lines = {}, nil, {}
+    print = function(text) lines[#lines + 1] = tostring(text) end
+    CastAheadUI.ShowUpdateNotice(CastAheadWindow.NEWS)
+    noticeFrame.open.scripts.OnClick()
+    print = realPrint
+    check(CastAheadDB.kickFocusOnly == true and shownTab == nil and not noticeFrame.shown and #lines == 1,
+        "Turn it on in What's new turns the focus switch on, says so in chat and hides the notice")
     CastAheadUI.ShowTab, CreateFrame, CastAheadUI.ShowUpdateNotice = savedShowTab, savedCreate, savedNotice
 
     -- What's new: once per message after an update, with a button to its
@@ -655,8 +662,8 @@ do
         fire("PLAYER_ENTERING_WORLD")
     end
     login({ schema = 6 }, false)
-    check(#told == 1 and told[1] == CastAheadWindow.NEWS and told[1].page == "Casts",
-        "an updated profile is told what's new once, with a button to the Casts page")
+    check(#told == 1 and told[1] == CastAheadWindow.NEWS and told[1].enable == "kickFocusOnly",
+        "an updated profile is told what's new once, with a button that turns the focus switch on")
     check(CastAheadDB.newsSeen == CastAheadWindow.NEWS.id, "the message is marked seen")
     login(CastAheadDB, false)
     check(#told == 1, "the same message is not shown again")
@@ -1382,9 +1389,9 @@ do
         hostile.focus = nil
         return n
     end
-    local open = { importantOnly = false, leadSeconds = 0 }
+    local open = { importantOnly = false, leadSeconds = 0, kickFocusOnly = true }
 
-    local anyMob = { importantOnly = false, leadSeconds = 0, kickFocusOnly = false }
+    local anyMob = { importantOnly = false, leadSeconds = 0 }
 
     check(kickAlerts(open, 2.0) == 1, "kick voice: a shown unstarred kick is voiced")
     check(kickAlerts(open, 3.5) == 1, "kick voice: a starred kick is voiced")
@@ -1395,7 +1402,7 @@ do
         hostile.focus, focusIs = true, true
         check(kickAlerts(open, length) == 1, "kick voice: focus on this plate voices, cast " .. length)
         hostile.focus, focusIs = true, false
-        check(kickAlerts(anyMob, length) == 1, "kick voice: focus switch off voices every mob, cast " .. length)
+        check(kickAlerts(anyMob, length) == 1, "kick voice: focus switch off by default voices every mob, cast " .. length)
     end
 
     hostile.focus, focusIs = true, "SECRET"
@@ -1418,11 +1425,11 @@ do
     check(kickAlerts(anyMob, 5.2, true) == 1, "kick voice: turning interruptible with the focus switch off is voiced")
 
     hostile.focus, focusIs = true, false
-    check(kickAlerts({ leadSeconds = 0 }, 8.5) == 1, "kick voice: other calls unaffected")
+    check(kickAlerts({ leadSeconds = 0, kickFocusOnly = true }, 8.5) == 1, "kick voice: other calls unaffected")
 
     local function headsAlerts(length, focusOff)
         CastAheadDB = { importantOnly = false, leadSeconds = 5 }
-        if focusOff then CastAheadDB.kickFocusOnly = false end
+        if not focusOff then CastAheadDB.kickFocusOnly = true end
         enter()
         castFor(length)
         sounds, spoken, clips = 0, 0, 0
@@ -1501,7 +1508,7 @@ do
     local function traceRun(dev, length, claimed)
         traced = {}
         print = function(text) if tostring(text):find("kick voice:", 1, true) then traced[#traced + 1] = text end end
-        local settings = { importantOnly = false, leadSeconds = 0, devMode = dev or nil }
+        local settings = { importantOnly = false, leadSeconds = 0, devMode = dev or nil, kickFocusOnly = true }
         if claimed then
             kickAlerts(settings, length)
         else

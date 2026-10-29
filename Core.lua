@@ -276,8 +276,12 @@ local function FocusState(unit)
     return same == true and "this" or "other"
 end
 
+local function FocusOnly()
+    return CastAheadConfig.Get("kickFocusOnly") == true
+end
+
 local function KickVoiceAllowed(unit, advice)
-    if not advice or advice.label ~= "KICK" or not CastAheadConfig.Enabled("kickFocusOnly") then
+    if not advice or advice.label ~= "KICK" or not FocusOnly() then
         return true
     end
     local focus = FocusState(unit)
@@ -567,9 +571,9 @@ local function KickTrace(unit, kind, state, candidates, spell, interruptible, ad
         reason = "skip:not-shown"
     elseif not (advice and advice.label == "KICK") then
         reason = "skip:not-kick"
-    elseif CastAheadConfig.Enabled("kickFocusOnly") and focus == "other" then
+    elseif FocusOnly() and focus == "other" then
         reason = "skip:gate:focus-other"
-    elseif CastAheadConfig.Enabled("kickFocusOnly") and focus == "secret" then
+    elseif FocusOnly() and focus == "secret" then
         reason = "skip:gate:focus-secret"
     elseif not CastAheadConfig.Enabled("sound") or CastAheadConfig.AllMuted(candidates) then
         reason = "skip:sound-off"

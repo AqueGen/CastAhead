@@ -77,12 +77,16 @@ local DEFENSIVES_OFF = {
 -- Shown once after an update, never on a new install. Only changes that
 -- change how a run plays out go here; raise `id` for each new message.
 W.NEWS = {
-    id = 1,
+    id = 2,
     title = "What's new in CastAhead",
-    text = "- The Casts page now sorts every cast by what you get in combat: called out loud, shown without sound, or hidden. Hover a cast to see why.\n\n"
-        .. "- Click a cast to give it its own settings: star it as important, mute it, or give it its own sound or early warning.\n\n"
-        .. "- \"My role only\" now hides tank busters and dispels you cannot use even with \"Important casts only\" off.",
-    button = "Open Casts", page = "Casts",
+    text = "- Casts with a star say \"must kick\". Other casts say \"kick\". The Sounds tab has a MUST KICK row if you want a different sound.\n\n"
+        .. "- New switch: \"Kick calls only for my focus\". It is off.\n"
+        .. "On: only your focus gets kick calls. If you have no focus, every mob gets them.\n"
+        .. "Off: every mob gets kick calls.\n\n"
+        .. "- The addon is often silent on the first cast of a mob. It starts with the second cast.\n\n"
+        .. "Turn the focus switch on here, or later in General - Sound.",
+    button = "Turn it on", enable = "kickFocusOnly",
+    done = "kick calls only for your focus are on. Turn them off in /ca - General - Sound.",
 }
 local notice
 
@@ -134,7 +138,8 @@ local function BuildNotice()
     notice.open:SetPoint("RIGHT", notice.close, "LEFT", -PAD, 0)
 end
 
--- `message` = { title, text, button, page }; the button opens that page.
+-- `message` = { title, text, button, page } or { ..., enable, done }: the
+-- button opens that page, or turns that default-off switch on and prints `done`.
 -- Without one it is the notice about defensive calls going off by default.
 function W.ShowUpdateNotice(message)
     message = message or DEFENSIVES_OFF
@@ -144,7 +149,13 @@ function W.ShowUpdateNotice(message)
     notice.open:SetText(message.button)
     notice.open:SetScript("OnClick", function()
         notice:Hide()
-        CastAheadUI.ShowTab(message.page)
+        if message.enable then
+            CastAheadConfig.Set(message.enable, true)
+            if CastAheadOptions and CastAheadOptions.Refresh then CastAheadOptions.Refresh() end
+            print("|cff33ff99CastAhead:|r " .. message.done)
+        else
+            CastAheadUI.ShowTab(message.page)
+        end
     end)
     notice:SetSize(NOTICE_W, TITLE_H + 1 + 3 * NOTICE_PAD + ENTRY_H + math.ceil(notice.body:GetStringHeight()))
     notice:Show()

@@ -133,7 +133,7 @@ local SWITCHES = {
         tip = "Master switch for everything the addon plays." },
     voice = { label = "Voice",
         tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"kick\"." },
-    kickFocusOnly = { label = "Kick calls only for my focus",
+    kickFocusOnly = { label = "Kick calls only for my focus", defaultOff = true,
         tip = "With an enemy focus, only its casts get the kick call; other mobs keep their icons. Without a focus, or with a friendly or dead one, every mob is called. The focus's raid mark does not matter." },
     fixedSpacing = { label = "Fixed spacing", defaultOff = true,
         tip = "Space the icons evenly: each step is the icon width plus the Gap, however long the words under the icons are. Every row looks the same; two long words side by side may overlap." },
