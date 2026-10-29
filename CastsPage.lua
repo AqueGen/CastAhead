@@ -85,12 +85,12 @@ local function RunState(entry)
     if IsDisabled(entry.spell) then return false, false, hidden .. "switched off here." end
     if not CastAheadMatch.Shown(entry) then
         if CastAheadConfig.SpellImportant(entry.spell) == false and CastAheadMatch.ImportantOnly() then
-            return false, false, hidden .. "you unstarred it, and \"Important casts only\" is on in General."
+            return false, false, hidden .. "you marked it not important, and \"Important casts only\" is on in General."
         end
         if not CastAheadMatch.FitsPlayer(entry) then
-            return false, false, hidden .. "not for your role (\"My role only\" in General). Star it to show it anyway."
+            return false, false, hidden .. "not for your role (\"My role only\" in General). Mark it important to show it anyway."
         end
-        return false, false, hidden .. "no star, and \"Important casts only\" is on in General. Star it to show it."
+        return false, false, hidden .. "not important, and \"Important casts only\" is on in General. Mark it important to show it."
     end
     local silent = "Shown in combat without a call: "
     if not CastAheadMatch.Advice(entry) then return true, false, silent .. "the logs give it no call, so only its icon and timer show." end
@@ -282,13 +282,13 @@ local HEADER_TIPS = {
     hear = { "Play the call",
         "Click to hear how this cast is announced, without waiting for a pull." },
     prio = { "Important",
-        "Starred casts are the ones worth reacting to. |cffffd100Important casts only|r in the General tab hides everything else. A starred kick says \"must kick\", any other kick \"kick\", and so does a cast that could still be an unstarred one. Click a cell to star or unstar a cast." },
+        "Important casts are the ones worth reacting to. |cffffd100Important casts only|r in the General tab hides everything else. An important kick says \"must kick\", any other kick \"kick\", and so does a cast that could still be a not important one. Click a cell to mark a cast important or not." },
     advice = { "What to do",
-        "The call made when this cast starts. A dash means the cast is tracked but has no call: it is rare in the logs and not starred." },
+        "The call made when this cast starts. A dash means the cast is tracked but has no call: it is rare in the logs and not important." },
     spell = { "Spell",
         "The cast being tracked. Hover a row for the spell tooltip." },
     overrides = { "Overrides",
-        "A tick when any setting of the cast differs from the global ones: its star, mute, its own sound or early warning. Hover a row for the details, click it to change them." },
+        "A tick when any setting of the cast differs from the global ones: important or not, mute, its own sound or early warning. Hover a row for the details, click it to change them." },
     mob = { "Caster",
         "Which creature casts it. In 12.1 a nameplate never reveals a creature's name or ID, so this comes from combat logs - the addon only guesses which of them is in front of you." },
     level = { "Mob level",
@@ -768,7 +768,7 @@ local SECTIONS = {
     { key = "call", title = "In combat with a call" },
     { key = "silent", title = "In combat without sound", why = "muted, no call for it, or Sound is off in General" },
     { key = "hidden", title = "Hidden in combat",
-      why = "switched off, no star with Important casts only, or not for your role - hover a row" },
+      why = "switched off, not important with Important casts only, or not for your role - hover a row" },
 }
 local SECTION_H = 26
 local sectionRows = {}

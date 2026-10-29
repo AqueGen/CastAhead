@@ -118,7 +118,7 @@ end
 -- follows the storage convention, where nil means on.
 local SWITCHES = {
     importantOnly = { label = "Important casts only",
-        tip = "Show, speak and time only the casts marked with a star - the hand-picked set that needs a reaction." },
+        tip = "Show, speak and time only the casts marked Important on the Casts page - the hand-picked set that needs a reaction." },
     roleFilter = { label = "My role only",
         tip = "Hide calls this character cannot act on: dispels you do not have, tank busters for tanks and healers." },
     nameplates = { label = "Show icons on nameplates",
@@ -460,9 +460,9 @@ function BuildGeneral(panel)
     kickNote:SetSpacing(3)
     kickNote:SetPoint("TOPLEFT", focusOnly, "BOTTOMLEFT", 4, -2)
     kickNote:SetPoint("RIGHT", audio, "RIGHT", -10, 0)
-    kickNote:SetText("On: only your focus gets kick calls. If you have no focus, every mob gets them.\n"
+    kickNote:SetText("On: only your focus target gets kick calls. If you have no focus, every mob gets them.\n"
         .. "Off: every mob gets kick calls.\n"
-        .. "Casts with a star say \"must kick\". Other casts say \"kick\".")
+        .. "Important casts say \"must kick\". Other casts say \"kick\".")
     audio:SetScript("OnSizeChanged", function(self)
         local height = 26 + 3 * focusOnly:GetHeight() + 2 * 4 + 2 + kickNote:GetStringHeight() + 12
         if math.abs(self:GetHeight() - height) > 0.5 then
