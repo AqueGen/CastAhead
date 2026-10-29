@@ -118,7 +118,7 @@ end
 -- follows the storage convention, where nil means on.
 local SWITCHES = {
     importantOnly = { label = "Important casts only",
-        tip = "Show, speak and time only the casts marked with a star - the hand-picked set that needs a reaction." },
+        tip = "Show, speak and time only the casts marked Important on the Casts page - the hand-picked set that needs a reaction." },
     roleFilter = { label = "My role only",
         tip = "Hide calls this character cannot act on: dispels you do not have, tank busters for tanks and healers." },
     nameplates = { label = "Show icons on nameplates",
@@ -133,7 +133,7 @@ local SWITCHES = {
         tip = "Master switch for everything the addon plays." },
     voice = { label = "Voice",
         tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"kick\"." },
-    kickFocusOnly = { label = "Kick calls only for my focus",
+    kickFocusOnly = { label = "Kick calls only for my focus", defaultOff = true,
         tip = "With an enemy focus, only its casts get the kick call; other mobs keep their icons. Without a focus, or with a friendly or dead one, every mob is called. The focus's raid mark does not matter." },
     fixedSpacing = { label = "Fixed spacing", defaultOff = true,
         tip = "Space the icons evenly: each step is the icon width plus the Gap, however long the words under the icons are. Every row looks the same; two long words side by side may overlap." },
@@ -460,9 +460,8 @@ function BuildGeneral(panel)
     kickNote:SetSpacing(3)
     kickNote:SetPoint("TOPLEFT", focusOnly, "BOTTOMLEFT", 4, -2)
     kickNote:SetPoint("RIGHT", audio, "RIGHT", -10, 0)
-    kickNote:SetText("On: only your focus gets kick calls. If you have no focus, every mob gets them.\n"
-        .. "Off: every mob gets kick calls.\n"
-        .. "Casts with a star say \"must kick\". Other casts say \"kick\".")
+    kickNote:SetText("On: only your focus target gets kick calls. If you have no focus, every mob gets them.\n"
+        .. "Off: every mob gets kick calls.")
     audio:SetScript("OnSizeChanged", function(self)
         local height = 26 + 3 * focusOnly:GetHeight() + 2 * 4 + 2 + kickNote:GetStringHeight() + 12
         if math.abs(self:GetHeight() - height) > 0.5 then
@@ -1255,7 +1254,7 @@ function BuildReport(panel)
     table.insert(refreshers, Paint)
 end
 
-local SOUND_ROWS = { "KICK", "KICK_IMPORTANT", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
+local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
     "POISON", "CURSE", "MAGIC", "DISEASE", "BLEED", "SOOTHE", "PURGE", "SWITCH", "ADDS", "ALERT",
     "DEFENSIVE", "SOON", "BURST" }
 local SOUND_ROW_H = 26
@@ -1377,7 +1376,7 @@ function BuildSounds(panel)
     end
 
     for i, key in ipairs(SOUND_ROWS) do
-        local advice = CastAheadMatch.ADVICE[key] or CastAheadMatch.MUST_KICK
+        local advice = CastAheadMatch.ADVICE[key]
         local y = -(i - 1) * SOUND_ROW_H
         local label = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         label:SetPoint("TOPLEFT", body, "TOPLEFT", 0, y - 6)

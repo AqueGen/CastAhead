@@ -224,7 +224,6 @@ end
 -- tested outside the game.
 local ADVICE_SOUND = {           -- keyed by CastAheadMatch.ADVICE key
     KICK = "RAID_WARNING",
-    KICK_IMPORTANT = "RAID_WARNING",
     TANK = "ALARM_CLOCK_WARNING_3",
     AOE = "ALARM_CLOCK_WARNING_2",
     -- Not UI_RAID_BOSS_WHISPER_WARNING: DBM mutes that file (876098) with its
@@ -276,8 +275,12 @@ local function FocusState(unit)
     return same == true and "this" or "other"
 end
 
+local function FocusOnly()
+    return CastAheadConfig.Get("kickFocusOnly") == true
+end
+
 local function KickVoiceAllowed(unit, advice)
-    if not advice or advice.label ~= "KICK" or not CastAheadConfig.Enabled("kickFocusOnly") then
+    if not advice or advice.label ~= "KICK" or not FocusOnly() then
         return true
     end
     local focus = FocusState(unit)
@@ -424,8 +427,6 @@ do
                 lsm:Register("sound", "CastAhead: " .. advice.say, SOUND_ROOT .. "en\\" .. advice.file .. ".ogg")
             end
         end
-        local must = CastAheadMatch.MUST_KICK
-        lsm:Register("sound", "CastAhead: " .. must.say, SOUND_ROOT .. "en\\" .. must.file .. ".ogg")
         -- The game's own alert kits, so the picker has a spread of beeps even
         -- with no sound pack installed. Stored as kit numbers; Beep plays those.
         local GAME_SOUNDS = {
@@ -525,7 +526,6 @@ end
 -- only when nothing could speak. `voice` false skips speaking, for the
 -- General switch and for previews of just the sound.
 local function Alert(advice, lead, candidates, voice)
-    advice = CastAheadMatch.Call(advice, candidates)
     local custom = CustomSound(advice, candidates)
     if custom then
         PlayMedia(custom)
@@ -567,20 +567,20 @@ local function KickTrace(unit, kind, state, candidates, spell, interruptible, ad
         reason = "skip:not-shown"
     elseif not (advice and advice.label == "KICK") then
         reason = "skip:not-kick"
-    elseif CastAheadConfig.Enabled("kickFocusOnly") and focus == "other" then
+    elseif FocusOnly() and focus == "other" then
         reason = "skip:gate:focus-other"
-    elseif CastAheadConfig.Enabled("kickFocusOnly") and focus == "secret" then
+    elseif FocusOnly() and focus == "secret" then
         reason = "skip:gate:focus-secret"
     elseif not CastAheadConfig.Enabled("sound") or CastAheadConfig.AllMuted(candidates) then
         reason = "skip:sound-off"
     else
         reason = "played"
     end
-    local tier = candidates and (CastAheadMatch.AllImportant(candidates) and "important" or "normal") or "-"
     print("|cff33ff99CastAhead|r kick voice: " .. unit .. " " .. kind
         .. " claimed=" .. (candidates and tostring(spell) or "-")
         .. " advice=" .. (advice and advice.key or "-")
-        .. " tier=" .. tier .. " focus=" .. focus .. " -> " .. reason)
+        .. " focus=" .. focus .. " focusOnly=" .. (FocusOnly() and "on" or "off")
+        .. " -> " .. reason)
 end
 
 -- Creature identity ---------------------------------------------------------
