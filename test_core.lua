@@ -1444,7 +1444,7 @@ do
     PlaySoundFile = function(path, ...) heard[#heard + 1] = path return realPlay(path, ...) end
     local function plainKick(path) return path and path:find("\\KICK%.ogg$") end
     kickAlerts(open, 3.5)
-    check(heard[1] and heard[1]:find("KICK_IMPORTANT%.ogg$"), "kick voice: a starred kick plays the important kick clip")
+    check(heard[1] and heard[1]:find("KICK_IMPORTANT%.ogg$"), "kick voice: a starred kick plays the must kick clip")
     heard = {}
     kickAlerts(open, 2.0)
     check(plainKick(heard[1]), "kick voice: an unstarred kick plays the kick clip, got " .. tostring(heard[1]))
@@ -1454,10 +1454,45 @@ do
         "kick voice: a starred and an unstarred candidate together play the kick clip, got " .. tostring(heard[1]))
     heard = {}
     headsAlerts(3.5)
-    check(heard[1] and heard[1]:find("KICK_IMPORTANT_soon%.ogg$"), "kick voice: heads-up uses the important kick clip")
+    check(heard[1] and heard[1]:find("KICK_IMPORTANT_soon%.ogg$"), "kick voice: heads-up uses the must kick clip")
     heard = {}
     headsAlerts(2.0)
     check(heard[1] and heard[1]:find("\\KICK_soon%.ogg$"), "kick voice: heads-up uses the kick clip")
+
+    LibStub = function(name)
+        if name ~= "LibSharedMedia-3.0" then return nil end
+        return { Fetch = function(_, kind, key) return kind == "sound" and "picked\\" .. key .. ".ogg" or nil end }
+    end
+    local function pickedKick(sounds, spellSounds, length)
+        heard = {}
+        kickAlerts({ importantOnly = false, leadSeconds = 0, sounds = sounds, spellSounds = spellSounds }, length)
+        return heard[1]
+    end
+    check(pickedKick({ KICK_IMPORTANT = "Must" }, nil, 3.5) == "picked\\Must.ogg",
+        "must kick row: its pick plays on a starred kick, got " .. tostring(heard[1]))
+    check(pickedKick({ KICK = "Plain" }, nil, 3.5):find("KICK_IMPORTANT%.ogg$"),
+        "must kick row: the KICK pick does not reach a starred kick, got " .. tostring(heard[1]))
+    check(pickedKick({ KICK = "Plain", KICK_IMPORTANT = "Must" }, nil, 2.0) == "picked\\Plain.ogg",
+        "must kick row: an unstarred kick takes the KICK pick, got " .. tostring(heard[1]))
+    check(pickedKick({ KICK_IMPORTANT = "Must" }, { [982] = "Own" }, 3.5) == "picked\\Own.ogg",
+        "must kick row: a spell's own sound wins over the row, got " .. tostring(heard[1]))
+
+    CastAheadDB = { sounds = { KICK = "Plain" } }
+    heard = {}
+    CastAheadCore.PreviewSound(CastAheadMatch.MUST_KICK)
+    check(heard[1] and heard[1]:find("KICK_IMPORTANT%.ogg$"), "must kick row: the speaker plays the must kick clip, got " .. tostring(heard[1]))
+    heard = {}
+    CastAheadDB = {}
+    CastAheadCore.PreviewSound(CastAheadMatch.ADVICE.KICK)
+    check(plainKick(heard[1]), "KICK row: the speaker plays the kick clip, got " .. tostring(heard[1]))
+    heard = {}
+    CastAheadCore.PreviewMedia(nil, CastAheadMatch.MUST_KICK)
+    check(heard[1] and heard[1]:find("KICK_IMPORTANT%.ogg$"), "must kick row: the Voice entry's speaker plays the must kick clip")
+    CastAheadDB = { sounds = { KICK_IMPORTANT = "Must" } }
+    heard = {}
+    CastAheadCore.PreviewSound(CastAheadMatch.MUST_KICK)
+    check(heard[1] == "picked\\Must.ogg", "must kick row: the speaker plays its pick, got " .. tostring(heard[1]))
+    LibStub = nil
     PlaySoundFile = realPlay
 
     date = date or os.date

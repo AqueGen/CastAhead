@@ -224,6 +224,7 @@ end
 -- tested outside the game.
 local ADVICE_SOUND = {           -- keyed by CastAheadMatch.ADVICE key
     KICK = "RAID_WARNING",
+    KICK_IMPORTANT = "RAID_WARNING",
     TANK = "ALARM_CLOCK_WARNING_3",
     AOE = "ALARM_CLOCK_WARNING_2",
     -- Not UI_RAID_BOSS_WHISPER_WARNING: DBM mutes that file (876098) with its
@@ -423,6 +424,8 @@ do
                 lsm:Register("sound", "CastAhead: " .. advice.say, SOUND_ROOT .. "en\\" .. advice.file .. ".ogg")
             end
         end
+        local must = CastAheadMatch.MUST_KICK
+        lsm:Register("sound", "CastAhead: " .. must.say, SOUND_ROOT .. "en\\" .. must.file .. ".ogg")
         -- The game's own alert kits, so the picker has a spread of beeps even
         -- with no sound pack installed. Stored as kit numbers; Beep plays those.
         local GAME_SOUNDS = {
@@ -453,11 +456,8 @@ end
 -- test drive) goes through here so they cannot disagree.
 local ttsHintShown = false
 
-local function Voice(advice, lead, candidates)
+local function Voice(advice, lead)
     local file, say = advice.file, advice.say
-    if advice.label == "KICK" and CastAheadMatch.AllImportant(candidates) then
-        file, say = "KICK_IMPORTANT", "important kick"
-    end
     local text = lead and (say .. " soon") or say
     if CastAheadDB and CastAheadDB.voiceTTS then
         -- The player prefers the game's voice; the clip covers for it when it
@@ -525,12 +525,13 @@ end
 -- only when nothing could speak. `voice` false skips speaking, for the
 -- General switch and for previews of just the sound.
 local function Alert(advice, lead, candidates, voice)
+    advice = CastAheadMatch.Call(advice, candidates)
     local custom = CustomSound(advice, candidates)
     if custom then
         PlayMedia(custom)
         return
     end
-    if voice and Voice(advice, lead, candidates) then return end
+    if voice and Voice(advice, lead) then return end
     Beep(advice)
 end
 
