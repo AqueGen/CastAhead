@@ -12,7 +12,7 @@ Predicts trash casts in Mythic+ and tells you what to do about them. On top of t
 
 ## Kick calls and focus
 
-A kickable cast marked Important on the Casts page says "must kick"; any other kickable cast says "kick". When CastAhead is not sure a cast is an important one, it says "kick". By default only important casts are shown and called, so you mostly hear "must kick"; turn off "Important casts only" in General to hear "kick" on the rest.
+A kickable cast says "kick". By default only casts marked Important on the Casts page are shown and called; turn off "Important casts only" in General to hear the rest.
 
 "Kick calls only for my focus" in General - Sound is off by default, so every mob gets kick calls. Turn it on there or from the What's new panel after the update. While it is on and your focus is a live enemy, only its casts get the kick call, whatever its raid mark; the other mobs keep their icons. With no focus, a friendly one or a dead one, every mob is called.
 
@@ -41,7 +41,7 @@ A kickable cast marked Important on the Casts page says "must kick"; any other k
 A menu on the left: **Settings** (General, Sounds, Defensives while defensive calls are on), **Dungeon** (Guide, Saves, Casts, with the dungeon picked on top), **Raid** (Guide and Saves per difficulty, shown while the Raid switch is on) and **Feedback** (a Report page that prepares the text of a bug report or idea for a [GitHub issue](https://github.com/AqueGen/CastAhead/issues/new?template=report.yml) or a CurseForge comment).
 
 - **General**: what gets called and the outputs (nameplate icons, centre call, timeline, sound, voice). Sizes and positions live in Size and position. The early warning ("tank buster soon") is off by default: on top of the real call it can read as two casts.
-- **Sounds**: each category keeps the voice or plays any sound your other addons registered (MUST KICK is the important kick, KICK every other kick), and the game sound channel (Master, Dialog or SFX) sets the volume slider that controls the calls.
+- **Sounds**: each category keeps the voice or plays any sound your other addons registered, and the game sound channel (Master, Dialog or SFX) sets the volume slider that controls the calls.
 - **Casts**: every tracked cast with its call. Untick a cast to ignore it entirely. The Overrides column lists what a cast does differently from the global settings; click it to open the cast's panel (right of the table, or along the bottom in a narrow window): mark it important or not, mute its call, give it its own sound in place of the voice or its own early warning. Development mode adds the evidence columns.
 - **Guide** and **Saves**: per boss, the defensive calls for your role and the burst windows, as text and as a table.
 

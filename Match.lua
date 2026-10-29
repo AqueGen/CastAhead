@@ -93,9 +93,6 @@ for key, advice in pairs(M.ADVICE) do
 end
 M.ADVICE.SAVE = M.ADVICE.TANK   -- old name, kept so saved settings still resolve
 
-M.MUST_KICK = { key = "KICK_IMPORTANT", file = "KICK_IMPORTANT", label = "MUST KICK", short = "MUST KICK",
-    say = "must kick", r = M.ADVICE.KICK.r, g = M.ADVICE.KICK.g, b = M.ADVICE.KICK.b }
-
 -- A curated category (row.prio) wins outright. Below that, `interruptible` is
 -- what the game said about the cast happening right now and overrides the
 -- statistics, since a mob can be immune this pull.
@@ -449,19 +446,6 @@ function M.Important(row)
     local own = M.OwnImportant(row.spell)
     if own ~= nil then return own and M.Advice(row) ~= nil end
     return M.Curated(row)
-end
-
-function M.AllImportant(candidates)
-    if not candidates or #candidates == 0 then return false end
-    for i = 1, #candidates do
-        if not M.Important(candidates[i]) then return false end
-    end
-    return true
-end
-
-function M.Call(advice, candidates)
-    if advice and advice.label == "KICK" and M.AllImportant(candidates) then return M.MUST_KICK end
-    return advice
 end
 
 function M.OnlyImportant(rows)

@@ -79,9 +79,9 @@ local DEFENSIVES_OFF = {
 W.NEWS = {
     id = 2,
     title = "What's new in CastAhead",
-    text = "- Important casts say \"must kick\". With \"Important casts only\" off, other casts say \"kick\". The Sounds tab has a MUST KICK row if you want a different sound.\n\n"
+    text = "- The kick call now says \"kick\".\n\n"
         .. "- New switch: \"Kick calls only for my focus\". It is off.\n"
-        .. "On: you hear \"must kick\" when your focus target casts an important spell. Other mobs get no kick calls. If you have no focus, every mob gets them.\n"
+        .. "On: only your focus target gets kick calls. Other mobs get no kick calls. If you have no focus, every mob gets them.\n"
         .. "Off: every mob gets kick calls.\n\n"
         .. "- The addon is often silent on the first cast of a mob. It starts with the second cast.\n\n"
         .. "Turn the focus switch on here, or later in General - Sound.",

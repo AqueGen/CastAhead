@@ -461,8 +461,7 @@ function BuildGeneral(panel)
     kickNote:SetPoint("TOPLEFT", focusOnly, "BOTTOMLEFT", 4, -2)
     kickNote:SetPoint("RIGHT", audio, "RIGHT", -10, 0)
     kickNote:SetText("On: only your focus target gets kick calls. If you have no focus, every mob gets them.\n"
-        .. "Off: every mob gets kick calls.\n"
-        .. "Important casts say \"must kick\". With \"Important casts only\" off, other casts say \"kick\".")
+        .. "Off: every mob gets kick calls.")
     audio:SetScript("OnSizeChanged", function(self)
         local height = 26 + 3 * focusOnly:GetHeight() + 2 * 4 + 2 + kickNote:GetStringHeight() + 12
         if math.abs(self:GetHeight() - height) > 0.5 then
@@ -1255,7 +1254,7 @@ function BuildReport(panel)
     table.insert(refreshers, Paint)
 end
 
-local SOUND_ROWS = { "KICK", "KICK_IMPORTANT", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
+local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
     "POISON", "CURSE", "MAGIC", "DISEASE", "BLEED", "SOOTHE", "PURGE", "SWITCH", "ADDS", "ALERT",
     "DEFENSIVE", "SOON", "BURST" }
 local SOUND_ROW_H = 26
@@ -1377,7 +1376,7 @@ function BuildSounds(panel)
     end
 
     for i, key in ipairs(SOUND_ROWS) do
-        local advice = CastAheadMatch.ADVICE[key] or CastAheadMatch.MUST_KICK
+        local advice = CastAheadMatch.ADVICE[key]
         local y = -(i - 1) * SOUND_ROW_H
         local label = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         label:SetPoint("TOPLEFT", body, "TOPLEFT", 0, y - 6)

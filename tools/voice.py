@@ -29,7 +29,6 @@ XML_LANG = "en-US"
 # cast; the plain form fires when the cast actually starts.
 LINES = {
     "KICK": "kick",
-    "KICK_IMPORTANT": "must kick",
     "CC": "stun",
     "TANK": "tank buster",
     "AOE": "AOE damage",

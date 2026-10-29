@@ -336,20 +336,12 @@ check(M.Advice({ kickable = true }) == M.ADVICE.KICK,
     "rows without a curated category keep the statistical verdict")
 
 -- Importance helpers drive the display filter and the sound gate.
-check(M.AllImportant({ { prio = "AOE" }, { prio = "DODGE" } }), "every candidate marked makes the set important")
-check(not M.AllImportant({ { prio = "AOE" }, {} }), "one unmarked candidate, not important")
-check(not M.AllImportant(nil) and not M.AllImportant({}), "no candidates, not important")
+check(M.Important({ prio = "AOE" }) and not M.Important({}), "a marked row is important, an unmarked one is not")
 check(#M.OnlyImportant({ { prio = "AOE" }, {} }) == 1, "OnlyImportant keeps just marked rows")
 
 check(M.ADVICE.DEFENSIVE and M.ADVICE.DEFENSIVE.say == "defensive" and M.ADVICE.DEFENSIVE.file == "DEFENSIVE",
     "one defensive call, spoken as defensive")
 check(M.ADVICE.SMALL == nil and M.ADVICE.BIG == nil, "no small or big defensive call")
-
-for _, name in ipairs({ "KICK_IMPORTANT", "KICK_IMPORTANT_soon" }) do
-    local f = io.open("Sounds/en/" .. name .. ".ogg", "rb")
-    check(f ~= nil, "voice clip missing: Sounds/en/" .. name .. ".ogg")
-    if f then f:close() end
-end
 
 -- Every verdict has both voice clips on disk (tools/voice.py renders them);
 -- a missing one would silently drop to the game voice or the beep.
@@ -393,7 +385,7 @@ check(#M.OnlyImportant({ { prio = "TANK" }, { prio = "DODGE" }, {} }) == 1, "Onl
 M.PlayerRole = function() return "TANK" end
 check(M.Important({ prio = "TANK" }), "a tank sees tank busters")
 M.PlayerCanHandle = function(category) return category ~= "POISON" end
-check(not M.AllImportant({ { prio = "POISON" } }), "no poison dispel known, no poison call")
+check(not M.Important({ prio = "POISON" }), "no poison dispel known, no poison call")
 check(M.Important({ prio = "CURSE" }), "other schools stay while known")
 check(M.Important({ prio = "DODGE" }), "role-blind categories are never capability-gated")
 M.PlayerCanHandle = function() return false end

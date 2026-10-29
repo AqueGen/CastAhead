@@ -39,7 +39,7 @@ local function SetSpellSound(entry, name)
 end
 
 local function CategorySound(entry)
-    local advice = CastAheadMatch.Call(CastAheadMatch.Advice(entry), { entry })
+    local advice = CastAheadMatch.Advice(entry)
     return advice and CastAheadDB and CastAheadDB.sounds and CastAheadDB.sounds[advice.sound or advice.key]
 end
 
@@ -282,7 +282,7 @@ local HEADER_TIPS = {
     hear = { "Play the call",
         "Click to hear how this cast is announced, without waiting for a pull." },
     prio = { "Important",
-        "Important casts are the ones worth reacting to. |cffffd100Important casts only|r in the General tab hides everything else. An important kick says \"must kick\", any other kick \"kick\", and so does a cast that could still be a not important one. Click a cell to mark a cast important or not." },
+        "Important casts are the ones worth reacting to. |cffffd100Important casts only|r in the General tab hides everything else. Click a cell to mark a cast important or not." },
     advice = { "What to do",
         "The call made when this cast starts. A dash means the cast is tracked but has no call: it is rare in the logs and not important." },
     spell = { "Spell",
@@ -464,7 +464,7 @@ local function BuildEditor()
     editor.colA:SetPoint("TOPLEFT", 10, -48)
     local a = editor.colA
     editor.important = Check(a, "Important", { "TOPLEFT", a, "TOPLEFT", 0, 0 },
-        "Counts for \"Important casts only\" in General, and a kick on this cast says \"must kick\" instead of \"kick\". Starts as our curated choice.")
+        "Counts for \"Important casts only\" in General. Starts as our curated choice.")
     editor.curated = a:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     editor.curated:SetPoint("LEFT", editor.important.label, "RIGHT", 8, 0)
     editor.important:SetScript("OnClick", function(self) SetImportant(editor.entry, self:GetChecked()) end)
@@ -497,7 +497,7 @@ local function BuildEditor()
                 SetSpellSound(e, name or "")
                 EditorChanged()
             end,
-            CastAheadMatch.Call(CastAheadMatch.Advice(e), { e }))
+            CastAheadMatch.Advice(e))
     end)
 
     editor.colB = CreateFrame("Frame", nil, editor)
