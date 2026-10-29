@@ -584,7 +584,8 @@ local function KickTrace(unit, kind, state, candidates, spell, interruptible, ad
     print("|cff33ff99CastAhead|r kick voice: " .. unit .. " " .. kind
         .. " claimed=" .. (candidates and tostring(spell) or "-")
         .. " advice=" .. (advice and advice.key or "-")
-        .. " tier=" .. tier .. " focus=" .. focus .. " -> " .. reason)
+        .. " tier=" .. tier .. " focus=" .. focus .. " focusOnly=" .. (FocusOnly() and "on" or "off")
+        .. " -> " .. reason)
 end
 
 -- Creature identity ---------------------------------------------------------

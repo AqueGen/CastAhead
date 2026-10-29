@@ -462,7 +462,7 @@ function BuildGeneral(panel)
     kickNote:SetPoint("RIGHT", audio, "RIGHT", -10, 0)
     kickNote:SetText("On: only your focus target gets kick calls. If you have no focus, every mob gets them.\n"
         .. "Off: every mob gets kick calls.\n"
-        .. "Important casts say \"must kick\". Other casts say \"kick\".")
+        .. "Important casts say \"must kick\". With \"Important casts only\" off, other casts say \"kick\".")
     audio:SetScript("OnSizeChanged", function(self)
         local height = 26 + 3 * focusOnly:GetHeight() + 2 * 4 + 2 + kickNote:GetStringHeight() + 12
         if math.abs(self:GetHeight() - height) > 0.5 then
