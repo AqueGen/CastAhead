@@ -4,7 +4,7 @@ Predicts trash casts in Mythic+ and tells you what to do about them. On top of t
 
 ## What it does
 
-- **Names the cast before the game does.** In 12.1 an addon may not read what a hostile unit is casting, so CastAhead measures the cast bar's length and matches it against a database of every trash cast in the season's dungeons, narrowed by the interval between casts and by which spells the creature owns.
+- **Names the cast before the game does.** In 12.1 an addon may not read what a hostile unit is casting; CastAhead recognises it on its own, from a database of every trash cast in the season's dungeons.
 - **Says the answer, not the spell name.** "Kick", "dispel poison", "tank buster", "dodge", "adds incoming" - spoken by recorded clips or the game's own combat voice, shown as a countdown icon beside the nameplate and as a call in the middle of the screen.
 - **Counts down to the next one.** Cooldowns are stored as rotations, not averages: a mob that cycles 4.8 / 4.8 / 8.7 seconds is predicted on the right slot.
 - **Filters to what you can act on.** By default only hand-picked important casts, and only the ones your role can answer.
@@ -12,17 +12,15 @@ Predicts trash casts in Mythic+ and tells you what to do about them. On top of t
 
 ## Kick calls and focus
 
-A kickable cast with a star on the Casts page says "important kick"; any other kickable cast says "kick". When CastAhead cannot tell a starred cast from an unstarred one of the same length, it says "kick". By default only starred casts are shown and called, so you mostly hear "important kick"; turn off "Important casts only" in General to hear "kick" on the rest.
+A kickable cast with a star on the Casts page says "important kick"; any other kickable cast says "kick". When CastAhead is not sure a cast is a starred one, it says "kick". By default only starred casts are shown and called, so you mostly hear "important kick"; turn off "Important casts only" in General to hear "kick" on the rest.
 
 "Kick calls only for my focus" in General - Sound is on by default. While your focus is a live enemy, only its casts get the kick call, whatever its raid mark; the other mobs keep their icons. With no focus, a friendly one or a dead one, every mob is called. Turn it off to hear kick calls on every mob whatever your focus.
 
-## What it cannot do
+## Limits
 
-The game hides the name of a hostile cast while it is going out, so CastAhead works out which cast it is from what it can see: the mob's level and power type, cast or channel, whether the cast has a target, and the cast's length once it finishes. That has two consequences:
-
-- A mob's first cast is often not recognised. Once the mob finishes one cast, CastAhead knows its schedule and calls its next casts as they start.
-- A cast that is kicked never finishes, so it tells CastAhead nothing. A mob whose casts are always kicked may stay unrecognised for the whole pull.
-- Now and then a cast is taken for another one of the same length, and the call is wrong.
+- A mob's first cast is usually not called; calls start from its second cast.
+- A mob whose casts always get kicked may not be called at all.
+- Now and then a call is wrong.
 
 ## Commands
 

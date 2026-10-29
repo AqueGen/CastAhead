@@ -371,18 +371,16 @@ function BuildGeneral(panel)
     table.insert(refreshers, PaintSetup)
     panel.flowTop = 40
 
-    local how = BuildGroup(panel, "How it works", 60)
+    local how = BuildGroup(panel, "Limits", 60)
     local howText = how:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     howText:SetJustifyH("LEFT")
     howText:SetTextColor(0.8, 0.8, 0.8)
     howText:SetSpacing(3)
     howText:SetPoint("TOPLEFT", how, "TOPLEFT", 10, -26)
     howText:SetPoint("RIGHT", how, "RIGHT", -10, 0)
-    howText:SetText("The game hides what an enemy is casting, so CastAhead works it out from what it can see: "
-        .. "the mob, cast or channel, whether the cast has a target, and how long it lasts. "
-        .. "A mob's first cast is usually not recognised. Once the mob has finished one cast, CastAhead knows "
-        .. "its timing and calls its next casts as they start. A kicked cast never finishes, so it teaches nothing, "
-        .. "and now and then a cast is taken for another one.")
+    howText:SetText("- A mob's first cast is usually not called; calls start from its second cast.\n"
+        .. "- A mob whose casts always get kicked may not be called at all.\n"
+        .. "- Now and then a call is wrong.")
     how:SetScript("OnSizeChanged", function(self)
         local height = 26 + howText:GetStringHeight() + 10
         if math.abs(self:GetHeight() - height) > 0.5 then
