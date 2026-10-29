@@ -336,9 +336,9 @@ check(M.Advice({ kickable = true }) == M.ADVICE.KICK,
     "rows without a curated category keep the statistical verdict")
 
 -- Importance helpers drive the display filter and the sound gate.
-check(M.AnyImportant({ { prio = "AOE" }, {} }), "one marked candidate makes the set important")
-check(not M.AnyImportant({ {}, {} }), "no marked candidate, not important")
-check(not M.AnyImportant(nil), "nil candidate set is not important")
+check(M.AllImportant({ { prio = "AOE" }, { prio = "DODGE" } }), "every candidate marked makes the set important")
+check(not M.AllImportant({ { prio = "AOE" }, {} }), "one unmarked candidate, not important")
+check(not M.AllImportant(nil) and not M.AllImportant({}), "no candidates, not important")
 check(#M.OnlyImportant({ { prio = "AOE" }, {} }) == 1, "OnlyImportant keeps just marked rows")
 
 check(M.ADVICE.DEFENSIVE and M.ADVICE.DEFENSIVE.say == "defensive" and M.ADVICE.DEFENSIVE.file == "DEFENSIVE",
@@ -393,7 +393,7 @@ check(#M.OnlyImportant({ { prio = "TANK" }, { prio = "DODGE" }, {} }) == 1, "Onl
 M.PlayerRole = function() return "TANK" end
 check(M.Important({ prio = "TANK" }), "a tank sees tank busters")
 M.PlayerCanHandle = function(category) return category ~= "POISON" end
-check(not M.AnyImportant({ { prio = "POISON" } }), "no poison dispel known, no poison call")
+check(not M.AllImportant({ { prio = "POISON" } }), "no poison dispel known, no poison call")
 check(M.Important({ prio = "CURSE" }), "other schools stay while known")
 check(M.Important({ prio = "DODGE" }), "role-blind categories are never capability-gated")
 M.PlayerCanHandle = function() return false end
@@ -428,7 +428,7 @@ check(M.SaveKey({ DAMAGER = true, TANK = true }, "TANK") == nil and M.SaveKey({ 
     and M.SaveKey({ TANK = true }, "TANK") == "BUSTER",
     "SaveKey applies the tank buster rule to tanks only")
 local kickRow = { spell = 901, cast = 2.0, kickable = true, save = { TANK = true } }
-check(M.Advice(kickRow) == M.ADVICE.KICK, "a kickable cast still says interrupt")
+check(M.Advice(kickRow) == M.ADVICE.KICK, "a kickable cast still says kick")
 check(M.Advice({ spell = 902, prio = "KICK", save = { TANK = true } }) == M.ADVICE.KICK, "a curated kick still wins")
 check(M.Advice({ spell = 903, prio = "DODGE", save = { TANK = true } }) == M.ADVICE.DODGE, "a curated dodge outranks the defensive call")
 check(M.Advice({ spell = 903, prio = "TARGET", save = { TANK = true } }) == M.ADVICE.TARGET, "a curated target keeps its call, the save may be someone else's")

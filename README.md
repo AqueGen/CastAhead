@@ -4,11 +4,23 @@ Predicts trash casts in Mythic+ and tells you what to do about them. On top of t
 
 ## What it does
 
-- **Names the cast before the game does.** In 12.1 an addon may not read what a hostile unit is casting, so CastAhead measures the cast bar's length and matches it against a database of every trash cast in the season's dungeons, narrowed by the interval between casts and by which spells the creature owns.
-- **Says the answer, not the spell name.** "Interrupt", "dispel poison", "tank buster", "dodge", "adds incoming" - spoken by recorded clips or the game's own combat voice, shown as a countdown icon beside the nameplate and as a call in the middle of the screen.
+- **Names the cast before the game does.** In 12.1 an addon may not read what a hostile unit is casting; CastAhead recognises it on its own, from a database of every trash cast in the season's dungeons.
+- **Says the answer, not the spell name.** "Kick", "dispel poison", "tank buster", "dodge", "adds incoming" - spoken by recorded clips or the game's own combat voice, shown as a countdown icon beside the nameplate and as a call in the middle of the screen.
 - **Counts down to the next one.** Cooldowns are stored as rotations, not averages: a mob that cycles 4.8 / 4.8 / 8.7 seconds is predicted on the right slot.
 - **Filters to what you can act on.** By default only hand-picked important casts, and only the ones your role can answer.
 - **Feeds Blizzard's encounter timeline** with predictions confident enough to be shown as exact.
+
+## Kick calls and focus
+
+A kickable cast with a star on the Casts page says "must kick"; any other kickable cast says "kick". When CastAhead is not sure a cast is a starred one, it says "kick". By default only starred casts are shown and called, so you mostly hear "must kick"; turn off "Important casts only" in General to hear "kick" on the rest.
+
+"Kick calls only for my focus" in General - Sound is on by default. While your focus is a live enemy, only its casts get the kick call, whatever its raid mark; the other mobs keep their icons. With no focus, a friendly one or a dead one, every mob is called. Turn it off to hear kick calls on every mob whatever your focus.
+
+## Limits
+
+- The addon is often silent on the first cast of a mob. It starts with the second cast.
+- If you always interrupt a mob, the addon may say nothing for that mob.
+- Some calls are wrong: about 5 to 8 calls in 100.
 
 ## Commands
 
@@ -29,7 +41,7 @@ Predicts trash casts in Mythic+ and tells you what to do about them. On top of t
 A menu on the left: **Settings** (General, Sounds, Defensives while defensive calls are on), **Dungeon** (Guide, Saves, Casts, with the dungeon picked on top), **Raid** (Guide and Saves per difficulty, shown while the Raid switch is on) and **Feedback** (a Report page that prepares the text of a bug report or idea for a [GitHub issue](https://github.com/AqueGen/CastAhead/issues/new?template=report.yml) or a CurseForge comment).
 
 - **General**: what gets called and the outputs (nameplate icons, centre call, timeline, sound, voice). Sizes and positions live in Size and position. The early warning ("tank buster soon") is off by default: on top of the real call it can read as two casts.
-- **Sounds**: each category keeps the voice or plays any sound your other addons registered, and the game sound channel (Master, Dialog or SFX) sets the volume slider that controls the calls.
+- **Sounds**: each category keeps the voice or plays any sound your other addons registered (MUST KICK is the starred kick, KICK every other kick), and the game sound channel (Master, Dialog or SFX) sets the volume slider that controls the calls.
 - **Casts**: every tracked cast with its call. Untick a cast to ignore it entirely. The Overrides column lists what a cast does differently from the global settings; click it to open the cast's panel (right of the table, or along the bottom in a narrow window): mark it important or not, mute its call, give it its own sound in place of the voice or its own early warning. Development mode adds the evidence columns.
 - **Guide** and **Saves**: per boss, the defensive calls for your role and the burst windows, as text and as a table.
 

@@ -28,8 +28,8 @@ XML_LANG = "en-US"
 # CastAheadMatch.ADVICE key -> what is said. The "soon" form is the 3s heads-up before a predicted
 # cast; the plain form fires when the cast actually starts.
 LINES = {
-    "KICK": "interrupt",
-    "KICK_IMPORTANT": "important kick",
+    "KICK": "kick",
+    "KICK_IMPORTANT": "must kick",
     "CC": "stun",
     "TANK": "tank buster",
     "AOE": "AOE damage",

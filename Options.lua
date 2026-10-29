@@ -132,9 +132,9 @@ local SWITCHES = {
     sound = { label = "Sound",
         tip = "Master switch for everything the addon plays." },
     voice = { label = "Voice",
-        tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"interrupt\"." },
-    kickImportantOnly = { label = "Kick voice only on important casts",
-        tip = "Play the kick call only for important casts, and only on your focus when it is an enemy, whatever mark it has. It says \"important kick\"." },
+        tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"kick\"." },
+    kickFocusOnly = { label = "Kick calls only for my focus",
+        tip = "With an enemy focus, only its casts get the kick call; other mobs keep their icons. Without a focus, or with a friendly or dead one, every mob is called. The focus's raid mark does not matter." },
     fixedSpacing = { label = "Fixed spacing", defaultOff = true,
         tip = "Space the icons evenly: each step is the icon width plus the Gap, however long the words under the icons are. Every row looks the same; two long words side by side may overlap." },
     fullLabels = { label = "Full labels", defaultOff = true,
@@ -371,6 +371,24 @@ function BuildGeneral(panel)
     table.insert(refreshers, PaintSetup)
     panel.flowTop = 40
 
+    local how = BuildGroup(panel, "Limits", 60)
+    local howText = how:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    howText:SetJustifyH("LEFT")
+    howText:SetTextColor(0.8, 0.8, 0.8)
+    howText:SetSpacing(3)
+    howText:SetPoint("TOPLEFT", how, "TOPLEFT", 10, -26)
+    howText:SetPoint("RIGHT", how, "RIGHT", -10, 0)
+    howText:SetText("- The addon is often silent on the first cast of a mob. It starts with the second cast.\n"
+        .. "- If you always interrupt a mob, the addon may say nothing for that mob.\n"
+        .. "- Some calls are wrong: about 5 to 8 calls in 100.")
+    how:SetScript("OnSizeChanged", function(self)
+        local height = 26 + howText:GetStringHeight() + 10
+        if math.abs(self:GetHeight() - height) > 0.5 then
+            self:SetHeight(height)
+            panel:Relayout()
+        end
+    end)
+
     local what = BuildGroup(panel, "What to call out", 262)
     local important = BuildSwitch(panel, "importantOnly",
         { "TOPLEFT", what, "TOPLEFT", 10, -26 })
@@ -435,7 +453,23 @@ function BuildGeneral(panel)
     local audio = BuildGroup(panel, "Sound", 126)
     local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 }, RedrawAndSaves)
     local voice = BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 }, RedrawAndSaves)
-    BuildSwitch(panel, "kickImportantOnly", { "TOPLEFT", voice, "BOTTOMLEFT", 0, -4 })
+    local focusOnly = BuildSwitch(panel, "kickFocusOnly", { "TOPLEFT", voice, "BOTTOMLEFT", 0, -4 })
+    local kickNote = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    kickNote:SetJustifyH("LEFT")
+    kickNote:SetTextColor(0.7, 0.7, 0.7)
+    kickNote:SetSpacing(3)
+    kickNote:SetPoint("TOPLEFT", focusOnly, "BOTTOMLEFT", 4, -2)
+    kickNote:SetPoint("RIGHT", audio, "RIGHT", -10, 0)
+    kickNote:SetText("On: only your focus gets kick calls. If you have no focus, every mob gets them.\n"
+        .. "Off: every mob gets kick calls.\n"
+        .. "Casts with a star say \"must kick\". Other casts say \"kick\".")
+    audio:SetScript("OnSizeChanged", function(self)
+        local height = 26 + 3 * focusOnly:GetHeight() + 2 * 4 + 2 + kickNote:GetStringHeight() + 12
+        if math.abs(self:GetHeight() - height) > 0.5 then
+            self:SetHeight(height)
+            panel:Relayout()
+        end
+    end)
 
     local plates = BuildGroup(panel, "Nameplate icons", 100)
     local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 }, OutputChanged)
@@ -1221,7 +1255,7 @@ function BuildReport(panel)
     table.insert(refreshers, Paint)
 end
 
-local SOUND_ROWS = { "KICK", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
+local SOUND_ROWS = { "KICK", "KICK_IMPORTANT", "CC", "TANK", "AOE", "DODGE", "FRONTAL", "TARGET", "DISPEL",
     "POISON", "CURSE", "MAGIC", "DISEASE", "BLEED", "SOOTHE", "PURGE", "SWITCH", "ADDS", "ALERT",
     "DEFENSIVE", "SOON", "BURST" }
 local SOUND_ROW_H = 26
@@ -1343,7 +1377,7 @@ function BuildSounds(panel)
     end
 
     for i, key in ipairs(SOUND_ROWS) do
-        local advice = CastAheadMatch.ADVICE[key]
+        local advice = CastAheadMatch.ADVICE[key] or CastAheadMatch.MUST_KICK
         local y = -(i - 1) * SOUND_ROW_H
         local label = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         label:SetPoint("TOPLEFT", body, "TOPLEFT", 0, y - 6)
