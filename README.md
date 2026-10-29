@@ -22,6 +22,7 @@ The game hides the name of a hostile cast while it is going out, so CastAhead wo
 
 - A mob's first cast is often not recognised. Once the mob finishes one cast, CastAhead knows its schedule and calls its next casts as they start.
 - A cast that is kicked never finishes, so it tells CastAhead nothing. A mob whose casts are always kicked may stay unrecognised for the whole pull.
+- Now and then a cast is taken for another one of the same length, and the call is wrong.
 
 ## Commands
 

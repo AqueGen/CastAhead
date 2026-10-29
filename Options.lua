@@ -134,7 +134,7 @@ local SWITCHES = {
     voice = { label = "Voice",
         tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"kick\"." },
     kickFocusOnly = { label = "Kick calls only for my focus",
-        tip = "With an enemy focus, only its casts get the kick call; other mobs keep their icons. Without a focus every mob is called. A mob's first cast is often not recognised: calls start once it has finished one cast." },
+        tip = "With an enemy focus, only its casts get the kick call; other mobs keep their icons. Without a focus, or with a friendly or dead one, every mob is called. The focus's raid mark does not matter." },
     fixedSpacing = { label = "Fixed spacing", defaultOff = true,
         tip = "Space the icons evenly: each step is the icon width plus the Gap, however long the words under the icons are. Every row looks the same; two long words side by side may overlap." },
     fullLabels = { label = "Full labels", defaultOff = true,
@@ -435,7 +435,22 @@ function BuildGeneral(panel)
     local audio = BuildGroup(panel, "Sound", 126)
     local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 }, RedrawAndSaves)
     local voice = BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 }, RedrawAndSaves)
-    BuildSwitch(panel, "kickFocusOnly", { "TOPLEFT", voice, "BOTTOMLEFT", 0, -4 })
+    local focusOnly = BuildSwitch(panel, "kickFocusOnly", { "TOPLEFT", voice, "BOTTOMLEFT", 0, -4 })
+    local kickNote = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    kickNote:SetJustifyH("LEFT")
+    kickNote:SetTextColor(0.7, 0.7, 0.7)
+    kickNote:SetPoint("TOPLEFT", focusOnly, "BOTTOMLEFT", 4, -2)
+    kickNote:SetPoint("RIGHT", audio, "RIGHT", -10, 0)
+    kickNote:SetText("A starred cast says \"important kick\", any other kickable cast \"kick\". "
+        .. "A mob's first cast is usually not recognised, so its kick calls start from the second one, "
+        .. "and now and then a cast is taken for another one.")
+    local function SizeAudio()
+        local row = focusOnly:GetHeight()
+        audio:SetHeight(26 + 3 * row + 2 * 4 + 2 + kickNote:GetStringHeight() + 12)
+        panel:Relayout()
+    end
+    SizeAudio()
+    table.insert(refreshers, SizeAudio)
 
     local plates = BuildGroup(panel, "Nameplate icons", 100)
     local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 }, OutputChanged)
