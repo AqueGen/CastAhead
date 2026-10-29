@@ -371,6 +371,26 @@ function BuildGeneral(panel)
     table.insert(refreshers, PaintSetup)
     panel.flowTop = 40
 
+    local how = BuildGroup(panel, "How it works", 60)
+    local howText = how:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    howText:SetJustifyH("LEFT")
+    howText:SetTextColor(0.8, 0.8, 0.8)
+    howText:SetSpacing(3)
+    howText:SetPoint("TOPLEFT", how, "TOPLEFT", 10, -26)
+    howText:SetPoint("RIGHT", how, "RIGHT", -10, 0)
+    howText:SetText("The game hides what an enemy is casting, so CastAhead works it out from what it can see: "
+        .. "the mob, cast or channel, whether the cast has a target, and how long it lasts. "
+        .. "A mob's first cast is usually not recognised. Once the mob has finished one cast, CastAhead knows "
+        .. "its timing and calls its next casts as they start. A kicked cast never finishes, so it teaches nothing, "
+        .. "and now and then a cast is taken for another one.")
+    how:SetScript("OnSizeChanged", function(self)
+        local height = 26 + howText:GetStringHeight() + 10
+        if math.abs(self:GetHeight() - height) > 0.5 then
+            self:SetHeight(height)
+            panel:Relayout()
+        end
+    end)
+
     local what = BuildGroup(panel, "What to call out", 262)
     local important = BuildSwitch(panel, "importantOnly",
         { "TOPLEFT", what, "TOPLEFT", 10, -26 })
@@ -442,15 +462,14 @@ function BuildGeneral(panel)
     kickNote:SetPoint("TOPLEFT", focusOnly, "BOTTOMLEFT", 4, -2)
     kickNote:SetPoint("RIGHT", audio, "RIGHT", -10, 0)
     kickNote:SetText("A starred cast says \"important kick\", any other kickable cast \"kick\". "
-        .. "A mob's first cast is usually not recognised, so its kick calls start from the second one, "
-        .. "and now and then a cast is taken for another one.")
-    local function SizeAudio()
-        local row = focusOnly:GetHeight()
-        audio:SetHeight(26 + 3 * row + 2 * 4 + 2 + kickNote:GetStringHeight() + 12)
-        panel:Relayout()
-    end
-    SizeAudio()
-    table.insert(refreshers, SizeAudio)
+        .. "With an enemy focus, only the focus gets the kick call.")
+    audio:SetScript("OnSizeChanged", function(self)
+        local height = 26 + 3 * focusOnly:GetHeight() + 2 * 4 + 2 + kickNote:GetStringHeight() + 12
+        if math.abs(self:GetHeight() - height) > 0.5 then
+            self:SetHeight(height)
+            panel:Relayout()
+        end
+    end)
 
     local plates = BuildGroup(panel, "Nameplate icons", 100)
     local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 }, OutputChanged)
