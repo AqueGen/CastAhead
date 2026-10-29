@@ -155,8 +155,27 @@ local function CoverageLine(key)
         total - #never, total, table.concat(names, ", "), #never > 8 and (" and " .. (#never - 8) .. " more") or "")
 end
 
+local function Unmarked(key) return (key.marks or 0) == 0 end
+
+local function HasCasts(key)
+    for _, line in ipairs(key.lines) do
+        if Kind(line) == "START" then return true end
+    end
+    return false
+end
+
 local function Disposable(key)
-    return key.pseudo and (key.marks or 0) == 0
+    return key.pseudo and Unmarked(key) and not HasCasts(key)
+end
+
+local function Victim(keys)
+    for i = 1, #keys - 1 do
+        if keys[i].pseudo and Unmarked(keys[i]) then return i end
+    end
+    for i = 1, #keys - 1 do
+        if Unmarked(keys[i]) then return i end
+    end
+    return 1
 end
 
 function R.EndKey(result)
@@ -204,11 +223,7 @@ function R.StartKey(info)
         startedAt = GetTime(), mobs = 0, marks = 0, lines = {},
     }
     while #keys > R.MAX_KEYS do
-        local victim = 1
-        for i = 1, #keys - 1 do
-            if (keys[i].marks or 0) == 0 then victim = i break end
-        end
-        table.remove(keys, victim)
+        table.remove(keys, Victim(keys))
     end
     Forget()
 end

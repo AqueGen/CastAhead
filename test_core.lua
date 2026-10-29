@@ -2797,6 +2797,15 @@ for i = 1, R.MAX_KEYS + 1 do
 end
 Loud()
 check(#R.Keys() == R.MAX_KEYS, "only the newest keys are kept, got " .. #R.Keys())
+do
+    R.Keys()[3].pseudo = true
+    local pseudoKey, firstKey = R.Keys()[3], R.Keys()[1]
+    R.EndKey("completed")
+    R.StartKey({ instance = 1877, name = "Test", level = 99 })
+    local evicted = true
+    for _, k in ipairs(R.Keys()) do if k == pseudoKey then evicted = false end end
+    check(evicted and R.Keys()[1] == firstKey, "a full journal drops an unmarked run outside a key before any key")
+end
 local savedMax = R.MAX_LINES
 R.MAX_LINES = 3
 R.Note("PULL", nil, "in") R.Note("PULL", nil, "out") R.Note("PULL", nil, "in") R.Note("PULL", nil, "out")
@@ -2965,7 +2974,7 @@ R.EndKey("completed")
 fire("PLAYER_ENTERING_WORLD")
 fire("UNIT_SPELLCAST_SUCCEEDED", "player", nil, 555)
 R.EndKey("left")
-check(#R.Keys() == 1, "an unmarked pseudo-key is dropped when it ends, got " .. #R.Keys())
+check(#R.Keys() == 1, "an unmarked pseudo-key with no enemy cast is dropped when it ends, got " .. #R.Keys())
 local afterEnd = R.Mark()
 check(afterEnd and #R.Keys() == 1 and R.Keys()[1].lines[#R.Keys()[1].lines]:match("|MARK|"),
     "a mark right after a key ended lands in that key")
@@ -2985,6 +2994,15 @@ check(#R.Keys() == keysBefore + 1, "a key ended in an earlier session (a later c
 check(not R.Export(R.Keys()[#R.Keys()]):find("|", 1, true),
     "the export carries no '|', which the game's text boxes read as escape codes")
 R.EndKey("completed")
+do
+    local count = #R.Keys()
+    fire("PLAYER_ENTERING_WORLD")
+    fire("UNIT_SPELLCAST_SUCCEEDED", "player", nil, 555)
+    R.Note("START", "1.1", 0, 372743)
+    R.EndKey("left")
+    check(#R.Keys() == count + 1 and R.Keys()[#R.Keys()].pseudo,
+        "a run outside a key with an enemy cast is kept, got " .. #R.Keys() .. " of " .. count)
+end
 Loud()
 
 -- A cast the addon ignores (out of combat) leaves no START behind.
