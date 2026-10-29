@@ -457,10 +457,12 @@ function BuildGeneral(panel)
     local kickNote = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     kickNote:SetJustifyH("LEFT")
     kickNote:SetTextColor(0.7, 0.7, 0.7)
+    kickNote:SetSpacing(3)
     kickNote:SetPoint("TOPLEFT", focusOnly, "BOTTOMLEFT", 4, -2)
     kickNote:SetPoint("RIGHT", audio, "RIGHT", -10, 0)
-    kickNote:SetText("A starred cast says \"important kick\", any other kickable cast \"kick\". "
-        .. "With an enemy focus, only the focus gets the kick call.")
+    kickNote:SetText("On: only your focus gets kick calls. If you have no focus, every mob gets them.\n"
+        .. "Off: every mob gets kick calls.\n"
+        .. "Casts with a star say \"important kick\". Other casts say \"kick\".")
     audio:SetScript("OnSizeChanged", function(self)
         local height = 26 + 3 * focusOnly:GetHeight() + 2 * 4 + 2 + kickNote:GetStringHeight() + 12
         if math.abs(self:GetHeight() - height) > 0.5 then
