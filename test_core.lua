@@ -5396,12 +5396,22 @@ do
             .. tostring(icons and icons.TANK.labelValue))
         CastAheadDB.fullLabels = nil
         do
+            local realFrame, realRefresh, windowShown, refreshed = CastAheadWindow.Frame, CastAheadOptions.Refresh, true, 0
+            CastAheadWindow.Frame = function() return { IsShown = function() return windowShown end } end
+            CastAheadOptions.Refresh = function(...) refreshed = refreshed + 1 return realRefresh(...) end
             GetSpecializationRole = function() return "TANK" end
             fire("PLAYER_SPECIALIZATION_CHANGED", "player")
             check(icons and icons.TANK.alpha == 1, "a spec change to a tank repaints the filter picture, the buster bright")
             GetSpecializationRole = function() return "DAMAGER" end
             fire("PLAYER_SPECIALIZATION_CHANGED", "player")
             check(icons and icons.TANK.alpha == 0.35, "a spec change back to a damage dealer dims the buster again")
+            windowShown, refreshed = false, 0
+            fire("SPELLS_CHANGED")
+            check(refreshed == 0, "a spells change with the window closed does not repaint the settings")
+            windowShown = true
+            fire("SPELLS_CHANGED")
+            check(refreshed == 1, "a spells change with the window open repaints the settings once, got " .. refreshed)
+            CastAheadWindow.Frame, CastAheadOptions.Refresh = realFrame, realRefresh
             local realData = CastAheadData
             CastAheadData = { [9107] = { name = "Before", { spell = 9107, prio = "KICK", first = 10, cd = { 20 } } } }
             CastAheadCore.Reapply()

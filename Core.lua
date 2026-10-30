@@ -2415,7 +2415,8 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
             if CastAheadOptions and CastAheadOptions.RefreshDefensives then CastAheadOptions.RefreshDefensives() end
             if CastAheadUI and CastAheadUI.RefreshSaves then CastAheadUI.RefreshSaves() end
             if CastAheadCore then CastAheadCore.Reapply() end
-            if CastAheadOptions then CastAheadOptions.Refresh() end
+            local window = CastAheadWindow and CastAheadWindow.Frame and CastAheadWindow.Frame()
+            if CastAheadOptions and window and window:IsShown() then CastAheadOptions.Refresh() end
         end
         return
     end
