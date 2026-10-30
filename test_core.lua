@@ -6563,6 +6563,15 @@ do
         check(Heard() == "SOON,DEFENSIVE,DEFENSIVE,DEFENSIVE,BURST" and BurstAt(t) == 38,
             "burst: saves in a row keep the burst waiting, past its window, heard " .. Heard() .. " at " .. tostring(BurstAt(t)))
         ClearOfCalls("saves in a row")
+
+        t = Phase(nil)
+        for i, at in ipairs({ 31, 33.5, 36, 38.5 }) do S.Schedule("test:long" .. i, 1, t + at, t + at + 4, A.DEFENSIVE) end
+        run(38)
+        local held
+        for _, p in ipairs(B.Pending(now)) do held = held or p.advice == A.BURST end
+        run(10)
+        check(Heard() == "SOON,DEFENSIVE,DEFENSIVE,DEFENSIVE,DEFENSIVE" and not held,
+            "burst: held over 3 s past its window, it is dropped unseen, heard " .. Heard())
         PlaySoundFile = playing
         CastAheadDB.saveLeadSeconds = nil
     end

@@ -3,6 +3,7 @@ local B = CastAheadBurst
 local M = CastAheadMatch
 
 local SAVE_GAP = 2
+local LATE_DROP = 3
 local BURST_SHOWN = 5
 local ICON = "Interface\\Icons\\Spell_Nature_Bloodlust"
 B.ICON = ICON
@@ -222,7 +223,9 @@ function B.Tick(now)
         if not e.fired and now >= e.fireAt and now < e.endAt then
             e.windowEnd = e.windowEnd or e.endAt
             local at = DeferUntil(now, e.windowEnd)
-            if at then
+            if at and at > e.windowEnd + LATE_DROP then
+                e.fired, e.endAt = true, now
+            elseif at then
                 e.fireAt = at
                 if e.advice == M.ADVICE.BURST then e.endAt = math.max(e.endAt, at + BURST_SHOWN) end
             else
