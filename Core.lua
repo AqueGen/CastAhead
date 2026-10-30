@@ -928,7 +928,7 @@ local function ApplyBarSize(bar)
     local size = CastAheadConfig.IconSize()
     local labelScale = CastAheadConfig.LabelScale()
     local timeScale = CastAheadConfig.TimeScale()
-    SetBarStrata(bar, CastAheadConfig.Strata())
+    if not bar._preview then SetBarStrata(bar, CastAheadConfig.Strata()) end
     if bar._size == size and bar._labelScale == labelScale
         and bar._timeScale == timeScale then
         return size
@@ -947,27 +947,21 @@ local function ApplyBarSize(bar)
     return size
 end
 
-local function GetBar(state, index)
-    state.bars = state.bars or {}
-    if state.bars[index] then
-        ApplyBarSize(state.bars[index])
-        return state.bars[index]
-    end
-    local pooled = table.remove(barPool)
-    if pooled then
-        state.bars[index] = pooled
-        ApplyBarSize(pooled)
-        return pooled
-    end
-    local bar = CreateFrame("Frame", nil, UIParent)
+-- A bar on any parent but UIParent is a settings picture: it takes the
+-- window's strata and clipping, and never enters the pool.
+local function NewBar(parent)
+    local bar = CreateFrame("Frame", nil, parent)
     bar:SetSize(ICON_SIZE, ICON_SIZE)
     bar:EnableMouse(false)
-    -- Nameplate addons draw at their own strata; without pinning ours above
-    -- them the icon disappears behind the plate it belongs to. The strata
-    -- itself is the player's (ApplyBarSize), fixed so no parent moves it.
-    if bar.SetFixedFrameStrata then bar:SetFixedFrameStrata(true) end
-    bar:SetFrameLevel(6200)
-    if bar.SetFixedFrameLevel then bar:SetFixedFrameLevel(true) end
+    bar._preview = parent ~= UIParent
+    if not bar._preview then
+        -- Nameplate addons draw at their own strata; without pinning ours above
+        -- them the icon disappears behind the plate it belongs to. The strata
+        -- itself is the player's (ApplyBarSize), fixed so no parent moves it.
+        if bar.SetFixedFrameStrata then bar:SetFixedFrameStrata(true) end
+        bar:SetFrameLevel(6200)
+        if bar.SetFixedFrameLevel then bar:SetFixedFrameLevel(true) end
+    end
 
     bar.border = bar:CreateTexture(nil, "BACKGROUND")
     bar.border:SetPoint("TOPLEFT", -1.5, 1.5)
@@ -1017,6 +1011,22 @@ local function GetBar(state, index)
 
     bar:Hide()
     ApplyBarSize(bar)
+    return bar
+end
+
+local function GetBar(state, index)
+    state.bars = state.bars or {}
+    if state.bars[index] then
+        ApplyBarSize(state.bars[index])
+        return state.bars[index]
+    end
+    local pooled = table.remove(barPool)
+    if pooled then
+        state.bars[index] = pooled
+        ApplyBarSize(pooled)
+        return pooled
+    end
+    local bar = NewBar(UIParent)
     state.bars[index] = bar
     return bar
 end
@@ -2644,17 +2654,15 @@ local CENTER_STRATA = "HIGH"
 local CENTER_LINES = 3      -- a pack can cast three things at once; more is noise
 local CENTER_LINE_H = 44
 
-local function CenterFrame()
-    if center then return center end
-    center = CreateFrame("Frame", nil, UIParent)
-    center:SetSize(360, CENTER_LINE_H * CENTER_LINES)
-    center:SetFrameStrata(CENTER_STRATA)
-    center:EnableMouse(false)
-    center.lines = {}
+local function BuildCenterBlock(parent)
+    local block = CreateFrame("Frame", nil, parent)
+    block:SetSize(360, CENTER_LINE_H * CENTER_LINES)
+    block:EnableMouse(false)
+    block.lines = {}
     for i = 1, CENTER_LINES do
-        local line = CreateFrame("Frame", nil, center)
+        local line = CreateFrame("Frame", nil, block)
         line:SetSize(360, CENTER_LINE_H)
-        line:SetPoint("TOP", center, "TOP", 0, -(i - 1) * CENTER_LINE_H)
+        line:SetPoint("TOP", block, "TOP", 0, -(i - 1) * CENTER_LINE_H)
         line.icon = line:CreateTexture(nil, "ARTWORK")
         line.icon:SetSize(40, 40)
         -- Icon and text are centred as a pair, so the block's middle is the
@@ -2678,8 +2686,15 @@ local function CenterFrame()
         line.text:SetShadowColor(0, 0, 0, 1)
         line.text:SetShadowOffset(2, -2)
         line:Hide()
-        center.lines[i] = line
+        block.lines[i] = line
     end
+    return block
+end
+
+local function CenterFrame()
+    if center then return center end
+    center = BuildCenterBlock(UIParent)
+    center:SetFrameStrata(CENTER_STRATA)
     -- Backdrop only while the block is being moved, so there is something to
     -- grab and see.
     -- Only the first line is shown while moving, so only it is boxed: the
@@ -2719,14 +2734,9 @@ local function CenterDragOffset()
         math.floor(cy * scale - uy + (center:GetHeight() / 2 - CENTER_LINE_H / 2) * scale + 0.5)
 end
 
-local function PlaceCenter(f)
-    local x, y = CenterOffset()
-    -- The block is scaled rather than rebuilt at a new size: one setting then
-    -- moves the icon, the words and the countdown together, and the spacing
-    -- between them stays right at any size.
-    local scale = CastAheadConfig.CenterScale()
-    -- The words have a size of their own on top of the block's: the icon and
-    -- the countdown beside them are already as big as the block makes them.
+-- The words have a size of their own on top of the block's: the icon and
+-- the countdown beside them are already as big as the block makes them.
+local function ApplyCenterTextScale(f)
     local textScale = CastAheadConfig.CenterTextScale()
     if f._textScale ~= textScale then
         f._textScale = textScale
@@ -2734,6 +2744,15 @@ local function PlaceCenter(f)
             f.lines[i].text:SetFont(FONT, math.max(10, math.floor(28 * textScale + 0.5)), "OUTLINE")
         end
     end
+end
+
+local function PlaceCenter(f)
+    local x, y = CenterOffset()
+    -- The block is scaled rather than rebuilt at a new size: one setting then
+    -- moves the icon, the words and the countdown together, and the spacing
+    -- between them stays right at any size.
+    local scale = CastAheadConfig.CenterScale()
+    ApplyCenterTextScale(f)
     if f._x ~= x or f._y ~= y or f._scale ~= scale then
         f._x, f._y, f._scale = x, y, scale
         f:SetScale(scale)
@@ -2910,6 +2929,27 @@ local function SampleDataRow(key)
     sampleRows[key] = false
 end
 
+local function SamplePicks(keys, now)
+    local A = CastAheadMatch.ADVICE
+    local picks = {}
+    for i = 1, #keys do
+        local key = keys[i]
+        if key == "KICK" then
+            local kick = SampleDataRow("KICK")
+            picks[#picks + 1] = { advice = A.KICK, endAt = now + 2.4,
+                                  icons = { kick and SpellIcon(kick.spell) or FALLBACK_ICON } }
+        elseif key == "DEFENSIVE" then
+            local defensive = CastAheadSaves and CastAheadSaves.Icons(A.DEFENSIVE, nil)
+            picks[#picks + 1] = { advice = A.DEFENSIVE, endAt = now + 4.0,
+                                  icons = defensive and #defensive > 0 and defensive or { FALLBACK_ICON } }
+        elseif key == "BURST" then
+            picks[#picks + 1] = { advice = A.BURST, endAt = now + 6.0,
+                                  icons = { CastAheadBurst and CastAheadBurst.ICON or FALLBACK_ICON } }
+        end
+    end
+    return picks
+end
+
 local function ShowCenterSample(on)
     if centerUnlocked then ToggleMoveCenter(true) end
     centerSample = (on and CastAheadConfig.CenterText()) and true or false
@@ -2921,16 +2961,8 @@ local function ShowCenterSample(on)
     local f = CenterFrame()
     f.fill:Show()
     PlaceCenter(f)
-    local A = CastAheadMatch.ADVICE
-    local defensive = CastAheadSaves and CastAheadSaves.Icons(A.DEFENSIVE, nil)
-    local kick = SampleDataRow("KICK")
     local now = GetTime()
-    PaintCenter(f, {
-        { advice = A.KICK, endAt = now + 2.4, icons = { kick and SpellIcon(kick.spell) or FALLBACK_ICON } },
-        { advice = A.DEFENSIVE, endAt = now + 4.0,
-          icons = defensive and #defensive > 0 and defensive or { FALLBACK_ICON } },
-        { advice = A.BURST, endAt = now + 6.0, icons = { CastAheadBurst and CastAheadBurst.ICON or FALLBACK_ICON } },
-    }, now)
+    PaintCenter(f, SamplePicks({ "KICK", "DEFENSIVE", "BURST" }, now), now)
     return true
 end
 
@@ -3149,6 +3181,16 @@ CastAheadCore.Population = function() return killed, exhausted end
 CastAheadCore.MoveCenter = ToggleMoveCenter
 CastAheadCore.IsHostileNameplate = IsHostileNameplate
 CastAheadCore.ShowCenterSample = ShowCenterSample
+-- The settings picture of the centre call: a block of its own on `parent`,
+-- painted by the same code as the real one, at the player's text size.
+CastAheadCore.NewCenterPreview = BuildCenterBlock
+CastAheadCore.PaintCenterPreview = function(block, keys)
+    ApplyCenterTextScale(block)
+    local now = GetTime()
+    local picks = SamplePicks(keys, now)
+    PaintCenter(block, picks, now)
+    return 360, CENTER_LINE_H * math.min(#picks, CENTER_LINES)
+end
 CastAheadCore.SampleDataRow = SampleDataRow
 CastAheadCore.RememberPlateSize = RememberPlateSize
 
@@ -3907,6 +3949,43 @@ end
 
 function CastAheadCore.HideSampleRow(state)
     ReleaseBars(state)
+end
+
+-- The settings picture of the row: bars of the holder's own around a stand-in
+-- plate, painted and placed by the sample row's own code. Shown whatever the
+-- nameplate switch says; the caller draws the off state. Returns the size of
+-- plate, icons and labels together, so the caller can scale it to fit.
+function CastAheadCore.PreviewRow(holder, plate)
+    holder.previewBars = holder.previewBars or {}
+    local bars = holder.previewBars
+    local row = CastAheadCore.SAMPLE_ROW
+    -- Every slot is filled before the sample row runs, so GetBar never
+    -- reaches the pool for these bars.
+    for i = 1, #row do bars[i] = bars[i] or NewBar(holder) end
+    CastAheadCore.ShowSampleRow({ bars = bars }, plate)
+    local function fraction(point)
+        return point:find("LEFT") and 0 or point:find("RIGHT") and 1 or 0.5,
+            point:find("BOTTOM") and 0 or point:find("TOP") and 1 or 0.5
+    end
+    local pw, ph = plate:GetWidth() or 0, plate:GetHeight() or 0
+    local minX, minY, maxX, maxY = 0, 0, pw, ph
+    for i = 1, #row do
+        local bar = bars[i]
+        bar:Show()
+        local point, _, relative, x, y = bar:GetPoint()
+        local rx, ry = fraction(relative)
+        local px, py = fraction(point)
+        local size = bar._size or ICON_SIZE
+        local left = rx * pw + x - px * size
+        local bottom = ry * ph + y - py * size
+        local half = math.max(size, bar.label:GetStringWidth() or 0) / 2
+        local labelH = math.max(bar.label:GetStringHeight() or 0, LABEL_HEIGHT)
+        minX = math.min(minX, left + size / 2 - half)
+        maxX = math.max(maxX, left + size / 2 + half)
+        minY = math.min(minY, bottom - 1 - labelH)
+        maxY = math.max(maxY, bottom + size)
+    end
+    return maxX - minX, maxY - minY
 end
 
 function CastAheadCore.Reapply()

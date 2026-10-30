@@ -6156,6 +6156,64 @@ do
     CastAheadDB = savedDB
 end
 
+do
+    local savedDB = CastAheadDB
+    CastAheadDB = {}
+    local holder = CreateFrame("Frame")
+    local plate = CreateFrame("Frame", nil, holder)
+    plate.GetWidth = function() return 110 end
+    plate.GetHeight = function() return 45 end
+    local w, h = CastAheadCore.PreviewRow(holder, plate)
+    local bars = holder.previewBars
+    local own = 0
+    for i = 1, #bars do
+        if bars[i].parent == holder and bars[i]._preview == true and bars[i].shown then own = own + 1 end
+    end
+    check(#bars == 3 and own == 3, "preview row: three shown bars owned by the holder, got " .. own)
+    check(bars[1].labelValue == "KICK" and bars[2].labelValue == "DODGE" and bars[3].labelValue == "BUSTER",
+        "preview row: short labels")
+    check(bars[1].level ~= 6200 and bars[1].strata == nil, "preview row: no fixed strata or level 6200")
+    check(type(w) == "number" and w > 110 and h >= 45, "preview row: size covers the plate and the icons, got "
+        .. tostring(w) .. "x" .. tostring(h))
+    CastAheadDB.anchor = "top"
+    local _, tallH = CastAheadCore.PreviewRow(holder, plate)
+    check(tallH > h, "preview row: icons above the plate make it taller")
+    check(holder.previewBars[1] == bars[1] and #holder.previewBars == 3, "preview row: repaint reuses the bars")
+    CastAheadDB.fullLabels = true
+    CastAheadCore.PreviewRow(holder, plate)
+    check(bars[3].labelValue == "TANKBUSTER", "preview row: full labels")
+
+    local state = {}
+    CastAheadCore.ShowSampleRow(state, plate)
+    CastAheadCore.HideSampleRow(state)
+    local fresh = {}
+    CastAheadCore.ShowSampleRow(fresh, plate)
+    local leaked = 0
+    for i = 1, #fresh.bars do
+        if fresh.bars[i]._preview ~= false or fresh.bars[i].parent == holder then leaked = leaked + 1 end
+    end
+    check(leaked == 0, "preview row: preview bars never reach the pool")
+    CastAheadCore.HideSampleRow(fresh)
+
+    local block = CastAheadCore.NewCenterPreview(holder)
+    check(block.parent == holder and block.strata ~= "HIGH", "centre preview: parented to the holder, no HIGH strata")
+    CastAheadCore.PaintCenterPreview(block, { "KICK" })
+    check(block.lines[1].shown and tostring(block.lines[1].timeValue):match("^Kick") ~= nil,
+        "centre preview: line 1 says Kick, got " .. tostring(block.lines[1].timeValue))
+    check(not block.lines[2].shown and not block.lines[3].shown, "centre preview: lines 2-3 hidden")
+    check(CastAheadCore.CenterFrame() ~= block, "centre preview: a block of its own")
+
+    CastAheadCore.ShowCenterSample(true)
+    local center = CastAheadCore.CenterFrame()
+    check(center.lines[1].shown and center.lines[2].shown and center.lines[3].shown,
+        "centre sample: still three lines")
+    CastAheadCore.ShowCenterSample(false)
+    -- The setup cases count every shown frame, so the pictures leave none behind.
+    for i = 1, #block.lines do block.lines[i]:Hide() end
+    for i = 1, #bars do bars[i]:Hide() end
+    CastAheadDB = savedDB
+end
+
 -- A function, not a block: the main chunk is at Lua 5.1's 200-local limit.
 (function()
     local savedDB, savedLock = CastAheadDB, InCombatLockdown
