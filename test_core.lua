@@ -5054,6 +5054,68 @@ do
         CastAheadDB = {}
     end
     (function()
+        local COL_W = 250
+        local group, canvas
+        for _, f in ipairs(made) do
+            local title = rawget(f, "title")
+            if title and rawget(title, "value") == "Nameplate icons" then group = f end
+        end
+        check(group and group.stage, "Nameplate icons has a stage")
+        if not (group and group.stage) then return end
+        group.w = COL_W + 10 + 400
+        CastAheadOptions.Refresh()
+        for _, f in ipairs(made) do
+            if f.parent == group and rawget(f, "previewBars") then canvas = f end
+        end
+        check(canvas and #canvas.previewBars == 3 and canvas.shown, "Nameplate icons shows a picture with three preview bars")
+        if not canvas then return end
+        canvas.SetScale = function(self, s) self.scale = s end
+        local need = group.stage.Paint()
+        check(type(need) == "number" and need > 0 and group.h == math.max(100, need),
+            "Nameplate icons grows to what its stage needs, got " .. tostring(group.h) .. "/" .. tostring(need))
+        local function OffLine()
+            for _, fs in ipairs(texts) do
+                if rawget(fs, "value") == "Off - no icons on nameplates" then return fs end
+            end
+        end
+        check(canvas.alpha == 1 and OffLine() and OffLine().shown == false, "the picture is bright with nameplate icons on")
+        CastAheadDB.nameplates = false
+        CastAheadOptions.Refresh()
+        check(canvas.alpha == 0.35 and canvas.shown and OffLine() and OffLine().shown == true,
+            "with nameplate icons off the picture dims in place and says so")
+        CastAheadDB.nameplates = nil
+        CastAheadDB.fullLabels = true
+        CastAheadOptions.Refresh()
+        check(canvas.previewBars[3].labelValue == "TANKBUSTER", "Full labels shows TANKBUSTER in the picture, got "
+            .. tostring(canvas.previewBars[3].labelValue))
+        CastAheadDB.fullLabels = nil
+        local full = Frame("Full labels")
+        full.GetChecked = function() return true end
+        full.handlers.OnClick(full)
+        check(canvas.previewBars[3].labelValue == "TANKBUSTER", "ticking Full labels repaints the picture at once")
+        CastAheadDB.fullLabels = nil
+        for _, width in ipairs({ COL_W + 10 + 300, COL_W + 10 + 320, COL_W + 10 + 1500 }) do
+            group.w = width
+            CastAheadOptions.Refresh()
+            check(canvas.shown and canvas.scale and canvas.scale > 0 and canvas.scale <= 1,
+                "the picture fits a stage of " .. (width - COL_W - 10) .. ", scale " .. tostring(canvas.scale))
+        end
+        group.w = COL_W + 10 + 299
+        CastAheadOptions.Refresh()
+        check(not canvas.shown and group.h == 100, "a stage narrower than 300 hides the picture and the group shrinks back")
+        local realLock = InCombatLockdown
+        InCombatLockdown = function() return true end
+        group.w = COL_W + 10 + 400
+        local okShow = pcall(CastAheadOptions.ShowPanel, host, "General")
+        local okRefresh = pcall(CastAheadOptions.Refresh)
+        check(okShow and okRefresh, "the picture repaints in combat without an error")
+        InCombatLockdown = realLock
+        -- Later cases count every shown bar, so the picture leaves none behind.
+        group.w = COL_W
+        CastAheadOptions.Refresh()
+        for i = 1, #canvas.previewBars do canvas.previewBars[i]:Hide() end
+    end)();
+    (function()
         local setup, move
         for _, b in ipairs(made) do
             if rawget(b, "buttonText") == "Size and position" then setup = b end
@@ -6163,7 +6225,10 @@ do
     local plate = CreateFrame("Frame", nil, holder)
     plate.GetWidth = function() return 110 end
     plate.GetHeight = function() return 45 end
-    local w, h = CastAheadCore.PreviewRow(holder, plate)
+    local w, h, plateX, plateY = CastAheadCore.PreviewRow(holder, plate)
+    check(type(plateX) == "number" and plateX > 0 and plateX + 110 <= w and plateY >= 0 and plateY + 45 <= h,
+        "preview row: the plate offset keeps icons on its left inside the size, got "
+        .. tostring(plateX) .. "," .. tostring(plateY))
     local bars = holder.previewBars
     local own = 0
     for i = 1, #bars do

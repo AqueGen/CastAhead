@@ -3972,7 +3972,8 @@ end
 -- The settings picture of the row: bars of the holder's own around a stand-in
 -- plate, painted and placed by the sample row's own code. Shown whatever the
 -- nameplate switch says; the caller draws the off state. Returns the size of
--- plate, icons and labels together, so the caller can scale it to fit.
+-- plate, icons and labels together, so the caller can scale it to fit, and
+-- where the plate's bottom-left corner sits inside that size.
 function CastAheadCore.PreviewRow(holder, plate)
     holder.previewBars = holder.previewBars or {}
     local bars = holder.previewBars
@@ -4003,7 +4004,7 @@ function CastAheadCore.PreviewRow(holder, plate)
         minY = math.min(minY, bottom - 1 - labelH)
         maxY = math.max(maxY, bottom + size)
     end
-    return maxX - minX, maxY - minY
+    return maxX - minX, maxY - minY, -minX, -minY
 end
 
 function CastAheadCore.Reapply()

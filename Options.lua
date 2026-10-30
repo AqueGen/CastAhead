@@ -210,6 +210,99 @@ local function BuildGroup(panel, title, height, free)
 end
 CastAheadOptions.BuildGroup = BuildGroup
 
+local STAGE_X, STAGE_MIN_W = COL_W + 10, 300
+
+local function Desaturate(frame, off)
+    for _, region in ipairs({ frame:GetRegions() }) do
+        if region.SetDesaturated then region:SetDesaturated(off) end
+    end
+    for _, child in ipairs({ frame:GetChildren() }) do Desaturate(child, off) end
+end
+
+-- The empty right part of a group, right of the control column: a live
+-- picture or a plain sentence beside each control it explains, top to bottom
+-- in the order they are added. The group grows when they need more height
+-- than its controls.
+local function BuildStage(panel, group)
+    local stage, items = {}, {}
+    local controlsHeight = group:GetHeight()
+    group.stage = stage
+
+    local function Muted(text)
+        local fs = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fs:SetJustifyH("LEFT")
+        fs:SetTextColor(unpack(T.muted))
+        fs:SetText(text)
+        return fs
+    end
+
+    -- `spec.build(canvas)` makes the frames once, `spec.paint(canvas)` draws
+    -- the current settings and returns the drawn size, `spec.on()` says
+    -- whether the feature is on, `spec.off` names what is off.
+    function stage.Picture(control, spec)
+        local canvas = CreateFrame("Frame", nil, group)
+        spec.build(canvas)
+        items[#items + 1] = { control = control, canvas = canvas, spec = spec, off = Muted(spec.off) }
+    end
+
+    function stage.Line(control, text)
+        items[#items + 1] = { control = control, line = Muted(text) }
+    end
+
+    -- Offsets are measured from the group's top edge, as SetPoint takes them.
+    function stage.Paint()
+        local width = group:GetWidth() - STAGE_X
+        local wide = width >= STAGE_MIN_W
+        local top = group:GetTop()
+        local floor, need = -8, 0
+        for _, item in ipairs(items) do
+            local ctop, cbottom = item.control:GetTop(), item.control:GetBottom()
+            local known = top and ctop and cbottom
+            if item.line then
+                local y = math.min(known and ctop - top or -26, floor)
+                item.line:ClearAllPoints()
+                item.line:SetPoint("TOPLEFT", group, "TOPLEFT", STAGE_X, y)
+                item.line:SetPoint("RIGHT", group, "RIGHT", -10, 0)
+                floor = y - item.line:GetStringHeight() - 6
+                need = math.max(need, 4 - floor)
+            elseif not wide then
+                item.canvas:Hide()
+                item.off:SetShown(false)
+            else
+                local canvas, on = item.canvas, item.spec.on()
+                local w, h = item.spec.paint(canvas)
+                local scale = w > 0 and math.min(1, (width - 10) / w) or 1
+                local tall = h * scale
+                local mid = known and (ctop + cbottom) / 2 - top or -36
+                local y = math.min(mid + tall / 2, floor)
+                canvas:SetScale(scale)
+                canvas:ClearAllPoints()
+                canvas:SetPoint("TOPLEFT", group, "TOPLEFT", STAGE_X / scale, y / scale)
+                canvas:SetAlpha(on and 1 or 0.35)
+                Desaturate(canvas, not on)
+                canvas:Show()
+                -- The line's room is kept while on, so the group keeps its shape.
+                item.off:ClearAllPoints()
+                item.off:SetPoint("TOPLEFT", group, "TOPLEFT", STAGE_X, y - tall - 4)
+                item.off:SetShown(not on)
+                floor = y - tall - 4 - item.off:GetStringHeight() - 6
+                need = math.max(need, 4 - floor)
+            end
+        end
+        local height = math.max(controlsHeight, need)
+        if math.abs(group:GetHeight() - height) > 0.5 then
+            group:SetHeight(height)
+            panel:Relayout()
+        end
+        return need
+    end
+
+    group:HookScript("OnSizeChanged", stage.Paint)
+    table.insert(refreshers, stage.Paint)
+    return stage
+end
+CastAheadOptions.BuildStage = BuildStage
+
 -- One switch, placed against whatever the caller anchors it to.
 local function BuildSwitch(panel, key, point, onClick, label)
     local option = SWITCHES[key]
@@ -489,8 +582,39 @@ function BuildGeneral(panel)
     end)
 
     local plates = BuildGroup(panel, "Nameplate icons", 100)
-    local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 }, OutputChanged)
-    BuildSwitch(panel, "fullLabels", { "TOPLEFT", platesOn, "BOTTOMLEFT", 0, -4 })
+    local platesStage = BuildStage(panel, plates)
+    local platesOn = BuildSwitch(panel, "nameplates", { "TOPLEFT", plates, "TOPLEFT", 10, -26 }, function()
+        OutputChanged()
+        platesStage.Paint()
+    end)
+    BuildSwitch(panel, "fullLabels", { "TOPLEFT", platesOn, "BOTTOMLEFT", 0, -4 }, function()
+        Redraw()
+        platesStage.Paint()
+    end)
+    platesStage.Picture(platesOn, {
+        build = function(canvas)
+            local plate = CreateFrame("Frame", nil, canvas)
+            plate:SetSize(120, 10)
+            local health = plate:CreateTexture(nil, "ARTWORK")
+            health:SetAllPoints()
+            health:SetColorTexture(0.75, 0.12, 0.1)
+            local name = plate:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            name:SetPoint("BOTTOM", plate, "TOP", 0, 2)
+            name:SetText("Training Dummy")
+            canvas.plate = plate
+        end,
+        paint = function(canvas)
+            local w, h, x, y = CastAheadCore.PreviewRow(canvas, canvas.plate)
+            canvas.plate:ClearAllPoints()
+            canvas.plate:SetPoint("BOTTOMLEFT", canvas, "BOTTOMLEFT", x, y)
+            -- The name sits above the plate and may reach past the icons.
+            h = math.max(h, y + 10 + 16)
+            canvas:SetSize(w, h)
+            return w, h
+        end,
+        on = function() return CastAheadConfig.Enabled("nameplates") end,
+        off = "Off - no icons on nameplates",
+    })
 
     local centre = BuildGroup(panel, "Centre call", 70)
     BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 }, OutputChanged)
