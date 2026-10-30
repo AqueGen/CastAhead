@@ -106,10 +106,10 @@ end
 local RESTART = "Restart the game to finish the CastAhead update - defensive calls are off until then."
 
 local BANNER_H = 52
-local BANNER_LABELS = { saveCalls = "Call defensives in dungeons", raidSaves = "Call defensives in raids" }
+local BANNER_BUTTONS = { saveCalls = "Turn on defensive calls", raidSaves = "Turn on raid defensive calls" }
 local BANNER_ON = "Defensive calls are on."
 
--- The off banner of a defensive calls page: a status line and the real switch. Once it was shown
+-- The off banner of a defensive calls page: a status line and a button that turns the calls on. Once it was shown
 -- on this showing of the page it stays, reading `onText`, so the page does not jump under the cursor.
 -- The caller anchors it; Paint returns its height (0 when hidden).
 local function Banner(host, key, offText, onText)
@@ -125,14 +125,20 @@ local function Banner(host, key, offText, onText)
     banner.hint:SetPoint("TOPRIGHT", banner, "TOPRIGHT", -10, -10)
     banner.hint:SetTextColor(unpack(T.muted))
     banner.hint:SetText("The list below shows what you would get.")
-    CastAheadOptions.BuildSwitch(banner, key, { "BOTTOMLEFT", banner, "BOTTOMLEFT", 6, 4 },
-        key == "raidSaves" and CastAheadOptions.RaidSavesChanged or CastAheadOptions.SavesSwitchChanged, BANNER_LABELS[key])
+    local changed = key == "raidSaves" and CastAheadOptions.RaidSavesChanged or CastAheadOptions.SavesSwitchChanged
+    local turnOn = CastAheadWindow.Button(banner, BANNER_BUTTONS[key], 190)
+    turnOn:SetPoint("BOTTOMLEFT", banner, "BOTTOMLEFT", 10, 6)
+    turnOn:SetScript("OnClick", function()
+        CastAheadOptions.SetSwitch(key, true)
+        changed()
+    end)
     local wasOff = false
     function banner.Paint(callsOn)
         wasOff = wasOff or not callsOn
         banner:SetShown(wasOff)
         banner.status:SetText(callsOn and onText or offText)
         banner.hint:SetShown(not callsOn)
+        turnOn:SetShown(not callsOn)
         return wasOff and BANNER_H or 0
     end
     function banner.Reset() wasOff = false end

@@ -189,6 +189,8 @@ CreateFrame = function(kind, _, parent)
     if kind == "EditBox" then
         f.SetText = function(self, text) self.value = text end
         f.GetText = function(self) return self.value end
+    elseif kind == "Button" then
+        f.SetText = function(self, text) rawset(self, "buttonText", text) end
     end
     f.CreateTexture = StubRegion
     f.CreateFontString = function()
@@ -5833,14 +5835,21 @@ do
                 frame.SetAlpha = function(self, a) self.alpha = a end
             end
         end
-        local function Box(label)
+        local function Turn(label)
             for _, frame in ipairs(allFrames) do
-                if frame.kind == "CheckButton" and frame.parent and frame.parent.parent and frame.parent.parent.shown then
-                    for _, fs in ipairs(frame.fontStrings or {}) do
-                        if fs.value == label then return frame end
-                    end
+                if frame.kind == "Button" and rawget(frame, "buttonText") == label and frame.parent
+                    and frame.parent.parent and frame.parent.parent.shown then
+                    return frame
                 end
             end
+        end
+        local function AnyText(value)
+            for _, frame in ipairs(allFrames) do
+                for _, fs in ipairs(frame.fontStrings or {}) do
+                    if fs.value == value then return true end
+                end
+            end
+            return false
         end
         local function Has(frame, text)
             for _, fs in ipairs(frame.fontStrings or {}) do
@@ -5855,86 +5864,80 @@ do
                 end
             end
         end
-        local function Case(page, label, key, offText, db)
+        local function Case(page, label, key, offText, db, general)
             CastAheadDB = db
             CastAheadUI.RefreshTabs()
             CastAheadWindow.Show(page)
             Prep()
             CastAheadUI.RefreshSaves()
-            local box = Box(label)
-            check(box ~= nil, page .. " has a checkbox labelled " .. label)
-            if not box then return end
-            local banner, rows = box.parent, Rows(box.parent.parent)
+            local button = Turn(label)
+            check(button ~= nil, page .. " has a button labelled " .. label)
+            if not button then return end
+            local banner, rows = button.parent, Rows(button.parent.parent)
             check(banner.shown and Has(banner, offText), page .. " banner reads " .. offText)
+            check(button.shown, page .. " button is shown while calls are off")
+            for _, frame in ipairs(allFrames) do
+                if frame.kind == "CheckButton" and frame.parent == banner then
+                    check(false, page .. " banner has no checkbox")
+                end
+            end
             check(rows and rows.alpha == 0.35, page .. " rows are dimmed while calls are off, got " .. tostring(rows and rows.alpha))
             check(footer ~= nil and not footer:find("General - Features", 1, true),
                 page .. " footer does not send the user to General, got " .. tostring(footer))
-            box.GetChecked = function() return true end
-            box.handlers.OnClick(box)
-            check(CastAheadDB[key] == true, page .. " checkbox writes " .. key)
-            check(banner.shown and Has(banner, "Defensive calls are on."), page .. " banner reads on after the tick")
-            check(rows.alpha == 1, page .. " rows are not dimmed after the tick")
+            InCombatLockdown = function() return true end
+            button.handlers.OnClick(button)
+            InCombatLockdown = function() return false end
+            check(CastAheadDB[key] == true, page .. " button writes " .. key)
+            check(banner.shown and Has(banner, "Defensive calls are on."), page .. " banner reads on after the click")
+            check(not button.shown, page .. " button hides after the click")
+            check(rows.alpha == 1, page .. " rows are not dimmed after the click")
+            check(AnyText(general), page .. " click shows '" .. general .. "' on General")
             f:Hide()
-            box.parent.parent.handlers.OnShow(box.parent.parent)
+            button.parent.parent.handlers.OnShow(button.parent.parent)
             CastAheadWindow.Show(page)
             check(not banner.shown, page .. " banner is gone the next time the page is shown")
             CastAheadDB[key] = nil
             f:Hide()
         end
-        Case("Saves", "Call defensives in dungeons", "saveCalls", "Defensive calls are off.", {})
-        Case("RaidSaves", "Call defensives in raids", "raidSaves", "Raid defensive calls are off.", { raidMode = true })
+        Case("Saves", "Turn on defensive calls", "saveCalls", "Defensive calls are off.", {}, "Defensive calls: On")
+        Case("RaidSaves", "Turn on raid defensive calls", "raidSaves", "Raid defensive calls are off.", { raidMode = true },
+            "Raid: defensive on, burst off")
         ;(function()
-        local function Active(label)
-            for _, frame in ipairs(allFrames) do
-                if frame.kind == "CheckButton" and frame.parent and frame.parent.shown and frame.parent.parent and frame.parent.parent.shown then
-                    for _, fs in ipairs(frame.fontStrings or {}) do
-                        if fs.value == label then return frame end
-                    end
-                end
-            end
-        end
         local function GuideCase(page, label, db, offText)
             CastAheadDB = db
             CastAheadUI.RefreshTabs()
             CastAheadWindow.Show(page)
             Prep()
             CastAheadUI.RefreshSaves()
-            local box = Active(label)
-            check(box ~= nil, page .. " shows a banner checkbox labelled " .. label)
-            if not box then return end
-            check(box.parent.shown and Has(box.parent, offText), page .. " banner reads " .. offText)
+            local button = Turn(label)
+            check(button ~= nil, page .. " shows a banner button labelled " .. label)
+            if not button then return end
+            check(button.parent.shown and Has(button.parent, offText), page .. " banner reads " .. offText)
             local savedSaves = CastAheadSaves
             CastAheadSaves = nil
             CastAheadUI.RefreshSaves()
-            check(not box.parent.shown, page .. " banner is hidden while the restart notice shows")
+            check(not button.parent.shown, page .. " banner is hidden while the restart notice shows")
             CastAheadSaves = savedSaves
             f:Hide()
         end
-        GuideCase("Guide", "Call defensives in dungeons", {}, "Defensive calls are off.")
-        GuideCase("RaidGuide", "Call defensives in raids", { raidMode = true }, "Raid defensive calls are off.")
-        GuideCase("Saves", "Call defensives in dungeons", {}, "Defensive calls are off.")
-        GuideCase("RaidSaves", "Call defensives in raids", { raidMode = true }, "Raid defensive calls are off.")
+        GuideCase("Guide", "Turn on defensive calls", {}, "Defensive calls are off.")
+        GuideCase("RaidGuide", "Turn on raid defensive calls", { raidMode = true }, "Raid defensive calls are off.")
+        GuideCase("Saves", "Turn on defensive calls", {}, "Defensive calls are off.")
+        GuideCase("RaidSaves", "Turn on raid defensive calls", { raidMode = true }, "Raid defensive calls are off.")
 
-        for _, page in ipairs({ "RaidSaves", "RaidGuide" }) do
-            local savedInfo, cancelled = GetInstanceInfo, {}
-            local savedCancel = CastAheadSaves.CancelPrefix
-            GetInstanceInfo = function() return "Abyss", "raid", 15, "", 0, 0, false, 9999 end
-            CastAheadSaves.CancelPrefix = function(prefix) cancelled[#cancelled + 1] = prefix end
-            CastAheadDB = { raidMode = true, raidSaves = true }
-            CastAheadUI.RefreshTabs()
-            CastAheadWindow.Show(page)
-            Prep()
-            CastAheadUI.RefreshSaves()
-            local box = Active("Call defensives in raids")
-            check(box ~= nil, page .. " has the raid banner checkbox")
-            if box then
-                box.GetChecked = function() return false end
-                box.handlers.OnClick(box)
-                check(cancelled[1] == "dbm:" and cancelled[2] == "bw:",
-                    page .. " raid banner untick cancels pending dbm: and bw: calls, got " .. table.concat(cancelled, ","))
+        do
+            local counts, wrong = {}, {}
+            for _, frame in ipairs(allFrames) do
+                local t = frame.kind == "CheckButton" and rawget(frame, "text")
+                local v = t and rawget(t, "value")
+                if v then counts[v] = (counts[v] or 0) + 1 end
             end
-            CastAheadSaves.CancelPrefix, GetInstanceInfo = savedCancel, savedInfo
-            f:Hide()
+            for _, key in ipairs({ "saveCalls", "raidMode", "raidSaves", "burstCalls", "bossAdapter" }) do
+                local n = counts[CastAheadOptions.Switches[key].label] or 0
+                if n ~= 1 then wrong[#wrong + 1] = key .. "=" .. n end
+            end
+            check(#wrong == 0, "with the Saves, Guide, RaidSaves and RaidGuide pages built, each feature switch is still built once, got "
+                .. table.concat(wrong, ","))
         end
         end)()
 
@@ -5968,13 +5971,12 @@ do
             CastAheadWindow.Show("Saves")
             Prep()
             check(ListAlpha() == 0.35, "the Features list is dimmed before the banner is ticked, got " .. tostring(ListAlpha()))
-            local banner = Box("Call defensives in dungeons")
-            banner.GetChecked = function() return true end
+            local banner = Turn("Turn on defensive calls")
             banner.handlers.OnClick(banner)
             CastAheadOptions.Refresh()
             local boxes = CallBoxes()
             check(#boxes == 1 and boxes[1].checked == true,
-                "ticking the Saves banner ticks the one Features dungeon calls checkbox, got " .. #boxes .. " boxes")
+                "the Saves banner button ticks the one Features dungeon calls checkbox, got " .. #boxes .. " boxes")
             check(ListAlpha() == 1, "and the Features list is no longer dimmed, got " .. tostring(ListAlpha()))
         end)()
         InCombatLockdown = realLock
