@@ -334,8 +334,8 @@ local OFF_GREY = { 0.5, 0.5, 0.5 }
 
 -- Paints one sample call on `bar` and returns the room it takes with its
 -- label: width, height.
-local function PaintSample(bar, key)
-    local size = CastAheadCore.PaintPreviewBar(bar, key)
+local function PaintSample(bar, key, row)
+    local size = CastAheadCore.PaintPreviewBar(bar, key, row)
     return math.max(size, bar.label:GetStringWidth() or 0), size + 1 + math.max(bar.label:GetStringHeight() or 0, 10)
 end
 
@@ -665,12 +665,15 @@ function BuildGeneral(panel)
         end,
         paint = function(canvas)
             local x, h = 0, 0
+            -- An important kick and an unimportant dodge, so Important casts only has something to remove.
+            local rows = { KICK = CastAheadCore.SampleRowWhere("KICK", true), DODGE = CastAheadCore.SampleRowWhere("DODGE", false),
+                           TANK = CastAheadCore.SampleDataRow("TANK") or { prio = "TANK" } }
             for _, key in ipairs({ "KICK", "DODGE", "TANK" }) do
                 local bar = canvas.bars[key]
-                local w, tall = PaintSample(bar, key)
+                local w, tall = PaintSample(bar, key, rows[key])
                 bar:ClearAllPoints()
                 bar:SetPoint("TOPLEFT", canvas, "TOPLEFT", x + (w - bar._size) / 2, 0)
-                DimSample(bar, not CastAheadMatch.Shown(CastAheadCore.SampleDataRow(key) or { prio = key }))
+                DimSample(bar, not CastAheadMatch.Shown(rows[key]))
                 x, h = x + w + 8, math.max(h, tall)
             end
             canvas:SetSize(x - 8, h)
