@@ -146,33 +146,32 @@ local SWITCHES = {
     timeline = { label = "Feed the Blizzard timeline",
         tip = "Feed confident predictions to the game's own encounter timeline." },
     bigwigsBars = { label = "Show in BigWigs bars",
-        tip = "BigWigs turns the game's timeline off and leaves other addons' entries out of its bars. While the game's timeline is off, the same predictions show as BigWigs bars instead. It uses a part of BigWigs that is not an official addon API, so a BigWigs update may stop it working." },
+        tip = "When BigWigs hides the game's timeline, show the predictions as BigWigs bars. A BigWigs update may break this." },
     sound = { label = "Sound",
         tip = "Master switch for everything the addon plays." },
     voice = { label = "Voice",
         tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"kick\"." },
-    kickFocusOnly = { label = "Kick calls only for my focus", defaultOff = true,
-        tip = "With an enemy focus, only its casts get the kick call; other mobs keep their icons. Without a focus, or with a friendly or dead one, every mob is called. The focus's raid mark does not matter." },
+    kickFocusOnly = { label = "Kick calls only for my focus", defaultOff = true },
     fixedSpacing = { label = "Fixed spacing", defaultOff = true,
-        tip = "Space the icons evenly: each step is the icon width plus the Gap, however long the words under the icons are. Every row looks the same; two long words side by side may overlap." },
+        tip = "Each step is the icon width plus the Gap. Two long words side by side may overlap." },
     fullLabels = { label = "Full labels", defaultOff = true,
-        tip = "Write the long calls out in full under a nameplate icon: TANKBUSTER instead of BUSTER. Unless Fixed spacing is on, longer words push the icons further apart. Off, the longest calls are shortened (BUSTER, DEF, SOON) and the rows stay tight. The cast table and the voice always use the full word." },
+        tip = "Write long calls in full under the icon: TANKBUSTER, not BUSTER." },
     devMode = { label = "Development mode", defaultOff = true,
-        tip = "Adds the Development tab and starts recording data that helps improve the addon (the Record everything switch there, on by default). It does not change what the addon calls out." },
+        tip = "Starts recording data that helps improve the addon (Record everything, on by default)." },
     recordAll = { label = "Record everything",
-        tip = "Records the game's combat log with advanced logging in every dungeon (it stops when you leave, unless you started it yourself), a journal of each key, and what the game lets an addon read from each enemy cast. The journal holds 12 keys. When it is full it asks you to reload so the data reaches the disk; then copy it off and clear it on this tab. No player names are recorded." },
+        tip = "Records dungeon logs and a journal of up to 12 keys. Asks you to reload when full. No player names." },
     saveCalls = { label = "Defensive calls in dungeons", defaultOff = true,
         tip = "In dungeons and the open world, call a defensive ahead of damage that needs one, and show your button for it in the centre. Raids have their own switch." },
     bossAdapter = { label = "Boss calls from DBM / BigWigs",
         tip = "Also call defensives for boss abilities announced by DBM or BigWigs." },
     raidMode = { label = "Raid (experimental)", defaultOff = true,
-        tip = "Turns the raid features below on and off together. Off, none of them runs and the Raid section leaves the menu; each keeps its own setting for when you turn this back on." },
+        tip = "Off, no raid feature runs and the Raid section leaves the menu. Each feature keeps its own setting." },
     raidSaves = { label = "Defensive calls in raids", defaultOff = true,
         tip = "In raids, call a defensive for a dangerous boss debuff on you, timed to when its damage hits in top-player fights. Does not need the dungeon switch." },
     burstCalls = { label = "Burst windows", defaultOff = true,
-        tip = "On bosses with a phase worth bursting into, say \"burst now\" when it starts, with a countdown in the centre block, and \"burst soon\" ahead of it if the slider below is set. Healers get their own phases for group-healing cooldowns. On every other boss it stays silent: press on cooldown." },
+        tip = "Says \"burst now\" when a boss phase worth bursting starts. Silent on other bosses." },
     showMarkPanel = { label = "Mark panel", defaultOff = true,
-        tip = "A panel on screen to mark a wrong call on a mob you pick, with an optional note, and to open the report. Only while recording. The key bindings and /ca mark work without it." },
+        tip = "Also opens the report. Only while recording. The key bindings and /ca mark work without it." },
 }
 CastAheadOptions.Switches = SWITCHES
 
@@ -442,7 +441,7 @@ local function BuildSwitch(panel, key, point, onClick, label)
     box:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(label, 1, 1, 1)
-        GameTooltip:AddLine(option.tip, nil, nil, nil, true)
+        if option.tip then GameTooltip:AddLine(option.tip, nil, nil, nil, true) end
         GameTooltip:Show()
     end)
     box:SetScript("OnLeave", GameTooltip_Hide)

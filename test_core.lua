@@ -6218,6 +6218,26 @@ do
         and sw.raidSaves.label == "Defensive calls in raids" and sw.raidSaves.defaultOff == true
         and sw.burstCalls.label == "Burst windows", "the four feature switches carry their labels and start off")
     check(sw.centerText.defaultOff == nil, "the centre call is not a default-off switch")
+    do
+        check(sw.fullLabels.tip == "Write long calls in full under the icon: TANKBUSTER, not BUSTER.", "full labels tip is short")
+        check(sw.bigwigsBars.tip == "When BigWigs hides the game's timeline, show the predictions as BigWigs bars. A BigWigs update may break this.",
+            "BigWigs bars tip is short")
+        check(sw.burstCalls.tip == "Says \"burst now\" when a boss phase worth bursting starts. Silent on other bosses.", "burst tip is short")
+        check(sw.recordAll.tip == "Records dungeon logs and a journal of up to 12 keys. Asks you to reload when full. No player names.",
+            "record tip is short")
+        check(sw.kickFocusOnly.tip == nil, "the kick focus switch has no tip")
+        local long = {}
+        for key, option in pairs(sw) do
+            if option.tip and #option.tip > 160 then long[#long + 1] = key end
+        end
+        check(#long == 0, "no switch tip is over 160 characters: " .. table.concat(long, ","))
+        local savedTip, lines = GameTooltip, 0
+        GameTooltip = setmetatable({ AddLine = function() lines = lines + 1 end }, { __index = function() return function() end end })
+        local okBox, box = pcall(CastAheadOptions.BuildSwitch, {}, "kickFocusOnly", { "TOPLEFT" })
+        local okHover = okBox and pcall(box.handlers.OnEnter, box)
+        GameTooltip = savedTip
+        check(okBox and okHover and lines == 0, "a switch without a tip adds no tooltip body")
+    end
     check(ok and table.concat(CastAheadOptions.TABS, ",") == "General,Sounds,Defensives,Development,Report",
         "the settings pages are General, Sounds, Defensives and Development, Report comes last")
     local savedMeta, savedBuild, savedLocale, savedInfo, savedDB = C_AddOns, GetBuildInfo, GetLocale, GetSpecializationInfoByID, CastAheadDB
