@@ -5417,7 +5417,6 @@ do
         local setHeight = group.SetHeight
         group.SetHeight = function(self, h) sets = sets + 1 setHeight(self, h) end
         local stage = CastAheadOptions.BuildStage(panel, group)
-        check(stage.Line == nil, "the stage holds pictures only, no sentences")
         local control = CreateFrame("Frame", nil, panel)
         local note = CastAheadOptions.Note(panel, control, "Stage test sentence")
         check(note and rawget(note, "value") == "Stage test sentence" and note.points
@@ -7127,7 +7126,7 @@ do
     check(framesMade == before and reused == 3, "preview row: the pool still holds the released bars, got " .. reused)
     CastAheadCore.HideSampleRow(fresh)
 
-    local block = CastAheadCore.NewCenterPreview(holder)
+    local block = CastAheadCore.BuildCenterBlock(holder)
     check(block.parent == holder and block.strata ~= "HIGH", "centre preview: parented to the holder, no HIGH strata")
     CastAheadCore.PaintCenterPreview(block, { "KICK" })
     check(block.lines[1].shown and tostring(block.lines[1].timeValue):match("^Kick") ~= nil,

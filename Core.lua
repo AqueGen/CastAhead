@@ -35,7 +35,7 @@ local THIN_EVIDENCE = 5              -- rows backed by less are always estimates
 local COMBAT_POLL_INTERVAL = 0.1
 local MAX_NAMEPLATES = 40
 
--- Created up front: the main chunk is at Lua 5.1's 200-local limit, so helpers
+-- Created up front: the main chunk is near Lua 5.1's 200-local limit, so helpers
 -- shared between distant sections hang here instead of taking a local each.
 CastAheadCore = {}
 
@@ -2409,7 +2409,6 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         -- dispels the character knows.
         if event == "SPELLS_CHANGED" or unit == "player" then
             InvalidateCapabilities()
-            if CastAheadCore then CastAheadCore.ForgetSamples() end
             if CastAheadSaves and event == "PLAYER_SPECIALIZATION_CHANGED" then CastAheadSaves.SetViewSpec(nil) end
             if CastAheadSaves then CastAheadSaves.Refresh() end
             if CastAheadOptions and CastAheadOptions.RefreshDefensives then CastAheadOptions.RefreshDefensives() end
@@ -2975,7 +2974,6 @@ end
 
 -- The settings picture of the centre call: a block of its own, painted by the
 -- same code as the real one, at the player's text size.
-CastAheadCore.NewCenterPreview = CastAheadCore.BuildCenterBlock
 
 function CastAheadCore.PaintCenterPreview(block, keys)
     local now = GetTime()

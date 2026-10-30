@@ -360,7 +360,7 @@ end
 local function CenterPicture(key, on, off, caption)
     return {
         build = function(canvas)
-            canvas.block = CastAheadCore.NewCenterPreview(canvas)
+            canvas.block = CastAheadCore.BuildCenterBlock(canvas)
             if caption then canvas.caption = canvas:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall") end
         end,
         paint = function(canvas, isOn)
@@ -592,6 +592,8 @@ if StaticPopupDialogs then
         preferredIndex = 3,
     }
 end
+
+local function OnOff(on) return on and "on" or "off" end
 
 -- Groups in reading order: what is announced at all first, then the places
 -- it is drawn. Each group carries its own on/off switch, so nothing has to be
@@ -850,7 +852,6 @@ function BuildGeneral(panel)
         "Off - no call in the middle of the screen"))
 
     local features = BuildGroup(panel, "Features", 78)
-    local function OnOff(on) return on and "on" or "off" end
     for i, read in ipairs({
         function() return "Defensive calls: " .. (CastAheadConfig.DungeonSaves() and "On" or "Off") end,
         function()
@@ -1379,8 +1380,6 @@ local REPORT_OFTEN = { "Every time", "Sometimes", "Once" }
 local function NewPicks() return { level = LEVEL_DEFAULT } end
 local reportKind, pick = "cast", NewPicks()
 
-local function OnOff(on) return on and "on" or "off" end
-
 local function KindOf(key)
     for _, k in ipairs(REPORT_KINDS) do if k.key == key then return k end end
     return REPORT_KINDS[1]
@@ -1848,5 +1847,5 @@ for _, name in ipairs(CastAheadOptions.TABS) do
     CastAheadWindow.Register(name, MENU_GROUPS[name] or "Settings",
         function(h) host = h end,
         function() CastAheadOptions.ShowPanel(host, name) end,
-        nil, name == "Features")
+        nil, nil)
 end
