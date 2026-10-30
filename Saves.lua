@@ -650,7 +650,8 @@ function S.Refresh()
 end
 
 function S.Schedule(key, spellID, fireAt, endAt, advice)
-    scheduled[key] = { spell = spellID, fireAt = fireAt, endAt = endAt, advice = advice }
+    scheduled[key] = { spell = spellID, fireAt = fireAt, endAt = endAt, advice = advice,
+                       candidates = spellID and { { spell = spellID } } or nil }
 end
 
 function S.Cancel(key)
@@ -717,12 +718,12 @@ function S.Tick(now)
             if saveLead > 0 and not c.fired and not c.warned and now >= c.fireAt - saveLead and now < c.fireAt then
                 c.warned, c.warnedAt = true, now
                 lastFiredAt = now
-                if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice, true) end
+                if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice, true, c.candidates) end
             end
             if not c.fired and now >= c.fireAt and now < c.endAt then
                 c.fired, c.firedAt = true, now
                 lastFiredAt = now
-                if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice) end
+                if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice, nil, c.candidates) end
             end
             if now >= c.endAt then scheduled[key] = nil end
         end

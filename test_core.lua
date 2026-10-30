@@ -3669,6 +3669,21 @@ do
     check(Heard() == "DEFENSIVE_soon,DEFENSIVE_soon,DEFENSIVE", "move: then the plain call, heard " .. Heard())
     run(5)
 
+    heard = {}
+    CastAheadDB = { saveCalls = true, saveLeadSeconds = 3, spellMute = { [100] = true } }
+    S.Schedule("test:muted", 100, now + 5, now + 8, def)
+    run(10)
+    check(#heard == 0, "a spell muted on the Casts page silences its scheduled save, heard " .. Heard())
+    local savedStub = LibStub
+    LibStub = function() return { Fetch = function(_, _, name) return "custom/" .. name .. ".ogg" end } end
+    CastAheadDB = { saveCalls = true, saveLeadSeconds = 3, spellSounds = { [100] = "Bell" } }
+    heard = {}
+    S.Schedule("test:picked", 100, now + 5, now + 8, def)
+    run(10)
+    check(Heard() == "Bell,Bell", "a sound picked for the spell replaces the voice on a scheduled save, heard " .. Heard())
+    LibStub = savedStub
+    CastAheadDB = { saveCalls = true, saveLeadSeconds = 3 }
+
     CastAheadCore.FeatureTest("defensive")
     check(S.NextFireAt(now) and math.abs(S.NextFireAt(now) - (now + 4)) < 1e-6,
         "the defensive Test button with early warning 3 calls at now + 4, got " .. tostring(S.NextFireAt(now) and S.NextFireAt(now) - now))
