@@ -4353,6 +4353,30 @@ check(Alerts() == 0, "the updated bar counts from where it paused")
 advance(1.0)
 check(Alerts() == 1, "and calls once after resuming")
 advance(5)
+do
+    local heard, savedPlay = {}, PlaySoundFile
+    PlaySoundFile = function(path, ...)
+        heard[#heard + 1] = path:match("([%w_]+)%.ogg$")
+        return savedPlay(path, ...)
+    end
+    local function Heard() return table.concat(heard, ",") end
+    CastAheadDB.saveLeadSeconds = 3
+    local t0 = now
+    A.OnBar("dbm", "t13", 1299684, 10, now)
+    advance(3.9)
+    check(#heard == 0, "early warning 3 on a boss bar: quiet before end - lead - 3, heard " .. Heard())
+    advance(0.2)
+    check(Heard() == "DEFENSIVE_soon", "early warning 3 on a boss bar: soon at end - lead - 3, heard " .. Heard())
+    A.OnUpdate("dbm", "t13", now - t0, 10, now)
+    advance(0.5)
+    check(Heard() == "DEFENSIVE_soon", "an update with the same end time does not warn again, heard " .. Heard())
+    advance(2.5)
+    check(Heard() == "DEFENSIVE_soon,DEFENSIVE", "then the plain call at end - lead, heard " .. Heard())
+    advance(5)
+    check(Heard() == "DEFENSIVE_soon,DEFENSIVE", "nothing more from the boss bar, heard " .. Heard())
+    CastAheadDB.saveLeadSeconds = nil
+    PlaySoundFile = savedPlay
+end
 A.OnBar("dbm", "t11", 1299684, 10, now)
 sounds, spoken, clips = 0, 0, 0
 advance(2)
