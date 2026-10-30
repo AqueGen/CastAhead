@@ -110,6 +110,7 @@ local function RedrawAndSaves()
 end
 
 function CastAheadOptions.SavesSwitchChanged()
+    if CastAheadCore and CastAheadCore.ForgetSamples then CastAheadCore.ForgetSamples() end
     SaveRefresh()
     CastAheadOptions.RefreshDefensives()
     if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
@@ -277,12 +278,17 @@ local function BuildStage(panel, group)
             local ctop, cbottom = item.control:GetTop(), item.control:GetBottom()
             local known = top and ctop and cbottom
             if item.line then
-                local y = math.min(known and ctop - top or -26, floor)
-                item.line:ClearAllPoints()
-                item.line:SetPoint("TOPLEFT", group, "TOPLEFT", STAGE_X, y)
-                item.line:SetPoint("RIGHT", group, "RIGHT", -10, 0)
-                floor = y - item.line:GetStringHeight() - 6
-                need = math.max(need, 4 - floor)
+                -- A hidden control's sentence goes with it and takes no room.
+                local shown = item.control:IsShown() and true or false
+                item.line:SetShown(shown)
+                if shown then
+                    local y = math.min(known and ctop - top or -26, floor)
+                    item.line:ClearAllPoints()
+                    item.line:SetPoint("TOPLEFT", group, "TOPLEFT", STAGE_X, y)
+                    item.line:SetPoint("RIGHT", group, "RIGHT", -10, 0)
+                    floor = y - item.line:GetStringHeight() - 6
+                    need = math.max(need, 4 - floor)
+                end
             elseif not wide then
                 item.canvas:Hide()
                 item.off:SetShown(false)
@@ -1233,7 +1239,8 @@ function BuildDefensives(panel)
     end)
     local function CallsOn() return CastAheadConfig.DungeonSaves() or CastAheadConfig.RaidSaves() end
     local stage = BuildStage(panel, group)
-    local bossLine = stage.Line(boss, "Adds calls for boss abilities DBM or BigWigs announce.")
+    stage.Line(raidSaves, "Calls a defensive for a dangerous boss debuff on you.")
+    local bossLine = stage.Line(boss,"Adds calls for boss abilities DBM or BigWigs announce.")
     local status = stage.Line(boss, "")
     local early, earlyLabel = BuildSlider(panel, {
         key = "saveLeadSeconds",
@@ -1302,7 +1309,10 @@ function BuildDefensives(panel)
         note:SetShown(not shipped)
         list:SetShown(shipped)
         reset:SetShown(shipped)
-        stage.Paint()
+        -- Switch rows, slider, then the reset button or the slider's end labels.
+        local rows = raid and 3 or 2
+        stage.Fit(26 + rows * calls:GetHeight() + (rows - 1) * 4 + 14 + earlyLabel:GetStringHeight() + 12
+            + early:GetHeight() + (shipped and 24 + reset:GetHeight() or 14) + 10)
         panel:Relayout()
     end
     table.insert(refreshers, Paint)

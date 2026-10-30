@@ -455,7 +455,7 @@ function S.GuideLines(instanceID)
     for _, name in ipairs(order) do BossBlock(lines, name, groups[name], bursts[name], off) end
     if #trash > 0 then
         if #lines > 0 then lines[#lines + 1] = "" end
-        lines[#lines + 1] = "Trash"
+        lines[#lines + 1] = off and Dim("Trash") or "Trash"
         for _, line in ipairs(trash) do lines[#lines + 1] = off and Dim(line) or line end
     end
     return lines

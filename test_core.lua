@@ -162,7 +162,8 @@ end
 
 local eventHandler, updateHandler
 CreateFrame = function(kind, _, parent)
-    local f = { shown = false, texts = {}, kind = kind, handlers = {}, parent = parent }
+    local f = { shown = false, texts = {}, kind = kind, handlers = {}, parent = parent,
+        parentStrata = parent and parent.strata }
     allFrames[#allFrames + 1] = f
     framesMade = framesMade + 1
     f.Show = function(self)
@@ -3941,6 +3942,7 @@ do
         end
         check(greyOk and seen, "dungeon guide with calls off lists Boss lines, every defensive line starts grey, got " .. offText)
         check(not offText:find(CastAheadSaves.EP_NOTE, 1, true), "dungeon guide with calls off has no damage note")
+        check(offText:find("\n|cffaaaaaaTrash|r\n", 1, true), "dungeon guide with calls off greys the Trash heading too")
         CastAheadDB = savedAll
         CastAheadDB.raidMode, CastAheadDB.burstCalls = true, true
         check(CastAheadSaves.GuideText(9000):find("Burst phases come from top-player logs", 1, true),
@@ -5313,7 +5315,26 @@ do
         check(icons and icons.TANK.labelValue == "TANKBUSTER", "Full labels reach the filter picture, got "
             .. tostring(icons and icons.TANK.labelValue))
         CastAheadDB.fullLabels = nil
-        local kick, other = CastAheadCore.SampleRowWhere("KICK", true), CastAheadCore.SampleRowWhere(nil, false)
+        do
+            GetSpecializationRole = function() return "TANK" end
+            fire("PLAYER_SPECIALIZATION_CHANGED", "player")
+            check(icons and icons.TANK.alpha == 1, "a spec change to a tank repaints the filter picture, the buster bright")
+            GetSpecializationRole = function() return "DAMAGER" end
+            fire("PLAYER_SPECIALIZATION_CHANGED", "player")
+            check(icons and icons.TANK.alpha == 0.35, "a spec change back to a damage dealer dims the buster again")
+            local realData = CastAheadData
+            CastAheadData = { [9107] = { name = "Before", { spell = 9107, prio = "KICK", first = 10, cd = { 20 } } } }
+            CastAheadCore.Reapply()
+            local before = CastAheadCore.SampleRowWhere("KICK", true)
+            CastAheadData = { [9108] = { name = "After", { spell = 9108, prio = "KICK", first = 10, cd = { 20 } } } }
+            CastAheadOptions.SavesSwitchChanged()
+            local after = CastAheadCore.SampleRowWhere("KICK", true)
+            check(before and before.spell == 9107 and after and after.spell == 9108,
+                "the defensive calls switch drops the cached filter samples")
+            CastAheadData = realData
+            CastAheadCore.Reapply()
+        end
+        local kick, other =CastAheadCore.SampleRowWhere("KICK", true), CastAheadCore.SampleRowWhere(nil, false)
         local otherKey = other and CastAheadMatch.Advice(other).key
         check(kick and kick.spell and CastAheadMatch.Important(kick) and other and other.spell
             and not CastAheadMatch.Important(other) and otherKey ~= "KICK" and otherKey ~= "TANK" and otherKey ~= "BUSTER",
@@ -5468,6 +5489,32 @@ do
         CastAheadOptions.ShowPanel(host, "Defensives")
         check(Off("Off - no early warning") and not Off("Off - defensive calls are off"),
             "with calls on and the slider at 0 the strip says there is no early warning")
+        do
+            local realFit, fitted = defs.stage.Fit, {}
+            defs.stage.Fit = function(h)
+                local need = realFit(h)
+                fitted.h, fitted.need = h, need
+                return need
+            end
+            local raidLine
+            for _, fs in ipairs(rawget(defs, "fontStrings") or {}) do
+                if rawget(fs, "value") == "Calls a defensive for a dangerous boss debuff on you." then raidLine = fs end
+            end
+            local content = {}
+            for _, raid in ipairs({ true, false }) do
+                CastAheadDB = { saveCalls = true, raidMode = raid or nil }
+                CastAheadOptions.ShowPanel(host, "Defensives")
+                content[raid] = fitted.h
+                check(fitted.h and defs.h == math.max(fitted.h, fitted.need),
+                    "the Defensives group is as tall as its content or its stage, raid " .. tostring(raid))
+                check(raidLine and raidLine.shown == raid, "the Defensives raid sentence shows with its switch, raid " .. tostring(raid))
+            end
+            local row = Frame("Defensive calls in raids"):GetHeight() + 4
+            check(content[true] and content[false] and content[true] - content[false] == row,
+                "the Defensives content is one switch row shorter without raid mode, got "
+                .. tostring(content[true]) .. " and " .. tostring(content[false]))
+            defs.stage.Fit = realFit
+        end
 
         CastAheadDB = {}
         local pictures = {}
@@ -6623,6 +6670,8 @@ do
     local center = CastAheadCore.CenterFrame()
     check(center.lines[1].shown and center.lines[2].shown and center.lines[3].shown,
         "centre sample: still three lines")
+    check(center.lines[1].parentStrata == "HIGH" and block.lines[1].parentStrata == nil,
+        "the live centre block is HIGH before its first line is made, the preview never")
     CastAheadCore.ShowCenterSample(false)
     -- The setup cases count every shown frame, so the pictures leave none behind.
     for i = 1, #block.lines do block.lines[i]:Hide() end

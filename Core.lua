@@ -2409,11 +2409,13 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         -- dispels the character knows.
         if event == "SPELLS_CHANGED" or unit == "player" then
             InvalidateCapabilities()
+            if CastAheadCore then CastAheadCore.ForgetSamples() end
             if CastAheadSaves and event == "PLAYER_SPECIALIZATION_CHANGED" then CastAheadSaves.SetViewSpec(nil) end
             if CastAheadSaves then CastAheadSaves.Refresh() end
             if CastAheadOptions and CastAheadOptions.RefreshDefensives then CastAheadOptions.RefreshDefensives() end
             if CastAheadUI and CastAheadUI.RefreshSaves then CastAheadUI.RefreshSaves() end
             if CastAheadCore then CastAheadCore.Reapply() end
+            if CastAheadOptions then CastAheadOptions.Refresh() end
         end
         return
     end
@@ -2658,9 +2660,10 @@ local CENTER_STRATA = "HIGH"
 local CENTER_LINES = 3      -- a pack can cast three things at once; more is noise
 local CENTER_LINE_H = 44
 
-function CastAheadCore.BuildCenterBlock(parent)
+function CastAheadCore.BuildCenterBlock(parent, strata)
     local block = CreateFrame("Frame", nil, parent)
     block:SetSize(360, CENTER_LINE_H * CENTER_LINES)
+    if strata then block:SetFrameStrata(strata) end
     block:EnableMouse(false)
     block.lines = {}
     for i = 1, CENTER_LINES do
@@ -2697,8 +2700,7 @@ end
 
 local function CenterFrame()
     if center then return center end
-    center = CastAheadCore.BuildCenterBlock(UIParent)
-    center:SetFrameStrata(CENTER_STRATA)
+    center = CastAheadCore.BuildCenterBlock(UIParent, CENTER_STRATA)
     -- Backdrop only while the block is being moved, so there is something to
     -- grab and see.
     -- Only the first line is shown while moving, so only it is boxed: the
@@ -4046,6 +4048,11 @@ function CastAheadCore.PaintPreviewBar(bar, key, row)
     bar.time:SetFormattedText("%d", sample.time)
     bar:Show()
     return size
+end
+
+-- The picked samples depend on the role and on whether defensive calls are on.
+function CastAheadCore.ForgetSamples()
+    wipe(sampleRows)
 end
 
 function CastAheadCore.Reapply()
