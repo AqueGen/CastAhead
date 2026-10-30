@@ -5051,11 +5051,11 @@ do
         check(raidSaves.alpha == 0.35 and bursts.alpha == 0.35 and raid.alpha ~= 0.35,
             "with the raid switch off its two children are dimmed, the raid switch is not")
         check(raidSaves.enabled ~= false and bursts.enabled ~= false, "and the dimmed children stay enabled")
-        check(tests[1].alpha ~= 0.35 and tests[2].alpha == 0.35,
-            "the dungeon Test button stays bright, the burst one dims with the raid section")
+        check(tests[1].alpha ~= 0.35 and tests[2].alpha ~= 0.35,
+            "both Test buttons stay bright while their sections are off")
         CastAheadDB = { raidMode = true }
         CastAheadOptions.ShowPanel(host, "Features")
-        check(raidSaves.alpha == 1 and bursts.alpha == 1 and tests[2].alpha == 1,
+        check(raidSaves.alpha == 1 and bursts.alpha == 1 and tests[2].alpha ~= 0.35,
             "with the raid switch on its section is not dimmed")
         CastAheadDB = { raidSaves = true, burstCalls = true }
         CastAheadOptions.ShowPanel(host, "Features")
@@ -5238,7 +5238,7 @@ do
         end
     end
     for _, case in ipairs({ { {}, 0.35, "all off" }, { { saveCalls = true }, 1, "dungeons" },
-        { { raidMode = true, raidSaves = true }, 0.35, "raids" }, { { raidSaves = true }, 0.35, "raids without the raid switch" } }) do
+        { { raidMode = true, raidSaves = true }, 1, "raids" }, { { raidSaves = true }, 0.35, "raids without the raid switch" } }) do
         CastAheadDB = case[1]
         CastAheadOptions.ShowPanel(host, "Features")
         local boss, raid = Frame("Boss calls from DBM / BigWigs"), Frame("Defensive calls in raids")
@@ -5246,7 +5246,7 @@ do
         check(not HasOffNote(), "Features has no off note, " .. case[3])
         check(raid and raid.shown == true, "Features raid defensive switch is shown, " .. case[3])
         check(ListGroup() and ListGroup().alpha == case[2] and boss.alpha == case[2],
-            "the dungeon section follows the dungeon switch, " .. case[3])
+            "the shared defensive controls dim only while no defensive calls are on, " .. case[3])
     end
     CastAheadDB = {};
 
@@ -5294,7 +5294,8 @@ do
             "A panel to mark a wrong call while recording.",
             "Calls a defensive for a dangerous boss debuff on you.",
             "Puts every setting back to a new install. Recorded data stays.",
-            "Adds calls for boss abilities DBM or BigWigs announce." }) do
+            "Adds calls for boss abilities DBM or BigWigs announce.",
+            "Boss mods, early warning and buttons also apply to raid defensive calls." }) do
             check(Text(s) ~= nil, "a visible sentence says: " .. s)
         end
         local groups = {}
@@ -6291,6 +6292,32 @@ do
     local ok = pcall(dofile, "Options.lua")
     check(ok and CastAheadOptions and CastAheadOptions.Switches and CastAheadOptions.Switches.burstCalls
         and CastAheadOptions.Switches.burstCalls.defaultOff == true, "the burst switch exists and is off by default")
+    do
+        local savedSaves, savedSlider, mark = CastAheadSaves, MinimalSliderWithSteppersMixin, #allFrames
+        CastAheadSaves = nil
+        MinimalSliderWithSteppersMixin = savedSlider or { Label = { Min = 1, Max = 2 }, Event = { OnValueChanged = 1 } }
+        local savedCreate = CreateFrame
+        CreateFrame = function(...)
+            local f = savedCreate(...)
+            f.MinText, f.MaxText, f.Slider = StubRegion(), StubRegion(), StubRegion()
+            f.SetValue, f.GetHeight, f.GetWidth = function() end, function() return 0 end, function() return 600 end
+            return f
+        end
+        local built, err = pcall(CastAheadOptions.ShowPanel, CreateFrame("Frame"), "Features")
+        CreateFrame = savedCreate
+        local found = {}
+        for i = mark + 1, #allFrames do
+            local t = allFrames[i].kind == "CheckButton" and rawget(allFrames[i], "text")
+            if t and t.value then found[t.value] = true end
+        end
+        check(built and found["Raid (experimental)"] and found["Defensive calls in raids"] and found["Burst windows"]
+            and not found["Defensive calls in dungeons"],
+            "without the saves module Features still builds the raid section " .. tostring(err))
+        CastAheadSaves, MinimalSliderWithSteppersMixin = savedSaves, savedSlider
+        -- Later cases count shown frames and run every refresher: hide the stub page and reload a fresh module.
+        for i = mark + 1, #allFrames do allFrames[i].shown = false end
+        dofile("Options.lua")
+    end
     local sw = CastAheadOptions.Switches
     check(sw.saveCalls.label == "Defensive calls in dungeons" and sw.saveCalls.defaultOff == true
         and sw.raidMode and sw.raidMode.label == "Raid (experimental)" and sw.raidMode.defaultOff == true

@@ -38,7 +38,7 @@ A kickable cast says "kick". By default only casts marked Important on the Casts
 
 ## The window
 
-A menu on the left: **Settings** (General, Sounds, Defensives while defensive calls are on), **Dungeon** (Guide, Saves, Casts, with the dungeon picked on top), **Raid** (Guide and Saves per difficulty, shown while the Raid switch is on) and **Feedback** (a Report page that prepares the text of a bug report or idea for a [GitHub issue](https://github.com/AqueGen/CastAhead/issues/new?template=report.yml) or a CurseForge comment).
+A menu on the left: **Settings** (General, Sounds, Features), **Dungeon** (Guide, Saves, Casts, with the dungeon picked on top), **Raid** (Guide and Saves per difficulty, shown while "Raid (experimental)" on the Features page is on) and **Feedback** (a Report page that prepares the text of a bug report or idea for a [GitHub issue](https://github.com/AqueGen/CastAhead/issues/new?template=report.yml) or a CurseForge comment).
 
 - **General**: what gets called and the outputs (nameplate icons, centre call, timeline, sound, voice). Sizes and positions live in Size and position. The early warning ("tank buster soon") is off by default: on top of the real call it can read as two casts.
 - **Sounds**: each category keeps the voice or plays any sound your other addons registered, and the game sound channel (Master, Dialog or SFX) sets the volume slider that controls the calls.
@@ -49,11 +49,11 @@ A menu on the left: **Settings** (General, Sounds, Defensives while defensive ca
 
 ## Defensive calls (alpha)
 
-Off by default: "Defensive calls in dungeons" in General - Features. CastAhead says "defensive" and shows up to three icons of the buttons you can press right now. The calls come from trash casts, from dangerous debuffs landing on you (sound only), and from boss abilities in DBM or BigWigs timers.
+Off by default: "Defensive calls in dungeons" on the Features page. CastAhead says "defensive" and shows up to three icons of the buttons you can press right now. The calls come from trash casts, from dangerous debuffs landing on you (sound only), and from boss abilities in DBM or BigWigs timers.
 
 A hit gets a call when the whole episode (the hit plus its damage over time, pulses and stacks) would take you below zero at +20 without a defensive, and top players at +20 press one for it. Calls are judged at +20 whatever key you run. Tanks get calls for tank busters only. A cast aimed at one player says "targeted" instead, because the game does not tell addons whom it is aimed at.
 
-Each spec ships one ordered list of personal defensives; the top ready button is the one shown. The Defensives page edits the list (add a spell or item by id, name or link), sets the defensive early warning (0 to 10 s, off by default) and switches the DBM / BigWigs boss calls. Boss coverage is partial: a boss ability gets a call only while a boss mod runs a timer for it.
+Each spec ships one ordered list of personal defensives; the top ready button is the one shown. The Features page edits the list (add a spell or item by id, name or link), sets the defensive early warning (0 to 10 s, off by default) and switches the DBM / BigWigs boss calls. Boss coverage is partial: a boss ability gets a call only while a boss mod runs a timer for it.
 
 ## Raid debuff calls (alpha)
 

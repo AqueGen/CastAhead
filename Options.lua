@@ -1202,11 +1202,11 @@ local function BuildRaidSection(panel)
         local lead = CastAheadConfig.BurstLead()
         return lead > 0 and string.format("burst soon %ds before", lead) or nil
     end))
-    local test = TestButton(panel, bursts, 16, "A sample \"burst soon\", then \"burst now\" with its countdown.",
+    TestButton(panel, bursts, 16, "A sample \"burst soon\", then \"burst now\" with its countdown.",
         function() return CastAheadCore.FeatureTest("burst") end)
     local function Paint()
         local alpha = SwitchOn("raidMode") and 1 or OFF_ALPHA
-        for _, w in ipairs({ raidSaves, bursts, burstSoon, soonLabel, savesLine, burstLine, test }) do w:SetAlpha(alpha) end
+        for _, w in ipairs({ raidSaves, bursts, burstSoon, soonLabel, savesLine, burstLine }) do w:SetAlpha(alpha) end
         -- Three switch rows, the slider caption, the slider and its end labels.
         stage.Fit(6 + 3 * raid:GetHeight() + 2 * 4 + 8 + soonLabel:GetStringHeight() + 12 + burstSoon:GetHeight() + 14 + 10)
     end
@@ -1215,11 +1215,21 @@ local function BuildRaidSection(panel)
     return group
 end
 
+-- The raid section closes the page, `above` pixels under the end of the grouped flow.
+local function PlaceRaid(panel, raid, y, above)
+    raid:ClearAllPoints()
+    raid:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -(y + above + COL_GAP))
+    raid:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -COL_X, -(y + above + COL_GAP))
+    return above + COL_GAP + raid:GetHeight()
+end
+
 function BuildFeatures(panel)
     if not CastAheadSaves then
         local note = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         note:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -6)
         note:SetText("Restart the game to finish the CastAhead update - defensive calls are off until then.")
+        local raid = BuildRaidSection(panel)
+        panel.flowBottom = function(y) return PlaceRaid(panel, raid, y, note:GetStringHeight() + 10) end
         return
     end
     local group = BuildGroup(panel, nil, DEFENSIVES_H)
@@ -1239,6 +1249,7 @@ function BuildFeatures(panel)
     TestButton(panel, calls, 0, "One sample defensive call with your buttons, in the centre and out loud.",
         function() return CastAheadCore.FeatureTest("defensive") end)
     local bossLine = stage.Line(boss, "Adds calls for boss abilities DBM or BigWigs announce.")
+    local sharedLine = stage.Line(boss, "Boss mods, early warning and buttons also apply to raid defensive calls.")
     local status = stage.Line(boss, "")
     local early, earlyLabel = BuildSlider(panel, {
         key = "saveLeadSeconds",
@@ -1287,19 +1298,16 @@ function BuildFeatures(panel)
             h = note:GetStringHeight() + 10
         end
         if caveat.text:IsShown() then h = h + 10 + caveat.Place(COL_X, y + h + 10, width) end
-        raid:ClearAllPoints()
-        raid:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -(y + h + COL_GAP))
-        raid:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -COL_X, -(y + h + COL_GAP))
-        return h + COL_GAP + raid:GetHeight()
+        return PlaceRaid(panel, raid, y, h)
     end
 
     Paint = function()
-        local on = CastAheadConfig.DungeonSaves()
+        local on = CallsOn()
         local spec = CastAheadSaves and CastAheadSaves.ViewSpecID()
         local shipped = spec and CastAheadSaveButtons and CastAheadSaveButtons[spec] and true or false
         status:SetText("|cffaaaaaa" .. (CastAheadBossAdapter and CastAheadBossAdapter.Status() or "No boss mod") .. "|r")
         local alpha = on and 1 or OFF_ALPHA
-        for _, w in ipairs({ boss, bossLine, status, early, earlyLabel, list, reset, caveat.text, caveat.button, note }) do w:SetAlpha(alpha) end
+        for _, w in ipairs({ boss, bossLine, sharedLine, status, early, earlyLabel, list, reset, caveat.text, caveat.button, note }) do w:SetAlpha(alpha) end
         note:SetShown(not shipped)
         list:SetShown(shipped)
         reset:SetShown(shipped)
