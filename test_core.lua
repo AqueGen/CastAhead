@@ -5346,6 +5346,27 @@ do
         local okNone = pcall(CastAheadOptions.Refresh)
         check(okNone and icons and not icons.OTHER.shown and icons.KICK.shown and icons.TANK.shown,
             "with no cast the filter drops, the picture shows only the kick and the buster")
+        CastAheadData = { [9103] = { name = "Gated first",
+            { spell = 9103, prio = "PURGE", first = 10, cd = { 20 } },
+            { spell = 9104, prio = "FRONTAL", first = 10, cd = { 20 } },
+            { spell = 9105, prio = "KICK", first = 10, cd = { 20 } },
+            { spell = 9106, prio = "TANK", first = 10, cd = { 20 } } } }
+        CastAheadDB = { spellImportant = { [9103] = false, [9104] = false } }
+        local realCan = CastAheadMatch.PlayerCanHandle
+        CastAheadMatch.PlayerCanHandle = function(category) return category ~= "PURGE" end
+        GetSpecialization, GetSpecializationRole = function() return 1 end, function() return "TANK" end
+        CastAheadCore.Reapply()
+        CastAheadOptions.Refresh()
+        local picked = CastAheadCore.SampleRowWhere(nil, false)
+        check(picked and picked.spell == 9104, "the dropped sample skips a cast this character cannot act on, got "
+            .. tostring(picked and picked.spell))
+        check(icons and icons.KICK.alpha == 1 and icons.OTHER.alpha == 0.35 and icons.TANK.alpha == 1,
+            "a tank with important only on sees only the dropped cast dimmed, never the buster")
+        CastAheadDB.importantOnly = false
+        CastAheadOptions.Refresh()
+        check(icons and icons.KICK.alpha == 1 and icons.OTHER.alpha == 1 and icons.TANK.alpha == 1,
+            "a tank with important only off sees nothing dimmed in the gated data")
+        CastAheadMatch.PlayerCanHandle = realCan
         CastAheadData = realData
         GetSpecialization, GetSpecializationRole = realSpec, realRole
         CastAheadDB = {}

@@ -4009,7 +4009,8 @@ end
 
 -- A data row that "Important casts only" keeps (`important` true) or drops,
 -- for a picture that shows what the filter does: with this call, or with
--- `key` nil any call but a kick or a tank buster. Nil when there is none.
+-- `key` nil any call but a kick or a tank buster that this character can act
+-- on, so only that filter drops it. Nil when there is none.
 function CastAheadCore.SampleRowWhere(key, important)
     local cacheKey = (key or "ANY") .. (important and ":important" or ":other")
     local hit = sampleRows[cacheKey]
@@ -4018,7 +4019,8 @@ function CastAheadCore.SampleRowWhere(key, important)
         for _, row in ipairs(rows) do
             local advice = CastAheadMatch.Advice(row)
             local fits = advice and (key and advice.key == key
-                or not key and advice.key ~= "KICK" and advice.key ~= "TANK" and advice.key ~= "BUSTER")
+                or not key and advice.key ~= "KICK" and advice.key ~= "TANK" and advice.key ~= "BUSTER"
+                    and CastAheadMatch.FitsPlayer(row))
             if fits and (CastAheadMatch.Important(row) and true or false) == important then
                 sampleRows[cacheKey] = row
                 return row

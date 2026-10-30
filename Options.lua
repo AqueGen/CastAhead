@@ -668,7 +668,8 @@ function BuildGeneral(panel)
             -- An important kick and a cast the filter drops, so Important casts only has something to remove.
             local rows = { KICK = CastAheadCore.SampleRowWhere("KICK", true) or { prio = "KICK" },
                            OTHER = CastAheadCore.SampleRowWhere(nil, false),
-                           TANK = CastAheadCore.SampleDataRow("TANK") or { prio = "TANK" } }
+                           TANK = CastAheadCore.SampleRowWhere("TANK", true) or CastAheadCore.SampleDataRow("TANK")
+                               or { prio = "TANK" } }
             canvas.bars.OTHER:SetShown(rows.OTHER ~= nil)
             for _, key in ipairs({ "KICK", "OTHER", "TANK" }) do
                 local bar, row = canvas.bars[key], rows[key]
@@ -1681,6 +1682,10 @@ function BuildSounds(panel)
     end)
     local ttsLine = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     ttsLine:SetTextColor(unpack(T.muted))
+    ttsLine:SetJustifyH("LEFT")
+    ttsLine:SetWordWrap(true)
+    ttsLine:SetPoint("TOPLEFT", tts, "BOTTOMLEFT", 4, -2)
+    ttsLine:SetPoint("RIGHT", panel, "RIGHT", -4, 0)
     ttsLine:SetText("Uses the game's speech instead of the recorded voice.")
     local function PaintTTS()
         local api = C_CombatAudioAlert
@@ -1689,8 +1694,6 @@ function BuildSounds(panel)
         tts.text:SetText(gameOn and "Game TTS voice"
             or "Game TTS voice |cffff6060(Combat Audio Alerts are off in the game's Accessibility options)|r")
         openGame:SetShown(not gameOn)
-        ttsLine:ClearAllPoints()
-        ttsLine:SetPoint("LEFT", gameOn and tts.text or openGame, "RIGHT", 12, 0)
     end
     tts:RegisterEvent("CVAR_UPDATE")
     tts:SetScript("OnEvent", PaintTTS)
@@ -1713,11 +1716,11 @@ function BuildSounds(panel)
     end)
 
     local channelLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    channelLabel:SetPoint("TOPLEFT", tts, "BOTTOMLEFT", 4, -12)
+    channelLabel:SetPoint("TOPLEFT", ttsLine, "BOTTOMLEFT", 0, -12)
     channelLabel:SetText("Sound channel")
     local channel = CreateFrame("DropdownButton", nil, panel, "WowStyle1DropdownTemplate")
     channel:SetSize(140, 22)
-    channel:SetPoint("TOPLEFT", tts, "BOTTOMLEFT", 100, -6)
+    channel:SetPoint("TOPLEFT", ttsLine, "BOTTOMLEFT", 96, -6)
     channel:SetupMenu(function(_, root)
         for _, name in ipairs(CastAheadConfig.CHANNELS) do
             root:CreateRadio(name,
@@ -1745,7 +1748,8 @@ function BuildSounds(panel)
     body:SetPoint("TOPLEFT", channel, "BOTTOMLEFT", -100, -10)
     body:SetSize(400, #SOUND_ROWS * SOUND_ROW_H)
     panel.flowTop = function()
-        return 4 + hint:GetStringHeight() + 4 + tts:GetHeight() + 6 + channel:GetHeight() + 10
+        return 4 + hint:GetStringHeight() + 4 + tts:GetHeight() + 2 + ttsLine:GetStringHeight() + 6
+            + channel:GetHeight() + 10
             + #SOUND_ROWS * SOUND_ROW_H
     end
 
