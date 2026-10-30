@@ -3806,9 +3806,14 @@ do
         "raid guide: the Burst section has the note and the windows, a boss with no burst data says so, got " .. text)
     CastAheadDB.raidSaves = nil
     text = Text(15)
-    check(not text:find("Defensive", 1, true) and text:find("Burst", 1, true), "raid guide: raid defensive calls off hide the Defensive section")
+    check(text:find("|cffaaaaaa  Defensive|r", 1, true) and text:find("Burst", 1, true),
+        "raid guide: raid defensive calls off grey the Defensive section and keep Burst, got " .. text)
     CastAheadDB.burstCalls = nil
-    check(CastAheadSaves.RaidGuideText(15):find("are off", 1, true), "raid guide: with both off it says the calls are off")
+    local both = CastAheadSaves.RaidGuideText(15)
+    check(not both:find("are off", 1, true) and both:find("Boss: ", 1, true) and both:find("|cffaaaaaa  Defensive|r", 1, true)
+        and both:find("|cffaaaaaa- |Hspell:1305963|hVenomous Surge|h", 1, true) and not both:find("Burst", 1, true)
+        and not both:find(CastAheadSaves.RAID_EP_NOTE, 1, true),
+        "raid guide: with both off every boss still lists greyed defensive lines, links kept, no damage note, got " .. both)
     CastAheadDB.raidSaves = true
     check(CastAheadSaves.RaidGuideText(15):find("^|cffaaaaaaDebuff calls and burst phases come from top%-player logs"),
         "raid guide: the caveat opens the guide")
@@ -3922,6 +3927,21 @@ do
         check(without:find("Boss: Zed\n|cff8fb8ff  Defensive|r\n|cffaaaaaa- nothing calls a defensive for your role|r", 1, true)
             and not without:find("Burst", 1, true),
             "with burst windows off the dungeon guide still lists every boss of the dungeon, got " .. without)
+        local savedAll = CastAheadDB
+        CastAheadDB = {}
+        local offText = CastAheadSaves.GuideText(9000)
+        local greyOk, seen = offText:find("Boss:", 1, true) ~= nil and not offText:find("General - Features", 1, true), false
+        local pastHead = false
+        for line in offText:gmatch("[^\n]+") do
+            if line:find("^Boss:") then pastHead = true end
+            if pastHead and line:find("efensive", 1, true) then
+                seen = true
+                if not line:find("^|cffaaaaaa") then greyOk = false end
+            end
+        end
+        check(greyOk and seen, "dungeon guide with calls off lists Boss lines, every defensive line starts grey, got " .. offText)
+        check(not offText:find(CastAheadSaves.EP_NOTE, 1, true), "dungeon guide with calls off has no damage note")
+        CastAheadDB = savedAll
         CastAheadDB.raidMode, CastAheadDB.burstCalls = true, true
         check(CastAheadSaves.GuideText(9000):find("Burst phases come from top-player logs", 1, true),
             "the dungeon guide carries the burst caveat while bursts are shown")
@@ -5294,7 +5314,7 @@ do
         end
         local function Box(label)
             for _, frame in ipairs(allFrames) do
-                if frame.kind == "CheckButton" then
+                if frame.kind == "CheckButton" and frame.parent and frame.parent.parent and frame.parent.parent.shown then
                     for _, fs in ipairs(frame.fontStrings or {}) do
                         if fs.value == label then return frame end
                     end
@@ -5342,6 +5362,61 @@ do
         end
         Case("Saves", "Call defensives in dungeons", "saveCalls", "Defensive calls are off.", {})
         Case("RaidSaves", "Call defensives in raids", "raidSaves", "Raid defensive calls are off.", { raidMode = true })
+        ;(function()
+        local function Active(label)
+            for _, frame in ipairs(allFrames) do
+                if frame.kind == "CheckButton" and frame.parent and frame.parent.shown and frame.parent.parent and frame.parent.parent.shown then
+                    for _, fs in ipairs(frame.fontStrings or {}) do
+                        if fs.value == label then return frame end
+                    end
+                end
+            end
+        end
+        local function GuideCase(page, label, db, offText)
+            CastAheadDB = db
+            CastAheadUI.RefreshTabs()
+            CastAheadWindow.Show(page)
+            Prep()
+            CastAheadUI.RefreshSaves()
+            local box = Active(label)
+            check(box ~= nil, page .. " shows a banner checkbox labelled " .. label)
+            if not box then return end
+            check(box.parent.shown and Has(box.parent, offText), page .. " banner reads " .. offText)
+            local savedSaves = CastAheadSaves
+            CastAheadSaves = nil
+            CastAheadUI.RefreshSaves()
+            check(not box.parent.shown, page .. " banner is hidden while the restart notice shows")
+            CastAheadSaves = savedSaves
+            f:Hide()
+        end
+        GuideCase("Guide", "Call defensives in dungeons", {}, "Defensive calls are off.")
+        GuideCase("RaidGuide", "Call defensives in raids", { raidMode = true }, "Raid defensive calls are off.")
+        GuideCase("Saves", "Call defensives in dungeons", {}, "Defensive calls are off.")
+        GuideCase("RaidSaves", "Call defensives in raids", { raidMode = true }, "Raid defensive calls are off.")
+
+        for _, page in ipairs({ "RaidSaves", "RaidGuide" }) do
+            local savedInfo, cancelled = GetInstanceInfo, {}
+            local savedCancel = CastAheadSaves.CancelPrefix
+            GetInstanceInfo = function() return "Abyss", "raid", 15, "", 0, 0, false, 9999 end
+            CastAheadSaves.CancelPrefix = function(prefix) cancelled[#cancelled + 1] = prefix end
+            CastAheadDB = { raidMode = true, raidSaves = true }
+            CastAheadUI.RefreshTabs()
+            CastAheadWindow.Show(page)
+            Prep()
+            CastAheadUI.RefreshSaves()
+            local box = Active("Call defensives in raids")
+            check(box ~= nil, page .. " has the raid banner checkbox")
+            if box then
+                box.GetChecked = function() return false end
+                box.handlers.OnClick(box)
+                check(cancelled[1] == "dbm:" and cancelled[2] == "bw:",
+                    page .. " raid banner untick cancels pending dbm: and bw: calls, got " .. table.concat(cancelled, ","))
+            end
+            CastAheadSaves.CancelPrefix, GetInstanceInfo = savedCancel, savedInfo
+            f:Hide()
+        end
+        end)()
+
         CastAheadDB = {}
         CastAheadUI.RefreshTabs()
         check(select(2, CastAheadWindow.Page("RaidSaves")) == false, "RaidSaves is not in the menu while the raid switch is off")

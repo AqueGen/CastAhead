@@ -126,7 +126,7 @@ local function Banner(host, key, offText, onText)
     banner.hint:SetTextColor(unpack(T.muted))
     banner.hint:SetText("The list below shows what you would get.")
     CastAheadOptions.BuildSwitch(banner, key, { "BOTTOMLEFT", banner, "BOTTOMLEFT", 6, 4 },
-        CastAheadOptions.SavesSwitchChanged, BANNER_LABELS[key])
+        key == "raidSaves" and CastAheadOptions.RaidSavesChanged or CastAheadOptions.SavesSwitchChanged, BANNER_LABELS[key])
     local wasOff = false
     function banner.Paint(callsOn)
         wasOff = wasOff or not callsOn
@@ -146,6 +146,7 @@ local function SavesPage(rowsFor, callsOn, key, offText, headers, note)
     local function Refresh()
         if not (host and host:IsVisible()) then return end
         if not CastAheadSaves then
+            banner:Hide()
             CastAheadWindow.SetFooter(RESTART)
             return
         end
@@ -242,17 +243,28 @@ local function SavesPage(rowsFor, callsOn, key, offText, headers, note)
 end
 
 -- One Guide page: the text for the picked place, under the class and spec bar.
-local function GuidePage(textFor)
-    local host, text, top = nil, nil, 0
+local function GuidePage(textFor, callsOn, key, offText)
+    local host, text, top, banner = nil, nil, 0, nil
     local function Refresh()
         if not (host and host:IsVisible()) then return end
+        local bannerHeight = 0
+        if CastAheadSaves then
+            bannerHeight = banner.Paint(callsOn())
+        else
+            banner:Hide()
+        end
+        text:SetPoint("TOPLEFT", host, "TOPLEFT", 4, -(top + bannerHeight + 4))
         text:SetText(CastAheadSaves and textFor() or RESTART)
-        host:SetHeight(top + text:GetStringHeight() + 8)
+        host:SetHeight(top + bannerHeight + text:GetStringHeight() + 8)
         CastAheadWindow.PaintSpecBars()
     end
     local function Build(h)
         host = h
         top = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end)
+        banner = Banner(host, key, offText, BANNER_ON)
+        banner:SetPoint("TOPLEFT", host, "TOPLEFT", 0, -top)
+        banner:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, -top)
+        host:SetScript("OnShow", banner.Reset)
         text = host:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         text:SetPoint("TOPLEFT", host, "TOPLEFT", 4, -(top + 4))
         text:SetWidth(math.max((host:GetWidth() or 0) - 8, 1))
@@ -277,10 +289,10 @@ local BuildGuide, RefreshGuide = GuidePage(function()
     return CastAheadSaves.GuideText(CastAheadWindow.Dungeon())
         or (CastAheadSaves.ViewRole() and "Nothing in this dungeon calls a defensive for this role."
             or "No specialization role - pick a spec to see your guide.")
-end)
+end, function() return CastAheadConfig.DungeonSaves() end, "saveCalls", "Defensive calls are off.")
 local BuildRaidGuide, RefreshRaidGuide = GuidePage(function()
     return CastAheadSaves.RaidGuideText(CastAheadWindow.RaidDifficulty())
-end)
+end, function() return CastAheadConfig.RaidSaves() end, "raidSaves", "Raid defensive calls are off.")
 local BuildSaves, RefreshSaves = SavesPage(function()
     return CastAheadSaves.ViewRows and CastAheadSaves.ViewRows(CastAheadWindow.Dungeon()) or {}
 end, function() return CastAheadConfig.DungeonSaves() end, "saveCalls", "Defensive calls are off.")

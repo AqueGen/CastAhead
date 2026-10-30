@@ -117,7 +117,7 @@ function CastAheadOptions.SavesSwitchChanged()
     Refresh()
 end
 
-local function RaidSavesChanged()
+function CastAheadOptions.RaidSavesChanged()
     CastAheadOptions.SavesSwitchChanged()
     local inRaid = GetInstanceInfo and select(2, GetInstanceInfo()) == "raid"
     if not CastAheadConfig.RaidSaves() and inRaid and CastAheadSaves then
@@ -511,7 +511,7 @@ function BuildGeneral(panel)
         end
     end
     local function RaidChanged()
-        RaidSavesChanged()
+        CastAheadOptions.RaidSavesChanged()
         PaintRaid()
     end
     local raid = BuildSwitch(panel, "raidMode", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, RaidChanged)
@@ -870,7 +870,7 @@ function BuildDefensives(panel)
     local group = BuildGroup(panel, "Defensive calls", DEFENSIVES_H)
     local Paint
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, CastAheadOptions.SavesSwitchChanged)
-    local raidSaves = BuildSwitch(panel, "raidSaves", { "TOPLEFT", calls, "BOTTOMLEFT", 16, -4 }, RaidSavesChanged)
+    local raidSaves = BuildSwitch(panel, "raidSaves", { "TOPLEFT", calls, "BOTTOMLEFT", 16, -4 }, CastAheadOptions.RaidSavesChanged)
     local boss = BuildSwitch(panel, "bossAdapter", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, function(on)
         Redraw()
         if not on and CastAheadSaves then
