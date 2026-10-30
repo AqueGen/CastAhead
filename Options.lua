@@ -661,20 +661,24 @@ function BuildGeneral(panel)
     whatStage.Picture(important, {
         build = function(canvas)
             canvas.bars = {}
-            for _, key in ipairs({ "KICK", "DODGE", "TANK" }) do canvas.bars[key] = CastAheadCore.NewBar(canvas) end
+            for _, key in ipairs({ "KICK", "OTHER", "TANK" }) do canvas.bars[key] = CastAheadCore.NewBar(canvas) end
         end,
         paint = function(canvas)
             local x, h = 0, 0
-            -- An important kick and an unimportant dodge, so Important casts only has something to remove.
-            local rows = { KICK = CastAheadCore.SampleRowWhere("KICK", true), DODGE = CastAheadCore.SampleRowWhere("DODGE", false),
+            -- An important kick and a cast the filter drops, so Important casts only has something to remove.
+            local rows = { KICK = CastAheadCore.SampleRowWhere("KICK", true) or { prio = "KICK" },
+                           OTHER = CastAheadCore.SampleRowWhere(nil, false),
                            TANK = CastAheadCore.SampleDataRow("TANK") or { prio = "TANK" } }
-            for _, key in ipairs({ "KICK", "DODGE", "TANK" }) do
-                local bar = canvas.bars[key]
-                local w, tall = PaintSample(bar, key, rows[key])
-                bar:ClearAllPoints()
-                bar:SetPoint("TOPLEFT", canvas, "TOPLEFT", x + (w - bar._size) / 2, 0)
-                DimSample(bar, not CastAheadMatch.Shown(rows[key]))
-                x, h = x + w + 8, math.max(h, tall)
+            canvas.bars.OTHER:SetShown(rows.OTHER ~= nil)
+            for _, key in ipairs({ "KICK", "OTHER", "TANK" }) do
+                local bar, row = canvas.bars[key], rows[key]
+                if row then
+                    local w, tall = PaintSample(bar, key, row)
+                    bar:ClearAllPoints()
+                    bar:SetPoint("TOPLEFT", canvas, "TOPLEFT", x + (w - bar._size) / 2, 0)
+                    DimSample(bar, not CastAheadMatch.Shown(row))
+                    x, h = x + w + 8, math.max(h, tall)
+                end
             end
             canvas:SetSize(x - 8, h)
             return x - 8, h

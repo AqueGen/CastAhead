@@ -4007,40 +4007,43 @@ function CastAheadCore.PreviewRow(holder, plate)
     return maxX - minX, maxY - minY, -minX, -minY
 end
 
--- A data row with this call that "Important casts only" keeps (`important`
--- true) or drops, for a picture that shows what the filter does.
+-- A data row that "Important casts only" keeps (`important` true) or drops,
+-- for a picture that shows what the filter does: with this call, or with
+-- `key` nil any call but a kick or a tank buster. Nil when there is none.
 function CastAheadCore.SampleRowWhere(key, important)
-    local cacheKey = key .. (important and ":important" or ":other")
+    local cacheKey = (key or "ANY") .. (important and ":important" or ":other")
     local hit = sampleRows[cacheKey]
-    if hit then return hit end
+    if hit ~= nil then return hit or nil end
     for _, rows in pairs(CastAheadData) do
         for _, row in ipairs(rows) do
             local advice = CastAheadMatch.Advice(row)
-            if advice and advice.key == key and (CastAheadMatch.Important(row) and true or false) == important then
+            local fits = advice and (key and advice.key == key
+                or not key and advice.key ~= "KICK" and advice.key ~= "TANK" and advice.key ~= "BUSTER")
+            if fits and (CastAheadMatch.Important(row) and true or false) == important then
                 sampleRows[cacheKey] = row
                 return row
             end
         end
     end
-    sampleRows[cacheKey] = { prio = key }
-    return sampleRows[cacheKey]
+    sampleRows[cacheKey] = false
 end
 
--- One sample of the row on a bar of the caller's (from NewBar), painted by
--- the same code, for a picture that places its icons itself; `row` picks the
--- cast, else the sample row's own. Returns the icon size.
+-- One cast on a bar of the caller's (from NewBar), painted by the same code
+-- as the sample row, for a picture that places its icons itself. `key` names
+-- the sample whose timing it shows; `row` picks the cast, else the sample
+-- row's own. Returns the icon size.
 function CastAheadCore.PaintPreviewBar(bar, key, row)
-    for _, sample in ipairs(CastAheadCore.SAMPLE_ROW) do
-        if sample.key == key then
-            local size = ApplyBarSize(bar)
-            row = row or CastAheadCore.SampleDataRow(key) or { prio = key }
-            PaintBar(bar, { row = row, approximate = sample.approx }, nil)
-            SetApprox(bar, sample.approx == true)
-            bar.time:SetFormattedText("%d", sample.time)
-            bar:Show()
-            return size
-        end
+    local sample = { time = 5 }
+    for _, s in ipairs(CastAheadCore.SAMPLE_ROW) do
+        if s.key == key then sample = s end
     end
+    local size = ApplyBarSize(bar)
+    row = row or CastAheadCore.SampleDataRow(key) or { prio = key }
+    PaintBar(bar, { row = row, approximate = sample.approx }, nil)
+    SetApprox(bar, sample.approx == true)
+    bar.time:SetFormattedText("%d", sample.time)
+    bar:Show()
+    return size
 end
 
 function CastAheadCore.Reapply()

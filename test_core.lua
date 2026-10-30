@@ -5297,14 +5297,15 @@ do
         local filter = Canvases(groups["What to call out"], "bars")[1]
         local realSpec, realRole = GetSpecialization, GetSpecializationRole
         GetSpecialization, GetSpecializationRole = function() return 1 end, function() return "DAMAGER" end
-        -- Every fixture dodge is curated, so one is starred unimportant for the filter to drop.
-        CastAheadData[9101] = { name = "Filter fixture", { spell = 9101, prio = "DODGE", first = 10, cd = { 20 } } }
+        -- A frontal starred unimportant, for the filter to drop.
+        CastAheadData[9101] = { name = "Filter fixture", { spell = 9101, prio = "FRONTAL", first = 10, cd = { 20 } } }
         CastAheadDB = { spellImportant = { [9101] = false } }
         CastAheadCore.Reapply()
         CastAheadOptions.Refresh()
         local icons = filter and filter.bars
-        check(icons and icons.KICK.alpha == 1 and icons.DODGE.alpha == 0.35 and icons.TANK.alpha == 0.35
-            and filter.alpha == 1, "by default a damage dealer sees the kick bright, the dodge and the buster dimmed")
+        check(icons and icons.KICK.alpha == 1 and icons.OTHER.shown and icons.OTHER.alpha == 0.35
+            and icons.TANK.alpha == 0.35 and filter.alpha == 1,
+            "by default a damage dealer sees the kick bright, the dropped cast and the buster dimmed")
         check(icons and icons.TANK.labelValue == "BUSTER" and icons.KICK.previewBars == nil,
             "the filter picture paints its samples with the nameplate bar code")
         CastAheadDB.fullLabels = true
@@ -5312,28 +5313,40 @@ do
         check(icons and icons.TANK.labelValue == "TANKBUSTER", "Full labels reach the filter picture, got "
             .. tostring(icons and icons.TANK.labelValue))
         CastAheadDB.fullLabels = nil
-        local kick, dodge = CastAheadCore.SampleRowWhere("KICK", true), CastAheadCore.SampleRowWhere("DODGE", false)
-        check(kick.spell and CastAheadMatch.Important(kick) and dodge.spell and not CastAheadMatch.Important(dodge),
-            "the filter samples are a real important kick and a real unimportant dodge")
+        local kick, other = CastAheadCore.SampleRowWhere("KICK", true), CastAheadCore.SampleRowWhere(nil, false)
+        local otherKey = other and CastAheadMatch.Advice(other).key
+        check(kick and kick.spell and CastAheadMatch.Important(kick) and other and other.spell
+            and not CastAheadMatch.Important(other) and otherKey ~= "KICK" and otherKey ~= "TANK" and otherKey ~= "BUSTER",
+            "the filter samples are a real important kick and a real dropped cast of another call")
+        check(icons and icons.OTHER.labelValue == CastAheadMatch.ADVICE[otherKey].label,
+            "the dropped cast is labelled with its own call, got " .. tostring(icons and icons.OTHER.labelValue))
         GetSpecializationRole = function() return "TANK" end
         CastAheadOptions.Refresh()
-        check(icons and icons.KICK.alpha == 1 and icons.DODGE.alpha == 0.35 and icons.TANK.alpha == 1,
-            "a tank with important only on sees only the dodge dimmed")
+        check(icons and icons.KICK.alpha == 1 and icons.OTHER.alpha == 0.35 and icons.TANK.alpha == 1,
+            "a tank with important only on sees only the dropped cast dimmed")
         CastAheadDB.importantOnly = false
         CastAheadOptions.Refresh()
-        check(icons and icons.KICK.alpha == 1 and icons.DODGE.alpha == 1 and icons.TANK.alpha == 1,
+        check(icons and icons.KICK.alpha == 1 and icons.OTHER.alpha == 1 and icons.TANK.alpha == 1,
             "a tank with important only off sees nothing dimmed")
         CastAheadDB.importantOnly = nil
         GetSpecializationRole = function() return "DAMAGER" end
         CastAheadDB.importantOnly, CastAheadDB.roleFilter = false, false
         CastAheadOptions.Refresh()
-        check(icons and icons.DODGE.alpha == 1 and icons.TANK.alpha == 1 and filter.alpha == 1,
+        check(icons and icons.OTHER.alpha == 1 and icons.TANK.alpha == 1 and filter.alpha == 1,
             "with both filters off nothing in the filter picture is dimmed")
         CastAheadDB.importantOnly, CastAheadDB.roleFilter = false, nil
         GetSpecialization, GetSpecializationRole = function() return nil end, function() return nil end
         local okRole = pcall(CastAheadOptions.Refresh)
-        check(okRole and icons and icons.KICK.alpha == 1 and icons.DODGE.alpha == 1 and icons.TANK.alpha == 1,
+        check(okRole and icons and icons.KICK.alpha == 1 and icons.OTHER.alpha == 1 and icons.TANK.alpha == 1,
             "without a specialization role nothing in the filter picture is dimmed")
+        local realData = CastAheadData
+        CastAheadData = { [9102] = { name = "Only important", { spell = 9102, prio = "KICK", first = 10, cd = { 20 } } } }
+        CastAheadDB = {}
+        CastAheadCore.Reapply()
+        local okNone = pcall(CastAheadOptions.Refresh)
+        check(okNone and icons and not icons.OTHER.shown and icons.KICK.shown and icons.TANK.shown,
+            "with no cast the filter drops, the picture shows only the kick and the buster")
+        CastAheadData = realData
         GetSpecialization, GetSpecializationRole = realSpec, realRole
         CastAheadDB = {}
         CastAheadData[9101] = nil
