@@ -10,7 +10,7 @@ local S = CastAheadSaves
 local M = CastAheadMatch
 
 local scheduled = {}
-local lastFiredAt
+local lastFiredAt, lastCalledAt
 local WARN_CLEAR = 1.5
 
 function S.SpecID()
@@ -660,6 +660,7 @@ function S.Cancel(key)
 end
 
 function S.LastFiredAt() return lastFiredAt end
+function S.LastCalledAt() return lastCalledAt end
 
 local function Audible(c) return not CastAheadConfig.AllMuted(c.candidates) end
 
@@ -739,7 +740,7 @@ function S.Tick(now)
             end
             if not c.fired and now >= c.fireAt and now < c.endAt then
                 c.fired, c.firedAt = true, now
-                if Audible(c) then lastFiredAt = now end
+                if Audible(c) then lastFiredAt, lastCalledAt = now, now end
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice, nil, c.candidates) end
             end
             if now >= c.endAt then scheduled[key] = nil end

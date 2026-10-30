@@ -6478,12 +6478,31 @@ do
     run(10)
 
     do
+        local spokenAt, playing = {}, PlaySoundFile
+        PlaySoundFile = function(path, ...)
+            spokenAt[#spokenAt + 1] = { path:match("([%w_]+)%.ogg$"), now }
+            return playing(path, ...)
+        end
+        local function ClearOfCalls(label)
+            for _, b in ipairs(spokenAt) do
+                for _, d in ipairs(spokenAt) do
+                    if b[1] == "BURST" and d[1] == "DEFENSIVE" and math.abs(b[2] - d[2]) < 2 - 1e-9 then
+                        check(false, "burst: " .. label .. ": burst within 2 s of a save call")
+                    end
+                end
+            end
+        end
         local function Phase(saveLead)
-            heard = {}
+            heard, spokenAt = {}, {}
             CastAheadDB.saveLeadSeconds = saveLead
             local t = now
             B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
             return t
+        end
+        local function BurstAt(t)
+            for _, s in ipairs(spokenAt) do
+                if s[1] == "BURST" then return s[2] - t end
+            end
         end
         local t = Phase(4)
         S.Schedule("test:between", 1, t + 35, t + 39, A.DEFENSIVE)
@@ -6494,6 +6513,7 @@ do
         run(2)
         check(Heard() == "SOON,DEFENSIVE_soon,BURST,DEFENSIVE", "burst: then the save call, heard " .. Heard())
         run(10)
+        ClearOfCalls("between")
 
         t = Phase(1)
         S.Schedule("test:tight", 1, t + 31.5, t + 35.5, A.DEFENSIVE)
@@ -6505,6 +6525,7 @@ do
         check(shown and shown.advice == A.BURST and math.abs(shown.endAt - (t + 38.5)) < 1e-6,
             "burst: a deferred burst stays on screen 5 s after it is spoken, got " .. tostring(shown and shown.endAt - t))
         run(10)
+        ClearOfCalls("tight")
 
         t = Phase(1)
         S.Schedule("test:gone", 1, t + 31.5, t + 35.5, A.DEFENSIVE)
@@ -6516,15 +6537,33 @@ do
         check(Heard() == "SOON,BURST", "burst: which then speaks, heard " .. Heard())
         run(10)
 
+        ClearOfCalls("cancelled")
+
+        t = Phase(2)
+        S.Schedule("test:after", 1, t + 32.5, t + 36.5, A.DEFENSIVE)
+        run(45)
+        check(Heard() == "SOON,DEFENSIVE_soon,DEFENSIVE,BURST" and BurstAt(t) == 34.5,
+            "burst: due 0.5 s before a save warning, it speaks 2 s after the save call, heard " .. Heard()
+            .. " at " .. tostring(BurstAt(t)))
+        ClearOfCalls("after the call")
+
+        t = Phase(3)
+        S.Schedule("test:short", 1, t + 33.5, t + 37.5, A.DEFENSIVE)
+        run(45)
+        check(Heard() == "SOON,BURST,DEFENSIVE_soon,DEFENSIVE" and BurstAt(t) == 30,
+            "burst: when after the call is past its window, it speaks at its own time, heard " .. Heard()
+            .. " at " .. tostring(BurstAt(t)))
+        ClearOfCalls("window too short")
+
         t = Phase(nil)
         S.Schedule("test:chain1", 1, t + 31, t + 35, A.DEFENSIVE)
         S.Schedule("test:chain2", 1, t + 33.5, t + 37.5, A.DEFENSIVE)
         S.Schedule("test:chain3", 1, t + 36, t + 40, A.DEFENSIVE)
-        run(33.5)
-        check(Heard() == "SOON,DEFENSIVE,DEFENSIVE", "burst: saves in a row keep the burst waiting, heard " .. Heard())
-        run(0.5)
-        check(Heard() == "SOON,DEFENSIVE,DEFENSIVE,BURST", "burst: never more than 4 s late, heard " .. Heard())
-        run(10)
+        run(45)
+        check(Heard() == "SOON,DEFENSIVE,DEFENSIVE,DEFENSIVE,BURST" and BurstAt(t) == 38,
+            "burst: saves in a row keep the burst waiting, past its window, heard " .. Heard() .. " at " .. tostring(BurstAt(t)))
+        ClearOfCalls("saves in a row")
+        PlaySoundFile = playing
         CastAheadDB.saveLeadSeconds = nil
     end
 
