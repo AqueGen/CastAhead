@@ -153,7 +153,7 @@ local SWITCHES = {
         tip = "Speak the response out loud: \"tank buster\", \"dodge\", \"kick\"." },
     kickFocusOnly = { label = "Kick calls only for my focus", defaultOff = true },
     fixedSpacing = { label = "Fixed spacing", defaultOff = true,
-        tip = "Each step is the icon width plus the Gap. Two long words side by side may overlap." },
+        tip = "Space icons evenly, whatever the word length. Two long words side by side may overlap." },
     fullLabels = { label = "Full labels", defaultOff = true,
         tip = "Write long calls in full under the icon: TANKBUSTER, not BUSTER." },
     devMode = { label = "Development mode", defaultOff = true,
@@ -729,7 +729,7 @@ function BuildGeneral(panel)
     kickNote:SetSpacing(3)
     kickNote:SetPoint("TOPLEFT", focusOnly, "BOTTOMLEFT", 4, -2)
     kickNote:SetWidth(COL_W - 24)
-    kickNote:SetText("On: only your focus target gets kick calls. If you have no focus, every mob gets them.\n"
+    kickNote:SetText("On: only your enemy focus gets kick calls. No focus, or a friendly or dead one: every mob gets them.\n"
         .. "Off: every mob gets kick calls.")
     local function FitAudio()
         audioStage.Fit(26 + 3 * focusOnly:GetHeight() + 2 * 4 + 2 + kickNote:GetStringHeight() + 12)
@@ -874,6 +874,7 @@ function BuildGeneral(panel)
     featuresStage.Picture(calls, CenterPicture("DEFENSIVE", CastAheadConfig.DungeonSaves, "Off - no defensive calls"))
     featuresStage.Line(raid, "Turns raid calls on. Experimental.")
     featuresStage.Line(raidSaves, "Calls a defensive for a dangerous boss debuff on you.")
+    featuresStage.Line(bursts, "Healers get their own phases for group cooldowns. Other bosses: no call.")
     featuresStage.Picture(bursts, CenterPicture("BURST", CastAheadConfig.BurstCalls, "Off - no burst calls", function()
         local lead = CastAheadConfig.BurstLead()
         return lead > 0 and string.format("burst soon %ds before", lead) or nil
