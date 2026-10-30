@@ -5341,17 +5341,26 @@ do
         health.desat = false
         canvas.GetChildren = function() return canvas.plate end
         canvas.plate.GetRegions = function() return health end
+        local icon = canvas.previewBars[1].icon
+        icon.SetDesaturated = function(self, on) self.desat = on end
+        icon.IsDesaturated = function(self) return self.desat end
+        icon.desat = false
+        canvas.previewBars[1].GetRegions = function() return icon end
+        local savedGetChildren = canvas.GetChildren
+        canvas.GetChildren = function() return canvas.plate, unpack(canvas.previewBars) end
         CastAheadDB.nameplates = false
         CastAheadOptions.Refresh()
-        check(canvas.alpha == 0.35 and canvas.shown and OffLine() and OffLine().shown == true,
-            "with nameplate icons off the picture dims in place and says so")
-        check(health.desat == true and colour and colour[1] == colour[2] and colour[2] == colour[3],
-            "with nameplate icons off the plate is desaturated and its fill grey")
+        check(canvas.alpha == 1 and canvas.plate.alpha ~= 0.35 and canvas.shown and OffLine() and OffLine().shown == true,
+            "with nameplate icons off the plate stays lit and the off line says so")
+        check(health.desat == false and colour and colour[1] > colour[2],
+            "with nameplate icons off the plate keeps its red fill and saturation")
+        check(canvas.previewBars[1].alpha == 0.35 and canvas.previewBars[3].alpha == 0.35 and icon.desat == true,
+            "with nameplate icons off only the icons dim and grey")
         CastAheadDB.nameplates = nil
         CastAheadOptions.Refresh()
-        check(health.desat == false and colour and colour[1] > colour[2],
-            "with nameplate icons on again the plate gets back its colour and saturation")
-        canvas.GetChildren, canvas.plate.GetRegions = nil, nil
+        check(health.desat == false and colour and colour[1] > colour[2] and canvas.previewBars[1].alpha == 1
+            and icon.desat == false, "with nameplate icons on again the icons get back their alpha and colour")
+        canvas.GetChildren, canvas.plate.GetRegions, canvas.previewBars[1].GetRegions = savedGetChildren, nil, nil
         CastAheadDB.fullLabels = true
         CastAheadOptions.Refresh()
         check(canvas.previewBars[3].labelValue == "TANKBUSTER", "Full labels shows TANKBUSTER in the picture, got "

@@ -254,7 +254,8 @@ local function BuildStage(panel, group)
     -- draws the current settings and returns the drawn size, `spec.on()` says
     -- whether the feature is on, `spec.off` (text, or a function returning it)
     -- names what is off, `spec.scale(canvas)` caps the picture's scale. While off the
-    -- stage dims the canvas and desaturates its textures; colour fills are
+    -- stage dims the canvas, or only the frames `spec.dimmed(canvas)` lists, and
+    -- desaturates their textures; colour fills are
     -- not greyed by that, so paint greys those itself when `on` is false.
     function stage.Picture(control, spec)
         local canvas = CreateFrame("Frame", nil, group)
@@ -278,7 +279,11 @@ local function BuildStage(panel, group)
                 local canvas, on = item.canvas, item.spec.on()
                 if on then Ungrey(item.saved) end
                 local w, h = item.spec.paint(canvas, on)
-                if not on then Grey(canvas, item.saved) end
+                canvas:SetAlpha(1)
+                for _, f in ipairs(item.spec.dimmed and item.spec.dimmed(canvas) or { canvas }) do
+                    if not on then Grey(f, item.saved) end
+                    f:SetAlpha(on and 1 or 0.35)
+                end
                 local most = item.spec.scale and item.spec.scale(canvas) or 1
                 local scale = w > 0 and math.min(most, (width - 10) / w) or most
                 local tall = h * scale
@@ -287,7 +292,6 @@ local function BuildStage(panel, group)
                 canvas:SetScale(scale)
                 canvas:ClearAllPoints()
                 canvas:SetPoint("TOPLEFT", group, "TOPLEFT", STAGE_X / scale, y / scale)
-                canvas:SetAlpha(on and 1 or 0.35)
                 canvas:Show()
                 -- The line's room is kept while on, so the group keeps its shape.
                 local off = item.spec.off
@@ -821,8 +825,8 @@ function BuildGeneral(panel)
             name:SetText("Training Dummy")
             canvas.plate = plate
         end,
-        paint = function(canvas, on)
-            if on then canvas.health:SetColorTexture(0.75, 0.12, 0.1) else canvas.health:SetColorTexture(0.4, 0.4, 0.4) end
+        paint = function(canvas)
+            canvas.health:SetColorTexture(0.75, 0.12, 0.1)
             local w, h, x, y = CastAheadCore.PreviewRow(canvas, canvas.plate)
             canvas.plate:ClearAllPoints()
             canvas.plate:SetPoint("BOTTOMLEFT", canvas, "BOTTOMLEFT", x, y)
@@ -832,6 +836,7 @@ function BuildGeneral(panel)
             return w, h
         end,
         on = function() return CastAheadConfig.Enabled("nameplates") end,
+        dimmed = function(canvas) return canvas.previewBars end,
         off = "Off - no icons on nameplates",
     })
 
