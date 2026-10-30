@@ -3010,8 +3010,9 @@ local function FeatureTest(kind)
     local now = GetTime()
     local endAt
     if kind == "defensive" and CastAheadSaves and CastAheadConfig.SaveCalls() then
-        endAt = now + 6
-        CastAheadSaves.Schedule("demo:def", 0, now + 1, endAt, CastAheadMatch.ADVICE.DEFENSIVE)
+        local fireAt = now + 1 + CastAheadConfig.SaveLead()
+        endAt = fireAt + 5
+        CastAheadSaves.Schedule("demo:def", 0, fireAt, endAt, CastAheadMatch.ADVICE.DEFENSIVE)
     elseif kind == "burst" and CastAheadBurst and CastAheadBurst.Demo and CastAheadConfig.BurstCalls() then
         endAt = CastAheadBurst.Demo(now)
     end

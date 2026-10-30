@@ -3615,6 +3615,68 @@ advance(0.1)
 check(Alerts() == 0, "a call whose hit passed while off never fires after switching back on")
 reset()
 
+-- Scheduled save calls: "soon" only as the early warning, the plain call at its time.
+do
+    local S, def = CastAheadSaves, CastAheadMatch.ADVICE.DEFENSIVE
+    local heard = {}
+    local savedPlay = PlaySoundFile
+    PlaySoundFile = function(path) heard[#heard + 1] = path:match("([%w_]+)%.ogg$") return true, 1 end
+    local function Heard() return table.concat(heard, ",") end
+    local function run(seconds)
+        for _ = 1, seconds * 10 do
+            now = now + 0.1
+            S.Tick(now)
+        end
+    end
+    CastAheadDB = { saveCalls = true }
+    S.Schedule("test:lead0", 100, now + 5, now + 8, def)
+    run(10)
+    check(Heard() == "DEFENSIVE", "early warning off: one plain call, heard " .. Heard())
+
+    heard = {}
+    CastAheadDB = { saveCalls = true, saveLeadSeconds = 3 }
+    local t0 = now
+    S.Schedule("test:lead3", 100, t0 + 5, t0 + 8, def)
+    run(1.9)
+    check(#heard == 0, "early warning 3: quiet before fireAt - 3, heard " .. Heard())
+    run(0.2)
+    check(Heard() == "DEFENSIVE_soon", "early warning 3: soon at fireAt - 3, heard " .. Heard())
+    run(2.8)
+    check(Heard() == "DEFENSIVE_soon", "early warning 3: nothing between the warning and the call, heard " .. Heard())
+    run(0.2)
+    check(Heard() == "DEFENSIVE_soon,DEFENSIVE", "early warning 3: the plain call at fireAt, heard " .. Heard())
+    run(5)
+    check(Heard() == "DEFENSIVE_soon,DEFENSIVE", "early warning 3: nothing more, heard " .. Heard())
+
+    heard = {}
+    S.Schedule("test:inside", 100, now + 1, now + 4, def)
+    run(0.1)
+    check(Heard() == "DEFENSIVE_soon", "a call scheduled inside its warning window warns on the first tick, heard " .. Heard())
+    run(1)
+    check(Heard() == "DEFENSIVE_soon,DEFENSIVE", "then calls at fireAt, heard " .. Heard())
+    run(4)
+
+    heard = {}
+    S.Schedule("test:move", 100, now + 4, now + 7, def)
+    run(1.5)
+    check(Heard() == "DEFENSIVE_soon", "move: warned before the move, heard " .. Heard())
+    S.Move("test:move", 13, 3, now)
+    run(6.9)
+    check(Heard() == "DEFENSIVE_soon", "move: quiet until the new warning, heard " .. Heard())
+    run(0.2)
+    check(Heard() == "DEFENSIVE_soon,DEFENSIVE_soon", "move later clears the warning so it warns again, heard " .. Heard())
+    run(3)
+    check(Heard() == "DEFENSIVE_soon,DEFENSIVE_soon,DEFENSIVE", "move: then the plain call, heard " .. Heard())
+    run(5)
+
+    CastAheadCore.FeatureTest("defensive")
+    check(S.NextFireAt(now) and math.abs(S.NextFireAt(now) - (now + 4)) < 1e-6,
+        "the defensive Test button with early warning 3 calls at now + 4, got " .. tostring(S.NextFireAt(now) and S.NextFireAt(now) - now))
+    CastAheadCore.StopFeatureTests()
+    PlaySoundFile = savedPlay
+    CastAheadDB = nil
+end
+
 -- After an update and /reload a new TOC file is missing until a client restart.
 local savedSaves = CastAheadSaves
 CastAheadSaves = nil
@@ -6243,9 +6305,9 @@ do
     run(10.5)
     S.Schedule("test:save1", 1, t1 + 29, t1 + 33, A.DEFENSIVE)
     run(20)
-    check(Heard() == "SOON,DEFENSIVE_soon", "burst: the save call is heard and the burst waits, heard " .. Heard())
+    check(Heard() == "SOON,DEFENSIVE", "burst: the save call is heard and the burst waits, heard " .. Heard())
     run(0.5)
-    check(Heard() == "SOON,DEFENSIVE_soon,BURST", "burst: the burst follows 2 s after the save, heard " .. Heard())
+    check(Heard() == "SOON,DEFENSIVE,BURST", "burst: the burst follows 2 s after the save, heard " .. Heard())
     run(10)
 
     heard = {}
@@ -6253,9 +6315,9 @@ do
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
     S.Schedule("test:save2", 1, t2 + 31, t2 + 35, A.DEFENSIVE)
     run(32.5)
-    check(Heard() == "SOON,DEFENSIVE_soon", "burst: a save due 1 s after the phase goes first, heard " .. Heard())
+    check(Heard() == "SOON,DEFENSIVE", "burst: a save due 1 s after the phase goes first, heard " .. Heard())
     run(1)
-    check(Heard() == "SOON,DEFENSIVE_soon,BURST", "burst: and the burst speaks 2 s after that save, heard " .. Heard())
+    check(Heard() == "SOON,DEFENSIVE,BURST", "burst: and the burst speaks 2 s after that save, heard " .. Heard())
     run(10)
 
     heard = {}
@@ -6263,9 +6325,9 @@ do
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
     S.Schedule("test:save3", 1, t3 + 25, t3 + 29, A.DEFENSIVE)
     run(26.5)
-    check(Heard() == "DEFENSIVE_soon", "burst: a heads-up landing on a save waits, heard " .. Heard())
+    check(Heard() == "DEFENSIVE", "burst: a heads-up landing on a save waits, heard " .. Heard())
     run(0.5)
-    check(Heard() == "DEFENSIVE_soon,SOON", "burst: and comes 2 s after it, heard " .. Heard())
+    check(Heard() == "DEFENSIVE,SOON", "burst: and comes 2 s after it, heard " .. Heard())
     run(10)
 
     heard = {}
@@ -6367,14 +6429,14 @@ do
     fire("ENCOUNTER_START", 3470, "Nek'zali", 15, 20)
     CastAheadBossAdapter.OnBar("dbm", "raidbar", 1299684, 10, now)
     for _ = 1, 16 do advance(0.5) end
-    check(Heard() == "DEFENSIVE_soon", "raid saves: switched on, a boss save call fires in a raid with no trash data, heard " .. Heard())
+    check(Heard() == "DEFENSIVE", "raid saves: switched on, a boss save call fires in a raid with no trash data, heard " .. Heard())
     fire("ENCOUNTER_END", 3470, "Nek'zali", 15, 20, 0)
     CastAheadDB.saveCalls = nil
     heard = {}
     fire("ENCOUNTER_START", 3470, "Nek'zali", 15, 20)
     CastAheadBossAdapter.OnBar("dbm", "raidbar", 1299684, 10, now)
     for _ = 1, 16 do advance(0.5) end
-    check(Heard() == "DEFENSIVE_soon", "raid saves: the raid switch alone is enough, heard " .. Heard())
+    check(Heard() == "DEFENSIVE", "raid saves: the raid switch alone is enough, heard " .. Heard())
     fire("ENCOUNTER_END", 3470, "Nek'zali", 15, 20, 0)
     CastAheadDB.raidSaves = nil
     CastAheadSaveButtons, GetSpecializationInfo, IsPlayerSpell = savedRaidButtons, nil, nil
