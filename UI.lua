@@ -48,8 +48,8 @@ end
 
 function CastAheadUI.RefreshTabs()
     CastAheadWindow.SetMenuShown("Development", CastAheadConfig.Dev())
-    local raid = CastAheadConfig.RaidSaves() or CastAheadConfig.BurstCalls()
-    CastAheadWindow.SetMenuShown("Defensives", CastAheadConfig.DungeonSaves() or CastAheadConfig.RaidSaves())
+    local raid = CastAheadConfig.Get("raidMode") == true
+    CastAheadWindow.SetMenuShown("Defensives", true)
     CastAheadWindow.SetMenuShown("RaidGuide", raid)
     CastAheadWindow.SetMenuShown("RaidSaves", raid)
 end

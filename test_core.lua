@@ -4870,6 +4870,7 @@ do
         local f = savedCreate(kind, name, parent, ...)
         made[#made + 1] = f
         f.template = ...
+        f.shown = true
         local createText = f.CreateFontString
         f.CreateFontString = function(...)
             local fs = createText(...)
@@ -4882,6 +4883,7 @@ do
         end
         f.SetShown = function(self, on) self.shown = on and true or false end
         f.SetEnabled = function(self, on) self.enabled = on and true or false end
+        f.SetAlpha = function(self, a) self.alpha = a end
         f.SetMotionScriptsWhileDisabled = function(self, on) self.motionWhileDisabled = on end
         f.SetText = function(self, t) rawset(self, "buttonText", t) end
         local setScript = f.SetScript
@@ -4935,7 +4937,8 @@ do
         end
         return table.concat(seen, " | ")
     end
-    check(Labels(1) == "", "the Defensives page has no defensive calls switch")
+    check(Labels(1) == "Defensive calls in dungeons | Defensive calls in raids",
+        "the Defensives page has its own dungeon and raid calls switches")
     local before, madeBefore = #texts, #made
     ok, err = pcall(CastAheadOptions.ShowPanel, host, "General")
     check(ok, "the General page builds headless " .. tostring(err))
@@ -4974,10 +4977,13 @@ do
             .. tostring(heights["Nameplate icons"]) .. "/" .. tostring(heights["Centre call"]))
     end
 
-    local function Frame(label)
+    local function Frame(label, nth)
         for _, f in ipairs(made) do
             local t = rawget(f, "text")
-            if t and rawget(t, "value") == label then return f end
+            if t and rawget(t, "value") == label then
+                nth = (nth or 1) - 1
+                if nth == 0 then return f end
+            end
         end
     end
     do
@@ -4987,7 +4993,7 @@ do
                 if title and rawget(title, "value") == "Features" then return f.h end
             end
         end
-        local raid, raidSaves, bursts = Frame("Raid (experimental)"), Frame("Defensive calls in raids"), Frame("Burst windows")
+        local raid, raidSaves, bursts = Frame("Raid (experimental)"), Frame("Defensive calls in raids", 2), Frame("Burst windows")
         local offHeight = FeaturesHeight()
         check(raid and raidSaves and bursts,
             "with the raid switch off its two children are still built")
@@ -5060,20 +5066,33 @@ do
         check(hint ~= nil, "General says next to the button that setup is best done near training dummies")
         CastAheadSetup.Enter, InCombatLockdown = realEnter, realLock
     end)()
-    local function OffNote()
+    local function HasOffNote()
         for _, fs in ipairs(texts) do
             local v = rawget(fs, "value")
-            if type(v) == "string" and v:find("turn them on in General - Features", 1, true) then return fs end
+            if type(v) == "string" and v:find("turn them on in General - Features", 1, true) then return true end
         end
     end
-    for _, case in ipairs({ { {}, false, "all off" }, { { saveCalls = true }, true, "dungeons" },
+    local function ListGroup()
+        for _, f in ipairs(made) do
+            local title = rawget(f, "title")
+            if title and rawget(title, "value") == "Defensive" then return f end
+        end
+    end
+    for _, case in ipairs({ { {}, false, "all off" }, { { saveCalls = true }, false, "dungeons" },
         { { raidMode = true, raidSaves = true }, true, "raids" }, { { raidSaves = true }, false, "raids without the raid switch" } }) do
         CastAheadDB = case[1]
         CastAheadOptions.ShowPanel(host, "Defensives")
-        local boss, note = Frame("Boss calls from DBM / BigWigs"), OffNote()
-        check(boss and boss.shown == case[2], "Defensives boss switch visibility, " .. case[3])
-        check(note and note.shown == not case[2], "Defensives off note visibility, " .. case[3])
+        local boss, raid = Frame("Boss calls from DBM / BigWigs"), Frame("Defensive calls in raids")
+        check(boss and boss.shown == true, "Defensives boss switch is shown, " .. case[3])
+        check(not HasOffNote(), "Defensives has no off note, " .. case[3])
+        check(raid and raid.shown == case[2], "Defensives raid switch visibility, " .. case[3])
     end
+    CastAheadDB = {}
+    CastAheadOptions.ShowPanel(host, "Defensives")
+    check(ListGroup() and ListGroup().alpha == 0.35, "Defensives list is dimmed while calls are off")
+    CastAheadDB = { saveCalls = true }
+    CastAheadOptions.ShowPanel(host, "Defensives")
+    check(ListGroup() and ListGroup().alpha == 1, "Defensives list is not dimmed while calls are on")
 
     CastAheadDB = {}
     CastAheadOptions.SetSwitch("centerText", false)
@@ -5191,7 +5210,7 @@ do
     CastAheadDB.raidMode, CastAheadDB.burstCalls = true, true
     CastAheadUI.ShowTab("RaidGuide")
     check(CastAheadWindow.Current() == "RaidGuide", "burst windows switched on show the Raid Guide")
-    CastAheadDB.burstCalls = nil
+    CastAheadDB.raidMode, CastAheadDB.burstCalls = nil, nil
     CastAheadUI.RefreshTabs()
     check(CastAheadWindow.Current() == "General", "the raid features switched off while the Raid Guide is open show General")
     do
@@ -5207,27 +5226,22 @@ do
         check(not hasExperimental, "there is no Experimental group")
         CastAheadDB.saveCalls, CastAheadDB.burstCalls, CastAheadDB.raidSaves = nil, nil, nil
         CastAheadUI.RefreshTabs()
-        check(Shown("Defensives") == false, "Defensives is hidden while dungeon and raid calls are off")
+        check(Shown("Defensives") == true, "Defensives is shown while dungeon and raid calls are off")
         check(Shown("RaidGuide") == false and Shown("RaidSaves") == false, "the Raid group is hidden while its features are off")
         check(Shown("Guide") == true, "the dungeon Guide stays shown with dungeon calls off")
         CastAheadDB.saveCalls = true
         CastAheadUI.RefreshTabs()
-        check(Shown("Defensives") == true, "Defensives is shown while dungeon calls are on")
         CastAheadUI.ShowTab("Defensives")
         CastAheadDB.saveCalls = nil
         CastAheadUI.RefreshTabs()
-        check(CastAheadWindow.Current() == "General", "calls switched off while Defensives is open show General")
+        check(CastAheadWindow.Current() == "Defensives", "calls switched off while Defensives is open keep Defensives")
         CastAheadDB.raidMode, CastAheadDB.raidSaves, CastAheadDB.burstCalls = nil, true, true
         CastAheadUI.RefreshTabs()
-        check(Shown("RaidGuide") == false and Shown("Defensives") == false,
-            "the raid switch off hides the Raid group and the raid half of Defensives, whatever its children hold")
-        CastAheadDB.raidMode, CastAheadDB.burstCalls = true, nil
+        check(Shown("RaidGuide") == false and Shown("RaidSaves") == false,
+            "raid children on without the raid switch leave the Raid group hidden")
+        CastAheadDB.raidMode, CastAheadDB.raidSaves, CastAheadDB.burstCalls = true, nil, nil
         CastAheadUI.RefreshTabs()
-        check(Shown("RaidGuide") and Shown("RaidSaves") and Shown("Defensives"),
-            "raid defensive calls on show the Raid group and Defensives")
-        CastAheadDB.raidSaves, CastAheadDB.burstCalls = nil, true
-        CastAheadUI.RefreshTabs()
-        check(Shown("RaidGuide") and not Shown("Defensives"), "burst windows alone show the Raid group, not Defensives")
+        check(Shown("RaidGuide") and Shown("RaidSaves"), "the raid switch alone shows the Raid group")
         local labels, raw = 0, 0
         for _, t in ipairs(buttonTexts) do
             if t == "Guide" then labels = labels + 1 end

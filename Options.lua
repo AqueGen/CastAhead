@@ -109,6 +109,23 @@ local function RedrawAndSaves()
     SaveRefresh()
 end
 
+function CastAheadOptions.SavesSwitchChanged()
+    SaveRefresh()
+    CastAheadOptions.RefreshDefensives()
+    if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
+    Refresh()
+end
+
+local function RaidSavesChanged()
+    CastAheadOptions.SavesSwitchChanged()
+    local inRaid = GetInstanceInfo and select(2, GetInstanceInfo()) == "raid"
+    if not CastAheadConfig.RaidSaves() and inRaid and CastAheadSaves then
+        CastAheadSaves.CancelPrefix("dbm:")
+        CastAheadSaves.CancelPrefix("bw:")
+    end
+    Redraw()
+end
+
 -- Every switch the General page offers, with the group it belongs to. The
 -- page used to be one flat column of checkboxes plus a pile of sliders on the
 -- right, and nothing said which slider went with which switch - the centre
@@ -478,11 +495,7 @@ function BuildGeneral(panel)
     BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 }, OutputChanged)
 
     local features = BuildGroup(panel, "Features", 230)
-    local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", features, "TOPLEFT", 10, -26 }, function()
-        SaveRefresh()
-        CastAheadOptions.RefreshDefensives()
-        if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
-    end)
+    local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", features, "TOPLEFT", 10, -26 }, CastAheadOptions.SavesSwitchChanged)
     local raidSaves, bursts, burstSoon, soonLabel
     local function PaintRaid()
         local on = SwitchOn("raidMode")
@@ -497,15 +510,7 @@ function BuildGeneral(panel)
         end
     end
     local function RaidChanged()
-        SaveRefresh()
-        CastAheadOptions.RefreshDefensives()
-        local inRaid = GetInstanceInfo and select(2, GetInstanceInfo()) == "raid"
-        if not CastAheadConfig.RaidSaves() and inRaid and CastAheadSaves then
-            CastAheadSaves.CancelPrefix("dbm:")
-            CastAheadSaves.CancelPrefix("bw:")
-        end
-        Redraw()
-        if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
+        RaidSavesChanged()
         PaintRaid()
     end
     local raid = BuildSwitch(panel, "raidMode", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, RaidChanged)
@@ -809,7 +814,7 @@ local function BuildButtonList(panel, store, key, title, emptyText)
     return group
 end
 
-local DEFENSIVES_H, DEFENSIVES_OFF_H, SPEC_BAR_PAD = 250, 56, 34
+local DEFENSIVES_H, SPEC_BAR_PAD, OFF_ALPHA = 302, 34, 0.35
 local REPORT_URL = "https://github.com/AqueGen/CastAhead/issues/new?template=report.yml"
 
 local function CopyBox(parent, text, width)
@@ -863,13 +868,9 @@ function BuildDefensives(panel)
     end
     local group = BuildGroup(panel, "Defensive calls", DEFENSIVES_H)
     local Paint
-    local offNote = group:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    offNote:SetPoint("TOPLEFT", group, "TOPLEFT", 10, -26)
-    offNote:SetWidth(COL_W - 20)
-    offNote:SetJustifyH("LEFT")
-    offNote:SetWordWrap(true)
-    offNote:SetText("|cffaaaaaaDefensive calls are off - turn them on in General - Features.|r")
-    local boss = BuildSwitch(panel, "bossAdapter", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, function(on)
+    local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, CastAheadOptions.SavesSwitchChanged)
+    local raidSaves = BuildSwitch(panel, "raidSaves", { "TOPLEFT", calls, "BOTTOMLEFT", 16, -4 }, RaidSavesChanged)
+    local boss = BuildSwitch(panel, "bossAdapter", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, function(on)
         Redraw()
         if not on and CastAheadSaves then
             CastAheadSaves.CancelPrefix("dbm:")
@@ -930,13 +931,19 @@ function BuildDefensives(panel)
         local spec = CastAheadSaves and CastAheadSaves.ViewSpecID()
         local shipped = spec and CastAheadSaveButtons and CastAheadSaveButtons[spec] and true or false
         status:SetText("|cffaaaaaa" .. (CastAheadBossAdapter and CastAheadBossAdapter.Status() or "No boss mod") .. "|r")
-        for _, w in ipairs({ boss, early, earlyLabel }) do w:SetShown(on) end
-        caveat.SetShown(on)
-        offNote:SetShown(not on)
-        group:SetHeight(on and DEFENSIVES_H or DEFENSIVES_OFF_H)
-        note:SetShown(on and not shipped)
-        list:SetShown(on and shipped)
-        reset:SetShown(on and shipped)
+        local raid = CastAheadConfig.Get("raidMode") == true
+        raidSaves:SetShown(raid)
+        boss:ClearAllPoints()
+        if raid then
+            boss:SetPoint("TOPLEFT", raidSaves, "BOTTOMLEFT", -16, -4)
+        else
+            boss:SetPoint("TOPLEFT", calls, "BOTTOMLEFT", 0, -4)
+        end
+        local alpha = on and 1 or OFF_ALPHA
+        for _, w in ipairs({ boss, early, earlyLabel, list, reset, caveat.text, caveat.button, note }) do w:SetAlpha(alpha) end
+        note:SetShown(not shipped)
+        list:SetShown(shipped)
+        reset:SetShown(shipped)
         panel:Relayout()
     end
     table.insert(refreshers, Paint)
