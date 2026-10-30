@@ -230,8 +230,8 @@ function C.AllMuted(candidates)
     return true
 end
 
-function C.LeadFor(candidates)
-    local global = C.Lead()
+function C.LeadFor(candidates, base)
+    local global = base or C.Lead()
     if not candidates or #candidates == 0 then return global end
     local best = 0
     for _, row in ipairs(candidates) do

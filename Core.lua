@@ -3091,9 +3091,8 @@ frame:SetScript("OnUpdate", function()
                         -- fired at START, and "soon" is wrong for it anyway.
                         if not entry.casting and entry.track and not entry.track.warned then
                             local lead = CastAheadConfig.LeadFor(entry.candidates)
-                            local first = entry.candidates and entry.candidates[1]
                             local saveLead = CastAheadSaves and CastAheadConfig.SaveCalls()
-                                and first and first.save and CastAheadConfig.SaveLead() or 0
+                                and CastAheadConfig.LeadFor(entry.candidates, CastAheadConfig.SaveLead()) or 0
                             local window = math.max(lead, saveLead)
                             if window > 0 and remaining <= window then
                                 local heads = CastAheadMatch.ConsensusAdvice(entry.candidates)

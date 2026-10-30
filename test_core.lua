@@ -3505,6 +3505,48 @@ reset()
 CastAheadDefensives = { spells = { [100] = { DAMAGER = true, lead = 4.0 } }, alias = {} }
 CastAheadCore.ReapplyData()
 
+-- A spell's own early warning on the Casts page wins over the save lead, as it does over the general one.
+CastAheadDB = { saveCalls = true, centerText = true, leadSeconds = 0, saveLeadSeconds = 4, spellLead = { [100] = 6 } }
+CastAheadCore.ReapplyData()
+enter()
+castFor(3.0)
+sounds, spoken, clips = 0, 0, 0
+advance(10.5)
+check(Alerts() == 0, "no save heads-up before the spell's own lead")
+advance(1.0)
+check(Alerts() == 1, string.format("the save heads-up follows the spell's own 6 s lead, got %d", Alerts()))
+reset()
+
+-- Two tied candidates where only the second carries the save: the consensus is a save, so the save lead applies.
+do
+    local savedRole = GetSpecializationRole
+    GetSpecializationRole = function() return "TANK" end
+    table.insert(CastAheadData[1877], { spell = 1701, npc = 17, mob = "Twin", name = "Smash", cast = 3.3, cd = { 20.0 },
+                              first = 5.0, firstN = 20, offset = 0.0, kick = 0, cc = 0, prio = "TANK" })
+    table.insert(CastAheadData[1877], { spell = 1702, npc = 17, mob = "Twin", name = "Crush", cast = 3.3, cd = { 20.0 },
+                              first = 5.0, firstN = 20, offset = 0.0, kick = 0, cc = 0 })
+    CastAheadDefensives.spells[1702] = { TANK = true, lead = 4.0 }
+    CastAheadPriority[1701] = "TANK"
+    CastAheadDB = { saveCalls = true, centerText = true, leadSeconds = 0, saveLeadSeconds = 4 }
+    CastAheadCore.ReapplyData()
+    enter()
+    castFor(3.3)
+    local call = CastAheadCore.LastCandidates(unit)
+    check(call and #call == 2 and call[1].spell == 1701 and not call[1].save and call[2].save,
+        "the tie keeps both candidates, the plain one first")
+    sounds, spoken, clips = 0, 0, 0
+    advance(12.0)
+    check(Alerts() == 0, "no tank buster heads-up before the save lead")
+    advance(1.0)
+    check(Alerts() == 1, string.format("a save consensus gets the save heads-up whatever the first candidate, got %d", Alerts()))
+    reset()
+    table.remove(CastAheadData[1877])
+    table.remove(CastAheadData[1877])
+    CastAheadDefensives.spells[1702], CastAheadPriority[1701] = nil, nil
+    GetSpecializationRole = savedRole
+    CastAheadCore.ReapplyData()
+end
+
 -- Save calls off: the cast keeps its old call and its own icon, and no save heads-up comes early.
 do
     local function CenterLine()
