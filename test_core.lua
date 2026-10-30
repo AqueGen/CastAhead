@@ -6474,17 +6474,53 @@ do
     check(Heard() == "DEFENSIVE,SOON", "burst: and comes 2 s after it, heard " .. Heard())
     run(10)
 
-    heard = {}
-    CastAheadDB.saveLeadSeconds = 3
-    local t4 = now
-    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
-    S.Schedule("test:save4", 1, t4 + 34, t4 + 38, A.DEFENSIVE)
-    run(35)
-    check(Heard() == "SOON,DEFENSIVE_soon,DEFENSIVE", "burst: a save warning due inside the gap holds the burst, heard " .. Heard())
-    run(1)
-    check(Heard() == "SOON,DEFENSIVE_soon,DEFENSIVE,BURST", "burst: which speaks 2 s after the save itself, heard " .. Heard())
-    run(10)
-    CastAheadDB.saveLeadSeconds = nil
+    do
+        local function Phase(saveLead)
+            heard = {}
+            CastAheadDB.saveLeadSeconds = saveLead
+            local t = now
+            B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+            return t
+        end
+        local t = Phase(4)
+        S.Schedule("test:between", 1, t + 35, t + 39, A.DEFENSIVE)
+        run(32.5)
+        check(Heard() == "SOON,DEFENSIVE_soon", "burst: waits 2 s after a save warning due inside the gap, heard " .. Heard())
+        run(0.5)
+        check(Heard() == "SOON,DEFENSIVE_soon,BURST", "burst: speaks between the save warning and its call, heard " .. Heard())
+        run(2)
+        check(Heard() == "SOON,DEFENSIVE_soon,BURST,DEFENSIVE", "burst: then the save call, heard " .. Heard())
+        run(10)
+
+        t = Phase(1)
+        S.Schedule("test:tight", 1, t + 31.5, t + 35.5, A.DEFENSIVE)
+        run(33)
+        check(Heard() == "SOON,DEFENSIVE_soon,DEFENSIVE", "burst: no room between a 1 s warning and its call, so it waits, heard " .. Heard())
+        run(0.5)
+        check(Heard() == "SOON,DEFENSIVE_soon,DEFENSIVE,BURST", "burst: and speaks 2 s after the call, heard " .. Heard())
+        run(10)
+
+        t = Phase(1)
+        S.Schedule("test:gone", 1, t + 31.5, t + 35.5, A.DEFENSIVE)
+        run(30)
+        S.Cancel("test:gone")
+        run(3)
+        check(Heard() == "SOON", "burst: a cancelled save leaves the burst waiting for its re-check, heard " .. Heard())
+        run(0.5)
+        check(Heard() == "SOON,BURST", "burst: which then speaks, heard " .. Heard())
+        run(10)
+
+        t = Phase(nil)
+        S.Schedule("test:chain1", 1, t + 31, t + 35, A.DEFENSIVE)
+        S.Schedule("test:chain2", 1, t + 33.5, t + 37.5, A.DEFENSIVE)
+        S.Schedule("test:chain3", 1, t + 36, t + 40, A.DEFENSIVE)
+        run(33.5)
+        check(Heard() == "SOON,DEFENSIVE,DEFENSIVE", "burst: saves in a row keep the burst waiting, heard " .. Heard())
+        run(0.5)
+        check(Heard() == "SOON,DEFENSIVE,DEFENSIVE,BURST", "burst: never more than 4 s late, heard " .. Heard())
+        run(10)
+        CastAheadDB.saveLeadSeconds = nil
+    end
 
     heard = {}
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)

@@ -3,6 +3,7 @@ local B = CastAheadBurst
 local M = CastAheadMatch
 
 local SAVE_GAP = 2
+local MAX_DEFER = 4
 local BURST_SHOWN = 5
 local ICON = "Interface\\Icons\\Spell_Nature_Bloodlust"
 B.ICON = ICON
@@ -34,7 +35,10 @@ local function DeferUntil(now)
     if last ~= nil and now - last < SAVE_GAP then at = last + SAVE_GAP end
     if nextAt ~= nil and nextAt - now < SAVE_GAP then at = math.max(at or 0, nextAt + SAVE_GAP) end
     local warnAt, warnedCall = S.NextWarnAt(now)
-    if warnAt ~= nil and warnAt - now < SAVE_GAP then at = math.max(at or 0, warnedCall + SAVE_GAP) end
+    if warnAt ~= nil and warnAt - now < SAVE_GAP then
+        local between = warnAt + 2 * SAVE_GAP <= warnedCall
+        at = math.max(at or 0, between and warnAt + SAVE_GAP or warnedCall + SAVE_GAP)
+    end
     return at
 end
 
@@ -209,9 +213,11 @@ function B.Tick(now)
     if not On() then return end
     for _, e in ipairs(entries) do
         if not e.fired and now >= e.fireAt and now < e.endAt then
-            local at = not e.deferred and DeferUntil(now)
+            e.plannedAt = e.plannedAt or e.fireAt
+            local at = now < e.plannedAt + MAX_DEFER and DeferUntil(now)
             if at then
-                e.deferred, e.fireAt = true, at
+                at = math.min(at, e.plannedAt + MAX_DEFER)
+                e.fireAt = at
                 if e.advice == M.ADVICE.BURST then e.endAt = math.max(e.endAt, at + BURST_SHOWN) end
             else
                 e.fired = true
