@@ -212,17 +212,31 @@ CastAheadOptions.BuildGroup = BuildGroup
 
 local STAGE_X, STAGE_MIN_W = COL_W + 10, 300
 
-local function Desaturate(frame, off)
+-- Greys every texture under a frame, keeping in `saved` what each one had,
+-- so a picture that greys an icon on purpose gets it back when turned on.
+local function Grey(frame, saved)
     for _, region in ipairs({ frame:GetRegions() }) do
-        if region.SetDesaturated then region:SetDesaturated(off) end
+        if region.SetDesaturated then
+            if saved[region] == nil then
+                saved[region] = region.IsDesaturated and region:IsDesaturated() or false
+            end
+            region:SetDesaturated(true)
+        end
     end
-    for _, child in ipairs({ frame:GetChildren() }) do Desaturate(child, off) end
+    for _, child in ipairs({ frame:GetChildren() }) do Grey(child, saved) end
+end
+
+local function Ungrey(saved)
+    for region, was in pairs(saved) do region:SetDesaturated(was) end
+    wipe(saved)
 end
 
 -- The empty right part of a group, right of the control column: a live
 -- picture or a plain sentence beside each control it explains, top to bottom
 -- in the order they are added. The group grows when they need more height
--- than its controls.
+-- than its controls; the stage is the only code that sets a staged group's
+-- height, and a group that sizes its controls at runtime hands that height
+-- to `stage.Fit`.
 local function BuildStage(panel, group)
     local stage, items = {}, {}
     local controlsHeight = group:GetHeight()
@@ -236,13 +250,15 @@ local function BuildStage(panel, group)
         return fs
     end
 
-    -- `spec.build(canvas)` makes the frames once, `spec.paint(canvas)` draws
-    -- the current settings and returns the drawn size, `spec.on()` says
-    -- whether the feature is on, `spec.off` names what is off.
+    -- `spec.build(canvas)` makes the frames once, `spec.paint(canvas, on)`
+    -- draws the current settings and returns the drawn size, `spec.on()` says
+    -- whether the feature is on, `spec.off` names what is off. While off the
+    -- stage dims the canvas and desaturates its textures; colour fills are
+    -- not greyed by that, so paint greys those itself when `on` is false.
     function stage.Picture(control, spec)
         local canvas = CreateFrame("Frame", nil, group)
         spec.build(canvas)
-        items[#items + 1] = { control = control, canvas = canvas, spec = spec, off = Muted(spec.off) }
+        items[#items + 1] = { control = control, canvas = canvas, spec = spec, off = Muted(spec.off), saved = {} }
     end
 
     function stage.Line(control, text)
@@ -270,7 +286,9 @@ local function BuildStage(panel, group)
                 item.off:SetShown(false)
             else
                 local canvas, on = item.canvas, item.spec.on()
-                local w, h = item.spec.paint(canvas)
+                if on then Ungrey(item.saved) end
+                local w, h = item.spec.paint(canvas, on)
+                if not on then Grey(canvas, item.saved) end
                 local scale = w > 0 and math.min(1, (width - 10) / w) or 1
                 local tall = h * scale
                 local mid = known and (ctop + cbottom) / 2 - top or -36
@@ -279,7 +297,6 @@ local function BuildStage(panel, group)
                 canvas:ClearAllPoints()
                 canvas:SetPoint("TOPLEFT", group, "TOPLEFT", STAGE_X / scale, y / scale)
                 canvas:SetAlpha(on and 1 or 0.35)
-                Desaturate(canvas, not on)
                 canvas:Show()
                 -- The line's room is kept while on, so the group keeps its shape.
                 item.off:ClearAllPoints()
@@ -295,6 +312,11 @@ local function BuildStage(panel, group)
             panel:Relayout()
         end
         return need
+    end
+
+    function stage.Fit(height)
+        controlsHeight = height
+        return stage.Paint()
     end
 
     group:HookScript("OnSizeChanged", stage.Paint)
@@ -595,15 +617,15 @@ function BuildGeneral(panel)
         build = function(canvas)
             local plate = CreateFrame("Frame", nil, canvas)
             plate:SetSize(120, 10)
-            local health = plate:CreateTexture(nil, "ARTWORK")
-            health:SetAllPoints()
-            health:SetColorTexture(0.75, 0.12, 0.1)
+            canvas.health = plate:CreateTexture(nil, "ARTWORK")
+            canvas.health:SetAllPoints()
             local name = plate:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             name:SetPoint("BOTTOM", plate, "TOP", 0, 2)
             name:SetText("Training Dummy")
             canvas.plate = plate
         end,
-        paint = function(canvas)
+        paint = function(canvas, on)
+            if on then canvas.health:SetColorTexture(0.75, 0.12, 0.1) else canvas.health:SetColorTexture(0.4, 0.4, 0.4) end
             local w, h, x, y = CastAheadCore.PreviewRow(canvas, canvas.plate)
             canvas.plate:ClearAllPoints()
             canvas.plate:SetPoint("BOTTOMLEFT", canvas, "BOTTOMLEFT", x, y)

@@ -5079,11 +5079,24 @@ do
             end
         end
         check(canvas.alpha == 1 and OffLine() and OffLine().shown == false, "the picture is bright with nameplate icons on")
+        local health, colour = canvas.health, nil
+        health.SetDesaturated = function(self, on) self.desat = on end
+        health.IsDesaturated = function(self) return self.desat end
+        health.SetColorTexture = function(_, r, g, b) colour = { r, g, b } end
+        health.desat = false
+        canvas.GetChildren = function() return canvas.plate end
+        canvas.plate.GetRegions = function() return health end
         CastAheadDB.nameplates = false
         CastAheadOptions.Refresh()
         check(canvas.alpha == 0.35 and canvas.shown and OffLine() and OffLine().shown == true,
             "with nameplate icons off the picture dims in place and says so")
+        check(health.desat == true and colour and colour[1] == colour[2] and colour[2] == colour[3],
+            "with nameplate icons off the plate is desaturated and its fill grey")
         CastAheadDB.nameplates = nil
+        CastAheadOptions.Refresh()
+        check(health.desat == false and colour and colour[1] > colour[2],
+            "with nameplate icons on again the plate gets back its colour and saturation")
+        canvas.GetChildren, canvas.plate.GetRegions = nil, nil
         CastAheadDB.fullLabels = true
         CastAheadOptions.Refresh()
         check(canvas.previewBars[3].labelValue == "TANKBUSTER", "Full labels shows TANKBUSTER in the picture, got "
@@ -5114,6 +5127,41 @@ do
         group.w = COL_W
         CastAheadOptions.Refresh()
         for i = 1, #canvas.previewBars do canvas.previewBars[i]:Hide() end
+    end)();
+    (function()
+        local COL_W = 250
+        local panel, relayouts, sets = CreateFrame("Frame"), 0, 0
+        panel.groups = {}
+        panel.Relayout = function() relayouts = relayouts + 1 end
+        local group = CastAheadOptions.BuildGroup(panel, "Stage test", 196)
+        local setHeight = group.SetHeight
+        group.SetHeight = function(self, h) sets = sets + 1 setHeight(self, h) end
+        local stage = CastAheadOptions.BuildStage(panel, group)
+        local control = CreateFrame("Frame", nil, panel)
+        stage.Line(control, "Stage test sentence")
+        local line
+        for _, fs in ipairs(texts) do
+            if rawget(fs, "value") == "Stage test sentence" then line = fs end
+        end
+        line.SetPoint = function(self, at, to, rel, x, y) if at == "TOPLEFT" then self.at = { to, rel, x, y } end end
+        line.GetStringHeight = function() return 24 end
+        local need = stage.Paint()
+        check(line.at and line.at[1] == group and line.at[3] == COL_W + 10 and line.at[4] < -8,
+            "a stage line sits in the stage column below the title")
+        check(need == 4 - (line.at[4] - 24 - 6), "a stage line adds its height to what the stage needs, got " .. tostring(need))
+        line.GetStringHeight = function() return 400 end
+        need = stage.Paint()
+        check(group.h == need and need > 400, "a tall stage line grows the group, got " .. tostring(group.h))
+        line.GetStringHeight = function() return 24 end
+        for _, h in ipairs({ 196, 262, 196 }) do
+            sets, relayouts = 0, 0
+            need = stage.Fit(h)
+            check(group.h == math.max(h, need), "the group fits controls of " .. h .. ", got " .. tostring(group.h))
+            check(sets <= 1 and relayouts <= 1, "fitting " .. h .. " sets the height once, got " .. sets .. "/" .. relayouts)
+            sets, relayouts = 0, 0
+            stage.Paint()
+            check(sets == 0 and relayouts == 0, "a repaint at the same size changes nothing, got " .. sets .. "/" .. relayouts)
+        end
     end)();
     (function()
         local setup, move
