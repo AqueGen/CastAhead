@@ -5405,6 +5405,7 @@ do
             "Copy the files off and clear the journal here when it asks.",
             "A panel to mark a wrong call while recording.",
             "Calls a defensive for a dangerous boss debuff on you.",
+            "Healers get their own phases for group cooldowns. Other bosses: no call. Burst soon: timed phases only.",
             "Puts every setting back to a new install. Recorded data stays.",
             "Adds calls for boss abilities DBM or BigWigs announce.",
             "Boss mods, early warning and buttons also apply to raid defensive calls." }) do

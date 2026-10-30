@@ -1214,7 +1214,7 @@ local function BuildRaidSection(panel)
     local raidSaves = BuildSwitch(panel, "raidSaves", { "TOPLEFT", raidNote, "BOTTOMLEFT", 16, -4 }, CastAheadOptions.RaidSavesChanged)
     local savesLine = Note(panel, raidSaves, "Calls a defensive for a dangerous boss debuff on you.")
     local bursts = BuildSwitch(panel, "burstCalls", { "TOPLEFT", savesLine, "BOTTOMLEFT", 0, -4 }, CastAheadOptions.RaidSavesChanged)
-    local burstLine = Note(panel, bursts, "Healers get their own phases for group cooldowns. Other bosses: no call.")
+    local burstLine = Note(panel, bursts, "Healers get their own phases for group cooldowns. Other bosses: no call. Burst soon: timed phases only.")
     local burstSoon, soonLabel = BuildSlider(panel, {
         key = "burstLeadSeconds",
         default = 0,
