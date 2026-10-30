@@ -35,6 +35,10 @@ local THIN_EVIDENCE = 5              -- rows backed by less are always estimates
 local COMBAT_POLL_INTERVAL = 0.1
 local MAX_NAMEPLATES = 40
 
+-- Created up front: the main chunk is at Lua 5.1's 200-local limit, so helpers
+-- shared between distant sections hang here instead of taking a local each.
+CastAheadCore = {}
+
 -- Declared up front because the bar code above needs them: Lua resolves an
 -- undeclared local as a global, which is nil at call time.
 local RefreshBar
@@ -949,7 +953,7 @@ end
 
 -- A bar on any parent but UIParent is a settings picture: it takes the
 -- window's strata and clipping, and never enters the pool.
-local function NewBar(parent)
+function CastAheadCore.NewBar(parent)
     local bar = CreateFrame("Frame", nil, parent)
     bar:SetSize(ICON_SIZE, ICON_SIZE)
     bar:EnableMouse(false)
@@ -1026,7 +1030,7 @@ local function GetBar(state, index)
         ApplyBarSize(pooled)
         return pooled
     end
-    local bar = NewBar(UIParent)
+    local bar = CastAheadCore.NewBar(UIParent)
     state.bars[index] = bar
     return bar
 end
@@ -2654,7 +2658,7 @@ local CENTER_STRATA = "HIGH"
 local CENTER_LINES = 3      -- a pack can cast three things at once; more is noise
 local CENTER_LINE_H = 44
 
-local function BuildCenterBlock(parent)
+function CastAheadCore.BuildCenterBlock(parent)
     local block = CreateFrame("Frame", nil, parent)
     block:SetSize(360, CENTER_LINE_H * CENTER_LINES)
     block:EnableMouse(false)
@@ -2693,7 +2697,7 @@ end
 
 local function CenterFrame()
     if center then return center end
-    center = BuildCenterBlock(UIParent)
+    center = CastAheadCore.BuildCenterBlock(UIParent)
     center:SetFrameStrata(CENTER_STRATA)
     -- Backdrop only while the block is being moved, so there is something to
     -- grab and see.
@@ -2736,7 +2740,7 @@ end
 
 -- The words have a size of their own on top of the block's: the icon and
 -- the countdown beside them are already as big as the block makes them.
-local function ApplyCenterTextScale(f)
+function CastAheadCore.ApplyCenterTextScale(f)
     local textScale = CastAheadConfig.CenterTextScale()
     if f._textScale ~= textScale then
         f._textScale = textScale
@@ -2752,7 +2756,7 @@ local function PlaceCenter(f)
     -- moves the icon, the words and the countdown together, and the spacing
     -- between them stays right at any size.
     local scale = CastAheadConfig.CenterScale()
-    ApplyCenterTextScale(f)
+    CastAheadCore.ApplyCenterTextScale(f)
     if f._x ~= x or f._y ~= y or f._scale ~= scale then
         f._x, f._y, f._scale = x, y, scale
         f:SetScale(scale)
@@ -2914,7 +2918,7 @@ end
 
 local sampleRows = {}
 
-local function SampleDataRow(key)
+function CastAheadCore.SampleDataRow(key)
     local hit = sampleRows[key]
     if hit ~= nil then return hit or nil end
     for _, rows in pairs(CastAheadData) do
@@ -2929,13 +2933,13 @@ local function SampleDataRow(key)
     sampleRows[key] = false
 end
 
-local function SamplePicks(keys, now)
+function CastAheadCore.SamplePicks(keys, now)
     local A = CastAheadMatch.ADVICE
     local picks = {}
     for i = 1, #keys do
         local key = keys[i]
         if key == "KICK" then
-            local kick = SampleDataRow("KICK")
+            local kick = CastAheadCore.SampleDataRow("KICK")
             picks[#picks + 1] = { advice = A.KICK, endAt = now + 2.4,
                                   icons = { kick and SpellIcon(kick.spell) or FALLBACK_ICON } }
         elseif key == "DEFENSIVE" then
@@ -2950,7 +2954,7 @@ local function SamplePicks(keys, now)
     return picks
 end
 
-local function ShowCenterSample(on)
+function CastAheadCore.ShowCenterSample(on)
     if centerUnlocked then ToggleMoveCenter(true) end
     centerSample = (on and CastAheadConfig.CenterText()) and true or false
     if not centerSample then
@@ -2962,8 +2966,35 @@ local function ShowCenterSample(on)
     f.fill:Show()
     PlaceCenter(f)
     local now = GetTime()
-    PaintCenter(f, SamplePicks({ "KICK", "DEFENSIVE", "BURST" }, now), now)
+    PaintCenter(f, CastAheadCore.SamplePicks({ "KICK", "DEFENSIVE", "BURST" }, now), now)
     return true
+end
+
+-- The settings picture of the centre call: a block of its own, painted by the
+-- same code as the real one, at the player's text size.
+CastAheadCore.NewCenterPreview = CastAheadCore.BuildCenterBlock
+
+function CastAheadCore.PaintCenterPreview(block, keys)
+    local now = GetTime()
+    local picks = CastAheadCore.SamplePicks(keys, now)
+    if #picks == 0 then
+        for i = 1, CENTER_LINES do block.lines[i]:Hide() end
+        block:Hide()
+        return 0, 0
+    end
+    CastAheadCore.ApplyCenterTextScale(block)
+    PaintCenter(block, picks, now)
+    -- Measured about the block's centre, so a centred block shows all of it:
+    -- the text sits 25 right of the centre, and the 40 icon, its 10 gap and
+    -- up to two 24 extras hang off the text's left edge.
+    local shown = math.min(#picks, CENTER_LINES)
+    local width = 0
+    for i = 1, shown do
+        local icons = picks[i].icons
+        local extras = icons and math.min(math.max(#icons - 1, 0), 2) or 0
+        width = math.max(width, (block.lines[i].text:GetStringWidth() or 0) + 2 * (25 + 24 * extras))
+    end
+    return width, CENTER_LINE_H * shown
 end
 
 -- The settings' per-feature Test buttons: one defensive call or one burst
@@ -3138,7 +3169,6 @@ end
 -- /ca debug. Answers the questions that matter when nothing shows up: did
 -- the dungeon table load, are plates being tracked, what level did we read, and
 -- how far identification got on each one.
-CastAheadCore = {}
 CastAheadCore.CENTER_Y = CENTER_Y
 CastAheadCore.CenterFrame = CenterFrame
 CastAheadCore.DropCenter = DropCenter
@@ -3180,18 +3210,6 @@ CastAheadCore.SpreadBars = SpreadBars
 CastAheadCore.Population = function() return killed, exhausted end
 CastAheadCore.MoveCenter = ToggleMoveCenter
 CastAheadCore.IsHostileNameplate = IsHostileNameplate
-CastAheadCore.ShowCenterSample = ShowCenterSample
--- The settings picture of the centre call: a block of its own on `parent`,
--- painted by the same code as the real one, at the player's text size.
-CastAheadCore.NewCenterPreview = BuildCenterBlock
-CastAheadCore.PaintCenterPreview = function(block, keys)
-    ApplyCenterTextScale(block)
-    local now = GetTime()
-    local picks = SamplePicks(keys, now)
-    PaintCenter(block, picks, now)
-    return 360, CENTER_LINE_H * math.min(#picks, CENTER_LINES)
-end
-CastAheadCore.SampleDataRow = SampleDataRow
 CastAheadCore.RememberPlateSize = RememberPlateSize
 
 function CastAheadCore.PlateSize()
@@ -3935,7 +3953,7 @@ function CastAheadCore.ShowSampleRow(state, frame)
     for i = 1, #row do
         local sample = row[i]
         local bar = GetBar(state, i)
-        PaintBar(bar, { row = SampleDataRow(sample.key) or { prio = sample.key }, approximate = sample.approx }, nil)
+        PaintBar(bar, { row = CastAheadCore.SampleDataRow(sample.key) or { prio = sample.key }, approximate = sample.approx }, nil)
         SetApprox(bar, sample.approx == true)
         bar.time:SetFormattedText("%d", sample.time)
         spread[i] = bar
@@ -3961,7 +3979,7 @@ function CastAheadCore.PreviewRow(holder, plate)
     local row = CastAheadCore.SAMPLE_ROW
     -- Every slot is filled before the sample row runs, so GetBar never
     -- reaches the pool for these bars.
-    for i = 1, #row do bars[i] = bars[i] or NewBar(holder) end
+    for i = 1, #row do bars[i] = bars[i] or CastAheadCore.NewBar(holder) end
     CastAheadCore.ShowSampleRow({ bars = bars }, plate)
     local function fraction(point)
         return point:find("LEFT") and 0 or point:find("RIGHT") and 1 or 0.5,

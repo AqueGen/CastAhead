@@ -6185,14 +6185,25 @@ do
 
     local state = {}
     CastAheadCore.ShowSampleRow(state, plate)
+    local pooled = {}
+    for i = 1, #state.bars do pooled[state.bars[i]] = true end
     CastAheadCore.HideSampleRow(state)
+    local other = CreateFrame("Frame")
+    CastAheadCore.PreviewRow(other, plate)
+    local own = 0
+    for i = 1, #other.previewBars do
+        local bar = other.previewBars[i]
+        if bar.parent == other and bar._preview == true and not pooled[bar] then own = own + 1 end
+    end
+    check(own == 3, "preview row: a full pool lends nothing to the preview, got " .. own)
+    local before = framesMade
     local fresh = {}
     CastAheadCore.ShowSampleRow(fresh, plate)
-    local leaked = 0
+    local reused = 0
     for i = 1, #fresh.bars do
-        if fresh.bars[i]._preview ~= false or fresh.bars[i].parent == holder then leaked = leaked + 1 end
+        if pooled[fresh.bars[i]] and fresh.bars[i]._preview == false then reused = reused + 1 end
     end
-    check(leaked == 0, "preview row: preview bars never reach the pool")
+    check(framesMade == before and reused == 3, "preview row: the pool still holds the released bars, got " .. reused)
     CastAheadCore.HideSampleRow(fresh)
 
     local block = CastAheadCore.NewCenterPreview(holder)
@@ -6202,6 +6213,16 @@ do
         "centre preview: line 1 says Kick, got " .. tostring(block.lines[1].timeValue))
     check(not block.lines[2].shown and not block.lines[3].shown, "centre preview: lines 2-3 hidden")
     check(CastAheadCore.CenterFrame() ~= block, "centre preview: a block of its own")
+    local savedSaves = CastAheadSaves
+    CastAheadSaves = { Icons = function() return { 1, 2, 3 } end }
+    block.lines[1].text.GetStringWidth = function() return 300 end
+    local cw, ch = CastAheadCore.PaintCenterPreview(block, { "DEFENSIVE" })
+    CastAheadSaves = savedSaves
+    check(cw == 446 and ch == 44, "centre preview: width covers long text and two extra icons, got "
+        .. tostring(cw) .. "x" .. tostring(ch))
+    local ew, eh = CastAheadCore.PaintCenterPreview(block, {})
+    check(ew == 0 and eh == 0 and not block.shown and not block.lines[1].shown,
+        "centre preview: no keys hides the block and measures nothing")
 
     CastAheadCore.ShowCenterSample(true)
     local center = CastAheadCore.CenterFrame()
@@ -6211,6 +6232,7 @@ do
     -- The setup cases count every shown frame, so the pictures leave none behind.
     for i = 1, #block.lines do block.lines[i]:Hide() end
     for i = 1, #bars do bars[i]:Hide() end
+    for i = 1, #other.previewBars do other.previewBars[i]:Hide() end
     CastAheadDB = savedDB
 end
 
