@@ -5281,6 +5281,113 @@ do
         CastAheadWindow.SetFooter, GetInstanceInfo = savedFooter, savedInfo
     end
 
+    do
+        local savedFooter, savedDB, footer = CastAheadWindow.SetFooter, CastAheadDB, nil
+        local realLock = InCombatLockdown
+        InCombatLockdown = function() return false end
+        CastAheadWindow.SetFooter = function(text) footer = text end
+        local function Prep()
+            for _, frame in ipairs(allFrames) do
+                frame.IsVisible = function(self) return self.shown end
+                frame.SetAlpha = function(self, a) self.alpha = a end
+            end
+        end
+        local function Box(label)
+            for _, frame in ipairs(allFrames) do
+                if frame.kind == "CheckButton" then
+                    for _, fs in ipairs(frame.fontStrings or {}) do
+                        if fs.value == label then return frame end
+                    end
+                end
+            end
+        end
+        local function Has(frame, text)
+            for _, fs in ipairs(frame.fontStrings or {}) do
+                if fs.value == text then return true end
+            end
+            return false
+        end
+        local function Rows(host)
+            for _, frame in ipairs(allFrames) do
+                if frame.kind == "Frame" and frame.parent and frame.parent.kind == "ScrollFrame" and frame.parent.parent == host then
+                    return frame
+                end
+            end
+        end
+        local function Case(page, label, key, offText, db)
+            CastAheadDB = db
+            CastAheadUI.RefreshTabs()
+            CastAheadWindow.Show(page)
+            Prep()
+            CastAheadUI.RefreshSaves()
+            local box = Box(label)
+            check(box ~= nil, page .. " has a checkbox labelled " .. label)
+            if not box then return end
+            local banner, rows = box.parent, Rows(box.parent.parent)
+            check(banner.shown and Has(banner, offText), page .. " banner reads " .. offText)
+            check(rows and rows.alpha == 0.35, page .. " rows are dimmed while calls are off, got " .. tostring(rows and rows.alpha))
+            check(footer ~= nil and not footer:find("General - Features", 1, true),
+                page .. " footer does not send the user to General, got " .. tostring(footer))
+            box.GetChecked = function() return true end
+            box.handlers.OnClick(box)
+            check(CastAheadDB[key] == true, page .. " checkbox writes " .. key)
+            check(banner.shown and Has(banner, "Defensive calls are on."), page .. " banner reads on after the tick")
+            check(rows.alpha == 1, page .. " rows are not dimmed after the tick")
+            f:Hide()
+            box.parent.parent.handlers.OnShow(box.parent.parent)
+            CastAheadWindow.Show(page)
+            check(not banner.shown, page .. " banner is gone the next time the page is shown")
+            CastAheadDB[key] = nil
+            f:Hide()
+        end
+        Case("Saves", "Call defensives in dungeons", "saveCalls", "Defensive calls are off.", {})
+        Case("RaidSaves", "Call defensives in raids", "raidSaves", "Raid defensive calls are off.", { raidMode = true })
+        CastAheadDB = {}
+        CastAheadUI.RefreshTabs()
+        check(select(2, CastAheadWindow.Page("RaidSaves")) == false, "RaidSaves is not in the menu while the raid switch is off")
+
+        ;(function()
+            -- The General and Defensives panels were built by the Options block above and stay cached.
+            local function CallBoxes()
+                local found = {}
+                for _, frame in ipairs(allFrames) do
+                    local text = rawget(frame, "text")
+                    if frame.kind == "CheckButton" and text and rawget(text, "value") == "Defensive calls in dungeons" then
+                        frame.SetChecked = function(self, on) self.checked = on end
+                        found[#found + 1] = frame
+                    end
+                end
+                return found
+            end
+            local function ListAlpha()
+                for _, frame in ipairs(allFrames) do
+                    local title = rawget(frame, "title")
+                    if title and rawget(title, "value") == "Defensive" then return frame.alpha end
+                end
+            end
+            CastAheadDB = {}
+            CallBoxes()
+            CastAheadOptions.Refresh()
+            CastAheadUI.RefreshTabs()
+            CastAheadWindow.Show("Saves")
+            Prep()
+            check(ListAlpha() == 0.35, "the Defensives list is dimmed before the banner is ticked, got " .. tostring(ListAlpha()))
+            local banner = Box("Call defensives in dungeons")
+            banner.GetChecked = function() return true end
+            banner.handlers.OnClick(banner)
+            CastAheadOptions.Refresh()
+            local boxes = CallBoxes()
+            local ticked = #boxes >= 2
+            for _, box in ipairs(boxes) do ticked = ticked and box.checked == true end
+            check(ticked, "ticking the Saves banner ticks General's and Defensives' dungeon calls checkboxes, got " .. #boxes .. " boxes")
+            check(ListAlpha() == 1, "and the Defensives list is no longer dimmed, got " .. tostring(ListAlpha()))
+        end)()
+        InCombatLockdown = realLock
+        f:Hide()
+        CastAheadWindow.SetFooter, CastAheadDB = savedFooter, savedDB
+        CastAheadUI.RefreshTabs()
+    end
+
     CastAheadDB.devMode = true
     CastAheadUI.ShowTab("Development")
     CastAhead_Toggle()

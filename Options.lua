@@ -113,6 +113,7 @@ function CastAheadOptions.SavesSwitchChanged()
     SaveRefresh()
     CastAheadOptions.RefreshDefensives()
     if CastAheadUI and CastAheadUI.RefreshTabs then CastAheadUI.RefreshTabs() end
+    if CastAheadUI and CastAheadUI.RefreshSaves then CastAheadUI.RefreshSaves() end
     Refresh()
 end
 

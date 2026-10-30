@@ -105,10 +105,44 @@ end
 
 local RESTART = "Restart the game to finish the CastAhead update - defensive calls are off until then."
 
+local BANNER_H = 52
+local BANNER_LABELS = { saveCalls = "Call defensives in dungeons", raidSaves = "Call defensives in raids" }
+local BANNER_ON = "Defensive calls are on."
+
+-- The off banner of a defensive calls page: a status line and the real switch. Once it was shown
+-- on this showing of the page it stays, reading `onText`, so the page does not jump under the cursor.
+-- The caller anchors it; Paint returns its height (0 when hidden).
+local function Banner(host, key, offText, onText)
+    local T = CastAheadWindow.THEME
+    local banner = CreateFrame("Frame", nil, host, "BackdropTemplate")
+    banner:SetHeight(BANNER_H)
+    banner:SetBackdrop(CastAheadWindow.FLAT)
+    banner:SetBackdropColor(unpack(T.panel))
+    banner:SetBackdropBorderColor(unpack(T.gold))
+    banner.status = banner:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    banner.status:SetPoint("TOPLEFT", banner, "TOPLEFT", 10, -8)
+    banner.hint = banner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    banner.hint:SetPoint("TOPRIGHT", banner, "TOPRIGHT", -10, -10)
+    banner.hint:SetTextColor(unpack(T.muted))
+    banner.hint:SetText("The list below shows what you would get.")
+    CastAheadOptions.BuildSwitch(banner, key, { "BOTTOMLEFT", banner, "BOTTOMLEFT", 6, 4 },
+        CastAheadOptions.SavesSwitchChanged, BANNER_LABELS[key])
+    local wasOff = false
+    function banner.Paint(callsOn)
+        wasOff = wasOff or not callsOn
+        banner:SetShown(wasOff)
+        banner.status:SetText(callsOn and onText or offText)
+        banner.hint:SetShown(not callsOn)
+        return wasOff and BANNER_H or 0
+    end
+    function banner.Reset() wasOff = false end
+    return banner
+end
+
 -- One Saves page: a table of the save rows for the picked place (a dungeon, or a raid difficulty).
 -- headers renames columns and note replaces the damage note where the dungeon wording does not fit.
-local function SavesPage(rowsFor, callsOn, offText, headers, note)
-    local host, rows, parent, side, tbl, top = nil, {}, nil, nil, nil, 0
+local function SavesPage(rowsFor, callsOn, key, offText, headers, note)
+    local host, rows, parent, side, tbl, top, banner = nil, {}, nil, nil, nil, 0, nil
     local function Refresh()
         if not (host and host:IsVisible()) then return end
         if not CastAheadSaves then
@@ -152,18 +186,21 @@ local function SavesPage(rowsFor, callsOn, offText, headers, note)
                 row:Hide()
             end
         end
+        local on = callsOn()
+        local bannerHeight = banner.Paint(on)
+        side:SetPoint("TOPLEFT", host, "TOPLEFT", 0, -(top + bannerHeight))
+        side:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, -(top + bannerHeight))
+        tbl:SetAlpha(on and 1 or 0.35)
         local rowsHeight = math.max(#items, 1) * ROW_HEIGHT
         parent:SetHeight(rowsHeight)
         tbl:SetHeight(HEADER_HEIGHT + 4 + rowsHeight)
         side:SetHeight(HEADER_HEIGHT + 4 + rowsHeight)
-        host:SetHeight(top + HEADER_HEIGHT + 4 + rowsHeight)
+        host:SetHeight(top + bannerHeight + HEADER_HEIGHT + 4 + rowsHeight)
 
         local S = CastAheadSaves
         local role, own = S.ViewRole(), S.ViewSpecID() == S.SpecID()
         local line
-        if not callsOn() then
-            line = offText
-        elseif not role then
+        if not role then
             line = "No specialization role - pick a spec to see your saves."
         else
             line = "Role: " .. (ROLE_NAMES[role] or role) .. (own and "." or " - another spec's list, cooldowns not shown.")
@@ -177,6 +214,10 @@ local function SavesPage(rowsFor, callsOn, offText, headers, note)
         host = h
         top = CastAheadWindow.SpecBar(host, 0, 0, function() CastAheadUI.RefreshSaves() end)
         top = top + EpNote(host, top, note)
+        banner = Banner(host, key, offText, BANNER_ON)
+        banner:SetPoint("TOPLEFT", host, "TOPLEFT", 0, -top)
+        banner:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, -top)
+        host:SetScript("OnShow", banner.Reset)
         side, tbl = CastAheadWindow.SideScroll(host, top)
         tbl:SetWidth(SAVE_WIDTH)
         local header = CreateFrame("Frame", nil, tbl)
@@ -232,9 +273,6 @@ local function GuidePage(textFor)
     return Build, Refresh
 end
 
-local OFF = "Defensive calls are off - turn them on in General - Features."
-local RAID_OFF = "Raid defensive calls are off - turn them on in General - Features."
-
 local BuildGuide, RefreshGuide = GuidePage(function()
     return CastAheadSaves.GuideText(CastAheadWindow.Dungeon())
         or (CastAheadSaves.ViewRole() and "Nothing in this dungeon calls a defensive for this role."
@@ -245,10 +283,10 @@ local BuildRaidGuide, RefreshRaidGuide = GuidePage(function()
 end)
 local BuildSaves, RefreshSaves = SavesPage(function()
     return CastAheadSaves.ViewRows and CastAheadSaves.ViewRows(CastAheadWindow.Dungeon()) or {}
-end, function() return CastAheadConfig.DungeonSaves() end, OFF)
+end, function() return CastAheadConfig.DungeonSaves() end, "saveCalls", "Defensive calls are off.")
 local BuildRaidSaves, RefreshRaidSaves = SavesPage(function()
     return CastAheadSaves.ViewRaidRows and CastAheadSaves.ViewRaidRows(CastAheadWindow.RaidDifficulty()) or {}
-end, function() return CastAheadConfig.RaidSaves() end, RAID_OFF, { lead = "After it lands", ep = "Damage" },
+end, function() return CastAheadConfig.RaidSaves() end, "raidSaves", "Raid defensive calls are off.", { lead = "After it lands", ep = "Damage" },
     CastAheadSaves and (CastAheadSaves.RAID_EP_NOTE .. " After it lands: seconds from the debuff landing to the call."))
 
 function CastAheadUI.RefreshSaves()
