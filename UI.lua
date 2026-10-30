@@ -48,8 +48,8 @@ end
 
 function CastAheadUI.RefreshTabs()
     CastAheadWindow.SetMenuShown("Development", CastAheadConfig.Dev())
-    local raid = CastAheadConfig.RaidSaves() or CastAheadConfig.BurstCalls()
-    CastAheadWindow.SetMenuShown("Defensives", CastAheadConfig.DungeonSaves() or CastAheadConfig.RaidSaves())
+    local raid = CastAheadConfig.Get("raidMode") == true
+    CastAheadWindow.SetMenuShown("Features", true)
     CastAheadWindow.SetMenuShown("RaidGuide", raid)
     CastAheadWindow.SetMenuShown("RaidSaves", raid)
 end
@@ -78,7 +78,7 @@ function CastAheadWindow.titleButtons(add)
     testButton:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:SetText("Test drive all", 1, 1, 1)
-        GameTooltip:AddLine("Play the selected dungeon's calls with nothing pulled, through the outputs switched on in General: icons on any nameplate in front of you, the centre call, the timeline, the voice and the sounds. Features that are switched on join in with samples of their own. Each feature also has its own Test button in General - Features. Click again to stop.", nil, nil, nil, true)
+        GameTooltip:AddLine("Play the selected dungeon's calls with nothing pulled, through the outputs switched on in General: icons on any nameplate in front of you, the centre call, the timeline, the voice and the sounds. Features that are switched on join in with samples of their own. Each feature also has its own Test button on the Features page. Click again to stop.", nil, nil, nil, true)
         GameTooltip:Show()
     end)
     testButton:SetScript("OnLeave", GameTooltip_Hide)

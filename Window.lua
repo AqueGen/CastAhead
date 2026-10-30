@@ -31,7 +31,7 @@ W.FLAT = FLAT
 local RAID_DIFFICULTIES = { { 14, "Normal" }, { 15, "Heroic" }, { 16, "Mythic" } }
 local RAID_DEFAULT = 15
 -- Pages from older versions, so a saved page name still opens something.
-local MOVED = { Bursts = "RaidGuide", RaidDefensives = "RaidGuide" }
+local MOVED = { Bursts = "RaidGuide", RaidDefensives = "RaidGuide", Defensives = "Features" }
 
 local frame, titleBar, titleAnchor, scaleDrop, menu, content, grid, raidGrid, scroll, footerText, footerHint
 local pages, order, headers, dungeonButtons, raidButtons = {}, {}, {}, {}, {}
@@ -71,8 +71,8 @@ end
 
 local NOTICE_W, NOTICE_PAD, NOTICE_ICON = 360, 14, 18
 local DEFENSIVES_OFF = {
-    text = "Defensive calls are now off by default, so they were switched off once for everyone, in dungeons and in raids.\n\nTurn them on in General - Features.",
-    button = "Open settings", page = "General",
+    text = "Defensive calls are now off by default, so they were switched off once for everyone, in dungeons and in raids.\n\nTurn them on in Features.",
+    button = "Open settings", page = "Features",
 }
 -- Shown once after an update, never on a new install. Only changes that
 -- change how a run plays out go here; raise `id` for each new message.

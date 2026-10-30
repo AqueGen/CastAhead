@@ -162,7 +162,8 @@ end
 
 local eventHandler, updateHandler
 CreateFrame = function(kind, _, parent)
-    local f = { shown = false, texts = {}, kind = kind, handlers = {}, parent = parent }
+    local f = { shown = false, texts = {}, kind = kind, handlers = {}, parent = parent,
+        parentStrata = parent and parent.strata }
     allFrames[#allFrames + 1] = f
     framesMade = framesMade + 1
     f.Show = function(self)
@@ -188,6 +189,8 @@ CreateFrame = function(kind, _, parent)
     if kind == "EditBox" then
         f.SetText = function(self, text) self.value = text end
         f.GetText = function(self) return self.value end
+    elseif kind == "Button" then
+        f.SetText = function(self, text) rawset(self, "buttonText", text) end
     end
     f.CreateTexture = StubRegion
     f.CreateFontString = function()
@@ -629,8 +632,16 @@ do
     C_Timer = savedTimer
     check(#delays == 1 and delays[1] > 0, "the notice is shown once, a moment after the world loads")
     print = realPrint
-    check(#lines == 1 and lines[1]:find("CastAhead:|r defensive calls are now off by default. Turn them on in /ca - General - Features.", 1, true)
+    check(#lines == 1 and lines[1]:find("CastAhead:|r defensive calls are now off by default. Turn them on in /ca - Features.", 1, true)
         and CastAheadDB.saveCallsNotice == nil, "the notice prints once and clears")
+    do
+        local body
+        for _, fs in ipairs(noticeFrame and noticeFrame.fontStrings or {}) do
+            if type(fs.value) == "string" and fs.value:find("Turn them on", 1, true) then body = fs.value end
+        end
+        check(body and body:find("Turn them on in Features.", 1, true) and not body:find("General", 1, true),
+            "the notice sends the user to Features, not General, got " .. tostring(body))
+    end
     check(shows == 1 and noticeFrame and noticeFrame.shown and CastAheadDB.saveCallsNotice == nil,
         "the update notice shows once and clears the flag")
     check(noticeFrame.open and noticeFrame.close, "the notice has an Open settings and a Close button")
@@ -640,7 +651,7 @@ do
     local shownTab
     CastAheadUI.ShowTab = function(name) shownTab = name end
     noticeFrame.open.scripts.OnClick()
-    check(shownTab == "General" and not noticeFrame.shown, "Open settings opens the General page and hides the notice")
+    check(shownTab == "Features" and not noticeFrame.shown, "Open settings opens the Features page and hides the notice")
     CastAheadUI.ShowUpdateNotice()
     check(noticeFrame.shown, "the notice shows again on request")
     noticeFrame.close.scripts.OnClick()
@@ -3494,6 +3505,76 @@ reset()
 CastAheadDefensives = { spells = { [100] = { DAMAGER = true, lead = 4.0 } }, alias = {} }
 CastAheadCore.ReapplyData()
 
+-- A spell's own early warning on the Casts page is for its cast call; the save heads-up keeps the save lead.
+CastAheadDB = { saveCalls = true, centerText = true, leadSeconds = 0, saveLeadSeconds = 4, spellLead = { [100] = 0 } }
+CastAheadCore.ReapplyData()
+enter()
+castFor(3.0)
+sounds, spoken, clips = 0, 0, 0
+advance(15.0)
+check(Alerts() == 0, "own lead 0: no save heads-up before the save lead")
+advance(1.5)
+check(Alerts() == 1, string.format("own lead 0: the save heads-up still comes at the save lead, got %d", Alerts()))
+reset()
+
+-- The test drive warns before a defensive call with the save lead, as live play does.
+do
+    local function Drive(db)
+        CastAheadDB = db
+        CastAheadCore.ReapplyData()
+        local made = #allFrames
+        CastAheadCore.Test(1877, { CastAheadData[1877][1] })
+        local tick
+        for i = made + 1, #allFrames do tick = tick or allFrames[i].handlers.OnUpdate end
+        sounds, spoken, clips = 0, 0, 0
+        local stop = now + 1.9
+        while now < stop do
+            now = now + 0.1
+            tick()
+        end
+        local heard = Alerts()
+        CastAheadCore.StopTest()
+        return heard
+    end
+    check(CastAheadMatch.Advice(CastAheadData[1877][1]) == CastAheadMatch.ADVICE.DEFENSIVE, "the demo row is a defensive call")
+    local heard = Drive({ saveCalls = true, leadSeconds = 0, saveLeadSeconds = 4 })
+    check(heard == 1, "the test drive warns before a defensive call with the save lead, got " .. heard)
+    heard = Drive({ saveCalls = true, leadSeconds = 5, saveLeadSeconds = 0 })
+    check(heard == 0, "the general early warning does not pre-announce a defensive call in the test drive, got " .. heard)
+    CastAheadDB = nil
+    CastAheadCore.ReapplyData()
+end
+
+-- Two tied candidates where only the second carries the save: the consensus is a save, so the save lead applies.
+do
+    local savedRole = GetSpecializationRole
+    GetSpecializationRole = function() return "TANK" end
+    table.insert(CastAheadData[1877], { spell = 1701, npc = 17, mob = "Twin", name = "Smash", cast = 3.3, cd = { 20.0 },
+                              first = 5.0, firstN = 20, offset = 0.0, kick = 0, cc = 0, prio = "TANK" })
+    table.insert(CastAheadData[1877], { spell = 1702, npc = 17, mob = "Twin", name = "Crush", cast = 3.3, cd = { 20.0 },
+                              first = 5.0, firstN = 20, offset = 0.0, kick = 0, cc = 0 })
+    CastAheadDefensives.spells[1702] = { TANK = true, lead = 4.0 }
+    CastAheadPriority[1701] = "TANK"
+    CastAheadDB = { saveCalls = true, centerText = true, leadSeconds = 0, saveLeadSeconds = 4 }
+    CastAheadCore.ReapplyData()
+    enter()
+    castFor(3.3)
+    local call = CastAheadCore.LastCandidates(unit)
+    check(call and #call == 2 and call[1].spell == 1701 and not call[1].save and call[2].save,
+        "the tie keeps both candidates, the plain one first")
+    sounds, spoken, clips = 0, 0, 0
+    advance(12.0)
+    check(Alerts() == 0, "no tank buster heads-up before the save lead")
+    advance(1.0)
+    check(Alerts() == 1, string.format("a save consensus gets the save heads-up whatever the first candidate, got %d", Alerts()))
+    reset()
+    table.remove(CastAheadData[1877])
+    table.remove(CastAheadData[1877])
+    CastAheadDefensives.spells[1702], CastAheadPriority[1701] = nil, nil
+    GetSpecializationRole = savedRole
+    CastAheadCore.ReapplyData()
+end
+
 -- Save calls off: the cast keeps its old call and its own icon, and no save heads-up comes early.
 do
     local function CenterLine()
@@ -3603,6 +3684,108 @@ CastAheadDB.saveCalls = true
 advance(0.1)
 check(Alerts() == 0, "a call whose hit passed while off never fires after switching back on")
 reset()
+
+-- Scheduled save calls: "soon" only as the early warning, the plain call at its time.
+do
+    local S, def = CastAheadSaves, CastAheadMatch.ADVICE.DEFENSIVE
+    local heard = {}
+    local savedPlay = PlaySoundFile
+    PlaySoundFile = function(path) heard[#heard + 1] = path:match("([%w_]+)%.ogg$") return true, 1 end
+    local function Heard() return table.concat(heard, ",") end
+    local function run(seconds)
+        for _ = 1, seconds * 10 do
+            now = now + 0.1
+            S.Tick(now)
+        end
+    end
+    CastAheadDB = { saveCalls = true }
+    S.Schedule("test:lead0", 100, now + 5, now + 8, def)
+    run(10)
+    check(Heard() == "DEFENSIVE", "early warning off: one plain call, heard " .. Heard())
+
+    heard = {}
+    CastAheadDB = { saveCalls = true, saveLeadSeconds = 3 }
+    local t0 = now
+    S.Schedule("test:lead3", 100, t0 + 5, t0 + 8, def)
+    run(1.9)
+    check(#heard == 0, "early warning 3: quiet before fireAt - 3, heard " .. Heard())
+    run(0.2)
+    check(Heard() == "DEFENSIVE_soon", "early warning 3: soon at fireAt - 3, heard " .. Heard())
+    run(2.8)
+    check(Heard() == "DEFENSIVE_soon", "early warning 3: nothing between the warning and the call, heard " .. Heard())
+    run(0.2)
+    check(Heard() == "DEFENSIVE_soon,DEFENSIVE", "early warning 3: the plain call at fireAt, heard " .. Heard())
+    run(5)
+    check(Heard() == "DEFENSIVE_soon,DEFENSIVE", "early warning 3: nothing more, heard " .. Heard())
+
+    heard = {}
+    S.Schedule("test:inside", 100, now + 2, now + 5, def)
+    run(0.1)
+    check(Heard() == "DEFENSIVE_soon", "a call scheduled inside its warning window warns on the first tick, heard " .. Heard())
+    run(2)
+    check(Heard() == "DEFENSIVE_soon,DEFENSIVE", "then calls at fireAt, heard " .. Heard())
+    run(4)
+
+    heard = {}
+    S.Schedule("test:close", 100, now + 1, now + 4, def)
+    run(5)
+    check(Heard() == "DEFENSIVE", "a call scheduled under 1.5 s before fireAt skips the warning, heard " .. Heard())
+
+    heard = {}
+    CastAheadDB.saveLeadSeconds = 1
+    S.Schedule("test:lead1", 100, now + 5, now + 8, def)
+    run(10)
+    check(Heard() == "DEFENSIVE_soon,DEFENSIVE", "early warning 1 still warns on time, heard " .. Heard())
+    CastAheadDB.saveLeadSeconds = 3
+
+    heard = {}
+    S.Schedule("test:move", 100, now + 4, now + 7, def)
+    run(1.5)
+    check(Heard() == "DEFENSIVE_soon", "move: warned before the move, heard " .. Heard())
+    S.Move("test:move", 13, 3, now)
+    run(6.9)
+    check(Heard() == "DEFENSIVE_soon", "move: quiet until the new warning, heard " .. Heard())
+    run(0.2)
+    check(Heard() == "DEFENSIVE_soon,DEFENSIVE_soon", "move later clears the warning so it warns again, heard " .. Heard())
+    run(3)
+    check(Heard() == "DEFENSIVE_soon,DEFENSIVE_soon,DEFENSIVE", "move: then the plain call, heard " .. Heard())
+    run(5)
+
+    heard = {}
+    CastAheadDB = { saveCalls = true, saveLeadSeconds = 3, spellMute = { [100] = true } }
+    S.Schedule("test:muted", 100, now + 5, now + 8, def)
+    run(10)
+    check(#heard == 0, "a spell muted on the Casts page silences its scheduled save, heard " .. Heard())
+    local firedBefore = S.LastFiredAt()
+    S.Schedule("test:mutedbusy", 100, now + 5, now + 8, def)
+    check(S.NextFireAt(now) == nil and S.NextWarnAt(now) == nil, "a muted scheduled save is not an upcoming call")
+    run(10)
+    check(S.LastFiredAt() == firedBefore, "a muted scheduled save does not count as a call heard")
+    CastAheadDB = { saveCalls = true, saveLeadSeconds = 3 }
+    S.Schedule("test:pastwarn", 100, now + 1, now + 4, def)
+    S.Schedule("test:nextwarn", 100, now + 3.5, now + 6.5, def)
+    local warnAt, warnedCall = S.NextWarnAt(now)
+    check(warnAt and math.abs(warnAt - (now + 0.5)) < 1e-6 and math.abs(warnedCall - (now + 3.5)) < 1e-6,
+        "the next warning skips one whose time has passed, got " .. tostring(warnAt and warnAt - now))
+    S.Cancel("test:pastwarn")
+    S.Cancel("test:nextwarn")
+    local savedStub = LibStub
+    LibStub = function() return { Fetch = function(_, _, name) return "custom/" .. name .. ".ogg" end } end
+    CastAheadDB = { saveCalls = true, saveLeadSeconds = 3, spellSounds = { [100] = "Bell" } }
+    heard = {}
+    S.Schedule("test:picked", 100, now + 5, now + 8, def)
+    run(10)
+    check(Heard() == "Bell,Bell", "a sound picked for the spell replaces the voice on a scheduled save, heard " .. Heard())
+    LibStub = savedStub
+    CastAheadDB = { saveCalls = true, saveLeadSeconds = 3 }
+
+    CastAheadCore.FeatureTest("defensive")
+    check(S.NextFireAt(now) and math.abs(S.NextFireAt(now) - (now + 4)) < 1e-6,
+        "the defensive Test button with early warning 3 calls at now + 4, got " .. tostring(S.NextFireAt(now) and S.NextFireAt(now) - now))
+    CastAheadCore.StopFeatureTests()
+    PlaySoundFile = savedPlay
+    CastAheadDB = nil
+end
 
 -- After an update and /reload a new TOC file is missing until a client restart.
 local savedSaves = CastAheadSaves
@@ -3806,9 +3989,14 @@ do
         "raid guide: the Burst section has the note and the windows, a boss with no burst data says so, got " .. text)
     CastAheadDB.raidSaves = nil
     text = Text(15)
-    check(not text:find("Defensive", 1, true) and text:find("Burst", 1, true), "raid guide: raid defensive calls off hide the Defensive section")
+    check(text:find("|cffaaaaaa  Defensive|r", 1, true) and text:find("Burst", 1, true),
+        "raid guide: raid defensive calls off grey the Defensive section and keep Burst, got " .. text)
     CastAheadDB.burstCalls = nil
-    check(CastAheadSaves.RaidGuideText(15):find("are off", 1, true), "raid guide: with both off it says the calls are off")
+    local both = CastAheadSaves.RaidGuideText(15)
+    check(not both:find("are off", 1, true) and both:find("Boss: ", 1, true) and both:find("|cffaaaaaa  Defensive|r", 1, true)
+        and both:find("|cffaaaaaa- |Hspell:1305963|hVenomous Surge|h", 1, true) and not both:find("Burst", 1, true)
+        and not both:find(CastAheadSaves.RAID_EP_NOTE, 1, true),
+        "raid guide: with both off every boss still lists greyed defensive lines, links kept, no damage note, got " .. both)
     CastAheadDB.raidSaves = true
     check(CastAheadSaves.RaidGuideText(15):find("^|cffaaaaaaDebuff calls and burst phases come from top%-player logs"),
         "raid guide: the caveat opens the guide")
@@ -3922,6 +4110,22 @@ do
         check(without:find("Boss: Zed\n|cff8fb8ff  Defensive|r\n|cffaaaaaa- nothing calls a defensive for your role|r", 1, true)
             and not without:find("Burst", 1, true),
             "with burst windows off the dungeon guide still lists every boss of the dungeon, got " .. without)
+        local savedAll = CastAheadDB
+        CastAheadDB = {}
+        local offText = CastAheadSaves.GuideText(9000)
+        local greyOk, seen = offText:find("Boss:", 1, true) ~= nil and not offText:find("General - Features", 1, true), false
+        local pastHead = false
+        for line in offText:gmatch("[^\n]+") do
+            if line:find("^Boss:") then pastHead = true end
+            if pastHead and line:find("efensive", 1, true) then
+                seen = true
+                if not line:find("^|cffaaaaaa") then greyOk = false end
+            end
+        end
+        check(greyOk and seen, "dungeon guide with calls off lists Boss lines, every defensive line starts grey, got " .. offText)
+        check(not offText:find(CastAheadSaves.EP_NOTE, 1, true), "dungeon guide with calls off has no damage note")
+        check(offText:find("\n|cffaaaaaaTrash|r\n", 1, true), "dungeon guide with calls off greys the Trash heading too")
+        CastAheadDB = savedAll
         CastAheadDB.raidMode, CastAheadDB.burstCalls = true, true
         check(CastAheadSaves.GuideText(9000):find("Burst phases come from top-player logs", 1, true),
             "the dungeon guide carries the burst caveat while bursts are shown")
@@ -4162,6 +4366,30 @@ check(Alerts() == 0, "the updated bar counts from where it paused")
 advance(1.0)
 check(Alerts() == 1, "and calls once after resuming")
 advance(5)
+do
+    local heard, savedPlay = {}, PlaySoundFile
+    PlaySoundFile = function(path, ...)
+        heard[#heard + 1] = path:match("([%w_]+)%.ogg$")
+        return savedPlay(path, ...)
+    end
+    local function Heard() return table.concat(heard, ",") end
+    CastAheadDB.saveLeadSeconds = 3
+    local t0 = now
+    A.OnBar("dbm", "t13", 1299684, 10, now)
+    advance(3.9)
+    check(#heard == 0, "early warning 3 on a boss bar: quiet before end - lead - 3, heard " .. Heard())
+    advance(0.2)
+    check(Heard() == "DEFENSIVE_soon", "early warning 3 on a boss bar: soon at end - lead - 3, heard " .. Heard())
+    A.OnUpdate("dbm", "t13", now - t0, 10, now)
+    advance(0.5)
+    check(Heard() == "DEFENSIVE_soon", "an update with the same end time does not warn again, heard " .. Heard())
+    advance(2.5)
+    check(Heard() == "DEFENSIVE_soon,DEFENSIVE", "then the plain call at end - lead, heard " .. Heard())
+    advance(5)
+    check(Heard() == "DEFENSIVE_soon,DEFENSIVE", "nothing more from the boss bar, heard " .. Heard())
+    CastAheadDB.saveLeadSeconds = nil
+    PlaySoundFile = savedPlay
+end
 A.OnBar("dbm", "t11", 1299684, 10, now)
 sounds, spoken, clips = 0, 0, 0
 advance(2)
@@ -4870,6 +5098,7 @@ do
         local f = savedCreate(kind, name, parent, ...)
         made[#made + 1] = f
         f.template = ...
+        f.shown = true
         local createText = f.CreateFontString
         f.CreateFontString = function(...)
             local fs = createText(...)
@@ -4877,11 +5106,14 @@ do
             fs.SetText = function(self, t) setText(self, t) rawset(self, "value", t) end
             fs.SetShown = function(self, on) self.shown = on and true or false end
             fs.SetTextColor = function(self, ...) self.color = (...) == 1 and "normal" or "muted" end
+            fs.SetPoint = function(self, ...) rawset(self, "points", { ... }) end
+            fs.SetWidth = function(self, w) rawset(self, "width", w) end
             texts[#texts + 1] = fs
             return fs
         end
         f.SetShown = function(self, on) self.shown = on and true or false end
         f.SetEnabled = function(self, on) self.enabled = on and true or false end
+        f.SetAlpha = function(self, a) self.alpha = a end
         f.SetMotionScriptsWhileDisabled = function(self, on) self.motionWhileDisabled = on end
         f.SetText = function(self, t) rawset(self, "buttonText", t) end
         local setScript = f.SetScript
@@ -4907,16 +5139,16 @@ do
         onPick = pick
         return realSpecBar(parent, x, y, pick, ...)
     end
-    ok, err = pcall(CastAheadOptions.ShowPanel, host, "Defensives")
+    ok, err = pcall(CastAheadOptions.ShowPanel, host, "Features")
     CastAheadWindow.SpecBar = realSpecBar
-    check(ok, "the Defensives page builds headless " .. tostring(err))
+    check(ok, "the Features page builds headless " .. tostring(err))
     do
         local store, reads = CastAheadSaves.Store, 0
         local realEdit = store.EditList
         store.EditList = function(...) reads = reads + 1 return realEdit(...) end
         if type(onPick) == "function" then onPick() end
         store.EditList = realEdit
-        check(type(onPick) == "function" and reads > 0, "picking a spec in the Defensives bar repaints the list")
+        check(type(onPick) == "function" and reads > 0, "picking a spec in the Features bar repaints the list")
     end
     ok, err = pcall(CastAheadOptions.ShowPanel, host, "Report")
     check(ok, "the Report page builds headless " .. tostring(err))
@@ -4924,7 +5156,8 @@ do
     check(not tabs:find("Bursts", 1, true) and not tabs:find("RaidDefensives", 1, true),
         "there are no Bursts and no Raid Defensives settings pages, got " .. tabs)
 
-    local wanted = { Features = true, ["Defensive calls in dungeons"] = true,
+    local wanted = { Features = true, ["Defensive calls: Off"] = true, ["Raid (experimental): Off"] = true,
+        ["Defensive calls in dungeons"] = true, ["Boss calls from DBM / BigWigs"] = true,
         ["Raid (experimental)"] = true, ["Defensive calls in raids"] = true, ["Burst windows"] = true,
         Advanced = true, ["Development mode"] = true }
     local function Labels(from)
@@ -4935,13 +5168,71 @@ do
         end
         return table.concat(seen, " | ")
     end
-    check(Labels(1) == "", "the Defensives page has no defensive calls switch")
+    check(Labels(1) == "Defensive calls in dungeons | Boss calls from DBM / BigWigs | Raid (experimental)"
+        .. " | Defensive calls in raids | Burst windows",
+        "the Features page holds the dungeon section, then the raid section with its switches under the raid switch")
     local before, madeBefore = #texts, #made
     ok, err = pcall(CastAheadOptions.ShowPanel, host, "General")
     check(ok, "the General page builds headless " .. tostring(err))
-    check(Labels(before + 1) == "Features | Defensive calls in dungeons | Raid (experimental)"
-        .. " | Defensive calls in raids | Burst windows | Advanced | Development mode",
-        "General lists the feature switches in their group, the raid ones under the raid switch, then Advanced")
+    check(Labels(before + 1) == "Features | Defensive calls: Off | Raid (experimental): Off | Advanced | Development mode",
+        "General's Features group holds two status rows and no switch, then Advanced")
+    do
+        local boxes, opens, rows = {}, {}, {}
+        for i = madeBefore + 1, #made do
+            local t = made[i].kind == "CheckButton" and rawget(made[i], "text")
+            if t then boxes[rawget(t, "value")] = true end
+            if rawget(made[i], "buttonText") == "Open" then opens[#opens + 1] = made[i] end
+        end
+        for _, key in ipairs({ "saveCalls", "raidMode", "raidSaves", "burstCalls", "bossAdapter" }) do
+            check(not boxes[CastAheadOptions.Switches[key].label], "General has no " .. key .. " checkbox")
+        end
+        for i = before + 1, #texts do
+            local v = rawget(texts[i], "value")
+            if v == "Defensive calls: Off" then rows.def = texts[i] end
+            if v == "Raid (experimental): Off" then rows.raid = texts[i] end
+        end
+        local cases = {
+            { {}, "Defensive calls: Off", "Raid (experimental): Off" },
+            { { saveCalls = true }, "Defensive calls: On", "Raid (experimental): Off" },
+            { { raidSaves = true, burstCalls = true }, "Defensive calls: Off", "Raid (experimental): Off" },
+            { { raidMode = true }, "Defensive calls: Off", "Raid: defensive off, burst off" },
+            { { raidMode = true, raidSaves = true }, "Defensive calls: Off", "Raid: defensive on, burst off" },
+            { { raidMode = true, burstCalls = true, saveCalls = true }, "Defensive calls: On", "Raid: defensive off, burst on" },
+        }
+        for _, case in ipairs(cases) do
+            CastAheadDB = case[1]
+            CastAheadOptions.Refresh()
+            local def, raid = rows.def and rawget(rows.def, "value"), rows.raid and rawget(rows.raid, "value")
+            check(def == case[2] and raid == case[3], "General status rows read " .. case[2] .. " / " .. case[3]
+                .. ", got " .. tostring(def) .. " / " .. tostring(raid))
+        end
+        CastAheadDB = {}
+        CastAheadOptions.Refresh()
+        local realShow, shows = CastAheadOptions.ShowFeatures, 0
+        CastAheadOptions.ShowFeatures = function() shows = shows + 1 end
+        for _, b in ipairs(opens) do b.handlers.OnClick(b) end
+        CastAheadOptions.ShowFeatures = realShow
+        check(#opens == 2 and shows == 2, "General has two Open buttons, each shows the Features page, got "
+            .. #opens .. "/" .. shows)
+    end
+    do
+        local counts, wrong = {}, {}
+        for _, f in ipairs(made) do
+            local t = f.kind == "CheckButton" and rawget(f, "text")
+            local v = t and rawget(t, "value")
+            if v then counts[v] = (counts[v] or 0) + 1 end
+        end
+        for _, key in ipairs({ "saveCalls", "raidMode", "raidSaves", "burstCalls", "bossAdapter" }) do
+            local n = counts[CastAheadOptions.Switches[key].label] or 0
+            if n ~= 1 then wrong[#wrong + 1] = key .. "=" .. n end
+        end
+        check(#wrong == 0, "each feature switch is built once across General and Features, got " .. table.concat(wrong, ","))
+        local tests = 0
+        for i = madeBefore + 1, #made do
+            if rawget(made[i], "buttonText") == "Test" then tests = tests + 1 end
+        end
+        check(tests == 0, "General has no feature Test button, got " .. tests)
+    end
     do
         local shown, found, sliders, dropdowns = {}, {}, 0, 0
         for i = before + 1, #texts do
@@ -4959,55 +5250,58 @@ do
             if page:find(gone, 1, true) then found[#found + 1] = gone end
         end
         check(#found == 0, "General builds no size or position control, found " .. table.concat(found, ","))
-        check(sliders == 2 and dropdowns == 0, "General keeps only the early-warning and burst-soon sliders and no dropdown, got "
+        check(sliders == 1 and dropdowns == 0, "General keeps only the early-warning slider and no dropdown, got "
             .. sliders .. "/" .. dropdowns)
         check(page:find("|Show icons on nameplates|", 1, true) and page:find("|Full labels|", 1, true)
             and page:find("|Show the centre call|", 1, true), "General keeps the nameplate and centre call switches")
-        local heights = {}
+        local heights, centre = {}, nil
         for _, g in ipairs(made) do
             local title = rawget(g, "title")
             local v = title and rawget(title, "value")
             if v == "Nameplate icons" or v == "Centre call" then heights[v] = g.h end
+            if v == "Centre call" then centre = g end
         end
-        check(heights["Nameplate icons"] == 100 and heights["Centre call"] == 70,
+        check(heights["Nameplate icons"] == 100 and centre and centre.stage
+            and heights["Centre call"] == math.max(70, centre.stage.Paint()),
             "General's icon and centre groups shrink to their switches, got "
             .. tostring(heights["Nameplate icons"]) .. "/" .. tostring(heights["Centre call"]))
     end
 
-    local function Frame(label)
+    local function Frame(label, nth)
         for _, f in ipairs(made) do
             local t = rawget(f, "text")
-            if t and rawget(t, "value") == label then return f end
-        end
-    end
-    do
-        local function FeaturesHeight()
-            for _, f in ipairs(made) do
-                local title = rawget(f, "title")
-                if title and rawget(title, "value") == "Features" then return f.h end
+            if t and rawget(t, "value") == label then
+                nth = (nth or 1) - 1
+                if nth == 0 then return f end
             end
         end
-        local raid, raidSaves, bursts = Frame("Raid (experimental)"), Frame("Defensive calls in raids"), Frame("Burst windows")
-        local offHeight = FeaturesHeight()
-        check(raid and raidSaves and bursts,
-            "with the raid switch off its two children are still built")
-        check(raidSaves.enabled == false and bursts.enabled == false and raid.enabled ~= false,
-            "with the raid switch off its two children are disabled")
-        check(raidSaves.text.color == "muted" and bursts.text.color == "muted", "and their labels are greyed")
-        check(raidSaves.motionWhileDisabled == true and bursts.motionWhileDisabled == true,
-            "the children keep their tooltips while disabled")
-        check(offHeight == 230, "the Features group keeps its height with the burst slider, got " .. tostring(offHeight))
-        CastAheadDB = { raidMode = true }
-        CastAheadOptions.ShowPanel(host, "General")
-        check(raidSaves.enabled == true and bursts.enabled == true, "with the raid switch on its two children are enabled")
-        check(raidSaves.text.color ~= "muted" and bursts.text.color ~= "muted", "and their labels are back to normal")
-        check(FeaturesHeight() == offHeight, "the Features group height does not change with the raid switch")
-        CastAheadDB = { raidSaves = true, burstCalls = true }
-        CastAheadOptions.ShowPanel(host, "General")
-        check(raidSaves.enabled == false and bursts.enabled == false,
-            "children switched on stay disabled while the raid switch is off")
-        CastAheadDB = {}
     end
+    ;(function()
+        local raid, raidSaves, bursts = Frame("Raid (experimental)"), Frame("Defensive calls in raids"), Frame("Burst windows")
+        local tests = {}
+        for _, f in ipairs(made) do
+            if rawget(f, "buttonText") == "Test" then tests[#tests + 1] = f end
+        end
+        check(raid and raidSaves and bursts and #tests == 2,
+            "with the raid switch off its two children and both Test buttons are still built")
+        if not (raid and raidSaves and bursts and #tests == 2) then return end
+        CastAheadDB = {}
+        CastAheadOptions.ShowPanel(host, "Features")
+        check(raidSaves.alpha == 0.35 and bursts.alpha == 0.35 and raid.alpha ~= 0.35,
+            "with the raid switch off its two children are dimmed, the raid switch is not")
+        check(raidSaves.enabled ~= false and bursts.enabled ~= false, "and the dimmed children stay enabled")
+        check(tests[1].alpha ~= 0.35 and tests[2].alpha ~= 0.35,
+            "both Test buttons stay bright while their sections are off")
+        CastAheadDB = { raidMode = true }
+        CastAheadOptions.ShowPanel(host, "Features")
+        check(raidSaves.alpha == 1 and bursts.alpha == 1 and tests[2].alpha ~= 0.35,
+            "with the raid switch on its section is not dimmed")
+        CastAheadDB = { raidSaves = true, burstCalls = true }
+        CastAheadOptions.ShowPanel(host, "Features")
+        check(raidSaves.alpha == 0.35 and bursts.alpha == 0.35,
+            "children switched on stay dimmed while the raid switch is off")
+        CastAheadDB = {}
+    end)()
     do
         local realChanged, changed = CastAheadSetup.OutputsChanged, 0
         CastAheadSetup.OutputsChanged = function() changed = changed + 1 end
@@ -5027,6 +5321,119 @@ do
         CastAheadSetup.OutputsChanged = realChanged
         CastAheadDB = {}
     end
+    (function()
+        local COL_W = 250
+        local group, canvas
+        for _, f in ipairs(made) do
+            local title = rawget(f, "title")
+            if title and rawget(title, "value") == "Nameplate icons" then group = f end
+        end
+        check(group and group.stage, "Nameplate icons has a stage")
+        if not (group and group.stage) then return end
+        group.w = COL_W + 10 + 400
+        CastAheadOptions.Refresh()
+        for _, f in ipairs(made) do
+            if f.parent == group and rawget(f, "previewBars") then canvas = f end
+        end
+        check(canvas and #canvas.previewBars == 3 and canvas.shown, "Nameplate icons shows a picture with three preview bars")
+        if not canvas then return end
+        canvas.SetScale = function(self, s) self.scale = s end
+        local need = group.stage.Paint()
+        check(type(need) == "number" and need > 0 and group.h == math.max(100, need),
+            "Nameplate icons grows to what its stage needs, got " .. tostring(group.h) .. "/" .. tostring(need))
+        local function OffLine()
+            for _, fs in ipairs(texts) do
+                if rawget(fs, "value") == "Off - no icons on nameplates" then return fs end
+            end
+        end
+        check(canvas.alpha == 1 and OffLine() and OffLine().shown == false, "the picture is bright with nameplate icons on")
+        local health, colour = canvas.health, nil
+        health.SetDesaturated = function(self, on) self.desat = on end
+        health.IsDesaturated = function(self) return self.desat end
+        health.SetColorTexture = function(_, r, g, b) colour = { r, g, b } end
+        health.desat = false
+        canvas.GetChildren = function() return canvas.plate end
+        canvas.plate.GetRegions = function() return health end
+        local icon = canvas.previewBars[1].icon
+        icon.SetDesaturated = function(self, on) self.desat = on end
+        icon.IsDesaturated = function(self) return self.desat end
+        icon.desat = false
+        canvas.previewBars[1].GetRegions = function() return icon end
+        local savedGetChildren = canvas.GetChildren
+        canvas.GetChildren = function() return canvas.plate, unpack(canvas.previewBars) end
+        local name = canvas.plate.fontStrings[1]
+        canvas.plate.alpha, name.alpha, colour = 1, 1, nil
+        CastAheadDB.nameplates = false
+        CastAheadOptions.Refresh()
+        check(canvas.alpha == 1 and canvas.plate.alpha == 1 and name.alpha == 1 and rawget(name, "value") == "Training Dummy"
+            and canvas.shown and OffLine() and OffLine().shown == true,
+            "with nameplate icons off the plate and its name stay lit and the off line says so")
+        check(health.desat == false and colour and colour[1] > colour[2],
+            "with nameplate icons off the plate keeps its red fill and saturation")
+        check(canvas.previewBars[1].alpha == 0.35 and canvas.previewBars[3].alpha == 0.35 and icon.desat == true,
+            "with nameplate icons off only the icons dim and grey")
+        CastAheadDB.nameplates = nil
+        CastAheadOptions.Refresh()
+        check(health.desat == false and colour and colour[1] > colour[2] and canvas.previewBars[1].alpha == 1
+            and icon.desat == false, "with nameplate icons on again the icons get back their alpha and colour")
+        canvas.GetChildren, canvas.plate.GetRegions, canvas.previewBars[1].GetRegions = savedGetChildren, nil, nil
+        CastAheadDB.fullLabels = true
+        CastAheadOptions.Refresh()
+        check(canvas.previewBars[3].labelValue == "TANKBUSTER", "Full labels shows TANKBUSTER in the picture, got "
+            .. tostring(canvas.previewBars[3].labelValue))
+        CastAheadDB.fullLabels = nil
+        local full = Frame("Full labels")
+        full.GetChecked = function() return true end
+        full.handlers.OnClick(full)
+        check(canvas.previewBars[3].labelValue == "TANKBUSTER", "ticking Full labels repaints the picture at once")
+        CastAheadDB.fullLabels = nil
+        for _, width in ipairs({ COL_W + 10 + 300, COL_W + 10 + 320, COL_W + 10 + 1500 }) do
+            group.w = width
+            CastAheadOptions.Refresh()
+            check(canvas.shown and canvas.scale and canvas.scale > 0 and canvas.scale <= 1,
+                "the picture fits a stage of " .. (width - COL_W - 10) .. ", scale " .. tostring(canvas.scale))
+        end
+        group.w = COL_W + 10 + 299
+        CastAheadOptions.Refresh()
+        check(not canvas.shown and group.h == 100, "a stage narrower than 300 hides the picture and the group shrinks back")
+        local realLock = InCombatLockdown
+        InCombatLockdown = function() return true end
+        group.w = COL_W + 10 + 400
+        local okShow = pcall(CastAheadOptions.ShowPanel, host, "General")
+        local okRefresh = pcall(CastAheadOptions.Refresh)
+        check(okShow and okRefresh, "the picture repaints in combat without an error")
+        InCombatLockdown = realLock
+        -- Later cases count every shown bar, so the picture leaves none behind.
+        group.w = COL_W
+        CastAheadOptions.Refresh()
+        for i = 1, #canvas.previewBars do canvas.previewBars[i]:Hide() end
+    end)();
+    (function()
+        local COL_W = 250
+        local panel, relayouts, sets = CreateFrame("Frame"), 0, 0
+        panel.groups = {}
+        panel.Relayout = function() relayouts = relayouts + 1 end
+        local group = CastAheadOptions.BuildGroup(panel, "Stage test", 196)
+        local setHeight = group.SetHeight
+        group.SetHeight = function(self, h) sets = sets + 1 setHeight(self, h) end
+        local stage = CastAheadOptions.BuildStage(panel, group)
+        local control = CreateFrame("Frame", nil, panel)
+        local note = CastAheadOptions.Note(panel, control, "Stage test sentence")
+        check(note and rawget(note, "value") == "Stage test sentence" and note.points
+            and note.points[1] == "TOPLEFT" and note.points[2] == control and note.points[3] == "BOTTOMLEFT",
+            "a note sits under its control")
+        check(note and note.width == COL_W - 20, "a note wraps in the control column, got " .. tostring(note and note.width))
+        local need
+        for _, h in ipairs({ 196, 262, 196 }) do
+            sets, relayouts = 0, 0
+            need = stage.Fit(h)
+            check(group.h == math.max(h, need), "the group fits controls of " .. h .. ", got " .. tostring(group.h))
+            check(sets <= 1 and relayouts <= 1, "fitting " .. h .. " sets the height once, got " .. sets .. "/" .. relayouts)
+            sets, relayouts = 0, 0
+            stage.Paint()
+            check(sets == 0 and relayouts == 0, "a repaint at the same size changes nothing, got " .. sets .. "/" .. relayouts)
+        end
+    end)();
     (function()
         local setup, move
         for _, b in ipairs(made) do
@@ -5060,20 +5467,384 @@ do
         check(hint ~= nil, "General says next to the button that setup is best done near training dummies")
         CastAheadSetup.Enter, InCombatLockdown = realEnter, realLock
     end)()
-    local function OffNote()
+    local function HasOffNote()
         for _, fs in ipairs(texts) do
             local v = rawget(fs, "value")
-            if type(v) == "string" and v:find("turn them on in General - Features", 1, true) then return fs end
+            if type(v) == "string" and v:find("turn them on in General - Features", 1, true) then return true end
         end
     end
-    for _, case in ipairs({ { {}, false, "all off" }, { { saveCalls = true }, true, "dungeons" },
-        { { raidMode = true, raidSaves = true }, true, "raids" }, { { raidSaves = true }, false, "raids without the raid switch" } }) do
-        CastAheadDB = case[1]
-        CastAheadOptions.ShowPanel(host, "Defensives")
-        local boss, note = Frame("Boss calls from DBM / BigWigs"), OffNote()
-        check(boss and boss.shown == case[2], "Defensives boss switch visibility, " .. case[3])
-        check(note and note.shown == not case[2], "Defensives off note visibility, " .. case[3])
+    local function ListGroup()
+        for _, f in ipairs(made) do
+            local title = rawget(f, "title")
+            if title and rawget(title, "value") == "Defensive" then return f end
+        end
     end
+    for _, case in ipairs({ { {}, 0.35, "all off" }, { { saveCalls = true }, 1, "dungeons" },
+        { { raidMode = true, raidSaves = true }, 1, "raids" }, { { raidSaves = true }, 0.35, "raids without the raid switch" } }) do
+        CastAheadDB = case[1]
+        CastAheadOptions.ShowPanel(host, "Features")
+        local boss, raid = Frame("Boss calls from DBM / BigWigs"), Frame("Defensive calls in raids")
+        check(boss and boss.shown == true, "Features boss switch is shown, " .. case[3])
+        check(not HasOffNote(), "Features has no off note, " .. case[3])
+        check(raid and raid.shown == true, "Features raid defensive switch is shown, " .. case[3])
+        check(ListGroup() and ListGroup().alpha == case[2] and boss.alpha == case[2],
+            "the shared defensive controls dim only while no defensive calls are on, " .. case[3])
+    end
+    CastAheadDB = {};
+
+    (function()
+        local COL_W, WIDE = 250, 250 + 10 + 400
+        local function Group(title)
+            for _, f in ipairs(made) do
+                local t = rawget(f, "title")
+                if t and rawget(t, "value") == title then return f end
+            end
+        end
+        local function Text(value)
+            for _, fs in ipairs(texts) do
+                if rawget(fs, "value") == value then return fs end
+            end
+        end
+        local function Canvases(group, field)
+            local list = {}
+            for _, f in ipairs(made) do
+                if f.parent == group and rawget(f, field) then list[#list + 1] = f end
+            end
+            return list
+        end
+        CastAheadDB = {}
+        CastAheadOptions.ShowPanel(host, "General")
+        local okDev, errDev = pcall(CastAheadOptions.ShowPanel, host, "Development")
+        check(okDev, "the Development page builds headless " .. tostring(errDev))
+        local okSounds, errSounds = pcall(CastAheadOptions.ShowPanel, host, "Sounds")
+        check(okSounds, "the Sounds page builds headless " .. tostring(errSounds))
+        for _, s in ipairs({ "Which game volume slider controls the calls.",
+            "Uses the game's speech instead of the recorded voice." }) do
+            local found
+            -- The Sounds page may have been built by an earlier case, outside `texts`.
+            for _, f in ipairs(allFrames) do
+                for _, fs in ipairs(rawget(f, "fontStrings") or {}) do
+                    if rawget(fs, "value") == s then found = fs end
+                end
+            end
+            check(found, "the Sounds page says: " .. s)
+        end
+        for _, s in ipairs({ "Plays the call sound. Off silences the addon.", "Speaks the call out loud.",
+            "Puts the predictions on the game's encounter timeline.", "Turns raid calls on. Experimental.",
+            "Adds the Development page. Changes no calls.",
+            "Copy the files off and clear the journal here when it asks.",
+            "A panel to mark a wrong call while recording.",
+            "Calls a defensive for a dangerous boss debuff on you.",
+            "Healers get their own phases for group cooldowns. Other bosses: no call. Burst soon: timed phases only.",
+            "Puts every setting back to a new install. Recorded data stays.",
+            "Adds calls for boss abilities DBM or BigWigs announce.",
+            "Boss mods, early warning and buttons also apply to raid defensive calls." }) do
+            check(Text(s) ~= nil, "a visible sentence says: " .. s)
+        end
+        for _, chain in ipairs({
+            { "Sound", "Plays the call sound. Off silences the addon.", "Voice" },
+            { "Feed the Blizzard timeline", "Puts the predictions on the game's encounter timeline.", "Show in BigWigs bars" },
+            { "Raid (experimental)", "Turns raid calls on. Experimental.", "Defensive calls in raids" },
+            { "Defensive calls in raids", "Calls a defensive for a dangerous boss debuff on you.", "Burst windows" },
+            { "Record everything", "Copy the files off and clear the journal here when it asks.", "Mark panel" },
+        }) do
+            local control, note, nextOne = Frame(chain[1]), Text(chain[2]), Frame(chain[3])
+            check(control and note and note.points and note.points[2] == control,
+                "the note sits under " .. chain[1])
+            check(nextOne and note and nextOne.points and nextOne.points[2] == note,
+                chain[3] .. " sits under the note of " .. chain[1])
+        end
+        local groups = {}
+        for _, title in ipairs({ "What to call out", "Sound", "Centre call" }) do
+            groups[title] = Group(title)
+            check(groups[title] and groups[title].stage, title .. " has a stage")
+            if not (groups[title] and groups[title].stage) then return end
+            groups[title].w = WIDE
+        end
+        -- A Features section has its switch for a title; the switch is anchored to the section.
+        for name, header in pairs({ Dungeon = "Defensive calls in dungeons", Raid = "Raid (experimental)" }) do
+            local switch = Frame(header)
+            groups[name] = switch and switch.points and switch.points[2]
+            check(groups[name] and groups[name].stage, "the Features " .. name .. " section has a stage")
+            if not (groups[name] and groups[name].stage) then return end
+            groups[name].w = WIDE
+        end
+        CastAheadOptions.ShowPanel(host, "Features")
+        CastAheadOptions.ShowPanel(host, "General")
+
+        local function Off(text) local fs = Text(text) return fs and fs.shown == true end
+
+        local centre = Canvases(groups["Centre call"], "block")[1]
+        check(centre and centre.shown and centre.alpha == 1 and centre.block.lines[1].shown
+            and tostring(centre.block.lines[1].timeValue):match("^Kick") ~= nil,
+            "Centre call shows a kick call picture")
+        CastAheadDB.centerText = false
+        CastAheadOptions.Refresh()
+        check(centre and centre.alpha == 0.35 and Off("Off - no call in the middle of the screen"),
+            "with the centre call off its picture dims and says so")
+        CastAheadDB.centerText = nil
+
+        local filter = Canvases(groups["What to call out"], "bars")[1]
+        local realSpec, realRole = GetSpecialization, GetSpecializationRole
+        GetSpecialization, GetSpecializationRole = function() return 1 end, function() return "DAMAGER" end
+        -- A frontal starred unimportant, for the filter to drop.
+        CastAheadData[9101] = { name = "Filter fixture", { spell = 9101, prio = "FRONTAL", first = 10, cd = { 20 } } }
+        CastAheadDB = { spellImportant = { [9101] = false } }
+        CastAheadCore.Reapply()
+        CastAheadOptions.Refresh()
+        local icons = filter and filter.bars
+        check(icons and icons.KICK.alpha == 1 and icons.OTHER.shown and icons.OTHER.alpha == 0.35
+            and icons.TANK.alpha == 0.35 and filter.alpha == 1,
+            "by default a damage dealer sees the kick bright, the dropped cast and the buster dimmed")
+        check(icons and icons.TANK.labelValue == "BUSTER" and icons.KICK.previewBars == nil,
+            "the filter picture paints its samples with the nameplate bar code")
+        CastAheadDB.fullLabels = true
+        CastAheadOptions.Refresh()
+        check(icons and icons.TANK.labelValue == "TANKBUSTER", "Full labels reach the filter picture, got "
+            .. tostring(icons and icons.TANK.labelValue))
+        CastAheadDB.fullLabels = nil
+        do
+            local realFrame, realRefresh, windowShown, refreshed = CastAheadWindow.Frame, CastAheadOptions.Refresh, true, 0
+            CastAheadWindow.Frame = function() return { IsShown = function() return windowShown end } end
+            CastAheadOptions.Refresh = function(...) refreshed = refreshed + 1 return realRefresh(...) end
+            GetSpecializationRole = function() return "TANK" end
+            fire("PLAYER_SPECIALIZATION_CHANGED", "player")
+            check(icons and icons.TANK.alpha == 1, "a spec change to a tank repaints the filter picture, the buster bright")
+            GetSpecializationRole = function() return "DAMAGER" end
+            fire("PLAYER_SPECIALIZATION_CHANGED", "player")
+            check(icons and icons.TANK.alpha == 0.35, "a spec change back to a damage dealer dims the buster again")
+            windowShown, refreshed = false, 0
+            fire("SPELLS_CHANGED")
+            check(refreshed == 0, "a spells change with the window closed does not repaint the settings")
+            windowShown = true
+            fire("SPELLS_CHANGED")
+            check(refreshed == 1, "a spells change with the window open repaints the settings once, got " .. refreshed)
+            CastAheadWindow.Frame, CastAheadOptions.Refresh = realFrame, realRefresh
+            local realData = CastAheadData
+            CastAheadData = { [9107] = { name = "Before", { spell = 9107, prio = "KICK", first = 10, cd = { 20 } } } }
+            CastAheadCore.Reapply()
+            local before = CastAheadCore.SampleRowWhere("KICK", true)
+            CastAheadData = { [9108] = { name = "After", { spell = 9108, prio = "KICK", first = 10, cd = { 20 } } } }
+            CastAheadOptions.SavesSwitchChanged()
+            local after = CastAheadCore.SampleRowWhere("KICK", true)
+            check(before and before.spell == 9107 and after and after.spell == 9108,
+                "the defensive calls switch drops the cached filter samples")
+            CastAheadData = realData
+            CastAheadCore.Reapply()
+        end
+        local kick, other =CastAheadCore.SampleRowWhere("KICK", true), CastAheadCore.SampleRowWhere(nil, false)
+        local otherKey = other and CastAheadMatch.Advice(other).key
+        check(kick and kick.spell and CastAheadMatch.Important(kick) and other and other.spell
+            and not CastAheadMatch.Important(other) and otherKey ~= "KICK" and otherKey ~= "TANK" and otherKey ~= "BUSTER",
+            "the filter samples are a real important kick and a real dropped cast of another call")
+        check(icons and icons.OTHER.labelValue == CastAheadMatch.ADVICE[otherKey].label,
+            "the dropped cast is labelled with its own call, got " .. tostring(icons and icons.OTHER.labelValue))
+        GetSpecializationRole = function() return "TANK" end
+        CastAheadOptions.Refresh()
+        check(icons and icons.KICK.alpha == 1 and icons.OTHER.alpha == 0.35 and icons.TANK.alpha == 1,
+            "a tank with important only on sees only the dropped cast dimmed")
+        CastAheadDB.importantOnly = false
+        CastAheadOptions.Refresh()
+        check(icons and icons.KICK.alpha == 1 and icons.OTHER.alpha == 1 and icons.TANK.alpha == 1,
+            "a tank with important only off sees nothing dimmed")
+        CastAheadDB.importantOnly = nil
+        GetSpecializationRole = function() return "DAMAGER" end
+        CastAheadDB.importantOnly, CastAheadDB.roleFilter = false, false
+        CastAheadOptions.Refresh()
+        check(icons and icons.OTHER.alpha == 1 and icons.TANK.alpha == 1 and filter.alpha == 1,
+            "with both filters off nothing in the filter picture is dimmed")
+        CastAheadDB.importantOnly, CastAheadDB.roleFilter = false, nil
+        GetSpecialization, GetSpecializationRole = function() return nil end, function() return nil end
+        local okRole = pcall(CastAheadOptions.Refresh)
+        check(okRole and icons and icons.KICK.alpha == 1 and icons.OTHER.alpha == 1 and icons.TANK.alpha == 1,
+            "without a specialization role nothing in the filter picture is dimmed")
+        local realData = CastAheadData
+        CastAheadData = { [9102] = { name = "Only important", { spell = 9102, prio = "KICK", first = 10, cd = { 20 } } } }
+        CastAheadDB = {}
+        CastAheadCore.Reapply()
+        local okNone = pcall(CastAheadOptions.Refresh)
+        check(okNone and icons and not icons.OTHER.shown and icons.KICK.shown and icons.TANK.shown,
+            "with no cast the filter drops, the picture shows only the kick and the buster")
+        CastAheadData = { [9103] = { name = "Gated first",
+            { spell = 9103, prio = "PURGE", first = 10, cd = { 20 } },
+            { spell = 9104, prio = "FRONTAL", first = 10, cd = { 20 } },
+            { spell = 9105, prio = "KICK", first = 10, cd = { 20 } },
+            { spell = 9106, prio = "TANK", first = 10, cd = { 20 } } } }
+        CastAheadDB = { spellImportant = { [9103] = false, [9104] = false } }
+        local realCan = CastAheadMatch.PlayerCanHandle
+        CastAheadMatch.PlayerCanHandle = function(category) return category ~= "PURGE" end
+        GetSpecialization, GetSpecializationRole = function() return 1 end, function() return "TANK" end
+        CastAheadCore.Reapply()
+        CastAheadOptions.Refresh()
+        local picked = CastAheadCore.SampleRowWhere(nil, false)
+        check(picked and picked.spell == 9104, "the dropped sample skips a cast this character cannot act on, got "
+            .. tostring(picked and picked.spell))
+        check(icons and icons.KICK.alpha == 1 and icons.OTHER.alpha == 0.35 and icons.TANK.alpha == 1,
+            "a tank with important only on sees only the dropped cast dimmed, never the buster")
+        CastAheadDB.importantOnly = false
+        CastAheadOptions.Refresh()
+        check(icons and icons.KICK.alpha == 1 and icons.OTHER.alpha == 1 and icons.TANK.alpha == 1,
+            "a tank with important only off sees nothing dimmed in the gated data")
+        CastAheadMatch.PlayerCanHandle = realCan
+        CastAheadData = realData
+        GetSpecialization, GetSpecializationRole = realSpec, realRole
+        CastAheadDB = {}
+        CastAheadData[9101] = nil
+        CastAheadCore.Reapply()
+
+        local lead = Canvases(groups["What to call out"], "tick")[1]
+        if lead then lead.tick.SetPoint = function(self, _, _, _, x) self.x = x end end
+        CastAheadOptions.Refresh()
+        check(lead and lead.alpha == 0.35 and Off("Off - no early warning"), "early warning at 0 dims its strip and says so")
+        CastAheadDB.leadSeconds = 5
+        CastAheadOptions.Refresh()
+        check(lead and lead.alpha == 1 and rawget(lead.caption, "value") == "warning 5s before"
+            and lead.tick.x and lead.tick.x > 106 and lead.tick.x < 107,
+            "early warning at 5 puts the tick 5s of 15 before the cast, got " .. tostring(lead and lead.tick.x))
+        CastAheadDB = {}
+
+        local focus = Canvases(groups["Sound"], "kicks")[1]
+        check(focus and focus.focus and focus.kicks[1].shown and focus.kicks[2].shown and focus.alpha == 1
+            and focus.kicks[1].labelValue == "KICK" and focus.speakers[1].shown and focus.speakers[2].shown,
+            "kick voice for every mob: both plates carry KICK and a speaker")
+        CastAheadDB.kickFocusOnly = true
+        CastAheadOptions.Refresh()
+        check(focus and focus.kicks[1].shown and focus.kicks[2].shown and focus.speakers[1].shown
+            and not focus.speakers[2].shown and focus.alpha == 1,
+            "kick voice for my focus: both plates keep KICK, only the focus one keeps its speaker")
+        CastAheadDB = {}
+        check(groups["Sound"].handlers.OnSizeChanged == nil, "the Sound group leaves its height to the stage")
+
+        local saves, burst = Canvases(groups.Dungeon, "block")[1], Canvases(groups.Raid, "block")[1]
+        check(saves and saves.alpha == 0.35 and Off("Off - no defensive calls"), "defensive calls off dim their picture")
+        CastAheadDB = { saveCalls = true, raidMode = true, burstCalls = true, burstLeadSeconds = 4 }
+        CastAheadOptions.Refresh()
+        check(saves and saves.alpha == 1 and tostring(saves.block.lines[1].timeValue):match("^Defensive") ~= nil,
+            "defensive calls on show a defensive call picture")
+        check(burst and burst.alpha == 1 and burst.caption.shown and rawget(burst.caption, "value") == "burst soon 4s before",
+            "burst calls on show the burst picture with its burst soon lead")
+        CastAheadDB.burstLeadSeconds = nil
+        CastAheadOptions.Refresh()
+        check(burst and burst.alpha == 1 and not burst.caption.shown, "burst soon at 0 leaves only the burst call")
+        CastAheadDB.raidMode = nil
+        CastAheadOptions.Refresh()
+        check(burst and burst.alpha == 0.35 and Off("Off - no burst calls"), "burst calls off dim their picture")
+        CastAheadDB = { saveCalls = true, raidMode = true, burstCalls = true }
+        for _, c in ipairs({ saves, burst, centre }) do
+            if c then c.SetScale = function(self, s) self.scale = s end end
+        end
+        CastAheadOptions.Refresh()
+        for name, c in pairs({ defensive = saves, burst = burst }) do
+            local line = c and c.scale and c.scale * c.block.lines[1].h
+            check(line and math.abs(line - 30) < 0.01, "the Features " .. name .. " picture has a 30 tall call line, got "
+                .. tostring(line))
+        end
+        check(centre and centre.scale == 1, "the Centre call picture keeps its full size, got "
+            .. tostring(centre and centre.scale))
+        do
+            local note, hidden = Text("Adds calls for boss abilities DBM or BigWigs announce."), false
+            local realShown, realHide = note.SetShown, note.Hide
+            note.SetShown = function(self, on) if not on then hidden = true end realShown(self, on) end
+            note.Hide = function() hidden = true end
+            groups.Dungeon.w = COL_W
+            CastAheadOptions.Refresh()
+            check(saves and not saves.shown, "a narrow Features section hides its picture")
+            check(not hidden and note.points[2] == Frame("Boss calls from DBM / BigWigs"),
+                "a narrow Features section keeps its notes under their controls")
+            note.SetShown, note.Hide = realShown, realHide
+            groups.Dungeon.w = WIDE
+        end
+        CastAheadDB = {}
+
+        local plays, previews = {}, {}
+        for _, b in ipairs(made) do
+            if rawget(b, "buttonText") == "Play" then plays[#plays + 1] = b end
+        end
+        local realPreview, realMedia = CastAheadCore.PreviewSound, CastAheadCore.PreviewMedia
+        CastAheadCore.PreviewSound = function(advice, _, voice) previews[#previews + 1] = { advice, voice } end
+        CastAheadCore.PreviewMedia = function(name, advice) previews[#previews + 1] = { advice, "media", name } end
+        if plays[1] then plays[1].handlers.OnClick(plays[1]) end
+        check(#plays == 2 and #previews == 1 and previews[1][1] == CastAheadMatch.ADVICE.KICK and previews[1][2] == true,
+            "Sound's Play plays the kick call once, spoken while the voice is on")
+        CastAheadDB.voice = false
+        if plays[1] then plays[1].handlers.OnClick(plays[1]) end
+        check(previews[2] and previews[2][2] == false, "Sound's Play skips the voice while the voice is off")
+        CastAheadDB.voice = nil
+        if plays[2] then plays[2].handlers.OnClick(plays[2]) end
+        check(previews[3] and previews[3][1] == CastAheadMatch.ADVICE.KICK and previews[3][2] == "media"
+            and previews[3][3] == nil, "Voice's Play speaks the kick call")
+        CastAheadCore.PreviewSound, CastAheadCore.PreviewMedia = realPreview, realMedia
+
+        local what = groups["What to call out"]
+        local line = Text("Puts the predictions on the game's encounter timeline.")
+        local realHeight = line.GetStringHeight
+        line.GetStringHeight = function() return 400 end
+        CastAheadOptions.Refresh()
+        check(what.h > 400, "What to call out keeps the height its stage needs after a refresh, got " .. tostring(what.h))
+        line.GetStringHeight = realHeight
+
+        CastAheadOptions.ShowPanel(host, "Features")
+        local defs = groups.Dungeon
+        local status
+        for _, fs in ipairs(texts) do
+            local v = rawget(fs, "value")
+            if type(v) == "string" and v:find("^|cffaaaaaa") and CastAheadBossAdapter
+                and v:find(CastAheadBossAdapter.Status(), 1, true) then status = fs end
+        end
+        if status then status.SetAlpha = function(self, a) self.alpha = a end end
+        local early = Canvases(defs, "tick")[1]
+        CastAheadDB = { saveCalls = true, saveLeadSeconds = 3 }
+        CastAheadOptions.ShowPanel(host, "Features")
+        check(status and status.points and status.points[2] == Text("Boss mods, early warning and buttons also apply to raid defensive calls."),
+            "the boss-mod status line sits under the shared-controls note in the control column")
+        check(early and early.alpha == 1 and rawget(early.caption, "value") == "warning 3s before",
+            "defensive early warning shows its strip")
+        CastAheadDB = { saveLeadSeconds = 3 }
+        CastAheadOptions.ShowPanel(host, "Features")
+        check(early and early.alpha == 0.35 and status and status.alpha == 0.35,
+            "with defensive calls off the strip and the boss-mod line dim")
+        check(Off("Off - defensive calls are off"), "the strip says defensive calls are off while its slider is set")
+        CastAheadDB = { saveCalls = true }
+        CastAheadOptions.ShowPanel(host, "Features")
+        check(Off("Off - no early warning") and not Off("Off - defensive calls are off"),
+            "with calls on and the slider at 0 the strip says there is no early warning")
+        do
+            local realFit, fitted = defs.stage.Fit, {}
+            defs.stage.Fit = function(h)
+                local need = realFit(h)
+                fitted.h, fitted.need = h, need
+                return need
+            end
+            local content = {}
+            for _, raid in ipairs({ true, false }) do
+                CastAheadDB = { saveCalls = true, raidMode = raid or nil }
+                CastAheadOptions.ShowPanel(host, "Features")
+                content[raid] = fitted.h
+                check(fitted.h and defs.h == math.max(fitted.h, fitted.need),
+                    "the dungeon section is as tall as its content or its stage, raid " .. tostring(raid))
+            end
+            check(content[true] and content[true] == content[false],
+                "the dungeon section height does not change with the raid switch, got "
+                .. tostring(content[true]) .. " and " .. tostring(content[false]))
+            defs.stage.Fit = realFit
+        end
+
+        CastAheadDB = {}
+        local pictures = {}
+        for _, field in ipairs({ "block", "bars", "tick", "kicks" }) do
+            for _, g in pairs(groups) do
+                for _, c in ipairs(Canvases(g, field)) do pictures[c] = true end
+            end
+        end
+        for _, g in pairs(groups) do g.w = COL_W end
+        CastAheadOptions.Refresh()
+        -- Later cases count every shown frame, so the pictures leave none behind.
+        for _, f in ipairs(made) do
+            local up = f
+            while up and not pictures[up] do up = rawget(up, "parent") end
+            if up then f.shown = false end
+        end
+    end)();
 
     CastAheadDB = {}
     CastAheadOptions.SetSwitch("centerText", false)
@@ -5191,13 +5962,14 @@ do
     CastAheadDB.raidMode, CastAheadDB.burstCalls = true, true
     CastAheadUI.ShowTab("RaidGuide")
     check(CastAheadWindow.Current() == "RaidGuide", "burst windows switched on show the Raid Guide")
-    CastAheadDB.burstCalls = nil
+    CastAheadDB.raidMode, CastAheadDB.burstCalls = nil, nil
     CastAheadUI.RefreshTabs()
     check(CastAheadWindow.Current() == "General", "the raid features switched off while the Raid Guide is open show General")
     do
         local W = CastAheadWindow
         local function Shown(name) return select(2, W.Page(name)) end
-        check(W.Page("Defensives") == "Settings", "Defensives sits in the Settings group")
+        check(W.Page("Features") == "Settings" and W.Page("Defensives") == nil,
+            "Features sits in the Settings group and there is no Defensives page")
         check(W.Page("RaidGuide") == "Raid" and W.Page("RaidSaves") == "Raid", "Guide and Saves sit in the Raid group")
         check(W.Page("Bursts") == nil and W.Page("RaidDefensives") == nil, "there is no Bursts or Raid Defensives page")
         local hasExperimental
@@ -5207,27 +5979,22 @@ do
         check(not hasExperimental, "there is no Experimental group")
         CastAheadDB.saveCalls, CastAheadDB.burstCalls, CastAheadDB.raidSaves = nil, nil, nil
         CastAheadUI.RefreshTabs()
-        check(Shown("Defensives") == false, "Defensives is hidden while dungeon and raid calls are off")
+        check(Shown("Features") == true, "Features is shown while every feature is off")
         check(Shown("RaidGuide") == false and Shown("RaidSaves") == false, "the Raid group is hidden while its features are off")
         check(Shown("Guide") == true, "the dungeon Guide stays shown with dungeon calls off")
         CastAheadDB.saveCalls = true
         CastAheadUI.RefreshTabs()
-        check(Shown("Defensives") == true, "Defensives is shown while dungeon calls are on")
-        CastAheadUI.ShowTab("Defensives")
+        CastAheadUI.ShowTab("Features")
         CastAheadDB.saveCalls = nil
         CastAheadUI.RefreshTabs()
-        check(CastAheadWindow.Current() == "General", "calls switched off while Defensives is open show General")
+        check(CastAheadWindow.Current() == "Features", "calls switched off while Features is open keep Features")
         CastAheadDB.raidMode, CastAheadDB.raidSaves, CastAheadDB.burstCalls = nil, true, true
         CastAheadUI.RefreshTabs()
-        check(Shown("RaidGuide") == false and Shown("Defensives") == false,
-            "the raid switch off hides the Raid group and the raid half of Defensives, whatever its children hold")
-        CastAheadDB.raidMode, CastAheadDB.burstCalls = true, nil
+        check(Shown("RaidGuide") == false and Shown("RaidSaves") == false,
+            "raid children on without the raid switch leave the Raid group hidden")
+        CastAheadDB.raidMode, CastAheadDB.raidSaves, CastAheadDB.burstCalls = true, nil, nil
         CastAheadUI.RefreshTabs()
-        check(Shown("RaidGuide") and Shown("RaidSaves") and Shown("Defensives"),
-            "raid defensive calls on show the Raid group and Defensives")
-        CastAheadDB.raidSaves, CastAheadDB.burstCalls = nil, true
-        CastAheadUI.RefreshTabs()
-        check(Shown("RaidGuide") and not Shown("Defensives"), "burst windows alone show the Raid group, not Defensives")
+        check(Shown("RaidGuide") and Shown("RaidSaves"), "the raid switch alone shows the Raid group")
         local labels, raw = 0, 0
         for _, t in ipairs(buttonTexts) do
             if t == "Guide" then labels = labels + 1 end
@@ -5239,6 +6006,14 @@ do
         CastAhead_Toggle()
         check(CastAheadWindow.Current() == "RaidGuide", "a page saved as Bursts by an older version opens the Raid Guide")
         CastAhead_Toggle()
+        CastAheadDB.window.page = "Defensives"
+        CastAhead_Toggle()
+        check(CastAheadWindow.Current() == "Features", "a page saved as Defensives by an older version opens Features")
+        CastAhead_Toggle()
+        CastAheadUI.ShowTab("Sounds")
+        CastAheadOptions.ShowFeatures()
+        check(f:IsShown() and CastAheadWindow.Current() == "Features", "ShowFeatures opens the Features page")
+        f:Hide()
         CastAheadDB.raidMode, CastAheadDB.burstCalls = nil, nil
         CastAheadUI.RefreshTabs()
     end
@@ -5265,6 +6040,199 @@ do
         f:Hide()
         CastAheadDB.saveCalls = nil
         CastAheadWindow.SetFooter, GetInstanceInfo = savedFooter, savedInfo
+    end
+
+    do
+        local savedFooter, savedDB, footer = CastAheadWindow.SetFooter, CastAheadDB, nil
+        local realLock = InCombatLockdown
+        InCombatLockdown = function() return false end
+        CastAheadWindow.SetFooter = function(text) footer = text end
+        local function Prep()
+            for _, frame in ipairs(allFrames) do
+                frame.IsVisible = function(self) return self.shown end
+                frame.SetAlpha = function(self, a) self.alpha = a end
+            end
+        end
+        local function Turn(label)
+            for _, frame in ipairs(allFrames) do
+                if frame.kind == "Button" and rawget(frame, "buttonText") == label and frame.parent
+                    and frame.parent.parent and frame.parent.parent.shown then
+                    return frame
+                end
+            end
+        end
+        local function AnyText(value)
+            for _, frame in ipairs(allFrames) do
+                for _, fs in ipairs(frame.fontStrings or {}) do
+                    if fs.value == value then return true end
+                end
+            end
+            return false
+        end
+        local function Has(frame, text)
+            for _, fs in ipairs(frame.fontStrings or {}) do
+                if fs.value == text then return true end
+            end
+            return false
+        end
+        local function Rows(host)
+            for _, frame in ipairs(allFrames) do
+                if frame.kind == "Frame" and frame.parent and frame.parent.kind == "ScrollFrame" and frame.parent.parent == host then
+                    return frame
+                end
+            end
+        end
+        local function Case(page, label, key, offText, db, general)
+            CastAheadDB = db
+            CastAheadUI.RefreshTabs()
+            CastAheadWindow.Show(page)
+            Prep()
+            CastAheadUI.RefreshSaves()
+            local button = Turn(label)
+            check(button ~= nil, page .. " has a button labelled " .. label)
+            if not button then return end
+            local banner, rows = button.parent, Rows(button.parent.parent)
+            check(banner.shown and Has(banner, offText), page .. " banner reads " .. offText)
+            check(button.shown, page .. " button is shown while calls are off")
+            for _, frame in ipairs(allFrames) do
+                if frame.kind == "CheckButton" and frame.parent == banner then
+                    check(false, page .. " banner has no checkbox")
+                end
+            end
+            check(rows and rows.alpha == 0.35, page .. " rows are dimmed while calls are off, got " .. tostring(rows and rows.alpha))
+            check(footer ~= nil and not footer:find("General - Features", 1, true),
+                page .. " footer does not send the user to General, got " .. tostring(footer))
+            InCombatLockdown = function() return true end
+            button.handlers.OnClick(button)
+            InCombatLockdown = function() return false end
+            check(CastAheadDB[key] == true, page .. " button writes " .. key)
+            check(banner.shown and Has(banner, "Defensive calls are on."), page .. " banner reads on after the click")
+            check(not button.shown, page .. " button hides after the click")
+            check(rows.alpha == 1, page .. " rows are not dimmed after the click")
+            check(AnyText(general), page .. " click shows '" .. general .. "' on General")
+            f:Hide()
+            button.parent.parent.handlers.OnShow(button.parent.parent)
+            CastAheadWindow.Show(page)
+            check(not banner.shown, page .. " banner is gone the next time the page is shown")
+            CastAheadDB[key] = nil
+            f:Hide()
+        end
+        Case("Saves", "Turn on defensive calls", "saveCalls", "Defensive calls are off.", {}, "Defensive calls: On")
+        Case("RaidSaves", "Turn on raid defensive calls", "raidSaves", "Raid defensive calls are off.", { raidMode = true },
+            "Raid: defensive on, burst off")
+        ;(function()
+        local function GuideCase(page, label, db, offText)
+            CastAheadDB = db
+            CastAheadUI.RefreshTabs()
+            CastAheadWindow.Show(page)
+            Prep()
+            CastAheadUI.RefreshSaves()
+            local button = Turn(label)
+            check(button ~= nil, page .. " shows a banner button labelled " .. label)
+            if not button then return end
+            check(button.parent.shown and Has(button.parent, offText), page .. " banner reads " .. offText)
+            local savedSaves = CastAheadSaves
+            CastAheadSaves = nil
+            CastAheadUI.RefreshSaves()
+            check(not button.parent.shown, page .. " banner is hidden while the restart notice shows")
+            CastAheadSaves = savedSaves
+            f:Hide()
+        end
+        GuideCase("Guide", "Turn on defensive calls", {}, "Defensive calls are off.")
+        GuideCase("RaidGuide", "Turn on raid defensive calls", { raidMode = true }, "Raid defensive calls are off.")
+        GuideCase("Saves", "Turn on defensive calls", {}, "Defensive calls are off.")
+        GuideCase("RaidSaves", "Turn on raid defensive calls", { raidMode = true }, "Raid defensive calls are off.")
+
+        do
+            local counts, wrong = {}, {}
+            for _, frame in ipairs(allFrames) do
+                local t = frame.kind == "CheckButton" and rawget(frame, "text")
+                local v = t and rawget(t, "value")
+                if v then counts[v] = (counts[v] or 0) + 1 end
+            end
+            for _, key in ipairs({ "saveCalls", "raidMode", "raidSaves", "burstCalls", "bossAdapter" }) do
+                local n = counts[CastAheadOptions.Switches[key].label] or 0
+                if n ~= 1 then wrong[#wrong + 1] = key .. "=" .. n end
+            end
+            check(#wrong == 0, "with the Saves, Guide, RaidSaves and RaidGuide pages built, each feature switch is still built once, got "
+                .. table.concat(wrong, ","))
+        end
+        end)()
+
+        ;(function()
+            local savedInfo, savedCancel = GetInstanceInfo, CastAheadSaves.CancelPrefix
+            local cancelled = {}
+            CastAheadSaves.CancelPrefix = function(prefix) cancelled[#cancelled + 1] = prefix end
+            local function Box(label)
+                for _, frame in ipairs(allFrames) do
+                    local text = rawget(frame, "text")
+                    if frame.kind == "CheckButton" and text and rawget(text, "value") == label then return frame end
+                end
+            end
+            local function Untick(label, inRaid, db)
+                cancelled = {}
+                GetInstanceInfo = function() return "Abyss", inRaid and "raid" or "party", 15, "", 0, 0, false, 9999 end
+                CastAheadDB = db
+                local box = Box(label)
+                local savedGet = rawget(box, "GetChecked")
+                box.GetChecked = function() return false end
+                box.handlers.OnClick(box)
+                box.GetChecked = savedGet
+                return table.concat(cancelled, ",")
+            end
+            check(Untick("Defensive calls in raids", true, { raidMode = true, raidSaves = true }) == "dbm:,bw:",
+                "unticking raid calls on the Features page in a raid cancels the pending dbm: and bw: calls")
+            check(Untick("Raid (experimental)", true, { raidMode = true, raidSaves = true }) == "dbm:,bw:",
+                "unticking the raid switch on the Features page in a raid cancels the pending dbm: and bw: calls")
+            check(Untick("Defensive calls in raids", false, { raidMode = true, raidSaves = true }) == "",
+                "unticking raid calls on the Features page outside a raid cancels nothing")
+            check(Untick("Raid (experimental)", false, { raidMode = true, raidSaves = true }) == "",
+                "unticking the raid switch on the Features page outside a raid cancels nothing")
+            CastAheadSaves.CancelPrefix, GetInstanceInfo = savedCancel, savedInfo
+        end)()
+
+        CastAheadDB = {}
+        CastAheadUI.RefreshTabs()
+        check(select(2, CastAheadWindow.Page("RaidSaves")) == false, "RaidSaves is not in the menu while the raid switch is off")
+
+        ;(function()
+            -- The General and Features panels were built by the Options block above and stay cached.
+            local function CallBoxes()
+                local found = {}
+                for _, frame in ipairs(allFrames) do
+                    local text = rawget(frame, "text")
+                    if frame.kind == "CheckButton" and text and rawget(text, "value") == "Defensive calls in dungeons" then
+                        frame.SetChecked = function(self, on) self.checked = on end
+                        found[#found + 1] = frame
+                    end
+                end
+                return found
+            end
+            local function ListAlpha()
+                for _, frame in ipairs(allFrames) do
+                    local title = rawget(frame, "title")
+                    if title and rawget(title, "value") == "Defensive" then return frame.alpha end
+                end
+            end
+            CastAheadDB = {}
+            CallBoxes()
+            CastAheadOptions.Refresh()
+            CastAheadUI.RefreshTabs()
+            CastAheadWindow.Show("Saves")
+            Prep()
+            check(ListAlpha() == 0.35, "the Features list is dimmed before the banner is ticked, got " .. tostring(ListAlpha()))
+            local banner = Turn("Turn on defensive calls")
+            banner.handlers.OnClick(banner)
+            CastAheadOptions.Refresh()
+            local boxes = CallBoxes()
+            check(#boxes == 1 and boxes[1].checked == true,
+                "the Saves banner button ticks the one Features dungeon calls checkbox, got " .. #boxes .. " boxes")
+            check(ListAlpha() == 1, "and the Features list is no longer dimmed, got " .. tostring(ListAlpha()))
+        end)()
+        InCombatLockdown = realLock
+        f:Hide()
+        CastAheadWindow.SetFooter, CastAheadDB = savedFooter, savedDB
+        CastAheadUI.RefreshTabs()
     end
 
     CastAheadDB.devMode = true
@@ -5483,9 +6451,9 @@ do
     run(10.5)
     S.Schedule("test:save1", 1, t1 + 29, t1 + 33, A.DEFENSIVE)
     run(20)
-    check(Heard() == "SOON,DEFENSIVE_soon", "burst: the save call is heard and the burst waits, heard " .. Heard())
+    check(Heard() == "SOON,DEFENSIVE", "burst: the save call is heard and the burst waits, heard " .. Heard())
     run(0.5)
-    check(Heard() == "SOON,DEFENSIVE_soon,BURST", "burst: the burst follows 2 s after the save, heard " .. Heard())
+    check(Heard() == "SOON,DEFENSIVE,BURST", "burst: the burst follows 2 s after the save, heard " .. Heard())
     run(10)
 
     heard = {}
@@ -5493,9 +6461,9 @@ do
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
     S.Schedule("test:save2", 1, t2 + 31, t2 + 35, A.DEFENSIVE)
     run(32.5)
-    check(Heard() == "SOON,DEFENSIVE_soon", "burst: a save due 1 s after the phase goes first, heard " .. Heard())
+    check(Heard() == "SOON,DEFENSIVE", "burst: a save due 1 s after the phase goes first, heard " .. Heard())
     run(1)
-    check(Heard() == "SOON,DEFENSIVE_soon,BURST", "burst: and the burst speaks 2 s after that save, heard " .. Heard())
+    check(Heard() == "SOON,DEFENSIVE,BURST", "burst: and the burst speaks 2 s after that save, heard " .. Heard())
     run(10)
 
     heard = {}
@@ -5503,10 +6471,109 @@ do
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
     S.Schedule("test:save3", 1, t3 + 25, t3 + 29, A.DEFENSIVE)
     run(26.5)
-    check(Heard() == "DEFENSIVE_soon", "burst: a heads-up landing on a save waits, heard " .. Heard())
+    check(Heard() == "DEFENSIVE", "burst: a heads-up landing on a save waits, heard " .. Heard())
     run(0.5)
-    check(Heard() == "DEFENSIVE_soon,SOON", "burst: and comes 2 s after it, heard " .. Heard())
+    check(Heard() == "DEFENSIVE,SOON", "burst: and comes 2 s after it, heard " .. Heard())
     run(10)
+
+    do
+        local spokenAt, playing = {}, PlaySoundFile
+        PlaySoundFile = function(path, ...)
+            spokenAt[#spokenAt + 1] = { path:match("([%w_]+)%.ogg$"), now }
+            return playing(path, ...)
+        end
+        local function ClearOfCalls(label)
+            for _, b in ipairs(spokenAt) do
+                for _, d in ipairs(spokenAt) do
+                    if b[1] == "BURST" and d[1] == "DEFENSIVE" and math.abs(b[2] - d[2]) < 2 - 1e-9 then
+                        check(false, "burst: " .. label .. ": burst within 2 s of a save call")
+                    end
+                end
+            end
+        end
+        local function Phase(saveLead)
+            heard, spokenAt = {}, {}
+            CastAheadDB.saveLeadSeconds = saveLead
+            local t = now
+            B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+            return t
+        end
+        local function BurstAt(t)
+            for _, s in ipairs(spokenAt) do
+                if s[1] == "BURST" then return s[2] - t end
+            end
+        end
+        local t = Phase(4)
+        S.Schedule("test:between", 1, t + 35, t + 39, A.DEFENSIVE)
+        run(32.5)
+        check(Heard() == "SOON,DEFENSIVE_soon", "burst: waits 2 s after a save warning due inside the gap, heard " .. Heard())
+        run(0.5)
+        check(Heard() == "SOON,DEFENSIVE_soon,BURST", "burst: speaks between the save warning and its call, heard " .. Heard())
+        run(2)
+        check(Heard() == "SOON,DEFENSIVE_soon,BURST,DEFENSIVE", "burst: then the save call, heard " .. Heard())
+        run(10)
+        ClearOfCalls("between")
+
+        t = Phase(1)
+        S.Schedule("test:tight", 1, t + 31.5, t + 35.5, A.DEFENSIVE)
+        run(33)
+        check(Heard() == "SOON,DEFENSIVE_soon,DEFENSIVE", "burst: no room between a 1 s warning and its call, so it waits, heard " .. Heard())
+        run(0.5)
+        check(Heard() == "SOON,DEFENSIVE_soon,DEFENSIVE,BURST", "burst: and speaks 2 s after the call, heard " .. Heard())
+        local shown = B.Pending(now)[1]
+        check(shown and shown.advice == A.BURST and math.abs(shown.endAt - (t + 38.5)) < 1e-6,
+            "burst: a deferred burst stays on screen 5 s after it is spoken, got " .. tostring(shown and shown.endAt - t))
+        run(10)
+        ClearOfCalls("tight")
+
+        t = Phase(1)
+        S.Schedule("test:gone", 1, t + 31.5, t + 35.5, A.DEFENSIVE)
+        run(30)
+        S.Cancel("test:gone")
+        run(3)
+        check(Heard() == "SOON", "burst: a cancelled save leaves the burst waiting for its re-check, heard " .. Heard())
+        run(0.5)
+        check(Heard() == "SOON,BURST", "burst: which then speaks, heard " .. Heard())
+        run(10)
+
+        ClearOfCalls("cancelled")
+
+        t = Phase(2)
+        S.Schedule("test:after", 1, t + 32.5, t + 36.5, A.DEFENSIVE)
+        run(45)
+        check(Heard() == "SOON,DEFENSIVE_soon,DEFENSIVE,BURST" and BurstAt(t) == 34.5,
+            "burst: due 0.5 s before a save warning, it speaks 2 s after the save call, heard " .. Heard()
+            .. " at " .. tostring(BurstAt(t)))
+        ClearOfCalls("after the call")
+
+        t = Phase(3)
+        S.Schedule("test:short", 1, t + 33.5, t + 37.5, A.DEFENSIVE)
+        run(45)
+        check(Heard() == "SOON,BURST,DEFENSIVE_soon,DEFENSIVE" and BurstAt(t) == 30,
+            "burst: when after the call is past its window, it speaks at its own time, heard " .. Heard()
+            .. " at " .. tostring(BurstAt(t)))
+        ClearOfCalls("window too short")
+
+        t = Phase(nil)
+        S.Schedule("test:chain1", 1, t + 31, t + 35, A.DEFENSIVE)
+        S.Schedule("test:chain2", 1, t + 33.5, t + 37.5, A.DEFENSIVE)
+        S.Schedule("test:chain3", 1, t + 36, t + 40, A.DEFENSIVE)
+        run(45)
+        check(Heard() == "SOON,DEFENSIVE,DEFENSIVE,DEFENSIVE,BURST" and BurstAt(t) == 38,
+            "burst: saves in a row keep the burst waiting, past its window, heard " .. Heard() .. " at " .. tostring(BurstAt(t)))
+        ClearOfCalls("saves in a row")
+
+        t = Phase(nil)
+        for i, at in ipairs({ 31, 33.5, 36, 38.5 }) do S.Schedule("test:long" .. i, 1, t + at, t + at + 4, A.DEFENSIVE) end
+        run(38)
+        local held
+        for _, p in ipairs(B.Pending(now)) do held = held or p.advice == A.BURST end
+        run(10)
+        check(Heard() == "SOON,DEFENSIVE,DEFENSIVE,DEFENSIVE,DEFENSIVE" and not held,
+            "burst: held over 3 s past its window, it is dropped unseen, heard " .. Heard())
+        PlaySoundFile = playing
+        CastAheadDB.saveLeadSeconds = nil
+    end
 
     heard = {}
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
@@ -5607,14 +6674,14 @@ do
     fire("ENCOUNTER_START", 3470, "Nek'zali", 15, 20)
     CastAheadBossAdapter.OnBar("dbm", "raidbar", 1299684, 10, now)
     for _ = 1, 16 do advance(0.5) end
-    check(Heard() == "DEFENSIVE_soon", "raid saves: switched on, a boss save call fires in a raid with no trash data, heard " .. Heard())
+    check(Heard() == "DEFENSIVE", "raid saves: switched on, a boss save call fires in a raid with no trash data, heard " .. Heard())
     fire("ENCOUNTER_END", 3470, "Nek'zali", 15, 20, 0)
     CastAheadDB.saveCalls = nil
     heard = {}
     fire("ENCOUNTER_START", 3470, "Nek'zali", 15, 20)
     CastAheadBossAdapter.OnBar("dbm", "raidbar", 1299684, 10, now)
     for _ = 1, 16 do advance(0.5) end
-    check(Heard() == "DEFENSIVE_soon", "raid saves: the raid switch alone is enough, heard " .. Heard())
+    check(Heard() == "DEFENSIVE", "raid saves: the raid switch alone is enough, heard " .. Heard())
     fire("ENCOUNTER_END", 3470, "Nek'zali", 15, 20, 0)
     CastAheadDB.raidSaves = nil
     CastAheadSaveButtons, GetSpecializationInfo, IsPlayerSpell = savedRaidButtons, nil, nil
@@ -5644,14 +6711,60 @@ do
     local ok = pcall(dofile, "Options.lua")
     check(ok and CastAheadOptions and CastAheadOptions.Switches and CastAheadOptions.Switches.burstCalls
         and CastAheadOptions.Switches.burstCalls.defaultOff == true, "the burst switch exists and is off by default")
+    do
+        local savedSaves, savedSlider, mark = CastAheadSaves, MinimalSliderWithSteppersMixin, #allFrames
+        CastAheadSaves = nil
+        MinimalSliderWithSteppersMixin = savedSlider or { Label = { Min = 1, Max = 2 }, Event = { OnValueChanged = 1 } }
+        local savedCreate = CreateFrame
+        CreateFrame = function(...)
+            local f = savedCreate(...)
+            f.MinText, f.MaxText, f.Slider = StubRegion(), StubRegion(), StubRegion()
+            f.SetValue, f.GetHeight, f.GetWidth = function() end, function() return 0 end, function() return 600 end
+            return f
+        end
+        local built, err = pcall(CastAheadOptions.ShowPanel, CreateFrame("Frame"), "Features")
+        CreateFrame = savedCreate
+        local found = {}
+        for i = mark + 1, #allFrames do
+            local t = allFrames[i].kind == "CheckButton" and rawget(allFrames[i], "text")
+            if t and t.value then found[t.value] = true end
+        end
+        check(built and found["Raid (experimental)"] and found["Defensive calls in raids"] and found["Burst windows"]
+            and not found["Defensive calls in dungeons"],
+            "without the saves module Features still builds the raid section " .. tostring(err))
+        CastAheadSaves, MinimalSliderWithSteppersMixin = savedSaves, savedSlider
+        -- Later cases count shown frames and run every refresher: hide the stub page and reload a fresh module.
+        for i = mark + 1, #allFrames do allFrames[i].shown = false end
+        dofile("Options.lua")
+    end
     local sw = CastAheadOptions.Switches
     check(sw.saveCalls.label == "Defensive calls in dungeons" and sw.saveCalls.defaultOff == true
         and sw.raidMode and sw.raidMode.label == "Raid (experimental)" and sw.raidMode.defaultOff == true
         and sw.raidSaves.label == "Defensive calls in raids" and sw.raidSaves.defaultOff == true
         and sw.burstCalls.label == "Burst windows", "the four feature switches carry their labels and start off")
     check(sw.centerText.defaultOff == nil, "the centre call is not a default-off switch")
-    check(ok and table.concat(CastAheadOptions.TABS, ",") == "General,Sounds,Defensives,Development,Report",
-        "the settings pages are General, Sounds, Defensives and Development, Report comes last")
+    do
+        check(sw.fullLabels.tip == "Write long calls in full under the icon: TANKBUSTER, not BUSTER.", "full labels tip is short")
+        check(sw.bigwigsBars.tip == "When BigWigs hides the game's timeline, show the predictions as BigWigs bars. A BigWigs update may break this.",
+            "BigWigs bars tip is short")
+        check(sw.burstCalls.tip == "Says \"burst now\" when a boss phase worth bursting starts. Silent on other bosses.", "burst tip is short")
+        check(sw.recordAll.tip == "Records dungeon logs and a journal of up to 12 keys. Asks you to reload when full. No player names.",
+            "record tip is short")
+        check(sw.kickFocusOnly.tip == nil, "the kick focus switch has no tip")
+        local long = {}
+        for key, option in pairs(sw) do
+            if option.tip and #option.tip > 160 then long[#long + 1] = key end
+        end
+        check(#long == 0, "no switch tip is over 160 characters: " .. table.concat(long, ","))
+        local savedTip, lines = GameTooltip, 0
+        GameTooltip = setmetatable({ AddLine = function() lines = lines + 1 end }, { __index = function() return function() end end })
+        local okBox, box = pcall(CastAheadOptions.BuildSwitch, {}, "kickFocusOnly", { "TOPLEFT" })
+        local okHover = okBox and pcall(box.handlers.OnEnter, box)
+        GameTooltip = savedTip
+        check(okBox and okHover and lines == 0, "a switch without a tip adds no tooltip body")
+    end
+    check(ok and table.concat(CastAheadOptions.TABS, ",") == "General,Sounds,Features,Development,Report",
+        "the settings pages are General, Sounds, Features and Development, Report comes last")
     local savedMeta, savedBuild, savedLocale, savedInfo, savedDB = C_AddOns, GetBuildInfo, GetLocale, GetSpecializationInfoByID, CastAheadDB
     local savedSpec, savedSpecInfo = GetSpecialization, GetSpecializationInfo
     GetSpecialization, GetSpecializationInfo = function() return 1 end, function() return 577 end
@@ -5957,6 +7070,91 @@ do
     CastAheadMatch.Advice = realAdvice
     check(afterFirst > 0 and advices == afterFirst, "sample row: a second lookup of the same key does not scan again, "
         .. afterFirst .. "/" .. advices)
+    CastAheadDB = savedDB
+end
+
+do
+    local savedDB = CastAheadDB
+    CastAheadDB = {}
+    local holder = CreateFrame("Frame")
+    local plate = CreateFrame("Frame", nil, holder)
+    plate.GetWidth = function() return 110 end
+    plate.GetHeight = function() return 45 end
+    local w, h, plateX, plateY = CastAheadCore.PreviewRow(holder, plate)
+    check(type(plateX) == "number" and plateX > 0 and plateX + 110 <= w and plateY >= 0 and plateY + 45 <= h,
+        "preview row: the plate offset keeps icons on its left inside the size, got "
+        .. tostring(plateX) .. "," .. tostring(plateY))
+    local bars = holder.previewBars
+    local own = 0
+    for i = 1, #bars do
+        if bars[i].parent == holder and bars[i]._preview == true and bars[i].shown then own = own + 1 end
+    end
+    check(#bars == 3 and own == 3, "preview row: three shown bars owned by the holder, got " .. own)
+    check(bars[1].labelValue == "KICK" and bars[2].labelValue == "DODGE" and bars[3].labelValue == "BUSTER",
+        "preview row: short labels")
+    check(bars[1].level ~= 6200 and bars[1].strata == nil, "preview row: no fixed strata or level 6200")
+    check(type(w) == "number" and w > 110 and h >= 45, "preview row: size covers the plate and the icons, got "
+        .. tostring(w) .. "x" .. tostring(h))
+    CastAheadDB.anchor = "top"
+    local _, tallH = CastAheadCore.PreviewRow(holder, plate)
+    check(tallH > h, "preview row: icons above the plate make it taller")
+    check(holder.previewBars[1] == bars[1] and #holder.previewBars == 3, "preview row: repaint reuses the bars")
+    CastAheadDB.fullLabels = true
+    CastAheadCore.PreviewRow(holder, plate)
+    check(bars[3].labelValue == "TANKBUSTER", "preview row: full labels")
+
+    local state = {}
+    CastAheadCore.ShowSampleRow(state, plate)
+    local pooled = {}
+    for i = 1, #state.bars do pooled[state.bars[i]] = true end
+    CastAheadCore.HideSampleRow(state)
+    local other = CreateFrame("Frame")
+    CastAheadCore.PreviewRow(other, plate)
+    local own = 0
+    for i = 1, #other.previewBars do
+        local bar = other.previewBars[i]
+        if bar.parent == other and bar._preview == true and not pooled[bar] then own = own + 1 end
+    end
+    check(own == 3, "preview row: a full pool lends nothing to the preview, got " .. own)
+    local before = framesMade
+    local fresh = {}
+    CastAheadCore.ShowSampleRow(fresh, plate)
+    local reused = 0
+    for i = 1, #fresh.bars do
+        if pooled[fresh.bars[i]] and fresh.bars[i]._preview == false then reused = reused + 1 end
+    end
+    check(framesMade == before and reused == 3, "preview row: the pool still holds the released bars, got " .. reused)
+    CastAheadCore.HideSampleRow(fresh)
+
+    local block = CastAheadCore.BuildCenterBlock(holder)
+    check(block.parent == holder and block.strata ~= "HIGH", "centre preview: parented to the holder, no HIGH strata")
+    CastAheadCore.PaintCenterPreview(block, { "KICK" })
+    check(block.lines[1].shown and tostring(block.lines[1].timeValue):match("^Kick") ~= nil,
+        "centre preview: line 1 says Kick, got " .. tostring(block.lines[1].timeValue))
+    check(not block.lines[2].shown and not block.lines[3].shown, "centre preview: lines 2-3 hidden")
+    check(CastAheadCore.CenterFrame() ~= block, "centre preview: a block of its own")
+    local savedSaves = CastAheadSaves
+    CastAheadSaves = { Icons = function() return { 1, 2, 3 } end }
+    block.lines[1].text.GetStringWidth = function() return 300 end
+    local cw, ch = CastAheadCore.PaintCenterPreview(block, { "DEFENSIVE" })
+    CastAheadSaves = savedSaves
+    check(cw == 446 and ch == 44, "centre preview: width covers long text and two extra icons, got "
+        .. tostring(cw) .. "x" .. tostring(ch))
+    local ew, eh = CastAheadCore.PaintCenterPreview(block, {})
+    check(ew == 0 and eh == 0 and not block.shown and not block.lines[1].shown,
+        "centre preview: no keys hides the block and measures nothing")
+
+    CastAheadCore.ShowCenterSample(true)
+    local center = CastAheadCore.CenterFrame()
+    check(center.lines[1].shown and center.lines[2].shown and center.lines[3].shown,
+        "centre sample: still three lines")
+    check(center.lines[1].parentStrata == "HIGH" and block.lines[1].parentStrata == nil,
+        "the live centre block is HIGH before its first line is made, the preview never")
+    CastAheadCore.ShowCenterSample(false)
+    -- The setup cases count every shown frame, so the pictures leave none behind.
+    for i = 1, #block.lines do block.lines[i]:Hide() end
+    for i = 1, #bars do bars[i]:Hide() end
+    for i = 1, #other.previewBars do other.previewBars[i]:Hide() end
     CastAheadDB = savedDB
 end
 

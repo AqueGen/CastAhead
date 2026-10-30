@@ -3,6 +3,7 @@ local B = CastAheadBurst
 local M = CastAheadMatch
 
 local SAVE_GAP = 2
+local LATE_DROP = 3
 local BURST_SHOWN = 5
 local ICON = "Interface\\Icons\\Spell_Nature_Bloodlust"
 B.ICON = ICON
@@ -26,13 +27,26 @@ local function ForRole(w, role)
     return w.event ~= nil or (w.role == "HEALER") == (role == "HEALER")
 end
 
-local function DeferUntil(now)
+-- Nil to speak now, else the time to look again: the first moment at least
+-- SAVE_GAP from every save sound. Past the window it speaks now, unless that
+-- lands on a save call.
+local function DeferUntil(now, windowEnd)
     local S = CastAheadSaves
     if not (S and S.LastFiredAt) then return nil end
-    local last, nextAt = S.LastFiredAt(), S.NextFireAt(now)
-    local at
-    if last ~= nil and now - last < SAVE_GAP then at = last + SAVE_GAP end
-    if nextAt ~= nil and nextAt - now < SAVE_GAP then at = math.max(at or 0, nextAt + SAVE_GAP) end
+    local lastCall, nextCall = S.LastCalledAt(), S.NextFireAt(now)
+    local warnAt, warnedCall = S.NextWarnAt(now)
+    local points = { S.LastFiredAt(), lastCall, warnAt, nextCall, warnedCall }
+    local at, moved = now, true
+    while moved do
+        moved = false
+        for i = 1, 5 do
+            local p = points[i]
+            if p and math.abs(p - at) < SAVE_GAP then at, moved = p + SAVE_GAP, true end
+        end
+    end
+    if at == now then return nil end
+    local onCall = nextCall and nextCall - now < SAVE_GAP or lastCall and now - lastCall < SAVE_GAP
+    if at > windowEnd and not onCall then return nil end
     return at
 end
 
@@ -207,9 +221,13 @@ function B.Tick(now)
     if not On() then return end
     for _, e in ipairs(entries) do
         if not e.fired and now >= e.fireAt and now < e.endAt then
-            local at = not e.deferred and DeferUntil(now)
-            if at then
-                e.deferred, e.fireAt = true, at
+            e.windowEnd = e.windowEnd or e.endAt
+            local at = DeferUntil(now, e.windowEnd)
+            if at and at > e.windowEnd + LATE_DROP then
+                e.fired, e.endAt = true, now
+            elseif at then
+                e.fireAt = at
+                if e.advice == M.ADVICE.BURST then e.endAt = math.max(e.endAt, at + BURST_SHOWN) end
             else
                 e.fired = true
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(e.advice) end
