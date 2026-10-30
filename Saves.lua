@@ -661,10 +661,12 @@ end
 
 function S.LastFiredAt() return lastFiredAt end
 
+local function Audible(c) return not CastAheadConfig.AllMuted(c.candidates) end
+
 function S.NextFireAt(now)
     local soonest
     for _, c in pairs(scheduled) do
-        if not c.pausedAt and not c.fired and c.fireAt >= now and (not soonest or c.fireAt < soonest) then
+        if not c.pausedAt and not c.fired and c.fireAt >= now and (not soonest or c.fireAt < soonest) and Audible(c) then
             soonest = c.fireAt
         end
     end
@@ -677,7 +679,7 @@ function S.NextWarnAt(now)
     local warnAt, fireAt
     for _, c in pairs(scheduled) do
         if not c.pausedAt and not c.fired and not c.warned and c.fireAt >= now
-                and (not warnAt or c.fireAt - lead < warnAt) then
+                and (not warnAt or c.fireAt - lead < warnAt) and Audible(c) then
             warnAt, fireAt = c.fireAt - lead, c.fireAt
         end
     end
@@ -732,12 +734,12 @@ function S.Tick(now)
             if saveLead > 0 and not c.fired and not c.warned and now >= c.fireAt - saveLead and now < c.fireAt
                     and c.fireAt - now >= math.min(WARN_CLEAR, saveLead - 0.5) then
                 c.warned, c.warnedAt = true, now
-                lastFiredAt = now
+                if Audible(c) then lastFiredAt = now end
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice, true, c.candidates) end
             end
             if not c.fired and now >= c.fireAt and now < c.endAt then
                 c.fired, c.firedAt = true, now
-                lastFiredAt = now
+                if Audible(c) then lastFiredAt = now end
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice, nil, c.candidates) end
             end
             if now >= c.endAt then scheduled[key] = nil end

@@ -3756,6 +3756,11 @@ do
     S.Schedule("test:muted", 100, now + 5, now + 8, def)
     run(10)
     check(#heard == 0, "a spell muted on the Casts page silences its scheduled save, heard " .. Heard())
+    local firedBefore = S.LastFiredAt()
+    S.Schedule("test:mutedbusy", 100, now + 5, now + 8, def)
+    check(S.NextFireAt(now) == nil and S.NextWarnAt(now) == nil, "a muted scheduled save is not an upcoming call")
+    run(10)
+    check(S.LastFiredAt() == firedBefore, "a muted scheduled save does not count as a call heard")
     local savedStub = LibStub
     LibStub = function() return { Fetch = function(_, _, name) return "custom/" .. name .. ".ogg" end } end
     CastAheadDB = { saveCalls = true, saveLeadSeconds = 3, spellSounds = { [100] = "Bell" } }
