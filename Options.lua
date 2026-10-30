@@ -262,7 +262,9 @@ local function BuildStage(panel, group)
     end
 
     function stage.Line(control, text)
-        items[#items + 1] = { control = control, line = Muted(text) }
+        local line = Muted(text)
+        items[#items + 1] = { control = control, line = line }
+        return line
     end
 
     -- Offsets are measured from the group's top edge, as SetPoint takes them.
@@ -324,6 +326,100 @@ local function BuildStage(panel, group)
     return stage
 end
 CastAheadOptions.BuildStage = BuildStage
+
+local OFF_GREY = { 0.5, 0.5, 0.5 }
+
+-- One call icon as the pictures draw it: the sample cast's icon with the
+-- short word under it. `Dim` greys it while a filter removes the call.
+local function SampleIcon(parent, key)
+    local advice = CastAheadMatch.ADVICE[key]
+    local icon = CreateFrame("Frame", nil, parent)
+    icon:SetSize(24, 24)
+    icon.texture = icon:CreateTexture(nil, "ARTWORK")
+    icon.texture:SetAllPoints()
+    icon.texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    local row = CastAheadCore.SampleDataRow(key)
+    icon.texture:SetTexture(row and C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(row.spell) or 136243)
+    icon.label = icon:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    icon.label:SetPoint("TOP", icon, "BOTTOM", 0, -2)
+    icon.label:SetText(advice.short or advice.label)
+    function icon.Dim(dim)
+        icon:SetAlpha(dim and 0.35 or 1)
+        icon.texture:SetDesaturated(dim and true or false)
+        if dim then icon.label:SetTextColor(unpack(OFF_GREY)) else icon.label:SetTextColor(advice.r, advice.g, advice.b) end
+    end
+    return icon
+end
+
+-- The centre call picture: a block of its own painted by the real centre
+-- code, and an optional caption under it while `caption()` returns one.
+local function CenterPicture(key, on, off, caption)
+    return {
+        build = function(canvas)
+            canvas.block = CastAheadCore.NewCenterPreview(canvas)
+            if caption then canvas.caption = canvas:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall") end
+        end,
+        paint = function(canvas, isOn)
+            local w, h = CastAheadCore.PaintCenterPreview(canvas.block, { key })
+            if not isOn then canvas.block.lines[1].text:SetTextColor(unpack(OFF_GREY)) end
+            local text = caption and caption()
+            if canvas.caption then
+                canvas.caption:SetText(text or "")
+                canvas.caption:SetShown(text ~= nil)
+                if text then w = math.max(w, canvas.caption:GetStringWidth()) end
+                canvas.caption:ClearAllPoints()
+                canvas.caption:SetPoint("TOP", canvas, "TOPLEFT", w / 2, -h - 2)
+                if text then h = h + 2 + canvas.caption:GetStringHeight() end
+            end
+            canvas.block:ClearAllPoints()
+            canvas.block:SetPoint("TOP", canvas, "TOPLEFT", w / 2, 0)
+            canvas:SetSize(w, h)
+            return w, h
+        end,
+        on = on,
+        off = off,
+    }
+end
+
+local STRIP_W, STRIP_SCALE = 160, 15
+
+-- An early warning as a strip: the cast at the right end, the warning
+-- `read()` seconds before it on a 15 s scale. Off at 0 or while `on()` is false.
+local function WarningStrip(read, on)
+    return {
+        build = function(canvas)
+            canvas.line = canvas:CreateTexture(nil, "ARTWORK")
+            canvas.line:SetSize(STRIP_W, 2)
+            canvas.line:SetPoint("TOPLEFT", canvas, "TOPLEFT", 0, -8)
+            canvas.cast = canvas:CreateTexture(nil, "OVERLAY")
+            canvas.cast:SetSize(6, 14)
+            canvas.cast:SetPoint("TOPRIGHT", canvas, "TOPLEFT", STRIP_W, -2)
+            canvas.tick = canvas:CreateTexture(nil, "OVERLAY")
+            canvas.tick:SetSize(2, 12)
+            canvas.caption = canvas:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            canvas.caption:SetPoint("TOPLEFT", canvas, "TOPLEFT", 0, -20)
+        end,
+        paint = function(canvas, isOn)
+            local value = math.min(read(), STRIP_SCALE)
+            canvas.line:SetColorTexture(unpack(T.muted))
+            if isOn then
+                canvas.cast:SetColorTexture(1, 0.2, 0.2)
+                canvas.tick:SetColorTexture(unpack(T.gold))
+            else
+                canvas.cast:SetColorTexture(unpack(OFF_GREY))
+                canvas.tick:SetColorTexture(unpack(OFF_GREY))
+            end
+            canvas.tick:ClearAllPoints()
+            canvas.tick:SetPoint("TOP", canvas, "TOPLEFT", STRIP_W * (1 - value / STRIP_SCALE), -3)
+            canvas.tick:SetShown(value > 0)
+            canvas.caption:SetText(value > 0 and string.format("warning %ds before", value) or "")
+            canvas:SetSize(STRIP_W, 34)
+            return STRIP_W, 34
+        end,
+        on = function() return read() > 0 and (not on or on()) end,
+        off = "Off - no early warning",
+    }
+end
 
 -- One switch, placed against whatever the caller anchors it to.
 local function BuildSwitch(panel, key, point, onClick, label)
@@ -523,10 +619,15 @@ function BuildGeneral(panel)
     end)
 
     local what = BuildGroup(panel, "What to call out", 262)
+    local whatStage = BuildStage(panel, what)
+    local function Filtered()
+        Redraw()
+        whatStage.Paint()
+    end
     local important = BuildSwitch(panel, "importantOnly",
-        { "TOPLEFT", what, "TOPLEFT", 10, -26 })
+        { "TOPLEFT", what, "TOPLEFT", 10, -26 }, Filtered)
     local role = BuildSwitch(panel, "roleFilter",
-        { "TOPLEFT", important, "BOTTOMLEFT", 0, -4 })
+        { "TOPLEFT", important, "BOTTOMLEFT", 0, -4 }, Filtered)
     local timeline = BuildSwitch(panel, "timeline",
         { "TOPLEFT", role, "BOTTOMLEFT", 0, -4 }, OutputChanged)
     local PaintTimelineOff
@@ -542,7 +643,7 @@ function BuildGeneral(panel)
     local timelineOff = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     timelineOff:SetJustifyH("LEFT")
     timelineOff:SetTextColor(1, 0.5, 0.2)
-    local _, leadLabel = BuildSlider(panel, {
+    local lead, leadLabel = BuildSlider(panel, {
         key = "leadSeconds",
         default = CastAheadConfig.LEAD_DEFAULT,
         min = 0, max = CastAheadConfig.LEAD_MAX,
@@ -553,7 +654,30 @@ function BuildGeneral(panel)
                 and string.format("Early warning: %ds", value)
                 or "Early warning: off"
         end,
+        after = function() whatStage.Paint() end,
     })
+    whatStage.Picture(important, {
+        build = function(canvas)
+            canvas.icons = {}
+            for i, key in ipairs({ "KICK", "DODGE", "TANK" }) do
+                local icon = SampleIcon(canvas, key)
+                icon:SetPoint("TOPLEFT", canvas, "TOPLEFT", 12 + (i - 1) * 52, 0)
+                canvas.icons[key] = icon
+            end
+            canvas:SetSize(152, 40)
+        end,
+        paint = function(canvas)
+            local hides = CastAheadMatch.ROLE_HIDES[CastAheadMatch.PlayerRole() or "NONE"]
+            canvas.icons.KICK.Dim(false)
+            canvas.icons.DODGE.Dim(SwitchOn("importantOnly"))
+            canvas.icons.TANK.Dim(hides and hides.TANK)
+            return 152, 40
+        end,
+        on = function() return true end,
+        off = "",
+    })
+    whatStage.Line(timeline, "Puts the predictions on the game's encounter timeline.")
+    whatStage.Picture(lead, WarningStrip(CastAheadConfig.Lead))
     -- The box is as tall as what it holds: the warning line takes room only while it
     -- has something to say, and the slider moves up under the switches when it does not
     function PaintTimelineOff()
@@ -570,38 +694,76 @@ function BuildGeneral(panel)
         end
         timelineOff:ClearAllPoints()
         timelineOff:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 4, -2)
-        timelineOff:SetPoint("RIGHT", what, "RIGHT", -10, 0) -- wraps to the box at any window width
+        timelineOff:SetWidth(COL_W - 24) -- wraps in the control column, clear of the pictures
         timelineOff:SetText(text or "")
         timelineOff:SetShown(text ~= nil)
         leadLabel:ClearAllPoints()
         leadLabel:SetPoint("TOPLEFT", text and timelineOff or last, "BOTTOMLEFT", text and 2 or 6, -10)
         local switches = bigWigs and 4 or 3
-        what:SetHeight(26 + switches * 26 + (text and timelineOff:GetStringHeight() + 2 or 0) + 92)
-        -- The boxes below were placed for the old height
-        panel:Relayout()
+        whatStage.Fit(26 + switches * 26 + (text and timelineOff:GetStringHeight() + 2 or 0) + 92)
     end
     PaintTimelineOff()
     table.insert(refreshers, PaintTimelineOff)
 
     local audio = BuildGroup(panel, "Sound", 126)
+    local audioStage = BuildStage(panel, audio)
     local sound = BuildSwitch(panel, "sound", { "TOPLEFT", audio, "TOPLEFT", 10, -26 }, RedrawAndSaves)
     local voice = BuildSwitch(panel, "voice", { "TOPLEFT", sound, "BOTTOMLEFT", 0, -4 }, RedrawAndSaves)
-    local focusOnly = BuildSwitch(panel, "kickFocusOnly", { "TOPLEFT", voice, "BOTTOMLEFT", 0, -4 })
+    local focusOnly = BuildSwitch(panel, "kickFocusOnly", { "TOPLEFT", voice, "BOTTOMLEFT", 0, -4 }, function()
+        Redraw()
+        audioStage.Paint()
+    end)
     local kickNote = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     kickNote:SetJustifyH("LEFT")
     kickNote:SetTextColor(0.7, 0.7, 0.7)
     kickNote:SetSpacing(3)
     kickNote:SetPoint("TOPLEFT", focusOnly, "BOTTOMLEFT", 4, -2)
-    kickNote:SetPoint("RIGHT", audio, "RIGHT", -10, 0)
+    kickNote:SetWidth(COL_W - 24)
     kickNote:SetText("On: only your focus target gets kick calls. If you have no focus, every mob gets them.\n"
         .. "Off: every mob gets kick calls.")
-    audio:SetScript("OnSizeChanged", function(self)
-        local height = 26 + 3 * focusOnly:GetHeight() + 2 * 4 + 2 + kickNote:GetStringHeight() + 12
-        if math.abs(self:GetHeight() - height) > 0.5 then
-            self:SetHeight(height)
-            panel:Relayout()
-        end
-    end)
+    local function FitAudio()
+        audioStage.Fit(26 + 3 * focusOnly:GetHeight() + 2 * 4 + 2 + kickNote:GetStringHeight() + 12)
+    end
+    audio:HookScript("OnSizeChanged", FitAudio)
+    for _, switch in ipairs({ sound, voice }) do
+        local play = CastAheadWindow.Button(panel, "Play", 44)
+        play:SetPoint("LEFT", switch, "LEFT", COL_W - 10 - 52, 0)
+        play:SetScript("OnClick", function() CastAheadCore.PreviewSound(CastAheadMatch.ADVICE.KICK) end)
+    end
+    audioStage.Line(sound, "Plays the call sound. Off silences the addon.")
+    audioStage.Line(voice, "Speaks the call out loud.")
+    audioStage.Picture(focusOnly, {
+        build = function(canvas)
+            canvas.kicks, canvas.plates = {}, {}
+            for i, name in ipairs({ "Focus", "Other mob" }) do
+                local kick = SampleIcon(canvas, "KICK")
+                kick:SetPoint("TOPLEFT", canvas, "TOPLEFT", 12 + (i - 1) * 120, -12)
+                local plate = CreateFrame("Frame", nil, canvas)
+                plate:SetSize(70, 8)
+                plate:SetPoint("LEFT", kick, "RIGHT", 4, 0)
+                plate.health = plate:CreateTexture(nil, "ARTWORK")
+                plate.health:SetAllPoints()
+                plate.health:SetColorTexture(0.75, 0.12, 0.1)
+                local label = plate:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                label:SetPoint("BOTTOMLEFT", plate, "TOPLEFT", 0, 2)
+                label:SetText(name)
+                kick.Dim(false)
+                canvas.kicks[i], canvas.plates[i] = kick, plate
+            end
+            canvas.focus = canvas:CreateTexture(nil, "BACKGROUND")
+            canvas.focus:SetPoint("TOPLEFT", canvas.plates[1], "TOPLEFT", -2, 2)
+            canvas.focus:SetPoint("BOTTOMRIGHT", canvas.plates[1], "BOTTOMRIGHT", 2, -2)
+            canvas.focus:SetColorTexture(unpack(T.gold))
+            canvas:SetSize(230, 50)
+        end,
+        paint = function(canvas)
+            canvas.kicks[2]:SetShown(not SwitchOn("kickFocusOnly"))
+            return 230, 50
+        end,
+        on = function() return true end,
+        off = "",
+    })
+    FitAudio()
 
     local plates = BuildGroup(panel, "Nameplate icons", 100)
     local platesStage = BuildStage(panel, plates)
@@ -639,9 +801,16 @@ function BuildGeneral(panel)
     })
 
     local centre = BuildGroup(panel, "Centre call", 70)
-    BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 }, OutputChanged)
+    local centreStage = BuildStage(panel, centre)
+    local centreOn = BuildSwitch(panel, "centerText", { "TOPLEFT", centre, "TOPLEFT", 10, -26 }, function()
+        OutputChanged()
+        centreStage.Paint()
+    end)
+    centreStage.Picture(centreOn, CenterPicture("KICK", CastAheadConfig.CenterText,
+        "Off - no call in the middle of the screen"))
 
     local features = BuildGroup(panel, "Features", 230)
+    local featuresStage = BuildStage(panel, features)
     local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", features, "TOPLEFT", 10, -26 }, CastAheadOptions.SavesSwitchChanged)
     local raidSaves, bursts, burstSoon, soonLabel
     local function PaintRaid()
@@ -676,8 +845,15 @@ function BuildGeneral(panel)
         caption = function(value)
             return value > 0 and string.format("Burst soon: %ds before", value) or "Burst soon: off"
         end,
+        after = function() featuresStage.Paint() end,
     })
     table.insert(refreshers, PaintRaid)
+    featuresStage.Picture(calls, CenterPicture("DEFENSIVE", CastAheadConfig.DungeonSaves, "Off - no defensive calls"))
+    featuresStage.Line(raid, "Turns raid calls on. Experimental.")
+    featuresStage.Picture(bursts, CenterPicture("BURST", CastAheadConfig.BurstCalls, "Off - no burst calls", function()
+        local lead = CastAheadConfig.BurstLead()
+        return lead > 0 and string.format("burst soon %ds before", lead) or nil
+    end))
 
     -- A Test button at the right end of a feature's row shows that feature alone.
     local function TestButton(switch, indent, tip, run)
@@ -703,6 +879,7 @@ function BuildGeneral(panel)
     local dev = BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
         if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
     end)
+    BuildStage(panel, extra).Line(dev, "Adds the Development page. Changes no calls.")
     local resetAll = CastAheadWindow.Button(panel, "Reset all settings", 130)
     resetAll:SetPoint("TOPLEFT", dev, "BOTTOMLEFT", 0, -10)
     resetAll:SetScript("OnClick", function()
@@ -743,9 +920,12 @@ function BuildDevelopment(panel)
     local recordAll = BuildSwitch(panel, "recordAll", { "TOPLEFT", recording, "TOPLEFT", 10, -26 }, function()
         if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
     end)
-    BuildSwitch(panel, "showMarkPanel", { "TOPLEFT", recordAll, "BOTTOMLEFT", 0, -4 }, function()
+    local markPanel = BuildSwitch(panel, "showMarkPanel", { "TOPLEFT", recordAll, "BOTTOMLEFT", 0, -4 }, function()
         if CastAheadReport then CastAheadReport.Refresh() end
     end)
+    local recordingStage = BuildStage(panel, recording)
+    recordingStage.Line(recordAll, "Copy the files off and clear the journal here when it asks.")
+    recordingStage.Line(markPanel, "A panel to mark a wrong call while recording.")
 
     local group = BuildGroup(panel, "Recorded enemy data", 62)
     local show = DevButton(panel, "Show", 70, { "TOPLEFT", group, "TOPLEFT", 16, -28 },
@@ -961,7 +1141,7 @@ local function BuildButtonList(panel, store, key, title, emptyText)
     return group
 end
 
-local DEFENSIVES_H, SPEC_BAR_PAD, OFF_ALPHA = 302, 34, 0.35
+local DEFENSIVES_H, SPEC_BAR_PAD, OFF_ALPHA = 282, 34, 0.35
 local REPORT_URL = "https://github.com/AqueGen/CastAhead/issues/new?template=report.yml"
 
 local function CopyBox(parent, text, width)
@@ -1024,21 +1204,24 @@ function BuildDefensives(panel)
             CastAheadSaves.CancelPrefix("bw:")
         end
     end)
-    local status = boss:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    status:SetPoint("TOPLEFT", boss.text, "BOTTOMLEFT", 0, -2)
+    local function CallsOn() return CastAheadConfig.DungeonSaves() or CastAheadConfig.RaidSaves() end
+    local stage = BuildStage(panel, group)
+    local status = stage.Line(boss, "")
     local early, earlyLabel = BuildSlider(panel, {
         key = "saveLeadSeconds",
         default = 0,
         min = 0, max = CastAheadConfig.SAVE_LEAD_MAX,
         low = "off", high = CastAheadConfig.SAVE_LEAD_MAX .. "s",
-        point = { "TOPLEFT", boss, "BOTTOMLEFT", 6, -34 },
+        point = { "TOPLEFT", boss, "BOTTOMLEFT", 6, -14 },
         width = COL_W - 50,
         caption = function(value)
             return value > 0
                 and string.format("Defensive early warning: %ds", value)
                 or "Defensive early warning: off"
         end,
+        after = function() stage.Paint() end,
     })
+    stage.Picture(early, WarningStrip(CastAheadConfig.SaveLead, CallsOn))
 
     local store = CastAheadSaves.Store
     local list = BuildButtonList(panel, store, "def", "Defensive", "Empty - no defensive call")
@@ -1074,7 +1257,7 @@ function BuildDefensives(panel)
     end
 
     Paint = function()
-        local on = CastAheadConfig.DungeonSaves() or CastAheadConfig.RaidSaves()
+        local on = CallsOn()
         local spec = CastAheadSaves and CastAheadSaves.ViewSpecID()
         local shipped = spec and CastAheadSaveButtons and CastAheadSaveButtons[spec] and true or false
         status:SetText("|cffaaaaaa" .. (CastAheadBossAdapter and CastAheadBossAdapter.Status() or "No boss mod") .. "|r")
@@ -1087,10 +1270,11 @@ function BuildDefensives(panel)
             boss:SetPoint("TOPLEFT", calls, "BOTTOMLEFT", 0, -4)
         end
         local alpha = on and 1 or OFF_ALPHA
-        for _, w in ipairs({ boss, early, earlyLabel, list, reset, caveat.text, caveat.button, note }) do w:SetAlpha(alpha) end
+        for _, w in ipairs({ boss, status, early, earlyLabel, list, reset, caveat.text, caveat.button, note }) do w:SetAlpha(alpha) end
         note:SetShown(not shipped)
         list:SetShown(shipped)
         reset:SetShown(shipped)
+        stage.Paint()
         panel:Relayout()
     end
     table.insert(refreshers, Paint)

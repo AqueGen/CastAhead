@@ -4986,13 +4986,15 @@ do
             .. sliders .. "/" .. dropdowns)
         check(page:find("|Show icons on nameplates|", 1, true) and page:find("|Full labels|", 1, true)
             and page:find("|Show the centre call|", 1, true), "General keeps the nameplate and centre call switches")
-        local heights = {}
+        local heights, centre = {}, nil
         for _, g in ipairs(made) do
             local title = rawget(g, "title")
             local v = title and rawget(title, "value")
             if v == "Nameplate icons" or v == "Centre call" then heights[v] = g.h end
+            if v == "Centre call" then centre = g end
         end
-        check(heights["Nameplate icons"] == 100 and heights["Centre call"] == 70,
+        check(heights["Nameplate icons"] == 100 and centre and centre.stage
+            and heights["Centre call"] == math.max(70, centre.stage.Paint()),
             "General's icon and centre groups shrink to their switches, got "
             .. tostring(heights["Nameplate icons"]) .. "/" .. tostring(heights["Centre call"]))
     end
@@ -5222,7 +5224,176 @@ do
     check(ListGroup() and ListGroup().alpha == 0.35, "Defensives list is dimmed while calls are off")
     CastAheadDB = { saveCalls = true }
     CastAheadOptions.ShowPanel(host, "Defensives")
-    check(ListGroup() and ListGroup().alpha == 1, "Defensives list is not dimmed while calls are on")
+    check(ListGroup() and ListGroup().alpha == 1, "Defensives list is not dimmed while calls are on");
+
+    (function()
+        local COL_W, WIDE = 250, 250 + 10 + 400
+        local function Group(title)
+            for _, f in ipairs(made) do
+                local t = rawget(f, "title")
+                if t and rawget(t, "value") == title then return f end
+            end
+        end
+        local function Text(value)
+            for _, fs in ipairs(texts) do
+                if rawget(fs, "value") == value then return fs end
+            end
+        end
+        local function Canvases(group, field)
+            local list = {}
+            for _, f in ipairs(made) do
+                if f.parent == group and rawget(f, field) then list[#list + 1] = f end
+            end
+            return list
+        end
+        CastAheadDB = {}
+        CastAheadOptions.ShowPanel(host, "General")
+        local okDev, errDev = pcall(CastAheadOptions.ShowPanel, host, "Development")
+        check(okDev, "the Development page builds headless " .. tostring(errDev))
+        for _, s in ipairs({ "Plays the call sound. Off silences the addon.", "Speaks the call out loud.",
+            "Puts the predictions on the game's encounter timeline.", "Turns raid calls on. Experimental.",
+            "Adds the Development page. Changes no calls.",
+            "Copy the files off and clear the journal here when it asks.",
+            "A panel to mark a wrong call while recording." }) do
+            check(Text(s) ~= nil, "a visible sentence says: " .. s)
+        end
+        local groups = {}
+        for _, title in ipairs({ "What to call out", "Sound", "Centre call", "Features", "Defensive calls" }) do
+            groups[title] = Group(title)
+            check(groups[title] and groups[title].stage, title .. " has a stage")
+            if not (groups[title] and groups[title].stage) then return end
+            groups[title].w = WIDE
+        end
+        CastAheadOptions.ShowPanel(host, "General")
+
+        local function Off(text) local fs = Text(text) return fs and fs.shown == true end
+
+        local centre = Canvases(groups["Centre call"], "block")[1]
+        check(centre and centre.shown and centre.alpha == 1 and centre.block.lines[1].shown
+            and tostring(centre.block.lines[1].timeValue):match("^Kick") ~= nil,
+            "Centre call shows a kick call picture")
+        CastAheadDB.centerText = false
+        CastAheadOptions.Refresh()
+        check(centre and centre.alpha == 0.35 and Off("Off - no call in the middle of the screen"),
+            "with the centre call off its picture dims and says so")
+        CastAheadDB.centerText = nil
+
+        local filter = Canvases(groups["What to call out"], "icons")[1]
+        local realSpec, realRole = GetSpecialization, GetSpecializationRole
+        GetSpecialization, GetSpecializationRole = function() return 1 end, function() return "DAMAGER" end
+        CastAheadOptions.Refresh()
+        local icons = filter and filter.icons
+        check(icons and icons.KICK.alpha == 1 and icons.DODGE.alpha == 0.35 and icons.TANK.alpha == 0.35
+            and filter.alpha == 1, "with important only and my role on, a damage dealer sees dodge and buster dimmed")
+        CastAheadDB.importantOnly, CastAheadDB.roleFilter = false, false
+        CastAheadOptions.Refresh()
+        check(icons and icons.DODGE.alpha == 1 and icons.TANK.alpha == 1 and filter.alpha == 1,
+            "with both filters off nothing in the filter picture is dimmed")
+        CastAheadDB.importantOnly, CastAheadDB.roleFilter = false, nil
+        GetSpecialization, GetSpecializationRole = function() return nil end, function() return nil end
+        local okRole = pcall(CastAheadOptions.Refresh)
+        check(okRole and icons and icons.KICK.alpha == 1 and icons.DODGE.alpha == 1 and icons.TANK.alpha == 1,
+            "without a specialization role nothing in the filter picture is dimmed")
+        GetSpecialization, GetSpecializationRole = realSpec, realRole
+        CastAheadDB = {}
+
+        local lead = Canvases(groups["What to call out"], "tick")[1]
+        if lead then lead.tick.SetPoint = function(self, _, _, _, x) self.x = x end end
+        CastAheadOptions.Refresh()
+        check(lead and lead.alpha == 0.35 and Off("Off - no early warning"), "early warning at 0 dims its strip and says so")
+        CastAheadDB.leadSeconds = 5
+        CastAheadOptions.Refresh()
+        check(lead and lead.alpha == 1 and rawget(lead.caption, "value") == "warning 5s before"
+            and lead.tick.x and lead.tick.x > 106 and lead.tick.x < 107,
+            "early warning at 5 puts the tick 5s of 15 before the cast, got " .. tostring(lead and lead.tick.x))
+        CastAheadDB = {}
+
+        local focus = Canvases(groups["Sound"], "kicks")[1]
+        check(focus and focus.focus and focus.kicks[1].shown and focus.kicks[2].shown and focus.alpha == 1,
+            "kick calls for every mob: both plates carry KICK")
+        CastAheadDB.kickFocusOnly = true
+        CastAheadOptions.Refresh()
+        check(focus and focus.kicks[1].shown and not focus.kicks[2].shown and focus.alpha == 1,
+            "kick calls for my focus: only the focus plate carries KICK, nothing dimmed")
+        CastAheadDB = {}
+        check(groups["Sound"].handlers.OnSizeChanged == nil, "the Sound group leaves its height to the stage")
+
+        local saves, burst = unpack(Canvases(groups["Features"], "block"))
+        check(saves and saves.alpha == 0.35 and Off("Off - no defensive calls"), "defensive calls off dim their picture")
+        CastAheadDB = { saveCalls = true, raidMode = true, burstCalls = true, burstLeadSeconds = 4 }
+        CastAheadOptions.Refresh()
+        check(saves and saves.alpha == 1 and tostring(saves.block.lines[1].timeValue):match("^Defensive") ~= nil,
+            "defensive calls on show a defensive call picture")
+        check(burst and burst.alpha == 1 and burst.caption.shown and rawget(burst.caption, "value") == "burst soon 4s before",
+            "burst calls on show the burst picture with its burst soon lead")
+        CastAheadDB.burstLeadSeconds = nil
+        CastAheadOptions.Refresh()
+        check(burst and burst.alpha == 1 and not burst.caption.shown, "burst soon at 0 leaves only the burst call")
+        CastAheadDB.raidMode = nil
+        CastAheadOptions.Refresh()
+        check(burst and burst.alpha == 0.35 and Off("Off - no burst calls"), "burst calls off dim their picture")
+        CastAheadDB = {}
+
+        local plays, previews = {}, {}
+        for _, b in ipairs(made) do
+            if rawget(b, "buttonText") == "Play" then plays[#plays + 1] = b end
+        end
+        local realPreview = CastAheadCore.PreviewSound
+        CastAheadCore.PreviewSound = function(advice) previews[#previews + 1] = advice end
+        if plays[1] then plays[1].handlers.OnClick(plays[1]) end
+        CastAheadCore.PreviewSound = realPreview
+        check(#plays == 2 and #previews == 1 and previews[1] == CastAheadMatch.ADVICE.KICK,
+            "Sound and Voice each have a Play button that plays the kick call once")
+
+        local what = groups["What to call out"]
+        local line = Text("Puts the predictions on the game's encounter timeline.")
+        local realHeight = line.GetStringHeight
+        line.GetStringHeight = function() return 400 end
+        CastAheadOptions.Refresh()
+        check(what.h > 400, "What to call out keeps the height its stage needs after a refresh, got " .. tostring(what.h))
+        line.GetStringHeight = realHeight
+
+        CastAheadOptions.ShowPanel(host, "Defensives")
+        local defs = groups["Defensive calls"]
+        defs.w = WIDE
+        local status
+        for _, fs in ipairs(texts) do
+            local v = rawget(fs, "value")
+            if type(v) == "string" and v:find("^|cffaaaaaa") and CastAheadBossAdapter
+                and v:find(CastAheadBossAdapter.Status(), 1, true) then status = fs end
+        end
+        if status then
+            status.SetPoint = function(self, at, to, _, x) if at == "TOPLEFT" then self.at = { to, x } end end
+            status.SetAlpha = function(self, a) self.alpha = a end
+        end
+        local early = Canvases(defs, "tick")[1]
+        CastAheadDB = { saveCalls = true, saveLeadSeconds = 3 }
+        CastAheadOptions.ShowPanel(host, "Defensives")
+        check(status and status.at and status.at[1] == defs and status.at[2] == COL_W + 10,
+            "the boss-mod status line sits in the Defensives stage column")
+        check(early and early.alpha == 1 and rawget(early.caption, "value") == "warning 3s before",
+            "defensive early warning shows its strip")
+        CastAheadDB = { saveLeadSeconds = 3 }
+        CastAheadOptions.ShowPanel(host, "Defensives")
+        check(early and early.alpha == 0.35 and status and status.alpha == 0.35,
+            "with defensive calls off the strip and the boss-mod line dim")
+
+        CastAheadDB = {}
+        local pictures = {}
+        for _, field in ipairs({ "block", "icons", "tick", "kicks" }) do
+            for _, g in pairs(groups) do
+                for _, c in ipairs(Canvases(g, field)) do pictures[c] = true end
+            end
+        end
+        for _, g in pairs(groups) do g.w = COL_W end
+        CastAheadOptions.Refresh()
+        -- Later cases count every shown frame, so the pictures leave none behind.
+        for _, f in ipairs(made) do
+            local up = f
+            while up and not pictures[up] do up = rawget(up, "parent") end
+            if up then f.shown = false end
+        end
+    end)();
 
     CastAheadDB = {}
     CastAheadOptions.SetSwitch("centerText", false)
