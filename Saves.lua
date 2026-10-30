@@ -11,6 +11,7 @@ local M = CastAheadMatch
 
 local scheduled = {}
 local lastFiredAt
+local WARN_CLEAR = 1.5
 
 function S.SpecID()
     if not (GetSpecialization and GetSpecializationInfo) then return nil end
@@ -728,7 +729,8 @@ function S.Tick(now)
     for key, c in pairs(scheduled) do
         if not c.pausedAt then
             local saveLead = CastAheadConfig.SaveLead()
-            if saveLead > 0 and not c.fired and not c.warned and now >= c.fireAt - saveLead and now < c.fireAt then
+            if saveLead > 0 and not c.fired and not c.warned and now >= c.fireAt - saveLead and now < c.fireAt
+                    and c.fireAt - now >= math.min(WARN_CLEAR, saveLead - 0.5) then
                 c.warned, c.warnedAt = true, now
                 lastFiredAt = now
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice, true, c.candidates) end

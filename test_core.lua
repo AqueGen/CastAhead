@@ -3719,12 +3719,24 @@ do
     check(Heard() == "DEFENSIVE_soon,DEFENSIVE", "early warning 3: nothing more, heard " .. Heard())
 
     heard = {}
-    S.Schedule("test:inside", 100, now + 1, now + 4, def)
+    S.Schedule("test:inside", 100, now + 2, now + 5, def)
     run(0.1)
     check(Heard() == "DEFENSIVE_soon", "a call scheduled inside its warning window warns on the first tick, heard " .. Heard())
-    run(1)
+    run(2)
     check(Heard() == "DEFENSIVE_soon,DEFENSIVE", "then calls at fireAt, heard " .. Heard())
     run(4)
+
+    heard = {}
+    S.Schedule("test:close", 100, now + 1, now + 4, def)
+    run(5)
+    check(Heard() == "DEFENSIVE", "a call scheduled under 1.5 s before fireAt skips the warning, heard " .. Heard())
+
+    heard = {}
+    CastAheadDB.saveLeadSeconds = 1
+    S.Schedule("test:lead1", 100, now + 5, now + 8, def)
+    run(10)
+    check(Heard() == "DEFENSIVE_soon,DEFENSIVE", "early warning 1 still warns on time, heard " .. Heard())
+    CastAheadDB.saveLeadSeconds = 3
 
     heard = {}
     S.Schedule("test:move", 100, now + 4, now + 7, def)
