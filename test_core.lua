@@ -6417,6 +6417,18 @@ do
     run(10)
 
     heard = {}
+    CastAheadDB.saveLeadSeconds = 3
+    local t4 = now
+    B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
+    S.Schedule("test:save4", 1, t4 + 34, t4 + 38, A.DEFENSIVE)
+    run(35)
+    check(Heard() == "SOON,DEFENSIVE_soon,DEFENSIVE", "burst: a save warning due inside the gap holds the burst, heard " .. Heard())
+    run(1)
+    check(Heard() == "SOON,DEFENSIVE_soon,DEFENSIVE,BURST", "burst: which speaks 2 s after the save itself, heard " .. Heard())
+    run(10)
+    CastAheadDB.saveLeadSeconds = nil
+
+    heard = {}
     B.OnEncounter("ENCOUNTER_START", 3492, 15, now)
     IsEncounterInProgress = function() return false end
     run(40)

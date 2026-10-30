@@ -33,6 +33,8 @@ local function DeferUntil(now)
     local at
     if last ~= nil and now - last < SAVE_GAP then at = last + SAVE_GAP end
     if nextAt ~= nil and nextAt - now < SAVE_GAP then at = math.max(at or 0, nextAt + SAVE_GAP) end
+    local warnAt, warnedCall = S.NextWarnAt(now)
+    if warnAt ~= nil and warnAt - now < SAVE_GAP then at = math.max(at or 0, warnedCall + SAVE_GAP) end
     return at
 end
 
@@ -210,6 +212,7 @@ function B.Tick(now)
             local at = not e.deferred and DeferUntil(now)
             if at then
                 e.deferred, e.fireAt = true, at
+                if e.advice == M.ADVICE.BURST then e.endAt = math.max(e.endAt, at + BURST_SHOWN) end
             else
                 e.fired = true
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(e.advice) end

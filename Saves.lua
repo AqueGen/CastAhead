@@ -670,6 +670,19 @@ function S.NextFireAt(now)
     return soonest
 end
 
+function S.NextWarnAt(now)
+    local lead = CastAheadConfig.SaveLead()
+    if lead <= 0 then return nil end
+    local warnAt, fireAt
+    for _, c in pairs(scheduled) do
+        if not c.pausedAt and not c.fired and not c.warned and c.fireAt >= now
+                and (not warnAt or c.fireAt - lead < warnAt) then
+            warnAt, fireAt = c.fireAt - lead, c.fireAt
+        end
+    end
+    return warnAt, fireAt
+end
+
 function S.CancelPrefix(prefix)
     for key in pairs(scheduled) do
         if key:sub(1, #prefix) == prefix then scheduled[key] = nil end
