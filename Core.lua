@@ -3225,9 +3225,9 @@ end
 
 -- The window's speaker buttons: hear a call exactly as it would play.
 -- Deliberately ignores the sound/voice mute switches - an explicit click
--- wants to hear it.
-function CastAheadCore.PreviewAdvice(advice, candidates)
-    if advice then Alert(advice, nil, candidates, true) end
+-- wants to hear it. `voice` false plays it as the voice switch off would.
+function CastAheadCore.PreviewAdvice(advice, candidates, voice)
+    if advice then Alert(advice, nil, candidates, voice ~= false) end
 end
 CastAheadCore.PreviewSound = CastAheadCore.PreviewAdvice
 
@@ -4005,6 +4005,22 @@ function CastAheadCore.PreviewRow(holder, plate)
         maxY = math.max(maxY, bottom + size)
     end
     return maxX - minX, maxY - minY, -minX, -minY
+end
+
+-- One sample of the row on a bar of the caller's (from NewBar), painted by
+-- the same code, for a picture that places its icons itself. Returns the
+-- icon size.
+function CastAheadCore.PaintPreviewBar(bar, key)
+    for _, sample in ipairs(CastAheadCore.SAMPLE_ROW) do
+        if sample.key == key then
+            local size = ApplyBarSize(bar)
+            PaintBar(bar, { row = CastAheadCore.SampleDataRow(key) or { prio = key }, approximate = sample.approx }, nil)
+            SetApprox(bar, sample.approx == true)
+            bar.time:SetFormattedText("%d", sample.time)
+            bar:Show()
+            return size
+        end
+    end
 end
 
 function CastAheadCore.Reapply()

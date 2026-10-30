@@ -252,13 +252,14 @@ local function BuildStage(panel, group)
 
     -- `spec.build(canvas)` makes the frames once, `spec.paint(canvas, on)`
     -- draws the current settings and returns the drawn size, `spec.on()` says
-    -- whether the feature is on, `spec.off` names what is off. While off the
+    -- whether the feature is on, `spec.off` (text, or a function returning it)
+    -- names what is off. While off the
     -- stage dims the canvas and desaturates its textures; colour fills are
     -- not greyed by that, so paint greys those itself when `on` is false.
     function stage.Picture(control, spec)
         local canvas = CreateFrame("Frame", nil, group)
         spec.build(canvas)
-        items[#items + 1] = { control = control, canvas = canvas, spec = spec, off = Muted(spec.off), saved = {} }
+        items[#items + 1] = { control = control, canvas = canvas, spec = spec, off = Muted(""), saved = {} }
     end
 
     function stage.Line(control, text)
@@ -301,6 +302,8 @@ local function BuildStage(panel, group)
                 canvas:SetAlpha(on and 1 or 0.35)
                 canvas:Show()
                 -- The line's room is kept while on, so the group keeps its shape.
+                local off = item.spec.off
+                item.off:SetText(type(off) == "function" and off() or off)
                 item.off:ClearAllPoints()
                 item.off:SetPoint("TOPLEFT", group, "TOPLEFT", STAGE_X, y - tall - 4)
                 item.off:SetShown(not on)
@@ -329,26 +332,21 @@ CastAheadOptions.BuildStage = BuildStage
 
 local OFF_GREY = { 0.5, 0.5, 0.5 }
 
--- One call icon as the pictures draw it: the sample cast's icon with the
--- short word under it. `Dim` greys it while a filter removes the call.
-local function SampleIcon(parent, key)
-    local advice = CastAheadMatch.ADVICE[key]
-    local icon = CreateFrame("Frame", nil, parent)
-    icon:SetSize(24, 24)
-    icon.texture = icon:CreateTexture(nil, "ARTWORK")
-    icon.texture:SetAllPoints()
-    icon.texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    local row = CastAheadCore.SampleDataRow(key)
-    icon.texture:SetTexture(row and C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(row.spell) or 136243)
-    icon.label = icon:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    icon.label:SetPoint("TOP", icon, "BOTTOM", 0, -2)
-    icon.label:SetText(advice.short or advice.label)
-    function icon.Dim(dim)
-        icon:SetAlpha(dim and 0.35 or 1)
-        icon.texture:SetDesaturated(dim and true or false)
-        if dim then icon.label:SetTextColor(unpack(OFF_GREY)) else icon.label:SetTextColor(advice.r, advice.g, advice.b) end
+-- Paints one sample call on `bar` and returns the room it takes with its
+-- label: width, height.
+local function PaintSample(bar, key)
+    local size = CastAheadCore.PaintPreviewBar(bar, key)
+    return math.max(size, bar.label:GetStringWidth() or 0), size + 1 + math.max(bar.label:GetStringHeight() or 0, 10)
+end
+
+-- Greys a sample bar a filter removes; the next paint brings its colours back.
+local function DimSample(bar, dim)
+    bar:SetAlpha(dim and 0.35 or 1)
+    bar.icon:SetDesaturated(dim)
+    if dim then
+        bar.label:SetTextColor(unpack(OFF_GREY))
+        bar.border:SetColorTexture(unpack(OFF_GREY))
     end
-    return icon
 end
 
 -- The centre call picture: a block of its own painted by the real centre
@@ -384,8 +382,9 @@ end
 local STRIP_W, STRIP_SCALE = 160, 15
 
 -- An early warning as a strip: the cast at the right end, the warning
--- `read()` seconds before it on a 15 s scale. Off at 0 or while `on()` is false.
-local function WarningStrip(read, on)
+-- `read()` seconds before it on a 15 s scale. Off at 0, or while `on()` is
+-- false, which the off line names with `blocked`.
+local function WarningStrip(read, on, blocked)
     return {
         build = function(canvas)
             canvas.line = canvas:CreateTexture(nil, "ARTWORK")
@@ -417,7 +416,10 @@ local function WarningStrip(read, on)
             return STRIP_W, 34
         end,
         on = function() return read() > 0 and (not on or on()) end,
-        off = "Off - no early warning",
+        off = function()
+            if read() > 0 and on and not on() then return blocked end
+            return "Off - no early warning"
+        end,
     }
 end
 
@@ -658,20 +660,21 @@ function BuildGeneral(panel)
     })
     whatStage.Picture(important, {
         build = function(canvas)
-            canvas.icons = {}
-            for i, key in ipairs({ "KICK", "DODGE", "TANK" }) do
-                local icon = SampleIcon(canvas, key)
-                icon:SetPoint("TOPLEFT", canvas, "TOPLEFT", 12 + (i - 1) * 52, 0)
-                canvas.icons[key] = icon
-            end
-            canvas:SetSize(152, 40)
+            canvas.bars = {}
+            for _, key in ipairs({ "KICK", "DODGE", "TANK" }) do canvas.bars[key] = CastAheadCore.NewBar(canvas) end
         end,
         paint = function(canvas)
-            local hides = CastAheadMatch.ROLE_HIDES[CastAheadMatch.PlayerRole() or "NONE"]
-            canvas.icons.KICK.Dim(false)
-            canvas.icons.DODGE.Dim(SwitchOn("importantOnly"))
-            canvas.icons.TANK.Dim(hides and hides.TANK)
-            return 152, 40
+            local x, h = 0, 0
+            for _, key in ipairs({ "KICK", "DODGE", "TANK" }) do
+                local bar = canvas.bars[key]
+                local w, tall = PaintSample(bar, key)
+                bar:ClearAllPoints()
+                bar:SetPoint("TOPLEFT", canvas, "TOPLEFT", x + (w - bar._size) / 2, 0)
+                DimSample(bar, not CastAheadMatch.Shown(CastAheadCore.SampleDataRow(key) or { prio = key }))
+                x, h = x + w + 8, math.max(h, tall)
+            end
+            canvas:SetSize(x - 8, h)
+            return x - 8, h
         end,
         on = function() return true end,
         off = "",
@@ -724,41 +727,54 @@ function BuildGeneral(panel)
     local function FitAudio()
         audioStage.Fit(26 + 3 * focusOnly:GetHeight() + 2 * 4 + 2 + kickNote:GetStringHeight() + 12)
     end
-    audio:HookScript("OnSizeChanged", FitAudio)
-    for _, switch in ipairs({ sound, voice }) do
-        local play = CastAheadWindow.Button(panel, "Play", 44)
-        play:SetPoint("LEFT", switch, "LEFT", COL_W - 10 - 52, 0)
-        play:SetScript("OnClick", function() CastAheadCore.PreviewSound(CastAheadMatch.ADVICE.KICK) end)
-    end
+    table.insert(refreshers, FitAudio)
+    local KICK = CastAheadMatch.ADVICE.KICK
+    local soundPlay = CastAheadWindow.Button(panel, "Play", 44)
+    soundPlay:SetPoint("LEFT", sound, "LEFT", COL_W - 10 - 52, 0)
+    soundPlay:SetScript("OnClick", function() CastAheadCore.PreviewSound(KICK, nil, CastAheadConfig.Enabled("voice")) end)
+    local voicePlay = CastAheadWindow.Button(panel, "Play", 44)
+    voicePlay:SetPoint("LEFT", voice, "LEFT", COL_W - 10 - 52, 0)
+    voicePlay:SetScript("OnClick", function() CastAheadCore.PreviewMedia(nil, KICK) end)
     audioStage.Line(sound, "Plays the call sound. Off silences the addon.")
     audioStage.Line(voice, "Speaks the call out loud.")
     audioStage.Picture(focusOnly, {
         build = function(canvas)
-            canvas.kicks, canvas.plates = {}, {}
+            canvas.kicks, canvas.plates, canvas.speakers = {}, {}, {}
             for i, name in ipairs({ "Focus", "Other mob" }) do
-                local kick = SampleIcon(canvas, "KICK")
-                kick:SetPoint("TOPLEFT", canvas, "TOPLEFT", 12 + (i - 1) * 120, -12)
                 local plate = CreateFrame("Frame", nil, canvas)
                 plate:SetSize(70, 8)
-                plate:SetPoint("LEFT", kick, "RIGHT", 4, 0)
                 plate.health = plate:CreateTexture(nil, "ARTWORK")
                 plate.health:SetAllPoints()
                 plate.health:SetColorTexture(0.75, 0.12, 0.1)
                 local label = plate:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
                 label:SetPoint("BOTTOMLEFT", plate, "TOPLEFT", 0, 2)
                 label:SetText(name)
-                kick.Dim(false)
-                canvas.kicks[i], canvas.plates[i] = kick, plate
+                local speaker = canvas:CreateTexture(nil, "ARTWORK")
+                speaker:SetSize(14, 14)
+                speaker:SetAtlas("chatframe-button-icon-speaker-on")
+                speaker:SetPoint("LEFT", plate, "RIGHT", 4, 0)
+                canvas.kicks[i], canvas.plates[i], canvas.speakers[i] = CastAheadCore.NewBar(canvas), plate, speaker
             end
             canvas.focus = canvas:CreateTexture(nil, "BACKGROUND")
             canvas.focus:SetPoint("TOPLEFT", canvas.plates[1], "TOPLEFT", -2, 2)
             canvas.focus:SetPoint("BOTTOMRIGHT", canvas.plates[1], "BOTTOMRIGHT", 2, -2)
             canvas.focus:SetColorTexture(unpack(T.gold))
-            canvas:SetSize(230, 50)
         end,
         paint = function(canvas)
-            canvas.kicks[2]:SetShown(not SwitchOn("kickFocusOnly"))
-            return 230, 50
+            local x, h = 0, 0
+            for i = 1, 2 do
+                local bar = canvas.kicks[i]
+                local w, tall = PaintSample(bar, "KICK")
+                bar:ClearAllPoints()
+                bar:SetPoint("TOPLEFT", canvas, "TOPLEFT", x + (w - bar._size) / 2, 0)
+                canvas.plates[i]:ClearAllPoints()
+                canvas.plates[i]:SetPoint("LEFT", canvas, "TOPLEFT", x + w + 4, -bar._size / 2)
+                x, h = x + w + 4 + 70 + 4 + 14 + 16, math.max(h, tall)
+            end
+            canvas.speakers[1]:Show()
+            canvas.speakers[2]:SetShown(not SwitchOn("kickFocusOnly"))
+            canvas:SetSize(x - 16, h)
+            return x - 16, h
         end,
         on = function() return true end,
         off = "",
@@ -850,6 +866,7 @@ function BuildGeneral(panel)
     table.insert(refreshers, PaintRaid)
     featuresStage.Picture(calls, CenterPicture("DEFENSIVE", CastAheadConfig.DungeonSaves, "Off - no defensive calls"))
     featuresStage.Line(raid, "Turns raid calls on. Experimental.")
+    featuresStage.Line(raidSaves, "Calls a defensive for a dangerous boss debuff on you.")
     featuresStage.Picture(bursts, CenterPicture("BURST", CastAheadConfig.BurstCalls, "Off - no burst calls", function()
         local lead = CastAheadConfig.BurstLead()
         return lead > 0 and string.format("burst soon %ds before", lead) or nil
@@ -879,9 +896,11 @@ function BuildGeneral(panel)
     local dev = BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
         if CastAheadCore and CastAheadCore.ApplyDevMode then CastAheadCore.ApplyDevMode() end
     end)
-    BuildStage(panel, extra).Line(dev, "Adds the Development page. Changes no calls.")
     local resetAll = CastAheadWindow.Button(panel, "Reset all settings", 130)
     resetAll:SetPoint("TOPLEFT", dev, "BOTTOMLEFT", 0, -10)
+    local extraStage = BuildStage(panel, extra)
+    extraStage.Line(dev, "Adds the Development page. Changes no calls.")
+    extraStage.Line(resetAll, "Puts every setting back to a new install. Recorded data stays.")
     resetAll:SetScript("OnClick", function()
         if StaticPopup_Show then StaticPopup_Show("CASTAHEAD_RESET_ALL") end
     end)
@@ -1206,6 +1225,7 @@ function BuildDefensives(panel)
     end)
     local function CallsOn() return CastAheadConfig.DungeonSaves() or CastAheadConfig.RaidSaves() end
     local stage = BuildStage(panel, group)
+    local bossLine = stage.Line(boss, "Adds calls for boss abilities DBM or BigWigs announce.")
     local status = stage.Line(boss, "")
     local early, earlyLabel = BuildSlider(panel, {
         key = "saveLeadSeconds",
@@ -1221,7 +1241,7 @@ function BuildDefensives(panel)
         end,
         after = function() stage.Paint() end,
     })
-    stage.Picture(early, WarningStrip(CastAheadConfig.SaveLead, CallsOn))
+    stage.Picture(early, WarningStrip(CastAheadConfig.SaveLead, CallsOn, "Off - defensive calls are off"))
 
     local store = CastAheadSaves.Store
     local list = BuildButtonList(panel, store, "def", "Defensive", "Empty - no defensive call")
@@ -1270,7 +1290,7 @@ function BuildDefensives(panel)
             boss:SetPoint("TOPLEFT", calls, "BOTTOMLEFT", 0, -4)
         end
         local alpha = on and 1 or OFF_ALPHA
-        for _, w in ipairs({ boss, status, early, earlyLabel, list, reset, caveat.text, caveat.button, note }) do w:SetAlpha(alpha) end
+        for _, w in ipairs({ boss, bossLine, status, early, earlyLabel, list, reset, caveat.text, caveat.button, note }) do w:SetAlpha(alpha) end
         note:SetShown(not shipped)
         list:SetShown(shipped)
         reset:SetShown(shipped)
@@ -1652,6 +1672,9 @@ function BuildSounds(panel)
         end
         Settings.OpenToCategory(id, CAA_ENABLE_COMBAT_AUDIO_ALERTS)
     end)
+    local ttsLine = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    ttsLine:SetTextColor(unpack(T.muted))
+    ttsLine:SetText("Uses the game's speech instead of the recorded voice.")
     local function PaintTTS()
         local api = C_CombatAudioAlert
         local gameOn = api and api.IsEnabled and api.IsEnabled()
@@ -1659,6 +1682,8 @@ function BuildSounds(panel)
         tts.text:SetText(gameOn and "Game TTS voice"
             or "Game TTS voice |cffff6060(Combat Audio Alerts are off in the game's Accessibility options)|r")
         openGame:SetShown(not gameOn)
+        ttsLine:ClearAllPoints()
+        ttsLine:SetPoint("LEFT", gameOn and tts.text or openGame, "RIGHT", 12, 0)
     end
     tts:RegisterEvent("CVAR_UPDATE")
     tts:SetScript("OnEvent", PaintTTS)
@@ -1697,6 +1722,10 @@ function BuildSounds(panel)
         end
     end)
     table.insert(refreshers, function() channel:GenerateMenu() end)
+    local channelLine = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    channelLine:SetPoint("LEFT", channel, "RIGHT", 12, 0)
+    channelLine:SetTextColor(unpack(T.muted))
+    channelLine:SetText("Which game volume slider controls the calls.")
     channel:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText("Sound channel", 1, 1, 1)

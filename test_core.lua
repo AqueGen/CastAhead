@@ -5250,11 +5250,27 @@ do
         CastAheadOptions.ShowPanel(host, "General")
         local okDev, errDev = pcall(CastAheadOptions.ShowPanel, host, "Development")
         check(okDev, "the Development page builds headless " .. tostring(errDev))
+        local okSounds, errSounds = pcall(CastAheadOptions.ShowPanel, host, "Sounds")
+        check(okSounds, "the Sounds page builds headless " .. tostring(errSounds))
+        for _, s in ipairs({ "Which game volume slider controls the calls.",
+            "Uses the game's speech instead of the recorded voice." }) do
+            local found
+            -- The Sounds page may have been built by an earlier case, outside `texts`.
+            for _, f in ipairs(allFrames) do
+                for _, fs in ipairs(rawget(f, "fontStrings") or {}) do
+                    if rawget(fs, "value") == s then found = fs end
+                end
+            end
+            check(found, "the Sounds page says: " .. s)
+        end
         for _, s in ipairs({ "Plays the call sound. Off silences the addon.", "Speaks the call out loud.",
             "Puts the predictions on the game's encounter timeline.", "Turns raid calls on. Experimental.",
             "Adds the Development page. Changes no calls.",
             "Copy the files off and clear the journal here when it asks.",
-            "A panel to mark a wrong call while recording." }) do
+            "A panel to mark a wrong call while recording.",
+            "Calls a defensive for a dangerous boss debuff on you.",
+            "Puts every setting back to a new install. Recorded data stays.",
+            "Adds calls for boss abilities DBM or BigWigs announce." }) do
             check(Text(s) ~= nil, "a visible sentence says: " .. s)
         end
         local groups = {}
@@ -5278,13 +5294,32 @@ do
             "with the centre call off its picture dims and says so")
         CastAheadDB.centerText = nil
 
-        local filter = Canvases(groups["What to call out"], "icons")[1]
+        local filter = Canvases(groups["What to call out"], "bars")[1]
         local realSpec, realRole = GetSpecialization, GetSpecializationRole
         GetSpecialization, GetSpecializationRole = function() return 1 end, function() return "DAMAGER" end
         CastAheadOptions.Refresh()
-        local icons = filter and filter.icons
-        check(icons and icons.KICK.alpha == 1 and icons.DODGE.alpha == 0.35 and icons.TANK.alpha == 0.35
-            and filter.alpha == 1, "with important only and my role on, a damage dealer sees dodge and buster dimmed")
+        local icons = filter and filter.bars
+        check(icons and icons.KICK.alpha == 1 and icons.DODGE.alpha == 1 and icons.TANK.alpha == 0.35
+            and filter.alpha == 1, "with my role on, a damage dealer sees only the buster dimmed")
+        check(icons and icons.TANK.labelValue == "BUSTER" and icons.KICK.previewBars == nil,
+            "the filter picture paints its samples with the nameplate bar code")
+        CastAheadDB.fullLabels = true
+        CastAheadOptions.Refresh()
+        check(icons and icons.TANK.labelValue == "TANKBUSTER", "Full labels reach the filter picture, got "
+            .. tostring(icons and icons.TANK.labelValue))
+        CastAheadDB.fullLabels = nil
+        local dodge = CastAheadCore.SampleDataRow("DODGE")
+        check(dodge and dodge.spell, "the dodge sample is a real cast")
+        if dodge and dodge.spell then
+            CastAheadDB.spellImportant = { [dodge.spell] = false }
+            CastAheadOptions.Refresh()
+            check(icons and icons.DODGE.alpha == 0.35 and icons.KICK.alpha == 1,
+                "with important only on, a dodge marked not important is dimmed")
+            CastAheadDB.importantOnly = false
+            CastAheadOptions.Refresh()
+            check(icons and icons.DODGE.alpha == 1, "with important only off, that dodge is back")
+            CastAheadDB.spellImportant = nil
+        end
         CastAheadDB.importantOnly, CastAheadDB.roleFilter = false, false
         CastAheadOptions.Refresh()
         check(icons and icons.DODGE.alpha == 1 and icons.TANK.alpha == 1 and filter.alpha == 1,
@@ -5309,12 +5344,14 @@ do
         CastAheadDB = {}
 
         local focus = Canvases(groups["Sound"], "kicks")[1]
-        check(focus and focus.focus and focus.kicks[1].shown and focus.kicks[2].shown and focus.alpha == 1,
-            "kick calls for every mob: both plates carry KICK")
+        check(focus and focus.focus and focus.kicks[1].shown and focus.kicks[2].shown and focus.alpha == 1
+            and focus.kicks[1].labelValue == "KICK" and focus.speakers[1].shown and focus.speakers[2].shown,
+            "kick voice for every mob: both plates carry KICK and a speaker")
         CastAheadDB.kickFocusOnly = true
         CastAheadOptions.Refresh()
-        check(focus and focus.kicks[1].shown and not focus.kicks[2].shown and focus.alpha == 1,
-            "kick calls for my focus: only the focus plate carries KICK, nothing dimmed")
+        check(focus and focus.kicks[1].shown and focus.kicks[2].shown and focus.speakers[1].shown
+            and not focus.speakers[2].shown and focus.alpha == 1,
+            "kick voice for my focus: both plates keep KICK, only the focus one keeps its speaker")
         CastAheadDB = {}
         check(groups["Sound"].handlers.OnSizeChanged == nil, "the Sound group leaves its height to the stage")
 
@@ -5338,12 +5375,20 @@ do
         for _, b in ipairs(made) do
             if rawget(b, "buttonText") == "Play" then plays[#plays + 1] = b end
         end
-        local realPreview = CastAheadCore.PreviewSound
-        CastAheadCore.PreviewSound = function(advice) previews[#previews + 1] = advice end
+        local realPreview, realMedia = CastAheadCore.PreviewSound, CastAheadCore.PreviewMedia
+        CastAheadCore.PreviewSound = function(advice, _, voice) previews[#previews + 1] = { advice, voice } end
+        CastAheadCore.PreviewMedia = function(name, advice) previews[#previews + 1] = { advice, "media", name } end
         if plays[1] then plays[1].handlers.OnClick(plays[1]) end
-        CastAheadCore.PreviewSound = realPreview
-        check(#plays == 2 and #previews == 1 and previews[1] == CastAheadMatch.ADVICE.KICK,
-            "Sound and Voice each have a Play button that plays the kick call once")
+        check(#plays == 2 and #previews == 1 and previews[1][1] == CastAheadMatch.ADVICE.KICK and previews[1][2] == true,
+            "Sound's Play plays the kick call once, spoken while the voice is on")
+        CastAheadDB.voice = false
+        if plays[1] then plays[1].handlers.OnClick(plays[1]) end
+        check(previews[2] and previews[2][2] == false, "Sound's Play skips the voice while the voice is off")
+        CastAheadDB.voice = nil
+        if plays[2] then plays[2].handlers.OnClick(plays[2]) end
+        check(previews[3] and previews[3][1] == CastAheadMatch.ADVICE.KICK and previews[3][2] == "media"
+            and previews[3][3] == nil, "Voice's Play speaks the kick call")
+        CastAheadCore.PreviewSound, CastAheadCore.PreviewMedia = realPreview, realMedia
 
         local what = groups["What to call out"]
         local line = Text("Puts the predictions on the game's encounter timeline.")
@@ -5377,10 +5422,15 @@ do
         CastAheadOptions.ShowPanel(host, "Defensives")
         check(early and early.alpha == 0.35 and status and status.alpha == 0.35,
             "with defensive calls off the strip and the boss-mod line dim")
+        check(Off("Off - defensive calls are off"), "the strip says defensive calls are off while its slider is set")
+        CastAheadDB = { saveCalls = true }
+        CastAheadOptions.ShowPanel(host, "Defensives")
+        check(Off("Off - no early warning") and not Off("Off - defensive calls are off"),
+            "with calls on and the slider at 0 the strip says there is no early warning")
 
         CastAheadDB = {}
         local pictures = {}
-        for _, field in ipairs({ "block", "icons", "tick", "kicks" }) do
+        for _, field in ipairs({ "block", "bars", "tick", "kicks" }) do
             for _, g in pairs(groups) do
                 for _, c in ipairs(Canvases(g, field)) do pictures[c] = true end
             end
