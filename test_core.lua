@@ -3761,6 +3761,14 @@ do
     check(S.NextFireAt(now) == nil and S.NextWarnAt(now) == nil, "a muted scheduled save is not an upcoming call")
     run(10)
     check(S.LastFiredAt() == firedBefore, "a muted scheduled save does not count as a call heard")
+    CastAheadDB = { saveCalls = true, saveLeadSeconds = 3 }
+    S.Schedule("test:pastwarn", 100, now + 1, now + 4, def)
+    S.Schedule("test:nextwarn", 100, now + 3.5, now + 6.5, def)
+    local warnAt, warnedCall = S.NextWarnAt(now)
+    check(warnAt and math.abs(warnAt - (now + 0.5)) < 1e-6 and math.abs(warnedCall - (now + 3.5)) < 1e-6,
+        "the next warning skips one whose time has passed, got " .. tostring(warnAt and warnAt - now))
+    S.Cancel("test:pastwarn")
+    S.Cancel("test:nextwarn")
     local savedStub = LibStub
     LibStub = function() return { Fetch = function(_, _, name) return "custom/" .. name .. ".ogg" end } end
     CastAheadDB = { saveCalls = true, saveLeadSeconds = 3, spellSounds = { [100] = "Bell" } }

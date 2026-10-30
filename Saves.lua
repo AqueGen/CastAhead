@@ -678,7 +678,7 @@ function S.NextWarnAt(now)
     if lead <= 0 then return nil end
     local warnAt, fireAt
     for _, c in pairs(scheduled) do
-        if not c.pausedAt and not c.fired and not c.warned and c.fireAt >= now
+        if not c.pausedAt and not c.fired and not c.warned and c.fireAt - lead >= now
                 and (not warnAt or c.fireAt - lead < warnAt) and Audible(c) then
             warnAt, fireAt = c.fireAt - lead, c.fireAt
         end
