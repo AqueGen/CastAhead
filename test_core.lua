@@ -4908,6 +4908,8 @@ do
             fs.SetText = function(self, t) setText(self, t) rawset(self, "value", t) end
             fs.SetShown = function(self, on) self.shown = on and true or false end
             fs.SetTextColor = function(self, ...) self.color = (...) == 1 and "normal" or "muted" end
+            fs.SetPoint = function(self, ...) rawset(self, "points", { ... }) end
+            fs.SetWidth = function(self, w) rawset(self, "width", w) end
             texts[#texts + 1] = fs
             return fs
         end
@@ -4956,7 +4958,7 @@ do
     check(not tabs:find("Bursts", 1, true) and not tabs:find("RaidDefensives", 1, true),
         "there are no Bursts and no Raid Defensives settings pages, got " .. tabs)
 
-    local wanted = { Features = true, ["Feature switches are on the Features page."] = true,
+    local wanted = { Features = true, ["Defensive calls: Off"] = true, ["Raid (experimental): Off"] = true,
         ["Defensive calls in dungeons"] = true, ["Boss calls from DBM / BigWigs"] = true,
         ["Raid (experimental)"] = true, ["Defensive calls in raids"] = true, ["Burst windows"] = true,
         Advanced = true, ["Development mode"] = true }
@@ -4974,8 +4976,47 @@ do
     local before, madeBefore = #texts, #made
     ok, err = pcall(CastAheadOptions.ShowPanel, host, "General")
     check(ok, "the General page builds headless " .. tostring(err))
-    check(Labels(before + 1) == "Features | Feature switches are on the Features page. | Advanced | Development mode",
-        "General's Features group holds no switch and points to the Features page, then Advanced")
+    check(Labels(before + 1) == "Features | Defensive calls: Off | Raid (experimental): Off | Advanced | Development mode",
+        "General's Features group holds two status rows and no switch, then Advanced")
+    do
+        local boxes, opens, rows = {}, {}, {}
+        for i = madeBefore + 1, #made do
+            local t = made[i].kind == "CheckButton" and rawget(made[i], "text")
+            if t then boxes[rawget(t, "value")] = true end
+            if rawget(made[i], "buttonText") == "Open" then opens[#opens + 1] = made[i] end
+        end
+        for _, key in ipairs({ "saveCalls", "raidMode", "raidSaves", "burstCalls", "bossAdapter" }) do
+            check(not boxes[CastAheadOptions.Switches[key].label], "General has no " .. key .. " checkbox")
+        end
+        for i = before + 1, #texts do
+            local v = rawget(texts[i], "value")
+            if v == "Defensive calls: Off" then rows.def = texts[i] end
+            if v == "Raid (experimental): Off" then rows.raid = texts[i] end
+        end
+        local cases = {
+            { {}, "Defensive calls: Off", "Raid (experimental): Off" },
+            { { saveCalls = true }, "Defensive calls: On", "Raid (experimental): Off" },
+            { { raidSaves = true, burstCalls = true }, "Defensive calls: Off", "Raid (experimental): Off" },
+            { { raidMode = true }, "Defensive calls: Off", "Raid: defensive off, burst off" },
+            { { raidMode = true, raidSaves = true }, "Defensive calls: Off", "Raid: defensive on, burst off" },
+            { { raidMode = true, burstCalls = true, saveCalls = true }, "Defensive calls: On", "Raid: defensive off, burst on" },
+        }
+        for _, case in ipairs(cases) do
+            CastAheadDB = case[1]
+            CastAheadOptions.Refresh()
+            local def, raid = rows.def and rawget(rows.def, "value"), rows.raid and rawget(rows.raid, "value")
+            check(def == case[2] and raid == case[3], "General status rows read " .. case[2] .. " / " .. case[3]
+                .. ", got " .. tostring(def) .. " / " .. tostring(raid))
+        end
+        CastAheadDB = {}
+        CastAheadOptions.Refresh()
+        local realShow, shows = CastAheadOptions.ShowFeatures, 0
+        CastAheadOptions.ShowFeatures = function() shows = shows + 1 end
+        for _, b in ipairs(opens) do b.handlers.OnClick(b) end
+        CastAheadOptions.ShowFeatures = realShow
+        check(#opens == 2 and shows == 2, "General has two Open buttons, each shows the Features page, got "
+            .. #opens .. "/" .. shows)
+    end
     do
         local counts, wrong = {}, {}
         for _, f in ipairs(made) do
@@ -5166,22 +5207,14 @@ do
         local setHeight = group.SetHeight
         group.SetHeight = function(self, h) sets = sets + 1 setHeight(self, h) end
         local stage = CastAheadOptions.BuildStage(panel, group)
+        check(stage.Line == nil, "the stage holds pictures only, no sentences")
         local control = CreateFrame("Frame", nil, panel)
-        stage.Line(control, "Stage test sentence")
-        local line
-        for _, fs in ipairs(texts) do
-            if rawget(fs, "value") == "Stage test sentence" then line = fs end
-        end
-        line.SetPoint = function(self, at, to, rel, x, y) if at == "TOPLEFT" then self.at = { to, rel, x, y } end end
-        line.GetStringHeight = function() return 24 end
-        local need = stage.Paint()
-        check(line.at and line.at[1] == group and line.at[3] == COL_W + 10 and line.at[4] < -8,
-            "a stage line sits in the stage column below the title")
-        check(need == 4 - (line.at[4] - 24 - 6), "a stage line adds its height to what the stage needs, got " .. tostring(need))
-        line.GetStringHeight = function() return 400 end
-        need = stage.Paint()
-        check(group.h == need and need > 400, "a tall stage line grows the group, got " .. tostring(group.h))
-        line.GetStringHeight = function() return 24 end
+        local note = CastAheadOptions.Note(panel, control, "Stage test sentence")
+        check(note and rawget(note, "value") == "Stage test sentence" and note.points
+            and note.points[1] == "TOPLEFT" and note.points[2] == control and note.points[3] == "BOTTOMLEFT",
+            "a note sits under its control")
+        check(note and note.width == COL_W - 20, "a note wraps in the control column, got " .. tostring(note and note.width))
+        local need
         for _, h in ipairs({ 196, 262, 196 }) do
             sets, relayouts = 0, 0
             need = stage.Fit(h)
@@ -5297,6 +5330,19 @@ do
             "Adds calls for boss abilities DBM or BigWigs announce.",
             "Boss mods, early warning and buttons also apply to raid defensive calls." }) do
             check(Text(s) ~= nil, "a visible sentence says: " .. s)
+        end
+        for _, chain in ipairs({
+            { "Sound", "Plays the call sound. Off silences the addon.", "Voice" },
+            { "Feed the Blizzard timeline", "Puts the predictions on the game's encounter timeline.", "Show in BigWigs bars" },
+            { "Raid (experimental)", "Turns raid calls on. Experimental.", "Defensive calls in raids" },
+            { "Defensive calls in raids", "Calls a defensive for a dangerous boss debuff on you.", "Burst windows" },
+            { "Record everything", "Copy the files off and clear the journal here when it asks.", "Mark panel" },
+        }) do
+            local control, note, nextOne = Frame(chain[1]), Text(chain[2]), Frame(chain[3])
+            check(control and note and note.points and note.points[2] == control,
+                "the note sits under " .. chain[1])
+            check(nextOne and note and nextOne.points and nextOne.points[2] == note,
+                chain[3] .. " sits under the note of " .. chain[1])
         end
         local groups = {}
         for _, title in ipairs({ "What to call out", "Sound", "Centre call" }) do
@@ -5463,6 +5509,31 @@ do
         CastAheadDB.raidMode = nil
         CastAheadOptions.Refresh()
         check(burst and burst.alpha == 0.35 and Off("Off - no burst calls"), "burst calls off dim their picture")
+        CastAheadDB = { saveCalls = true, raidMode = true, burstCalls = true }
+        for _, c in ipairs({ saves, burst, centre }) do
+            if c then c.SetScale = function(self, s) self.scale = s end end
+        end
+        CastAheadOptions.Refresh()
+        for name, c in pairs({ defensive = saves, burst = burst }) do
+            local line = c and c.scale and c.scale * c.block.lines[1].h
+            check(line and math.abs(line - 30) < 0.01, "the Features " .. name .. " picture has a 30 tall call line, got "
+                .. tostring(line))
+        end
+        check(centre and centre.scale == 1, "the Centre call picture keeps its full size, got "
+            .. tostring(centre and centre.scale))
+        do
+            local note, hidden = Text("Adds calls for boss abilities DBM or BigWigs announce."), false
+            local realShown, realHide = note.SetShown, note.Hide
+            note.SetShown = function(self, on) if not on then hidden = true end realShown(self, on) end
+            note.Hide = function() hidden = true end
+            groups.Dungeon.w = COL_W
+            CastAheadOptions.Refresh()
+            check(saves and not saves.shown, "a narrow Features section hides its picture")
+            check(not hidden and note.points[2] == Frame("Boss calls from DBM / BigWigs"),
+                "a narrow Features section keeps its notes under their controls")
+            note.SetShown, note.Hide = realShown, realHide
+            groups.Dungeon.w = WIDE
+        end
         CastAheadDB = {}
 
         local plays, previews = {}, {}
@@ -5500,15 +5571,12 @@ do
             if type(v) == "string" and v:find("^|cffaaaaaa") and CastAheadBossAdapter
                 and v:find(CastAheadBossAdapter.Status(), 1, true) then status = fs end
         end
-        if status then
-            status.SetPoint = function(self, at, to, _, x) if at == "TOPLEFT" then self.at = { to, x } end end
-            status.SetAlpha = function(self, a) self.alpha = a end
-        end
+        if status then status.SetAlpha = function(self, a) self.alpha = a end end
         local early = Canvases(defs, "tick")[1]
         CastAheadDB = { saveCalls = true, saveLeadSeconds = 3 }
         CastAheadOptions.ShowPanel(host, "Features")
-        check(status and status.at and status.at[1] == defs and status.at[2] == COL_W + 10,
-            "the boss-mod status line sits in the dungeon section stage column")
+        check(status and status.points and status.points[2] == Text("Boss mods, early warning and buttons also apply to raid defensive calls."),
+            "the boss-mod status line sits under the shared-controls note in the control column")
         check(early and early.alpha == 1 and rawget(early.caption, "value") == "warning 3s before",
             "defensive early warning shows its strip")
         CastAheadDB = { saveLeadSeconds = 3 }
