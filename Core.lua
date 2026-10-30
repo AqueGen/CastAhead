@@ -3091,8 +3091,7 @@ frame:SetScript("OnUpdate", function()
                         -- fired at START, and "soon" is wrong for it anyway.
                         if not entry.casting and entry.track and not entry.track.warned then
                             local lead = CastAheadConfig.LeadFor(entry.candidates)
-                            local saveLead = CastAheadSaves and CastAheadConfig.SaveCalls()
-                                and CastAheadConfig.LeadFor(entry.candidates, CastAheadConfig.SaveLead()) or 0
+                            local saveLead = CastAheadSaves and CastAheadConfig.SaveCalls() and CastAheadConfig.SaveLead() or 0
                             local window = math.max(lead, saveLead)
                             if window > 0 and remaining <= window then
                                 local heads = CastAheadMatch.ConsensusAdvice(entry.candidates)
@@ -3478,8 +3477,8 @@ function CastAheadCore.Test(instanceID, list)
                 else
                     local remaining = e.endAt - t
                     local advice = CastAheadMatch.Advice(e.row)
-                    local lead = CastAheadConfig.LeadFor({ e.row }, CastAheadSaves
-                        and CastAheadMatch.IsSave(advice) and CastAheadConfig.SaveLead() or nil)
+                    local lead = CastAheadSaves and CastAheadMatch.IsSave(advice) and CastAheadConfig.SaveLead()
+                        or CastAheadConfig.LeadFor({ e.row })
                     if lead > 0 and remaining <= lead and not e.warned then
                         e.warned = true
                         PlayAdviceSound(advice, true, { e.row })

@@ -3505,16 +3505,16 @@ reset()
 CastAheadDefensives = { spells = { [100] = { DAMAGER = true, lead = 4.0 } }, alias = {} }
 CastAheadCore.ReapplyData()
 
--- A spell's own early warning on the Casts page wins over the save lead, as it does over the general one.
-CastAheadDB = { saveCalls = true, centerText = true, leadSeconds = 0, saveLeadSeconds = 4, spellLead = { [100] = 6 } }
+-- A spell's own early warning on the Casts page is for its cast call; the save heads-up keeps the save lead.
+CastAheadDB = { saveCalls = true, centerText = true, leadSeconds = 0, saveLeadSeconds = 4, spellLead = { [100] = 0 } }
 CastAheadCore.ReapplyData()
 enter()
 castFor(3.0)
 sounds, spoken, clips = 0, 0, 0
-advance(10.5)
-check(Alerts() == 0, "no save heads-up before the spell's own lead")
-advance(1.0)
-check(Alerts() == 1, string.format("the save heads-up follows the spell's own 6 s lead, got %d", Alerts()))
+advance(15.0)
+check(Alerts() == 0, "own lead 0: no save heads-up before the save lead")
+advance(1.5)
+check(Alerts() == 1, string.format("own lead 0: the save heads-up still comes at the save lead, got %d", Alerts()))
 reset()
 
 -- The test drive warns before a defensive call with the save lead, as live play does.
