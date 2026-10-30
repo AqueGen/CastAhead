@@ -5941,6 +5941,28 @@ do
         end
         end)()
 
+        ;(function()
+            local savedInfo, savedCancel = GetInstanceInfo, CastAheadSaves.CancelPrefix
+            local cancelled = {}
+            CastAheadSaves.CancelPrefix = function(prefix) cancelled[#cancelled + 1] = prefix end
+            local function Untick(inRaid, db)
+                cancelled = {}
+                GetInstanceInfo = function() return "Abyss", inRaid and "raid" or "party", 15, "", 0, 0, false, 9999 end
+                CastAheadDB = db
+                CastAheadOptions.RaidSavesChanged()
+                return table.concat(cancelled, ",")
+            end
+            check(Untick(true, { raidMode = true, raidSaves = false }) == "dbm:,bw:",
+                "unticking raid calls in a raid cancels the pending dbm: and bw: calls")
+            check(Untick(true, { raidMode = false, raidSaves = true }) == "dbm:,bw:",
+                "unticking the raid switch in a raid cancels the pending dbm: and bw: calls")
+            check(Untick(false, { raidMode = true, raidSaves = false }) == "",
+                "unticking raid calls outside a raid cancels nothing")
+            check(Untick(true, { raidMode = true, raidSaves = true }) == "",
+                "raid calls still on cancel nothing")
+            CastAheadSaves.CancelPrefix, GetInstanceInfo = savedCancel, savedInfo
+        end)()
+
         CastAheadDB = {}
         CastAheadUI.RefreshTabs()
         check(select(2, CastAheadWindow.Page("RaidSaves")) == false, "RaidSaves is not in the menu while the raid switch is off")
