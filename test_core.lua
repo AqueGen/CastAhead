@@ -5361,10 +5361,13 @@ do
         canvas.previewBars[1].GetRegions = function() return icon end
         local savedGetChildren = canvas.GetChildren
         canvas.GetChildren = function() return canvas.plate, unpack(canvas.previewBars) end
+        local name = canvas.plate.fontStrings[1]
+        canvas.plate.alpha, name.alpha, colour = 1, 1, nil
         CastAheadDB.nameplates = false
         CastAheadOptions.Refresh()
-        check(canvas.alpha == 1 and canvas.plate.alpha ~= 0.35 and canvas.shown and OffLine() and OffLine().shown == true,
-            "with nameplate icons off the plate stays lit and the off line says so")
+        check(canvas.alpha == 1 and canvas.plate.alpha == 1 and name.alpha == 1 and rawget(name, "value") == "Training Dummy"
+            and canvas.shown and OffLine() and OffLine().shown == true,
+            "with nameplate icons off the plate and its name stay lit and the off line says so")
         check(health.desat == false and colour and colour[1] > colour[2],
             "with nameplate icons off the plate keeps its red fill and saturation")
         check(canvas.previewBars[1].alpha == 0.35 and canvas.previewBars[3].alpha == 0.35 and icon.desat == true,
@@ -6498,6 +6501,9 @@ do
         check(Heard() == "SOON,DEFENSIVE_soon,DEFENSIVE", "burst: no room between a 1 s warning and its call, so it waits, heard " .. Heard())
         run(0.5)
         check(Heard() == "SOON,DEFENSIVE_soon,DEFENSIVE,BURST", "burst: and speaks 2 s after the call, heard " .. Heard())
+        local shown = B.Pending(now)[1]
+        check(shown and shown.advice == A.BURST and math.abs(shown.endAt - (t + 38.5)) < 1e-6,
+            "burst: a deferred burst stays on screen 5 s after it is spoken, got " .. tostring(shown and shown.endAt - t))
         run(10)
 
         t = Phase(1)
