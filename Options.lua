@@ -1,6 +1,6 @@
 CastAheadOptions = {}
 
-CastAheadOptions.TABS = { "General", "Sounds", "Defensives", "Development", "Report" }
+CastAheadOptions.TABS = { "General", "Sounds", "Features", "Development", "Report" }
 local panels = {}
 local T = CastAheadWindow.THEME
 local FLAT = CastAheadWindow.FLAT
@@ -28,7 +28,7 @@ end
 
 -- Forward declarations: Build calls these, and Lua resolves a local by
 -- what it holds at call time, so they must exist as upvalues before it runs.
-local BuildGeneral, BuildSounds, BuildDefensives, BuildDevelopment, BuildReport
+local BuildGeneral, BuildSounds, BuildFeatures, BuildDevelopment, BuildReport
 -- Widgets are painted once, when a panel is first built, but storage can
 -- change behind their back: the /ca anchor|grow|offset|center slash commands
 -- and the setup mode all write it. Every widget that displays stored state
@@ -838,73 +838,11 @@ function BuildGeneral(panel)
     centreStage.Picture(centreOn, CenterPicture("KICK", CastAheadConfig.CenterText,
         "Off - no call in the middle of the screen"))
 
-    local features = BuildGroup(panel, "Features", 230)
-    local featuresStage = BuildStage(panel, features)
-    local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", features, "TOPLEFT", 10, -26 }, CastAheadOptions.SavesSwitchChanged)
-    local raidSaves, bursts, burstSoon, soonLabel
-    local function PaintRaid()
-        local on = SwitchOn("raidMode")
-        local color = on and { 1, 1, 1 } or T.muted
-        for _, child in ipairs({ raidSaves, bursts }) do
-            child:SetEnabled(on)
-            child.text:SetTextColor(unpack(color))
-        end
-        if burstSoon then
-            burstSoon:SetAlpha(on and 1 or 0.5)
-            soonLabel:SetTextColor(unpack(color))
-        end
-    end
-    local function RaidChanged()
-        CastAheadOptions.RaidSavesChanged()
-        PaintRaid()
-    end
-    local raid = BuildSwitch(panel, "raidMode", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, RaidChanged)
-    raidSaves = BuildSwitch(panel, "raidSaves", { "TOPLEFT", raid, "BOTTOMLEFT", 16, -4 }, RaidChanged)
-    bursts = BuildSwitch(panel, "burstCalls", { "TOPLEFT", raidSaves, "BOTTOMLEFT", 0, -4 }, RaidChanged)
-    for _, child in ipairs({ raidSaves, bursts }) do
-        if child.SetMotionScriptsWhileDisabled then child:SetMotionScriptsWhileDisabled(true) end
-    end
-    burstSoon, soonLabel = BuildSlider(panel, {
-        key = "burstLeadSeconds",
-        default = 0,
-        min = 0, max = CastAheadConfig.BURST_LEAD_MAX,
-        low = "off", high = CastAheadConfig.BURST_LEAD_MAX .. "s",
-        point = { "TOPLEFT", bursts, "BOTTOMLEFT", 6, -8 },
-        width = COL_W - 80,
-        caption = function(value)
-            return value > 0 and string.format("Burst soon: %ds before", value) or "Burst soon: off"
-        end,
-        after = function() featuresStage.Paint() end,
-    })
-    table.insert(refreshers, PaintRaid)
-    featuresStage.Picture(calls, CenterPicture("DEFENSIVE", CastAheadConfig.DungeonSaves, "Off - no defensive calls"))
-    featuresStage.Line(raid, "Turns raid calls on. Experimental.")
-    featuresStage.Line(raidSaves, "Calls a defensive for a dangerous boss debuff on you.")
-    featuresStage.Line(bursts, "Healers get their own phases for group cooldowns. Other bosses: no call.")
-    featuresStage.Picture(bursts, CenterPicture("BURST", CastAheadConfig.BurstCalls, "Off - no burst calls", function()
-        local lead = CastAheadConfig.BurstLead()
-        return lead > 0 and string.format("burst soon %ds before", lead) or nil
-    end))
-
-    -- A Test button at the right end of a feature's row shows that feature alone.
-    local function TestButton(switch, indent, tip, run)
-        local button = CastAheadWindow.Button(panel, "Test", 44)
-        button:SetPoint("LEFT", switch, "LEFT", COL_W - 10 - indent - 52, 0)
-        button:SetScript("OnClick", function()
-            if not run() then print("|cff33ff99CastAhead|r switch it on first, then press Test") end
-        end)
-        button:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText("Test", 1, 1, 1)
-            GameTooltip:AddLine(tip, nil, nil, nil, true)
-            GameTooltip:Show()
-        end)
-        button:SetScript("OnLeave", GameTooltip_Hide)
-    end
-    TestButton(calls, 0, "One sample defensive call with your buttons, in the centre and out loud.",
-        function() return CastAheadCore.FeatureTest("defensive") end)
-    TestButton(bursts, 16, "A sample \"burst soon\", then \"burst now\" with its countdown.",
-        function() return CastAheadCore.FeatureTest("burst") end)
+    local features = BuildGroup(panel, "Features", 46)
+    local featuresText = features:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    featuresText:SetPoint("TOPLEFT", features, "TOPLEFT", 10, -26)
+    featuresText:SetTextColor(unpack(T.muted))
+    featuresText:SetText("Feature switches are on the Features page.")
 
     local extra = BuildGroup(panel, "Advanced", 97)
     local dev = BuildSwitch(panel, "devMode", { "TOPLEFT", extra, "TOPLEFT", 10, -26 }, function()
@@ -1219,17 +1157,75 @@ local function Caveat(parent, text, kind)
     return c
 end
 
-function BuildDefensives(panel)
+-- A Test button at the right end of a feature's row shows that feature alone.
+local function TestButton(panel, switch, indent, tip, run)
+    local button = CastAheadWindow.Button(panel, "Test", 44)
+    button:SetPoint("LEFT", switch, "LEFT", COL_W - 10 - indent - 52, 0)
+    button:SetScript("OnClick", function()
+        if not run() then print("|cff33ff99CastAhead|r switch it on first, then press Test") end
+    end)
+    button:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Test", 1, 1, 1)
+        GameTooltip:AddLine(tip, nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    button:SetScript("OnLeave", GameTooltip_Hide)
+    return button
+end
+
+-- A section's header switch turns its feature on. While it is off the rest of
+-- the section is dimmed and stays editable.
+local function BuildRaidSection(panel)
+    local group = BuildGroup(panel, nil, 150, true)
+    local stage = BuildStage(panel, group)
+    local raid = BuildSwitch(panel, "raidMode", { "TOPLEFT", group, "TOPLEFT", 10, -6 }, CastAheadOptions.RaidSavesChanged)
+    raid.text:SetTextColor(unpack(T.gold))
+    local raidSaves = BuildSwitch(panel, "raidSaves", { "TOPLEFT", raid, "BOTTOMLEFT", 16, -4 }, CastAheadOptions.RaidSavesChanged)
+    local bursts = BuildSwitch(panel, "burstCalls", { "TOPLEFT", raidSaves, "BOTTOMLEFT", 0, -4 }, CastAheadOptions.RaidSavesChanged)
+    local burstSoon, soonLabel = BuildSlider(panel, {
+        key = "burstLeadSeconds",
+        default = 0,
+        min = 0, max = CastAheadConfig.BURST_LEAD_MAX,
+        low = "off", high = CastAheadConfig.BURST_LEAD_MAX .. "s",
+        point = { "TOPLEFT", bursts, "BOTTOMLEFT", 6, -8 },
+        width = COL_W - 80,
+        caption = function(value)
+            return value > 0 and string.format("Burst soon: %ds before", value) or "Burst soon: off"
+        end,
+        after = function() stage.Paint() end,
+    })
+    stage.Line(raid, "Turns raid calls on. Experimental.")
+    local savesLine = stage.Line(raidSaves, "Calls a defensive for a dangerous boss debuff on you.")
+    local burstLine = stage.Line(bursts, "Healers get their own phases for group cooldowns. Other bosses: no call.")
+    stage.Picture(bursts, CenterPicture("BURST", CastAheadConfig.BurstCalls, "Off - no burst calls", function()
+        local lead = CastAheadConfig.BurstLead()
+        return lead > 0 and string.format("burst soon %ds before", lead) or nil
+    end))
+    local test = TestButton(panel, bursts, 16, "A sample \"burst soon\", then \"burst now\" with its countdown.",
+        function() return CastAheadCore.FeatureTest("burst") end)
+    local function Paint()
+        local alpha = SwitchOn("raidMode") and 1 or OFF_ALPHA
+        for _, w in ipairs({ raidSaves, bursts, burstSoon, soonLabel, savesLine, burstLine, test }) do w:SetAlpha(alpha) end
+        -- Three switch rows, the slider caption, the slider and its end labels.
+        stage.Fit(6 + 3 * raid:GetHeight() + 2 * 4 + 8 + soonLabel:GetStringHeight() + 12 + burstSoon:GetHeight() + 14 + 10)
+    end
+    table.insert(refreshers, Paint)
+    Paint()
+    return group
+end
+
+function BuildFeatures(panel)
     if not CastAheadSaves then
         local note = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         note:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -6)
         note:SetText("Restart the game to finish the CastAhead update - defensive calls are off until then.")
         return
     end
-    local group = BuildGroup(panel, "Defensive calls", DEFENSIVES_H)
+    local group = BuildGroup(panel, nil, DEFENSIVES_H)
     local Paint
-    local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -26 }, CastAheadOptions.SavesSwitchChanged)
-    local raidSaves = BuildSwitch(panel, "raidSaves", { "TOPLEFT", calls, "BOTTOMLEFT", 16, -4 }, CastAheadOptions.RaidSavesChanged)
+    local calls = BuildSwitch(panel, "saveCalls", { "TOPLEFT", group, "TOPLEFT", 10, -6 }, CastAheadOptions.SavesSwitchChanged)
+    calls.text:SetTextColor(unpack(T.gold))
     local boss = BuildSwitch(panel, "bossAdapter", { "TOPLEFT", calls, "BOTTOMLEFT", 0, -4 }, function(on)
         Redraw()
         if not on and CastAheadSaves then
@@ -1239,8 +1235,10 @@ function BuildDefensives(panel)
     end)
     local function CallsOn() return CastAheadConfig.DungeonSaves() or CastAheadConfig.RaidSaves() end
     local stage = BuildStage(panel, group)
-    stage.Line(raidSaves, "Calls a defensive for a dangerous boss debuff on you.")
-    local bossLine = stage.Line(boss,"Adds calls for boss abilities DBM or BigWigs announce.")
+    stage.Picture(calls, CenterPicture("DEFENSIVE", CastAheadConfig.DungeonSaves, "Off - no defensive calls"))
+    TestButton(panel, calls, 0, "One sample defensive call with your buttons, in the centre and out loud.",
+        function() return CastAheadCore.FeatureTest("defensive") end)
+    local bossLine = stage.Line(boss, "Adds calls for boss abilities DBM or BigWigs announce.")
     local status = stage.Line(boss, "")
     local early, earlyLabel = BuildSlider(panel, {
         key = "saveLeadSeconds",
@@ -1279,6 +1277,7 @@ function BuildDefensives(panel)
     note:SetJustifyV("TOP")
     note:SetWordWrap(true)
     note:SetText("|cffaaaaaaNo shipped defensive lists for this specialization.|r")
+    local raid = BuildRaidSection(panel)
     panel.flowBottom = function(y)
         local width, h = math.max(panel:GetWidth() - 2 * COL_X, 1), 0
         if note:IsShown() then
@@ -1288,35 +1287,33 @@ function BuildDefensives(panel)
             h = note:GetStringHeight() + 10
         end
         if caveat.text:IsShown() then h = h + 10 + caveat.Place(COL_X, y + h + 10, width) end
-        return h
+        raid:ClearAllPoints()
+        raid:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -(y + h + COL_GAP))
+        raid:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -COL_X, -(y + h + COL_GAP))
+        return h + COL_GAP + raid:GetHeight()
     end
 
     Paint = function()
-        local on = CallsOn()
+        local on = CastAheadConfig.DungeonSaves()
         local spec = CastAheadSaves and CastAheadSaves.ViewSpecID()
         local shipped = spec and CastAheadSaveButtons and CastAheadSaveButtons[spec] and true or false
         status:SetText("|cffaaaaaa" .. (CastAheadBossAdapter and CastAheadBossAdapter.Status() or "No boss mod") .. "|r")
-        local raid = CastAheadConfig.Get("raidMode") == true
-        raidSaves:SetShown(raid)
-        boss:ClearAllPoints()
-        if raid then
-            boss:SetPoint("TOPLEFT", raidSaves, "BOTTOMLEFT", -16, -4)
-        else
-            boss:SetPoint("TOPLEFT", calls, "BOTTOMLEFT", 0, -4)
-        end
         local alpha = on and 1 or OFF_ALPHA
         for _, w in ipairs({ boss, bossLine, status, early, earlyLabel, list, reset, caveat.text, caveat.button, note }) do w:SetAlpha(alpha) end
         note:SetShown(not shipped)
         list:SetShown(shipped)
         reset:SetShown(shipped)
         -- Switch rows, slider, then the reset button or the slider's end labels.
-        local rows = raid and 3 or 2
-        stage.Fit(26 + rows * calls:GetHeight() + (rows - 1) * 4 + 14 + earlyLabel:GetStringHeight() + 12
+        stage.Fit(6 + 2 * calls:GetHeight() + 4 + 14 + earlyLabel:GetStringHeight() + 12
             + early:GetHeight() + (shipped and 24 + reset:GetHeight() or 14) + 10)
         panel:Relayout()
     end
     table.insert(refreshers, Paint)
     table.insert(listRefreshers, Paint)
+end
+
+function CastAheadOptions.ShowFeatures()
+    CastAheadUI.ShowTab("Features")
 end
 
 local BURST_DIFFICULTIES = { { 14, "Normal" }, { 15, "Heroic" }, { 16, "Mythic" }, { 8, "Keys" } }
@@ -1798,7 +1795,7 @@ function BuildSounds(panel)
     end
 end
 
-BUILDERS = { General = BuildGeneral, Sounds = BuildSounds, Defensives = BuildDefensives, Development = BuildDevelopment,
+BUILDERS = { General = BuildGeneral, Sounds = BuildSounds, Features = BuildFeatures, Development = BuildDevelopment,
              Report = BuildReport }
 local MENU_GROUPS = { Report = "Feedback" }
 
@@ -1807,5 +1804,5 @@ for _, name in ipairs(CastAheadOptions.TABS) do
     CastAheadWindow.Register(name, MENU_GROUPS[name] or "Settings",
         function(h) host = h end,
         function() CastAheadOptions.ShowPanel(host, name) end,
-        nil, name == "Defensives")
+        nil, name == "Features")
 end
