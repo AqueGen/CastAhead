@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.27.0](https://github.com/AqueGen/CastAhead/compare/v0.26.0...v0.27.0) (2026-10-30)
+
+
+### Features
+
+* one Features page for every switch, with a picture of what each option does ([#120](https://github.com/AqueGen/CastAhead/issues/120)) ([c0620f6](https://github.com/AqueGen/CastAhead/commit/c0620f606dc656b17b860f68daeb13f79db01891))
+
 ## [0.26.0](https://github.com/AqueGen/CastAhead/compare/v0.25.0...v0.26.0) (2026-10-29)
 
 
