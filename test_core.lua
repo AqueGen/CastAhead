@@ -3517,6 +3517,34 @@ advance(1.0)
 check(Alerts() == 1, string.format("the save heads-up follows the spell's own 6 s lead, got %d", Alerts()))
 reset()
 
+-- The test drive warns before a defensive call with the save lead, as live play does.
+do
+    local function Drive(db)
+        CastAheadDB = db
+        CastAheadCore.ReapplyData()
+        local made = #allFrames
+        CastAheadCore.Test(1877, { CastAheadData[1877][1] })
+        local tick
+        for i = made + 1, #allFrames do tick = tick or allFrames[i].handlers.OnUpdate end
+        sounds, spoken, clips = 0, 0, 0
+        local stop = now + 1.9
+        while now < stop do
+            now = now + 0.1
+            tick()
+        end
+        local heard = Alerts()
+        CastAheadCore.StopTest()
+        return heard
+    end
+    check(CastAheadMatch.Advice(CastAheadData[1877][1]) == CastAheadMatch.ADVICE.DEFENSIVE, "the demo row is a defensive call")
+    local heard = Drive({ saveCalls = true, leadSeconds = 0, saveLeadSeconds = 4 })
+    check(heard == 1, "the test drive warns before a defensive call with the save lead, got " .. heard)
+    heard = Drive({ saveCalls = true, leadSeconds = 5, saveLeadSeconds = 0 })
+    check(heard == 0, "the general early warning does not pre-announce a defensive call in the test drive, got " .. heard)
+    CastAheadDB = nil
+    CastAheadCore.ReapplyData()
+end
+
 -- Two tied candidates where only the second carries the save: the consensus is a save, so the save lead applies.
 do
     local savedRole = GetSpecializationRole

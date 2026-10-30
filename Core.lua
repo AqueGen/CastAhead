@@ -3477,10 +3477,12 @@ function CastAheadCore.Test(instanceID, list)
                     if CastAheadTimeline then CastAheadTimeline.Finish(e.track) end
                 else
                     local remaining = e.endAt - t
-                    local lead = CastAheadConfig.LeadFor({ e.row })
+                    local advice = CastAheadMatch.Advice(e.row)
+                    local lead = CastAheadConfig.LeadFor({ e.row }, CastAheadSaves
+                        and CastAheadMatch.IsSave(advice) and CastAheadConfig.SaveLead() or nil)
                     if lead > 0 and remaining <= lead and not e.warned then
                         e.warned = true
-                        PlayAdviceSound(CastAheadMatch.Advice(e.row), true, { e.row })
+                        PlayAdviceSound(advice, true, { e.row })
                     end
                     e.bar.time:SetFormattedText(remaining < ESTIMATE_NOW and "%.1f" or "%.0f", remaining)
                 end
