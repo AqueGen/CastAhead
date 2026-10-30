@@ -5945,21 +5945,31 @@ do
             local savedInfo, savedCancel = GetInstanceInfo, CastAheadSaves.CancelPrefix
             local cancelled = {}
             CastAheadSaves.CancelPrefix = function(prefix) cancelled[#cancelled + 1] = prefix end
-            local function Untick(inRaid, db)
+            local function Box(label)
+                for _, frame in ipairs(allFrames) do
+                    local text = rawget(frame, "text")
+                    if frame.kind == "CheckButton" and text and rawget(text, "value") == label then return frame end
+                end
+            end
+            local function Untick(label, inRaid, db)
                 cancelled = {}
                 GetInstanceInfo = function() return "Abyss", inRaid and "raid" or "party", 15, "", 0, 0, false, 9999 end
                 CastAheadDB = db
-                CastAheadOptions.RaidSavesChanged()
+                local box = Box(label)
+                local savedGet = rawget(box, "GetChecked")
+                box.GetChecked = function() return false end
+                box.handlers.OnClick(box)
+                box.GetChecked = savedGet
                 return table.concat(cancelled, ",")
             end
-            check(Untick(true, { raidMode = true, raidSaves = false }) == "dbm:,bw:",
-                "unticking raid calls in a raid cancels the pending dbm: and bw: calls")
-            check(Untick(true, { raidMode = false, raidSaves = true }) == "dbm:,bw:",
-                "unticking the raid switch in a raid cancels the pending dbm: and bw: calls")
-            check(Untick(false, { raidMode = true, raidSaves = false }) == "",
-                "unticking raid calls outside a raid cancels nothing")
-            check(Untick(true, { raidMode = true, raidSaves = true }) == "",
-                "raid calls still on cancel nothing")
+            check(Untick("Defensive calls in raids", true, { raidMode = true, raidSaves = true }) == "dbm:,bw:",
+                "unticking raid calls on the Features page in a raid cancels the pending dbm: and bw: calls")
+            check(Untick("Raid (experimental)", true, { raidMode = true, raidSaves = true }) == "dbm:,bw:",
+                "unticking the raid switch on the Features page in a raid cancels the pending dbm: and bw: calls")
+            check(Untick("Defensive calls in raids", false, { raidMode = true, raidSaves = true }) == "",
+                "unticking raid calls on the Features page outside a raid cancels nothing")
+            check(Untick("Raid (experimental)", false, { raidMode = true, raidSaves = true }) == "",
+                "unticking the raid switch on the Features page outside a raid cancels nothing")
             CastAheadSaves.CancelPrefix, GetInstanceInfo = savedCancel, savedInfo
         end)()
 
