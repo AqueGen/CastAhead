@@ -8,5 +8,6 @@
   <Script file="Segments.lua"/>
   <Script file="Slider.lua"/>
   <Script file="Checkbox.lua"/>
+  <Script file="Preview.lua"/>
   <Script file="End.lua"/>
 </Ui>
