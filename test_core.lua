@@ -5101,6 +5101,31 @@ do
     panel.flowBottom = function() return 30 end
     if relayout then relayout(panel) end
     check(panel.height == 6 + 208 + 30 + 12, "a note under the groups adds its height to the panel")
+    ;(function()
+        local COL_W, STAGE_X = 250, 260
+        for _, g in ipairs({ a, c }) do
+            g.SetWidth = function(self, w) self.width = w end
+            g.flowPad = nil
+        end
+        local box = { SetShown = function(self, on) self.shown = on and true or false end,
+                      SetWidth = function(self, w) self.width = w end }
+        a.preview = box
+        local split = { groups = { a, c }, pictures = true, SetHeight = panel.SetHeight }
+        local wide = 2 * 8 + STAGE_X + 300
+        function split:GetWidth() return self.w end
+        split.w = wide
+        relayout(split)
+        check(a.point.x == 8 and not a.right and a.width == COL_W and not c.right and c.width == COL_W,
+            "a page with pictures keeps its groups in the settings column, got " .. tostring(a.width))
+        check(box.shown == true and box.width == 300, "a group's picture box takes the rest of the content width, got "
+            .. tostring(box.width))
+        split.w = wide - 1
+        a.width, c.width = nil, nil
+        relayout(split)
+        check(a.right and a.right.x == -8 and c.right and box.shown == false,
+            "a page too narrow for a picture box spans its groups and hides the boxes")
+        a.preview = nil
+    end)()
 end
 
 do
@@ -5117,6 +5142,7 @@ do
         local createText = f.CreateFontString
         f.CreateFontString = function(...)
             local fs = createText(...)
+            rawset(fs, "font", (select(4, ...)))
             local setText = fs.SetText
             fs.SetText = function(self, t) setText(self, t) rawset(self, "value", t) end
             fs.SetShown = function(self, on) self.shown = on and true or false end
@@ -5187,7 +5213,16 @@ do
         .. " | Defensive calls in raids | Burst windows",
         "the Features page holds the dungeon section, then the raid section with its switches under the raid switch")
     local before, madeBefore = #texts, #made
-    ok, err = pcall(CastAheadOptions.ShowPanel, host, "General")
+    do
+        local realButton, primaries = CastAheadWindow.Button, {}
+        CastAheadWindow.Button = function(parent, text, width, primary)
+            if primary then primaries[#primaries + 1] = text end
+            return realButton(parent, text, width, primary)
+        end
+        ok, err = pcall(CastAheadOptions.ShowPanel, host, "General")
+        CastAheadWindow.Button = realButton
+        check(#primaries == 0, "General leaves the one primary button to the title bar, got " .. table.concat(primaries, ","))
+    end
     check(ok, "the General page builds headless " .. tostring(err))
     check(Labels(before + 1) == "Features | Defensive calls: Off | Raid (experimental): Off | Advanced | Development mode",
         "General's Features group holds two status rows and no switch, then Advanced")
@@ -5354,12 +5389,24 @@ do
         end
         check(group and group.stage, "Nameplate icons has a stage")
         if not (group and group.stage) then return end
-        group.w = COL_W + 10 + 400
+        group.parent.w = 16 + COL_W + 10 + 400
         CastAheadOptions.Refresh()
         for _, f in ipairs(made) do
-            if f.parent == group and rawget(f, "previewBars") then canvas = f end
+            if group.preview and f.parent == group.preview and rawget(f, "previewBars") then canvas = f end
         end
         check(canvas and #canvas.previewBars == 3 and canvas.shown, "Nameplate icons shows a picture with three preview bars")
+        check(group.preview.points and group.preview.points[2] == group and group.preview.points[3] == "BOTTOMRIGHT",
+            "the picture box sits right of its group, from its top to its bottom")
+        local limits, what
+        for _, f in ipairs(made) do
+            local title = rawget(f, "title")
+            if title and rawget(title, "value") == "Limits" then limits = f end
+            if title and rawget(title, "value") == "What to call out" then what = f end
+        end
+        check(limits and limits.preview == nil and what and what.preview ~= nil,
+            "a group without a picture leaves its slot empty, one with pictures has a box")
+        check(what and rawget(rawget(what, "title"), "font") == "GameFontNormal",
+            "group titles use GameFontNormal, got " .. tostring(what and rawget(rawget(what, "title"), "font")))
         if not canvas then return end
         canvas.SetScale = function(self, s) self.scale = s end
         local need = group.stage.Paint()
@@ -5412,23 +5459,24 @@ do
         check(canvas.previewBars[3].labelValue == "TANKBUSTER", "ticking Full labels repaints the picture at once")
         CastAheadDB.fullLabels = nil
         for _, width in ipairs({ COL_W + 10 + 300, COL_W + 10 + 320, COL_W + 10 + 1500 }) do
-            group.w = width
+            group.parent.w = 16 + width
             CastAheadOptions.Refresh()
-            check(canvas.shown and canvas.scale and canvas.scale > 0 and canvas.scale <= 1,
+            check(canvas.shown and canvas.scale and canvas.scale > 0 and canvas.scale <= 1
+                and canvas.w * canvas.scale <= width - COL_W - 10 - 20 + 0.01,
                 "the picture fits a stage of " .. (width - COL_W - 10) .. ", scale " .. tostring(canvas.scale))
         end
-        group.w = COL_W + 10 + 299
+        group.parent.w = 16 + COL_W + 10 + 299
         CastAheadOptions.Refresh()
         check(not canvas.shown and group.h == 100, "a stage narrower than 300 hides the picture and the group shrinks back")
         local realLock = InCombatLockdown
         InCombatLockdown = function() return true end
-        group.w = COL_W + 10 + 400
+        group.parent.w = 16 + COL_W + 10 + 400
         local okShow = pcall(CastAheadOptions.ShowPanel, host, "General")
         local okRefresh = pcall(CastAheadOptions.Refresh)
         check(okShow and okRefresh, "the picture repaints in combat without an error")
         InCombatLockdown = realLock
         -- Later cases count every shown bar, so the picture leaves none behind.
-        group.w = COL_W
+        group.parent.w = 16 + COL_W
         CastAheadOptions.Refresh()
         for i = 1, #canvas.previewBars do canvas.previewBars[i]:Hide() end
     end)();
@@ -5532,7 +5580,7 @@ do
         local function Canvases(group, field)
             local list = {}
             for _, f in ipairs(made) do
-                if f.parent == group and rawget(f, field) then list[#list + 1] = f end
+                if group.preview and f.parent == group.preview and rawget(f, field) then list[#list + 1] = f end
             end
             return list
         end
@@ -5583,7 +5631,7 @@ do
             groups[title] = Group(title)
             check(groups[title] and groups[title].stage, title .. " has a stage")
             if not (groups[title] and groups[title].stage) then return end
-            groups[title].w = WIDE
+            groups[title].parent.w = 16 + WIDE
         end
         -- A Features section has its switch for a title; the switch is anchored to the section.
         for name, header in pairs({ Dungeon = "Defensive calls in dungeons", Raid = "Raid (experimental)" }) do
@@ -5591,7 +5639,7 @@ do
             groups[name] = switch and switch.points and switch.points[2]
             check(groups[name] and groups[name].stage, "the Features " .. name .. " section has a stage")
             if not (groups[name] and groups[name].stage) then return end
-            groups[name].w = WIDE
+            groups[name].parent.w = 16 + WIDE
         end
         CastAheadOptions.ShowPanel(host, "Features")
         CastAheadOptions.ShowPanel(host, "General")
@@ -5770,13 +5818,13 @@ do
             local realShown, realHide = note.SetShown, note.Hide
             note.SetShown = function(self, on) if not on then hidden = true end realShown(self, on) end
             note.Hide = function() hidden = true end
-            groups.Dungeon.w = COL_W
+            groups.Dungeon.parent.w = 16 + COL_W
             CastAheadOptions.Refresh()
             check(saves and not saves.shown, "a narrow Features section hides its picture")
             check(not hidden and note.points[2] == Frame("Boss calls from DBM / BigWigs"),
                 "a narrow Features section keeps its notes under their controls")
             note.SetShown, note.Hide = realShown, realHide
-            groups.Dungeon.w = WIDE
+            groups.Dungeon.parent.w = 16 + WIDE
         end
         CastAheadDB = {}
 
@@ -5860,7 +5908,7 @@ do
                 for _, c in ipairs(Canvases(g, field)) do pictures[c] = true end
             end
         end
-        for _, g in pairs(groups) do g.w = COL_W end
+        for _, g in pairs(groups) do g.parent.w = 16 + COL_W end
         CastAheadOptions.Refresh()
         -- Later cases count every shown frame, so the pictures leave none behind.
         for _, f in ipairs(made) do
