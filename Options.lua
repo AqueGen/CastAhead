@@ -4,7 +4,7 @@ CastAheadOptions = {}
 CastAheadOptions.TABS = { "General", "Sounds", "Features", "Development", "Report" }
 local panels = {}
 local T = CastAheadWindow.THEME
-local FLAT = CastAheadWindow.FLAT
+local UI = CastAheadWindow.UI
 local COL_W, COL_GAP, COL_X = 250, 8, 8
 local SLIDER_W = COL_W - 40
 
@@ -43,17 +43,15 @@ local refreshers = {}
 local function BuildSlider(panel, spec)
     local label = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     label:SetPoint(unpack(spec.point))
-    local slider = CreateFrame("Frame", nil, panel, "MinimalSliderWithSteppersTemplate")
-    slider:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 6, -12)
-    slider:SetSize(spec.width or SLIDER_W, 19)
-    for corner, edge in pairs({ BOTTOMLEFT = slider.MinText, BOTTOMRIGHT = slider.MaxText }) do
-        edge:ClearAllPoints()
-        edge:SetPoint("TOP", slider.Slider, corner, 0, -1)
-        edge:SetFontObject("GameFontHighlightSmall")
+    local slider = UI.Slider(panel, spec.width or SLIDER_W)
+    slider:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 6, -8)
+    for point, text in pairs({ LEFT = spec.low or tostring(spec.min), RIGHT = spec.high or tostring(spec.max) }) do
+        local edge = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        edge:SetPoint("TOP", slider.track, "BOTTOM" .. point, 0, -6)
         edge:SetTextColor(unpack(T.muted))
+        edge:SetText(text)
     end
 
-    local suppress = false
     local function read()
         return spec.read and spec.read()
             or CastAheadConfig.Number(spec.key, spec.default, spec.min, spec.max)
@@ -62,25 +60,16 @@ local function BuildSlider(panel, spec)
         label:SetText(spec.caption(value))
     end
     local function show(value)
-        suppress = true
-        slider:SetValue(value)
-        suppress = false
-        paint(value)
+        slider:SetValue(value, true)
+        paint(slider:GetValue())
     end
-    local step = spec.step or 1
-    local L = MinimalSliderWithSteppersMixin.Label
-    slider:Init(read(), spec.min, spec.max, (spec.max - spec.min) / step, {
-        [L.Min] = function() return spec.low or tostring(spec.min) end,
-        [L.Max] = function() return spec.high or tostring(spec.max) end,
-    })
+    slider:Setup(spec.min, spec.max, spec.step or 1)
     show(read())
-    slider:RegisterCallback(MinimalSliderWithSteppersMixin.Event.OnValueChanged, function(_, value)
-        if suppress then return end
-        value = math.floor(value / step + 0.5) * step
+    slider.onChange = function(value)
         if spec.write then spec.write(value) else CastAheadConfig.Set(spec.key, value) end
         paint(value)
         if spec.after then spec.after(value) end
-    end, slider)
+    end
     table.insert(refreshers, function() show(read()) end)
     slider.Repaint = function() show(read()) end
     return slider, label
@@ -198,15 +187,13 @@ local function BuildGroup(panel, title, height, free)
     box:SetFrameLevel(panel:GetFrameLevel())
     box:SetSize(COL_W, height)
     if not free then table.insert(panel.groups, box) end
-    box:SetBackdrop(FLAT)
-    box:SetBackdropColor(unpack(T.panel))
-    box:SetBackdropBorderColor(unpack(T.border))
     if title then
         box.title = box:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         box.title:SetPoint("TOPLEFT", box, "TOPLEFT", 10, -8)
-        box.title:SetTextColor(unpack(T.gold))
         box.title:SetText(title)
     end
+    local rule = UI.PaintGroup(box, box.title)
+    if rule then rule:SetPoint("RIGHT", box, "LEFT", COL_W - 10, 0) end
     return box
 end
 CastAheadOptions.BuildGroup = BuildGroup
@@ -441,7 +428,7 @@ end
 local function BuildSwitch(panel, key, point, onClick, label)
     local option = SWITCHES[key]
     label = label or option.label
-    local box = CreateFrame("CheckButton", nil, panel, "MinimalCheckboxTemplate")
+    local box = UI.Checkbox(panel)
     box:SetPoint(unpack(point))
     box.text = box:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     box.text:SetPoint("LEFT", box, "RIGHT", 2, 0)
@@ -473,7 +460,7 @@ local function BuildPlacement(panel, point)
     local square = CreateFrame("Frame", nil, panel, "BackdropTemplate")
     square:SetSize(58, 58)
     square:SetPoint("TOPLEFT", anchorLabel, "BOTTOMLEFT", 4, -6)
-    square:SetBackdrop(FLAT)
+    square:SetBackdrop(UI.FLAT)
     square:SetBackdropColor(unpack(T.bg))
     square:SetBackdropBorderColor(unpack(T.border))
     local grid = {
@@ -1717,7 +1704,7 @@ function BuildSounds(panel)
 
     -- Off by default: the shipped clips speak unless this is on. Gated on the
     -- game's own Combat Audio Alerts setting, which it cannot work without.
-    local tts = CreateFrame("CheckButton", nil, panel, "MinimalCheckboxTemplate")
+    local tts = UI.Checkbox(panel)
     tts:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", -4, -4)
     tts.text = tts:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     tts.text:SetPoint("LEFT", tts, "RIGHT", 2, 0)

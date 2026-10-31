@@ -329,8 +329,7 @@ local function Reapply()
 end
 
 local function Check(parent, text, point, tip)
-    local check = CreateFrame("CheckButton", nil, parent, "MinimalCheckboxTemplate")
-    check:SetSize(WIDGET_HEIGHT, WIDGET_HEIGHT)
+    local check = CastAheadWindow.UI.Checkbox(parent, WIDGET_HEIGHT)
     check:SetPoint(unpack(point))
     check.label = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     check.label:SetPoint("LEFT", check, "RIGHT", 2, 0)
@@ -643,8 +642,7 @@ local function CreateRow(parent, index)
         local column = tableColumns[i]
         local x = ColumnOffset(i)
         if column.key == "check" then
-            row.check = CreateFrame("CheckButton", nil, row, "MinimalCheckboxTemplate")
-            row.check:SetSize(WIDGET_HEIGHT, WIDGET_HEIGHT)
+            row.check = CastAheadWindow.UI.Checkbox(row, WIDGET_HEIGHT)
             row.check:SetPoint("LEFT", row, "LEFT", x + (column.width - WIDGET_HEIGHT) / 2, 0)
         elseif column.key == "hear" then
             row.hear = CreateFrame("Button", nil, row)

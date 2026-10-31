@@ -1,0 +1,11 @@
+Copyright (c) 2026 AqueGen. All rights reserved.
+
+This software - the Velvet library for World of Warcraft addons (lua/LibVelvet-1.0), its tests, tools and documentation - is the property of the copyright holder.
+
+You may use it only as part of the copyright holder's own released addons.
+
+You may not copy, modify, redistribute, republish, sublicense or sell any part of it, or use any part of it in another project, without written permission from the copyright holder. This includes reproducing its source code or design tokens in whole or in part, and using it as training material or as a reference for generated code.
+
+Third-party parts keep their own terms: lua/LibVelvet-1.0/LibStub.lua (public domain).
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
