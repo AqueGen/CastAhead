@@ -246,7 +246,7 @@ CreateFrame = function(kind, _, parent)
     setmetatable(f, { __index = function(_, key)
         -- A plain Frame has no StatusBar methods. The old stub answered every
         -- call, so leftover bar calls after the icon rework went unnoticed.
-        if barOnly[key] and kind ~= "StatusBar" then
+        if barOnly[key] and kind ~= "StatusBar" and kind ~= "Slider" then
             return nil
         end
         if type(key) == "string" and key:match("^%l") then return nil end
@@ -331,7 +331,21 @@ SlashCmdList = {}
 SearchBoxTemplate_OnTextChanged = function() end
 GameTooltip = setmetatable({}, { __index = function() return function() end end })
 GameTooltip_Hide = function() end
-dofile("Window.lua")
+-- Tests below swap the global LibStub for SharedMedia fakes, so Window.lua always loads against this one.
+strmatch = strmatch or string.match
+CreateColor = CreateColor or function(r, g, b, a) return { r = r, g = g, b = b, a = a } end
+do
+    local xml = assert(io.open("Libs/LibVelvet-1.0/lib.xml", "rb")):read("*a")
+    for name in xml:gmatch('<Script file="([^"]+)"/>') do dofile("Libs/LibVelvet-1.0/" .. name) end
+    local velvet = LibStub
+    function DofileWindow()
+        local saved = LibStub
+        LibStub = velvet
+        dofile("Window.lua")
+        LibStub = saved
+    end
+end
+DofileWindow()
 dofile("CastsPage.lua")
 dofile("SavesPage.lua")
 dofile("UI.lua")
@@ -5241,7 +5255,7 @@ do
             if type(v) == "string" then shown[#shown + 1] = v end
         end
         for i = madeBefore + 1, #made do
-            if made[i].template == "MinimalSliderWithSteppersTemplate" then sliders = sliders + 1 end
+            if rawget(made[i], "onChange") then sliders = sliders + 1 end
             if made[i].template == "WowStyle1DropdownTemplate" then dropdowns = dropdowns + 1 end
         end
         local page = "|" .. table.concat(shown, "|") .. "|"
@@ -5253,6 +5267,15 @@ do
         check(#found == 0, "General builds no size or position control, found " .. table.concat(found, ","))
         check(sliders == 1 and dropdowns == 0, "General keeps only the early-warning slider and no dropdown, got "
             .. sliders .. "/" .. dropdowns)
+        local ends = {}
+        for i = madeBefore + 1, #made do
+            if rawget(made[i], "onChange") then
+                for _, fs in ipairs(rawget(made[i], "fontStrings") or {}) do ends[#ends + 1] = rawget(fs, "value") end
+            end
+        end
+        table.sort(ends)
+        check(table.concat(ends, "|") == "15s|off",
+            "the slider's end labels live on the slider so dimming it dims them, got " .. table.concat(ends, "|"))
         check(page:find("|Show icons on nameplates|", 1, true) and page:find("|Full labels|", 1, true)
             and page:find("|Show the centre call|", 1, true), "General keeps the nameplate and centre call switches")
         local heights, centre = {}, nil
@@ -6257,7 +6280,7 @@ do
     CastAheadOptions.ShowPanel = savedShowPanel
 
     CastAheadDB = { window = { width = 1900, height = 560 } }
-    dofile("Window.lua")
+    DofileWindow()
     CastAheadWindow.Register("TestA", "Dungeon", function() end, function() end)
     CastAheadWindow.Show("TestA")
     f = CastAheadWindow.Frame()
@@ -6289,7 +6312,7 @@ do
     end
     UIParent = { GetWidth = function() return 1920 end, GetHeight = function() return 1080 end }
     CastAheadDB = {}
-    dofile("Window.lua")
+    DofileWindow()
     local W = CastAheadWindow
     check(W.Dungeon() == 1, "outside a dungeon the selection is the first dungeon")
     here = 2
@@ -6329,7 +6352,7 @@ do
     end
     UIParent = { GetWidth = function() return 1920 end, GetHeight = function() return 1080 end }
     CastAheadDB = {}
-    dofile("Window.lua")
+    DofileWindow()
     local W = CastAheadWindow
     check(W.RaidDifficulty() == 15, "outside a raid the raid picker starts on Heroic")
     kind, difficulty = "raid", 16

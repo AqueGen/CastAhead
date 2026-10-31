@@ -1,17 +1,19 @@
 -- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 CastAheadWindow = {}
 local W = CastAheadWindow
+local UI = LibStub("LibVelvet-1.0")
+W.UI = UI
 
 W.THEME = {
-    bg = { 0.063, 0.075, 0.09, 0.99 },
-    panel = { 0.082, 0.098, 0.125, 1 },
-    border = { 0.235, 0.251, 0.282, 1 },
-    control = { 0.36, 0.38, 0.43, 1 },
+    bg = UI.T.bg,
+    panel = UI.T.panel,
+    border = UI.T.border,
+    control = UI.T.control,
     line = { 0.125, 0.145, 0.176, 1 },
-    gold = { 1, 0.82, 0 },
-    text = { 0.9, 0.9, 0.9 },
-    muted = { 0.66, 0.68, 0.72 },
-    selected = { 0.165, 0.192, 0.251, 1 },
+    gold = UI.T.gold,
+    text = UI.T.text,
+    muted = UI.T.muted,
+    selected = UI.T.selected,
 }
 -- 580 keeps a four-spec bar (druid) and a Sounds row whole; the title bar alone needs about 430
 W.MIN_W, W.MIN_H = 580, 420
@@ -26,7 +28,7 @@ local GROUPS = { "Settings", "Dungeon", "Raid", "Feedback" }
 local SCALE_STEPS = { 75, 100, 125, 150 }
 local SCALE_MIN, SCALE_MAX, SCALE_DEFAULT = 75, 150, 100
 local SIDE_HINT = "Shift + mouse wheel scrolls sideways"
-local FLAT = { bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 }
+local FLAT = UI.FLAT
 W.FLAT = FLAT
 
 local RAID_DIFFICULTIES = { { 14, "Normal" }, { 15, "Heroic" }, { 16, "Mythic" } }
@@ -54,19 +56,8 @@ local function Dungeons()
 end
 
 function W.Button(parent, text, width, primary)
-    local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
-    b:SetSize(width, ENTRY_H)
-    b:SetBackdrop(FLAT)
-    b:SetBackdropColor(unpack(T.panel))
-    b:SetBackdropBorderColor(unpack(primary and T.gold or T.control))
-    b.label = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    b.label:SetPoint("CENTER")
-    b.label:SetTextColor(unpack(primary and T.gold or T.text))
-    b:SetFontString(b.label)
-    b:SetText(text)
-    local hover = b:CreateTexture(nil, "HIGHLIGHT")
-    hover:SetAllPoints()
-    hover:SetColorTexture(1, 1, 1, 0.06)
+    local b = UI.Button(parent, text, width, primary)
+    b:SetHeight(ENTRY_H)
     return b
 end
 
@@ -329,25 +320,14 @@ end
 local function PaintMenu()
     for _, p in ipairs(order) do
         if p.entry then
-            local on = p.name == current
-            p.entry:SetBackdropColor(unpack(on and T.selected or T.panel))
-            p.entry.label:SetTextColor(unpack(on and T.gold or T.text))
-            p.entry.bar:SetShown(on)
+            UI.PaintNav(p.entry, p.name == current and "selected" or "normal")
         end
     end
 end
 
 local function Entry(page)
     if page.entry then return end
-    local b = W.Button(menu, page.label or page.name, MENU_W - 2 * PAD, false)
-    b:SetBackdropBorderColor(unpack(T.border))
-    b.label:ClearAllPoints()
-    b.label:SetPoint("LEFT", b, "LEFT", PAD, 0)
-    b.bar = b:CreateTexture(nil, "OVERLAY")
-    b.bar:SetPoint("TOPLEFT", b, "TOPLEFT", 0, 0)
-    b.bar:SetPoint("BOTTOMLEFT", b, "BOTTOMLEFT", 0, 0)
-    b.bar:SetWidth(2)
-    b.bar:SetColorTexture(unpack(T.gold))
+    local b = UI.NavEntry(menu, page.label or page.name, MENU_W - 2 * PAD, ENTRY_H)
     b:SetScript("OnClick", function() W.Show(page.name) end)
     page.entry = b
 end
@@ -459,7 +439,7 @@ local function Build()
     menuBg:SetColorTexture(unpack(T.panel))
     for _, group in ipairs(GROUPS) do
         headers[group] = menu:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        headers[group]:SetTextColor(unpack(T.gold))
+        headers[group]:SetTextColor(unpack(UI.HEADER))
         headers[group]:SetText(group)
     end
     for _, p in ipairs(order) do Entry(p) end

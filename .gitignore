@@ -1,5 +1,7 @@
-# Libraries: fetched by the packager from .pkgmeta, never committed.
-Libs/
+# Libraries: fetched by the packager from .pkgmeta, never committed - except our own
+# LibVelvet-1.0, a copy refreshed with Velvet's tools/sync.ps1.
+Libs/*
+!Libs/LibVelvet-1.0/
 
 # WoW leftovers
 *.bak

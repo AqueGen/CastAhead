@@ -86,6 +86,11 @@ SlashCmdList = {}
 SearchBoxTemplate_OnTextChanged = function() end
 GameTooltip = setmetatable({}, { __index = function() return function() end end })
 GameTooltip_Hide = function() end
+strmatch = strmatch or string.match
+do
+    local xml = assert(io.open("Libs/LibVelvet-1.0/lib.xml", "rb")):read("*a")
+    for name in xml:gmatch('<Script file="([^"]+)"/>') do dofile("Libs/LibVelvet-1.0/" .. name) end
+end
 dofile("Window.lua")
 dofile("CastsPage.lua")
 dofile("SavesPage.lua")

@@ -1,0 +1,12 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+  <Script file="LibStub.lua"/>
+  <Script file="Core.lua"/>
+  <Script file="Tokens.lua"/>
+  <Script file="Button.lua"/>
+  <Script file="Group.lua"/>
+  <Script file="Nav.lua"/>
+  <Script file="Segments.lua"/>
+  <Script file="Slider.lua"/>
+  <Script file="Checkbox.lua"/>
+  <Script file="End.lua"/>
+</Ui>
