@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 -- Spell identification, kept free of WoW API so it can be tested standalone.
 --
 -- Cooldowns are rotations: cd = { 4.8, 4.8, 8.7 } means the gaps between casts

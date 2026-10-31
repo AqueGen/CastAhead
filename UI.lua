@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 local testButton
 local DUNGEON_PAGES = { Casts = true, Saves = true, Guide = true, RaidGuide = true, RaidSaves = true }
 

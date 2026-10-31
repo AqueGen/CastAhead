@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 -- Standalone check: lua test.lua  (no WoW, no framework)
 dofile("Data.lua")
 dofile("Priority.lua")

@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 -- Curated priority set. Generated - do not edit by hand.
 --
 -- CastAheadPriority: which casts are worth calling out, and what kind of

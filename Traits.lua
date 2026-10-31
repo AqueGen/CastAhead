@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 -- Creature identity traits. Generated - do not edit by hand.
 --
 -- What a hostile nameplate still reveals in 12.1 - level, power type,

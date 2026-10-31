@@ -510,7 +510,8 @@ def classify(scan, spell, rec, tanks):
 
 def write_priority(path, chosen):
     out = io.open(path, "w", encoding="utf-8", newline="\n")
-    out.write("-- Curated priority set. Generated - do not edit by hand.\n--\n"
+    out.write("-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.\n"
+              "-- Curated priority set. Generated - do not edit by hand.\n--\n"
               "-- CastAheadPriority: which casts are worth calling out, and what kind of\n"
               "-- response each one asks for. Keys match CastAheadMatch.ADVICE.\n"
               "-- CastAheadExtra: prioritised casts our own logs have not captured yet,\n"

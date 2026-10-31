@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 -- Standalone check for Core.lua: lua test_core.lua
 --
 -- Core talks to the game only through a handful of functions, so stubbing those

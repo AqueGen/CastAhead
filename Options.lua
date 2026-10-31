@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 CastAheadOptions = {}
 
 CastAheadOptions.TABS = { "General", "Sounds", "Features", "Development", "Report" }

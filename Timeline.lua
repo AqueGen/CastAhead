@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 -- Feeds confident predictions into Blizzard's own encounter timeline.
 --
 -- Why not draw our own: the game already ships the sliding-icon timeline, and

@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 CastAheadSaveButtons = {
     [265] = { def = { 108416, 104773 } },
     [266] = { def = { 108416, 104773 } },
