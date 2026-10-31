@@ -7,9 +7,10 @@ local OFF_ALPHA = 0.35
 local LINE_H = 14
 local WORLD_TOP, WORLD_BOTTOM = { 0.16, 0.19, 0.15, 1 }, { 0.07, 0.08, 0.07, 1 }
 
-function lib.PreviewLayout(contentW, columnMin, zoneMin, zoneMax)
+function lib.PreviewLayout(contentW, columnMin, zoneMin, zoneMax, wanted)
     if contentW >= columnMin + lib.GAP + zoneMin then
-        local zoneW = math.min(zoneMax, contentW - columnMin - lib.GAP)
+        local room = contentW - columnMin - lib.GAP
+        local zoneW = wanted and math.max(zoneMin, math.min(wanted, room)) or math.min(zoneMax, room)
         return { mode = "side", columnW = contentW - zoneW - lib.GAP, zoneW = zoneW }
     end
     return { mode = "band", columnW = contentW, zoneW = contentW }

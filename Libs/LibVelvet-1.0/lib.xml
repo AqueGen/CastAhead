@@ -9,5 +9,7 @@
   <Script file="Slider.lua"/>
   <Script file="Checkbox.lua"/>
   <Script file="Preview.lua"/>
+  <Script file="Input.lua"/>
+  <Script file="Splitter.lua"/>
   <Script file="End.lua"/>
 </Ui>
