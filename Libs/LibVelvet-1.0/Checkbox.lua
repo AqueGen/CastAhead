@@ -5,11 +5,15 @@ if not lib.loading then return end
 local T = lib.T
 local OFF_ALPHA = 0.45
 
+-- Dims only the box art: callers hang their labels on the box and grey those themselves.
 local function Paint(box)
     local on = box:GetChecked() and true or false
-    box:SetBackdropColor(unpack(on and T.wellOn or T.well))
-    box:SetBackdropBorderColor(unpack(on and T.trackFill or T.control))
+    local a = box:IsEnabled() and 1 or OFF_ALPHA
+    local well, edge = on and T.wellOn or T.well, on and T.trackFill or T.control
+    box:SetBackdropColor(well[1], well[2], well[3], a)
+    box:SetBackdropBorderColor(edge[1], edge[2], edge[3], a)
     box.check:SetShown(on)
+    box.check:SetAlpha(a)
 end
 
 function lib.Checkbox(parent, size)
@@ -35,7 +39,7 @@ function lib.Checkbox(parent, size)
     end
     function box:SetEnabled(on)
         setEnabled(self, on)
-        self:SetAlpha(on and 1 or OFF_ALPHA)
+        Paint(self)
     end
     function box:Enable() self:SetEnabled(true) end
     function box:Disable() self:SetEnabled(false) end

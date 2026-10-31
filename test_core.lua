@@ -5267,6 +5267,15 @@ do
         check(#found == 0, "General builds no size or position control, found " .. table.concat(found, ","))
         check(sliders == 1 and dropdowns == 0, "General keeps only the early-warning slider and no dropdown, got "
             .. sliders .. "/" .. dropdowns)
+        local ends = {}
+        for i = madeBefore + 1, #made do
+            if rawget(made[i], "onChange") then
+                for _, fs in ipairs(rawget(made[i], "fontStrings") or {}) do ends[#ends + 1] = rawget(fs, "value") end
+            end
+        end
+        table.sort(ends)
+        check(table.concat(ends, "|") == "15s|off",
+            "the slider's end labels live on the slider so dimming it dims them, got " .. table.concat(ends, "|"))
         check(page:find("|Show icons on nameplates|", 1, true) and page:find("|Full labels|", 1, true)
             and page:find("|Show the centre call|", 1, true), "General keeps the nameplate and centre call switches")
         local heights, centre = {}, nil

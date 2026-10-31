@@ -46,7 +46,7 @@ local function BuildSlider(panel, spec)
     local slider = UI.Slider(panel, spec.width or SLIDER_W)
     slider:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 6, -8)
     for point, text in pairs({ LEFT = spec.low or tostring(spec.min), RIGHT = spec.high or tostring(spec.max) }) do
-        local edge = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local edge = slider:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         edge:SetPoint("TOP", slider.track, "BOTTOM" .. point, 0, -6)
         edge:SetTextColor(unpack(T.muted))
         edge:SetText(text)

@@ -33,8 +33,10 @@ local function GetValue(self) return self.value end
 
 local function Setup(self, min, max, step)
     self.min, self.max, self.step = min, max, step or 1
+    self.updating = true
     self.widget:SetMinMaxValues(min, max)
     self.widget:SetValueStep(self.step)
+    self.updating = nil
     self:SetValue(self.value or min, true)
 end
 
@@ -78,6 +80,7 @@ function lib.Slider(parent, width)
     widget:SetSize(inner, 22)
     widget:SetPoint("LEFT", STEPPER_W + STEPPER_GAP, 0)
     widget:SetOrientation("HORIZONTAL")
+    widget:EnableMouse(true)
     widget:SetObeyStepOnDrag(true)
     self.widget = widget
 
