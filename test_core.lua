@@ -5102,7 +5102,7 @@ do
     if relayout then relayout(panel) end
     check(panel.height == 6 + 208 + 30 + 12, "a note under the groups adds its height to the panel")
     ;(function()
-        local COL_W, STAGE_X = 250, 260
+        local COLUMN_MIN, GAP = 250, 8
         for _, g in ipairs({ a, c }) do
             g.SetWidth = function(self, w) self.width = w end
             g.flowPad = nil
@@ -5111,14 +5111,19 @@ do
                       SetWidth = function(self, w) self.width = w end }
         a.preview = box
         local split = { groups = { a, c }, pictures = true, SetHeight = panel.SetHeight }
-        local wide = 2 * 8 + STAGE_X + 300
+        local wide = 2 * 8 + COLUMN_MIN + GAP + 260
         function split:GetWidth() return self.w end
         split.w = wide
         relayout(split)
-        check(a.point.x == 8 and not a.right and a.width == COL_W and not c.right and c.width == COL_W,
+        check(a.point.x == 8 and not a.right and a.width == COLUMN_MIN and not c.right and c.width == COLUMN_MIN,
             "a page with pictures keeps its groups in the settings column, got " .. tostring(a.width))
-        check(box.shown == true and box.width == 300, "a group's picture box takes the rest of the content width, got "
+        check(box.shown == true and box.width == 260, "at the threshold the picture box is 260 wide, got "
             .. tostring(box.width))
+        split.w = 2 * 8 + 1304
+        relayout(split)
+        check(box.width == 380 and a.width == 1304 - 380 - GAP and c.width == a.width,
+            "on a wide page the picture box stops at 380 and the column takes the rest, got "
+            .. tostring(box.width) .. "/" .. tostring(a.width))
         split.w = wide - 1
         a.width, c.width = nil, nil
         relayout(split)
@@ -5458,16 +5463,35 @@ do
         full.handlers.OnClick(full)
         check(canvas.previewBars[3].labelValue == "TANKBUSTER", "ticking Full labels repaints the picture at once")
         CastAheadDB.fullLabels = nil
-        for _, width in ipairs({ COL_W + 10 + 300, COL_W + 10 + 320, COL_W + 10 + 1500 }) do
+        for _, width in ipairs({ COL_W + 8 + 260, COL_W + 8 + 300, COL_W + 8 + 1500 }) do
             group.parent.w = 16 + width
             CastAheadOptions.Refresh()
+            local zone = math.min(380, width - COL_W - 8)
             check(canvas.shown and canvas.scale and canvas.scale > 0 and canvas.scale <= 1
-                and canvas.w * canvas.scale <= width - COL_W - 10 - 20 + 0.01,
-                "the picture fits a stage of " .. (width - COL_W - 10) .. ", scale " .. tostring(canvas.scale))
+                and canvas.w * canvas.scale <= zone - 20 + 0.01,
+                "the picture fits a box of " .. zone .. ", scale " .. tostring(canvas.scale))
         end
-        group.parent.w = 16 + COL_W + 10 + 299
+        group.parent.w = 16 + COL_W + 8 + 259
         CastAheadOptions.Refresh()
-        check(not canvas.shown and group.h == 100, "a stage narrower than 300 hides the picture and the group shrinks back")
+        check(not canvas.shown and group.h == 100, "a box narrower than 260 hides the picture and the group shrinks back")
+        ;(function()
+            local note, play
+            for _, fs in ipairs(texts) do
+                if rawget(fs, "value") == "Plays the call sound. Off silences the addon." then note = fs end
+            end
+            for _, b in ipairs(made) do
+                if not play and rawget(b, "buttonText") == "Play" then play = b end
+            end
+            for _, case in ipairs({ { 1304, 1304 - 380 - 8 }, { 400, 400 } }) do
+                group.parent.w = 16 + case[1]
+                CastAheadOptions.ShowPanel(host, "General")
+                check(note and note.width == case[2] - 20, "a note wraps to the group width " .. case[2] .. ", got "
+                    .. tostring(note and note.width))
+                check(play and play.points and play.points[4] == case[2] - 10 - 52,
+                    "the Play button stays at the right end of a group " .. case[2] .. " wide, got "
+                    .. tostring(play and play.points and play.points[4]))
+            end
+        end)()
         local realLock = InCombatLockdown
         InCombatLockdown = function() return true end
         group.parent.w = 16 + COL_W + 10 + 400

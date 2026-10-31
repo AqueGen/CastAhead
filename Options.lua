@@ -7,19 +7,31 @@ local T = CastAheadWindow.THEME
 local UI = CastAheadWindow.UI
 local COL_W, COL_GAP, COL_X = 250, 8, 8
 local SLIDER_W = COL_W - 40
-local STAGE_X, STAGE_MIN_W, BOX_PAD = COL_W + 10, 300, 10
+local ZONE_MIN, ZONE_MAX, BOX_PAD = 260, 380, 10
 
-local function StageWidth(panel) return panel:GetWidth() - 2 * COL_X - STAGE_X end
+local function Layout(panel)
+    local contentW = panel:GetWidth() - 2 * COL_X
+    local layout = UI.PreviewLayout(contentW, COL_W, ZONE_MIN, ZONE_MAX)
+    layout.split = panel.pictures and layout.mode == "side" or false
+    if not layout.split then layout.columnW = contentW end
+    return layout
+end
 
-local function Split(panel) return panel.pictures and StageWidth(panel) >= STAGE_MIN_W or false end
+local function ColumnW(panel) return panel.columnW or COL_W end
 
-local function PlaceGroup(panel, g, y, split)
+local function Column(panel, fn)
+    panel.columnFns = panel.columnFns or {}
+    table.insert(panel.columnFns, fn)
+    fn(ColumnW(panel))
+end
+
+local function PlaceGroup(panel, g, y, layout)
     g:ClearAllPoints()
     g:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -y)
-    if split then g:SetWidth(COL_W) else g:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -COL_X, -y) end
+    if layout.split then g:SetWidth(layout.columnW) else g:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -COL_X, -y) end
     if g.preview then
-        g.preview:SetShown(split)
-        if split then g.preview:SetWidth(StageWidth(panel)) end
+        g.preview:SetShown(layout.split)
+        if layout.split then g.preview:SetWidth(layout.zoneW) end
     end
 end
 
@@ -27,11 +39,11 @@ end
 function CastAheadOptions.RelayoutGroups(panel)
     local top = panel.flowTop or 6
     if type(top) == "function" then top = top() end
-    local y, split = 0, Split(panel)
+    local y, layout = 0, Layout(panel)
     for _, g in ipairs(panel.groups) do
         if g:IsShown() then
             local pad = g.flowPad or 0
-            PlaceGroup(panel, g, top + y + pad, split)
+            PlaceGroup(panel, g, top + y + pad, layout)
             y = y + pad + g:GetHeight() + COL_GAP
         end
     end
@@ -242,8 +254,8 @@ local function BuildStage(panel, group)
     local function Box()
         if group.preview then return group.preview end
         local box = CreateFrame("Frame", nil, group, "BackdropTemplate")
-        box:SetPoint("TOPLEFT", group, "TOPRIGHT", STAGE_X - COL_W, 0)
-        box:SetPoint("BOTTOMLEFT", group, "BOTTOMRIGHT", STAGE_X - COL_W, 0)
+        box:SetPoint("TOPLEFT", group, "TOPRIGHT", UI.GAP, 0)
+        box:SetPoint("BOTTOMLEFT", group, "BOTTOMRIGHT", UI.GAP, 0)
         UI.PaintGroup(box)
         box:SetScript("OnSizeChanged", stage.Paint)
         group.preview, panel.pictures = box, true
@@ -273,8 +285,8 @@ local function BuildStage(panel, group)
 
     -- Offsets are measured from the group's top edge, as SetPoint takes them.
     function stage.Paint()
-        local width = StageWidth(panel)
-        local wide = width >= STAGE_MIN_W
+        local layout = Layout(panel)
+        local width, wide = layout.zoneW, layout.split
         local top = group:GetTop()
         local floor, need = -8, 0
         for _, item in ipairs(items) do
@@ -337,7 +349,7 @@ local function Note(panel, control, text)
     note:SetJustifyH("LEFT")
     note:SetTextColor(unpack(T.muted))
     note:SetWordWrap(true)
-    note:SetWidth(COL_W - 20)
+    Column(panel, function(w) note:SetWidth(w - 20) end)
     note:SetPoint("TOPLEFT", control, "BOTTOMLEFT", 0, -2)
     note:SetText(text)
     return note
@@ -564,6 +576,12 @@ local function Build(host, name)
     panel:SetPoint("TOPRIGHT", host, "TOPRIGHT")
     panel.groups = {}
     panel.Relayout = function(self)
+        local w = Layout(self).columnW
+        if w > 0 and w ~= self.columnW then
+            self.columnW = w
+            for _, fn in ipairs(self.columnFns or {}) do fn(w) end
+            Refresh()
+        end
         CastAheadOptions.RelayoutGroups(self)
         if self:IsVisible() then self:GetParent():SetHeight(self:GetHeight()) end
     end
@@ -728,7 +746,7 @@ function BuildGeneral(panel)
         end
         timelineOff:ClearAllPoints()
         timelineOff:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 4, -2)
-        timelineOff:SetWidth(COL_W - 24) -- wraps in the control column, clear of the pictures
+        timelineOff:SetWidth(ColumnW(panel) - 24)
         timelineOff:SetText(text or "")
         timelineOff:SetShown(text ~= nil)
         leadLabel:ClearAllPoints()
@@ -755,7 +773,7 @@ function BuildGeneral(panel)
     kickNote:SetTextColor(0.7, 0.7, 0.7)
     kickNote:SetSpacing(3)
     kickNote:SetPoint("TOPLEFT", focusOnly, "BOTTOMLEFT", 4, -2)
-    kickNote:SetWidth(COL_W - 24)
+    Column(panel, function(w) kickNote:SetWidth(w - 24) end)
     kickNote:SetText("On: only your enemy focus gets kick calls. No focus, or a friendly or dead one: every mob gets them.\n"
         .. "Off: every mob gets kick calls.")
     local function FitAudio()
@@ -765,10 +783,10 @@ function BuildGeneral(panel)
     table.insert(refreshers, FitAudio)
     local KICK = CastAheadMatch.ADVICE.KICK
     local soundPlay = CastAheadWindow.Button(panel, "Play", 44)
-    soundPlay:SetPoint("LEFT", sound, "LEFT", COL_W - 10 - 52, 0)
+    Column(panel, function(w) soundPlay:SetPoint("LEFT", sound, "LEFT", w - 10 - 52, 0) end)
     soundPlay:SetScript("OnClick", function() CastAheadCore.PreviewSound(KICK, nil, CastAheadConfig.Enabled("voice")) end)
     local voicePlay = CastAheadWindow.Button(panel, "Play", 44)
-    voicePlay:SetPoint("LEFT", voice, "LEFT", COL_W - 10 - 52, 0)
+    Column(panel, function(w) voicePlay:SetPoint("LEFT", voice, "LEFT", w - 10 - 52, 0) end)
     voicePlay:SetScript("OnClick", function() CastAheadCore.PreviewMedia(nil, KICK) end)
     audioStage.Picture(focusOnly, {
         build = function(canvas)
@@ -870,7 +888,7 @@ function BuildGeneral(panel)
         local text = features:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         text:SetPoint("TOPLEFT", features, "TOPLEFT", 10, -30 - (i - 1) * 24)
         local open = CastAheadWindow.Button(panel, "Open", 60)
-        open:SetPoint("TOPRIGHT", features, "TOPLEFT", COL_W - 10, -26 - (i - 1) * 24)
+        open:SetPoint("TOPRIGHT", features, "TOPRIGHT", -10, -26 - (i - 1) * 24)
         open:SetScript("OnClick", function() CastAheadOptions.ShowFeatures() end)
         table.insert(refreshers, function() text:SetText(read()) end)
     end
@@ -1203,7 +1221,7 @@ end
 -- A Test button at the right end of a feature's row shows that feature alone.
 local function TestButton(panel, switch, indent, tip, run)
     local button = CastAheadWindow.Button(panel, "Test", 44)
-    button:SetPoint("LEFT", switch, "LEFT", COL_W - 10 - indent - 52, 0)
+    Column(panel, function(w) button:SetPoint("LEFT", switch, "LEFT", w - 10 - indent - 52, 0) end)
     button:SetScript("OnClick", function()
         if not run() then print("|cff33ff99CastAhead|r switch it on first, then press Test") end
     end)
@@ -1261,7 +1279,7 @@ end
 
 -- The raid section closes the page, `above` pixels under the end of the grouped flow.
 local function PlaceRaid(panel, raid, y, above)
-    PlaceGroup(panel, raid, y + above + COL_GAP, Split(panel))
+    PlaceGroup(panel, raid, y + above + COL_GAP, Layout(panel))
     return above + COL_GAP + raid:GetHeight()
 end
 
