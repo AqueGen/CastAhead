@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 -- Minimap button via LibDBIcon.
 --
 -- A hand-rolled button was tried first and was wrong: it positioned itself on

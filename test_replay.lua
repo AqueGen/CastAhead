@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 -- Replays real fights through the real matcher and scores what it decided.
 --
 -- The addon only ever sees cast bars starting and stopping on nameplate units

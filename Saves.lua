@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 -- After an update the game loads new TOC files only on a client restart; a /reload
 -- leaves Lists.lua out, and a half-built module would break every caller.
 if not CastAheadLists then

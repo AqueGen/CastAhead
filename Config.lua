@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 -- Settings storage.
 --
 -- One flat table. Settings were briefly split per content type (keys vs

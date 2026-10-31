@@ -542,6 +542,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
         rows.sort(key=lambda x: (x["cast"], x["cd"][0] if x["cd"] else 0, x["npc"], x["spell"]))
 
     with open(out_path, "w", encoding="utf-8") as f:
+        f.write("-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.\n")
         f.write("-- Generated from combat logs by gen.py. Do not edit by hand.\n")
         f.write("-- cast: measured cast time. cd: start-to-start rotation, cycled.\n")
         f.write("-- first: seconds from the mob entering combat to its first cast.\n")

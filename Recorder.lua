@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 CastAheadRecorder = {}
 local R = CastAheadRecorder
 

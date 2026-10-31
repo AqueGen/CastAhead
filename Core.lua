@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 -- CastAhead: predicts when a trash mob will cast next, and names the cast.
 --
 -- In 12.1 enemy identity and cast info are Secret: no GUID, no unit name, no

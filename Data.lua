@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 -- Generated from combat logs by gen.py. Do not edit by hand.
 -- cast: measured cast time. cd: start-to-start rotation, cycled.
 -- first: seconds from the mob entering combat to its first cast.

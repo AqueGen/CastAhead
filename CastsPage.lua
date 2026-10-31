@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 -- /castahead - browse the tracked cast database and switch individual spells off.
 --
 -- This is an inspection tool: everything shown is harvested from combat logs and

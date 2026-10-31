@@ -1,3 +1,4 @@
+-- Copyright (c) 2026 AqueGen. All rights reserved. See LICENSE.
 local ROW_HEIGHT = 24
 local HEADER_HEIGHT = 18
 local COLUMN_GAP = 4
