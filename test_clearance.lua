@@ -36,5 +36,51 @@ do
         "touching the band edge is not overlap")
 end
 
+local SECRET = {}
+issecretvalue = function(v) return v == SECRET end
+UIParent = { GetEffectiveScale = function() return 1 end }
+
+local function Same(rect, l, r, b, t)
+    local e = 1e-6
+    return rect and math.abs(rect.left - l) < e and math.abs(rect.right - r) < e
+        and math.abs(rect.bottom - b) < e and math.abs(rect.top - t) < e
+end
+
+local function PlatyPlate(aurasInfo, scale, yOffset)
+    local display = {
+        aurasInfo = aurasInfo,
+        BuffDisplay = {},
+        IsShown = function() return true end,
+        GetEffectiveScale = function() return scale or 1 end,
+        GetPoint = function() return "CENTER", nil, "CENTER", 0, yOffset or 0 end,
+    }
+    local other = { IsShown = function() return true end }
+    return { GetChildren = function() return other, display end }
+end
+
+do
+    Platynator = {}
+    local A = CastAheadClearance.Adapters.platynator
+    check(A.loaded(), "Platynator global means loaded")
+    local buffs = { anchor = { "RIGHT", -60, 0 }, scale = 1.2, height = 1 }
+    local rects = A.rects(PlatyPlate({ buffs = buffs }))
+    check(rects and #rects == 1 and Same(rects[1], -84, -60, -12, 12), "a RIGHT-anchored holder left of centre")
+    rects = A.rects(PlatyPlate({ buffs = buffs }, 0.5))
+    check(rects and Same(rects[1], -42, -30, -6, 6), "a smaller display scale shrinks the rect")
+    rects = A.rects(PlatyPlate({ buffs = buffs }, 1, 10))
+    check(rects and Same(rects[1], -84, -60, -2, 22), "the display's y offset moves the rect")
+    rects = A.rects(PlatyPlate({ debuffs = { anchor = { -70, 0 }, scale = 1, height = 1 } }))
+    check(rects and Same(rects[1], -80, -60, -10, 10), "a two-number anchor centres the holder")
+    check(A.rects({ GetChildren = function() return { IsShown = function() return true end } end }) == nil,
+        "no Platynator display on the plate")
+    local secret = PlatyPlate({ buffs = buffs })
+    local display = select(2, secret.GetChildren())
+    display.GetEffectiveScale = function() return SECRET end
+    check(A.rects(secret) == nil, "a Secret scale gives up")
+    check(A.rects(PlatyPlate({ buffs = { scale = 1, height = 1 } })) == nil, "an entry without an anchor gives up")
+    Platynator = nil
+    check(not A.loaded(), "no Platynator global means not loaded")
+end
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)
