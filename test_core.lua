@@ -808,6 +808,20 @@ levels[unit] = 77
 enter()
 ok, err = pcall(advance, 1)
 check(ok, "an opening prediction must not error: " .. tostring(err))
+do
+    local caller = "Interface/AddOns/SquadCD/UI/KickBars.lua:120: in function 'Update'"
+    debugstack = function() return caller end
+    castFor(2.0)
+    local list = CastAheadAPI.Upcoming(unit, 3)
+    check(#list == 1 and list[1].spell == 800 and list[1].at and list[1].at > now and not list[1].casting,
+        "SquadCD gets the plate's next predicted cast with its time, got " .. tostring(list[1] and list[1].spell)
+        .. " at " .. tostring(list[1] and list[1].at) .. ", now " .. now)
+    caller = "Interface/AddOns/SomeoneElse/Core.lua:5: in main chunk"
+    check(#CastAheadAPI.Upcoming(unit, 3) == 0, "another addon gets nothing")
+    caller = "Interface/AddOns/SquadCD/UI/KickBars.lua:120: in function 'Update'"
+    check(#CastAheadAPI.Upcoming("nameplate9", 3) == 0, "an unknown plate gives an empty list")
+    debugstack = nil
+end
 reset()
 levels[unit] = nil
 table.remove(CastAheadData[1877])

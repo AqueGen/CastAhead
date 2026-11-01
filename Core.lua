@@ -3190,6 +3190,42 @@ CastAheadCore.LastCandidates = LastCandidates   -- replay harness only
 CastAheadCore.Tracks = function(unit) return plates[unit] and plates[unit].tracks end
 CastAheadCore.Casting = function(unit) return plates[unit] and plates[unit].casting end
 
+-- For our own addons only: the caller's file must sit in one of these folders.
+local PARTNERS = { "SquadCD" }
+
+local function Partner()
+    local ok, stack = pcall(debugstack, 3, 1, 0)
+    if not ok or type(stack) ~= "string" then return false end
+    for _, name in ipairs(PARTNERS) do
+        if stack:find("AddOns[/\\]" .. name .. "[/\\]") then return true end
+    end
+    return false
+end
+
+local function SoonerFirst(a, b)
+    if (a.at == nil) ~= (b.at == nil) then return a.at ~= nil end
+    return (a.at or 0) < (b.at or 0)
+end
+
+-- Soonest predictions of a nameplate unit: spell, icon, at (GetTime seconds the cast
+-- is due, or its end while casting; nil when untimed), approximate, casting.
+CastAheadAPI = {}
+function CastAheadAPI.Upcoming(unit, max)
+    local out = {}
+    local state = plates[unit]
+    if not state or not Partner() then return out end
+    for _, r in ipairs(CollectRows(state)) do
+        local spell = r.row and r.row.spell
+        if spell then
+            out[#out + 1] = { spell = spell, icon = SpellIcon(spell), at = r.endAt,
+                approximate = r.approximate == true, casting = r.casting == true }
+        end
+    end
+    table.sort(out, SoonerFirst)
+    for i = #out, (max or 3) + 1, -1 do out[i] = nil end
+    return out
+end
+
 function CastAheadCore.Snapshot()
     local out, now = {}, GetTime()
     local key = CastAheadRecorder and CastAheadRecorder.Current()
