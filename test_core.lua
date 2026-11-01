@@ -5327,7 +5327,7 @@ do
             if v == "Nameplate icons" or v == "Centre call" then heights[v] = g.h end
             if v == "Centre call" then centre = g end
         end
-        check(heights["Nameplate icons"] == 100 and centre and centre.stage
+        check(heights["Nameplate icons"] == 124 and centre and centre.stage
             and heights["Centre call"] == math.max(70, centre.stage.Paint()),
             "General's icon and centre groups shrink to their switches, got "
             .. tostring(heights["Nameplate icons"]) .. "/" .. tostring(heights["Centre call"]))
@@ -5417,7 +5417,7 @@ do
         if not canvas then return end
         canvas.SetScale = function(self, s) self.scale = s end
         local need = group.stage.Paint()
-        check(type(need) == "number" and need > 0 and group.h == math.max(100, need),
+        check(type(need) == "number" and need > 0 and group.h == math.max(124, need),
             "Nameplate icons grows to what its stage needs, got " .. tostring(group.h) .. "/" .. tostring(need))
         local function OffLine()
             for _, fs in ipairs(texts) do
@@ -5475,7 +5475,7 @@ do
         end
         group.parent.w = 16 + COL_W + 8 + 259
         CastAheadOptions.Refresh()
-        check(not canvas.shown and group.h == 100, "a box narrower than 260 hides the picture and the group shrinks back")
+        check(not canvas.shown and group.h == 124, "a box narrower than 260 hides the picture and the group shrinks back")
         ;(function()
             local note, play
             for _, fs in ipairs(texts) do

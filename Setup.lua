@@ -226,8 +226,14 @@ local FIELDS = {
     centerTextScale = Ranged("centerTextScale", C.CENTER_TEXT_DEFAULT, C.CENTER_TEXT_MIN, C.CENTER_TEXT_MAX, 1, true),
 }
 
+local function PaintAuraHint()
+    local hint = panel.auraHint
+    if hint then hint:SetText(CastAheadClearance.Hint(CastAheadConfig.Get("anchor") or "left") or "") end
+end
+
 local function Refresh()
     if not panel.fields then return end
+    PaintAuraHint()
     for key, field in pairs(panel.fields) do
         if not field.box:HasFocus() then field.box:SetText(tostring(Round(FIELDS[key].read()))) end
     end
@@ -389,6 +395,18 @@ local function BuildBody(W, T)
     y = 8
     panel.side, panel.grow = O.BuildPlacement(content, { "TOPLEFT", content, "TOPLEFT", 4, -y })
     y = y + 84
+    if CastAheadClearance and CastAheadClearance.Active() then
+        local hint = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        hint:SetPoint("TOPLEFT", content, "TOPLEFT", 4, -y)
+        hint:SetPoint("RIGHT", content, "RIGHT", -4, 0)
+        hint:SetJustifyH("LEFT")
+        hint:SetWordWrap(true)
+        hint:SetTextColor(0.67, 0.67, 0.67)
+        panel.auraHint = hint
+        for _, dot in ipairs({ panel.side:GetChildren() }) do dot:HookScript("OnClick", PaintAuraHint) end
+        PaintAuraHint()
+        y = y + 40
+    end
     Number("offsetX", "Distance (px)")
     Number("nudgeX", "X (px)")
     Number("nudgeY", "Y (px)")

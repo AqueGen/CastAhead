@@ -9,6 +9,7 @@ local function check(ok, msg)
     end
 end
 
+dofile("Config.lua")
 dofile("Clearance.lua")
 
 do
@@ -183,6 +184,37 @@ do
     check(A.rects(plate) == nil, "no Plater unit frame on the plate")
     Plater = nil
     check(not A.loaded(), "no Plater global means not loaded")
+end
+
+do
+    local H = CastAheadClearance.Hint
+    CastAheadDB = {}
+    Platynator, EllesmereNameplates_NS, Plater = nil, nil, nil
+    check(H("left") == nil, "hint: nothing loaded, nothing to say")
+    EuiStub(nil)
+    check(H("left") == "EllesmereUI Nameplates draws auras on the left of its plates. Icons are moved out by one aura icon.",
+        "hint: EUI buffs on our side, room made")
+    CastAheadConfig.SetEnabled("auraClearance", false)
+    check(H("left") == "EllesmereUI Nameplates draws auras on the left of its plates. "
+        .. "Turn on Make room for nameplate auras, or pick another side.", "hint: switched off, says how to fix it")
+    CastAheadConfig.SetEnabled("auraClearance", true)
+    check(H("top") == "EllesmereUI Nameplates draws auras on the top of its plates. Icons are moved out by one aura icon.",
+        "hint: debuffs above count for top")
+    check(H("bottom") == nil, "hint: nothing of theirs below the plate")
+    check(H("topleft") == nil and H("center") == nil, "hint: corners and centre are never pushed, so never hinted")
+    EllesmereNameplates_NS = nil
+    PlaterStub()
+    check(H("right") == "Plater draws auras on the right of its plates. Icons are moved out by one aura icon.",
+        "hint: Plater extra icons on the right")
+    check(H("left") == nil, "hint: Plater defaults leave the left free")
+    PlaterStub({ use_ui_parent = true })
+    check(H("right") == "Plater draws its plates in a way we cannot measure. Icons are not moved for this setup.",
+        "hint: plates lifted into UIParent")
+    Plater = nil
+    Platynator = {}
+    check(H("left") == "Platynator can draw auras on the left of its plates. Icons are moved out by one aura icon.",
+        "hint: Platynator designs are per unit, so it can draw")
+    Platynator = nil
 end
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))

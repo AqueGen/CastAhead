@@ -235,6 +235,38 @@ M.Adapters.plater = {
     end,
 }
 
+-- Which sides each addon draws auras on, from settings alone, for the hint.
+-- Platynator picks a design per unit, so it can only say "can".
+M.Adapters.platynator.sides = function() return nil end
+
+local EUI_SIDE = { left = "left", right = "right", top = "top", topleft = "top", topright = "top", bottom = "bottom" }
+M.Adapters.ellesmere.sides = function()
+    local ns = EllesmereNameplates_NS
+    local profile = ns.NP_GetProfile and ns.NP_GetProfile()
+    local defaults = ns.NP_GetDefaults and ns.NP_GetDefaults() or {}
+    local sides = {}
+    for _, kind in ipairs(EUI_KINDS) do
+        local side = EUI_SIDE[(profile and profile[kind.slot]) or defaults[kind.slot]]
+        if side then sides[side] = true end
+    end
+    return sides
+end
+
+local PLATER_SIDE = { "top", "left", "bottom", "bottom", "bottom", "right", "top", "top" }
+M.Adapters.plater.sides = function()
+    local profile = Plater.db and Plater.db.profile
+    if not profile then return {} end
+    if profile.use_ui_parent then return {}, true end
+    local sides = {}
+    local anchors = { profile.aura_frame1_anchor, profile.extra_icon_anchor }
+    if profile.buffs_on_aura2 then anchors[3] = profile.aura_frame2_anchor end
+    for _, anchor in pairs(anchors) do
+        local side = type(anchor) == "table" and PLATER_SIDE[anchor.side]
+        if side then sides[side] = true end
+    end
+    return sides
+end
+
 local ORDER = { "platynator", "ellesmere", "plater" }
 
 function M.Active()
@@ -271,6 +303,25 @@ function M.ForPlate(plate, unit, side, size, nudge)
     local push, keep = Measure(plate, unit, side, size, nudge)
     if keep then cache[plate] = { side = side, size = size, nudge = nudge, push = push } end
     return push
+end
+
+-- One line for the Size and position panel, or nil when there is nothing to say.
+function M.Hint(side)
+    if not SIDES[side] then return nil end
+    local adapter = M.Active()
+    if not adapter then return nil end
+    local ok, sides, unmeasured = pcall(adapter.sides)
+    if not ok then return nil end
+    if unmeasured then
+        return adapter.name .. " draws its plates in a way we cannot measure. Icons are not moved for this setup."
+    end
+    local verb = sides == nil and "can draw" or sides[side] and "draws"
+    if not verb then return nil end
+    local text = adapter.name .. " " .. verb .. " auras on the " .. side .. " of its plates. "
+    if CastAheadConfig.Enabled("auraClearance") then
+        return text .. "Icons are moved out by one aura icon."
+    end
+    return text .. "Turn on Make room for nameplate auras, or pick another side."
 end
 
 function M.Invalidate(plate)
