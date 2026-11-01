@@ -350,6 +350,8 @@ dofile("CastsPage.lua")
 dofile("SavesPage.lua")
 dofile("UI.lua")
 dofile("Core.lua")
+-- After Core: the stub CreateFrame hands the first OnEvent script to `fire`.
+dofile("Clearance.lua")
 dofile("Setup.lua")
 dofile("Recorder.lua")
 dofile("ReportWindow.lua")
@@ -5325,7 +5327,7 @@ do
             if v == "Nameplate icons" or v == "Centre call" then heights[v] = g.h end
             if v == "Centre call" then centre = g end
         end
-        check(heights["Nameplate icons"] == 100 and centre and centre.stage
+        check(heights["Nameplate icons"] == 124 and centre and centre.stage
             and heights["Centre call"] == math.max(70, centre.stage.Paint()),
             "General's icon and centre groups shrink to their switches, got "
             .. tostring(heights["Nameplate icons"]) .. "/" .. tostring(heights["Centre call"]))
@@ -5415,8 +5417,27 @@ do
         if not canvas then return end
         canvas.SetScale = function(self, s) self.scale = s end
         local need = group.stage.Paint()
-        check(type(need) == "number" and need > 0 and group.h == math.max(100, need),
+        check(type(need) == "number" and need > 0 and group.h == math.max(124, need),
             "Nameplate icons grows to what its stage needs, got " .. tostring(group.h) .. "/" .. tostring(need))
+        do
+            local realActive = CastAheadClearance.Active
+            local drawsAnywhere = { name = "Platynator", sides = function() return nil end }
+            CastAheadClearance.Active = function() return drawsAnywhere end
+            group.stage.Paint()
+            check(canvas.aura and canvas.aura.shown and canvas.previewBars[1].x == -(6 + 22),
+                "picture: with a nameplate addon's aura on our side, the icons sit past it, got "
+                .. tostring(canvas.previewBars[1].x))
+            CastAheadConfig.SetEnabled("auraClearance", false)
+            group.stage.Paint()
+            check(canvas.aura.shown and canvas.previewBars[1].x == -6,
+                "picture: switched off, the icons sit on the aura, got " .. tostring(canvas.previewBars[1].x))
+            CastAheadConfig.SetEnabled("auraClearance", true)
+            CastAheadClearance.Active = function() return nil end
+            group.stage.Paint()
+            check(not canvas.aura.shown and canvas.previewBars[1].x == -6,
+                "picture: no nameplate addon, no aura and no push")
+            CastAheadClearance.Active = realActive
+        end
         local function OffLine()
             for _, fs in ipairs(texts) do
                 if rawget(fs, "value") == "Off - no icons on nameplates" then return fs end
@@ -5473,7 +5494,7 @@ do
         end
         group.parent.w = 16 + COL_W + 8 + 259
         CastAheadOptions.Refresh()
-        check(not canvas.shown and group.h == 100, "a box narrower than 260 hides the picture and the group shrinks back")
+        check(not canvas.shown and group.h == 124, "a box narrower than 260 hides the picture and the group shrinks back")
         ;(function()
             local note, play
             for _, fs in ipairs(texts) do
@@ -8263,6 +8284,58 @@ end)()
     CastAheadDB, BigWigsLoader, BigWigs = savedDB, savedLoader, savedBigWigs
     C_EncounterTimeline.IsFeatureEnabled = savedFeature
 end)()
+
+do
+    local savedDB, savedActive, savedUI, savedSecret = CastAheadDB, CastAheadClearance.Active, UIParent, issecretvalue
+    CastAheadDB = {}
+    UIParent = { GetEffectiveScale = function() return 1 end }
+    local width = 24
+    local fake = { rects = function() return { { left = -60 - width, right = -60, bottom = -12, top = 12 } } end }
+    CastAheadClearance.Active = function() return fake end
+    local plateW = 120
+    local plate = {
+        GetWidth = function() return plateW end,
+        GetHeight = function() return 12 end,
+        GetEffectiveScale = function() return 1 end,
+    }
+    local state = {}
+    local function FirstX(unit)
+        CastAheadCore.ShowSampleRow(state, plate, unit)
+        return state.bars[1].x
+    end
+    check(FirstX("nameplate1") == -(6 + 24), "clearance: an aura icon left of the plate pushes the row out by it")
+    CastAheadConfig.SetEnabled("auraClearance", false)
+    check(FirstX("nameplate1") == -6, "clearance: switched off, the row sits at the plate")
+    check(CastAheadDB.offsetX == nil and CastAheadDB.nudgeX == nil, "clearance: never writes the player's offsets")
+    CastAheadConfig.SetEnabled("auraClearance", true)
+    check(CastAheadDB.auraClearance == nil, "clearance: on is stored as nil")
+    width = 30
+    check(FirstX("nameplate1") == -(6 + 24), "clearance: kept until the plate is invalidated")
+    CastAheadClearance.Invalidate(plate)
+    check(FirstX("nameplate1") == -(6 + 30), "clearance: an invalidated plate is measured again")
+    check(FirstX(nil) == -6, "clearance: a preview with no unit is not pushed")
+    plateW = {}
+    issecretvalue = function(v) return v == plateW end
+    CastAheadClearance.Invalidate()
+    check(FirstX("nameplate1") == -6, "clearance: a Secret plate width gives no push")
+    issecretvalue = savedSecret
+    plateW = 120
+    local ready = false
+    local late = { rects = function()
+        if not ready then return nil end
+        return { { left = -84, right = -60, bottom = -12, top = 12 } }
+    end }
+    CastAheadClearance.Active = function() return late end
+    CastAheadClearance.Invalidate()
+    check(FirstX("nameplate1") == -6, "clearance: the nameplate addon's frame is not there yet")
+    ready = true
+    check(FirstX("nameplate1") == -(6 + 24), "clearance: a frame that was not there yet is looked for again")
+    CastAheadClearance.Active = function() return nil end
+    CastAheadClearance.Invalidate()
+    check(FirstX("nameplate1") == -6, "clearance: no nameplate addon, no push")
+    CastAheadCore.HideSampleRow(state)
+    CastAheadDB, CastAheadClearance.Active, UIParent = savedDB, savedActive, savedUI
+end
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

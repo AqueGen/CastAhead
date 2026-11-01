@@ -39,6 +39,7 @@ ignore:
   - CLAUDE.md
   - test.lua
   - test_core.lua
+  - test_clearance.lua
   - test_replay.lua
   - tools
   - docs
