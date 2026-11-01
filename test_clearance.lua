@@ -208,8 +208,8 @@ do
     check(H("left") == "EllesmereUI Nameplates draws auras on the left of its plates. Icons are moved out by one aura icon.",
         "hint: EUI buffs on our side, room made")
     CastAheadConfig.SetEnabled("auraClearance", false)
-    check(H("left") == "EllesmereUI Nameplates draws auras on the left of its plates. "
-        .. "Turn on Make room for nameplate auras, or pick another side.", "hint: switched off, says how to fix it")
+    check(H("left", "The switch") == "EllesmereUI Nameplates draws auras on the left of its plates. "
+        .. "Turn on The switch, or pick another side.", "hint: switched off, names the switch")
     CastAheadConfig.SetEnabled("auraClearance", true)
     check(H("top") == "EllesmereUI Nameplates draws auras on the top of its plates. Icons are moved out by one aura icon.",
         "hint: debuffs above count for top")

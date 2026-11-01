@@ -347,8 +347,9 @@ function M.ForPlate(plate, unit, side, size, nudge)
     return push
 end
 
--- One line for the Size and position panel, or nil when there is nothing to say.
-function M.Hint(side)
+-- One line for the Size and position panel, or nil when there is nothing to
+-- say. `label` is the switch's name as the settings window shows it.
+function M.Hint(side, label)
     if not SIDES[side] then return nil end
     local adapter = M.Active()
     if not adapter then return nil end
@@ -363,7 +364,7 @@ function M.Hint(side)
     if CastAheadConfig.Enabled("auraClearance") then
         return text .. "Icons are moved out by one aura icon."
     end
-    return text .. "Turn on Make room for nameplate auras, or pick another side."
+    return text .. "Turn on " .. label .. ", or pick another side."
 end
 
 function M.Invalidate(plate)

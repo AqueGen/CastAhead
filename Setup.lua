@@ -228,7 +228,10 @@ local FIELDS = {
 
 local function PaintAuraHint()
     local hint = panel.auraHint
-    if hint then hint:SetText(CastAheadClearance.Hint(CastAheadConfig.Get("anchor") or "left") or "") end
+    if hint then
+        hint:SetText(CastAheadClearance.Hint(CastAheadConfig.Get("anchor") or "left",
+            CastAheadOptions.Switches.auraClearance.label) or "")
+    end
 end
 
 local function Refresh()
@@ -398,7 +401,7 @@ local function BuildBody(W, T)
     if CastAheadClearance and CastAheadClearance.Active() then
         local hint = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         hint:SetPoint("TOPLEFT", content, "TOPLEFT", 4, -y)
-        hint:SetPoint("RIGHT", content, "RIGHT", -4, 0)
+        hint:SetWidth(PANEL_W - 2 * PAD - 2 * INNER - 4)
         hint:SetJustifyH("LEFT")
         hint:SetWordWrap(true)
         hint:SetTextColor(0.67, 0.67, 0.67)
