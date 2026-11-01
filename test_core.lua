@@ -350,6 +350,8 @@ dofile("CastsPage.lua")
 dofile("SavesPage.lua")
 dofile("UI.lua")
 dofile("Core.lua")
+-- After Core: the stub CreateFrame hands the first OnEvent script to `fire`.
+dofile("Clearance.lua")
 dofile("Setup.lua")
 dofile("Recorder.lua")
 dofile("ReportWindow.lua")
@@ -8263,6 +8265,60 @@ end)()
     CastAheadDB, BigWigsLoader, BigWigs = savedDB, savedLoader, savedBigWigs
     C_EncounterTimeline.IsFeatureEnabled = savedFeature
 end)()
+
+do
+    local savedDB, savedActive, savedUI, savedSecret = CastAheadDB, CastAheadClearance.Active, UIParent, issecretvalue
+    CastAheadDB = {}
+    UIParent = { GetEffectiveScale = function() return 1 end }
+    local width = 24
+    CastAheadClearance.Active = function()
+        return { rects = function() return { { left = -60 - width, right = -60, bottom = -12, top = 12 } } end }
+    end
+    local plateW = 120
+    local plate = {
+        GetWidth = function() return plateW end,
+        GetHeight = function() return 12 end,
+        GetEffectiveScale = function() return 1 end,
+    }
+    local state = {}
+    local function FirstX(unit)
+        CastAheadCore.ShowSampleRow(state, plate, unit)
+        return state.bars[1].x
+    end
+    check(FirstX("nameplate1") == -(6 + 24), "clearance: an aura icon left of the plate pushes the row out by it")
+    CastAheadConfig.SetEnabled("auraClearance", false)
+    check(FirstX("nameplate1") == -6, "clearance: switched off, the row sits at the plate")
+    check(CastAheadDB.offsetX == nil and CastAheadDB.nudgeX == nil, "clearance: never writes the player's offsets")
+    CastAheadConfig.SetEnabled("auraClearance", true)
+    check(CastAheadDB.auraClearance == nil, "clearance: on is stored as nil")
+    width = 30
+    check(FirstX("nameplate1") == -(6 + 24), "clearance: kept until the plate is invalidated")
+    CastAheadClearance.Invalidate(plate)
+    check(FirstX("nameplate1") == -(6 + 30), "clearance: an invalidated plate is measured again")
+    check(FirstX(nil) == -6, "clearance: a preview with no unit is not pushed")
+    plateW = {}
+    issecretvalue = function(v) return v == plateW end
+    CastAheadClearance.Invalidate()
+    check(FirstX("nameplate1") == -6, "clearance: a Secret plate width gives no push")
+    issecretvalue = savedSecret
+    plateW = 120
+    local ready = false
+    CastAheadClearance.Active = function()
+        return { rects = function()
+            if not ready then return nil end
+            return { { left = -84, right = -60, bottom = -12, top = 12 } }
+        end }
+    end
+    CastAheadClearance.Invalidate()
+    check(FirstX("nameplate1") == -6, "clearance: the nameplate addon's frame is not there yet")
+    ready = true
+    check(FirstX("nameplate1") == -(6 + 24), "clearance: a frame that was not there yet is looked for again")
+    CastAheadClearance.Active = function() return nil end
+    CastAheadClearance.Invalidate()
+    check(FirstX("nameplate1") == -6, "clearance: no nameplate addon, no push")
+    CastAheadCore.HideSampleRow(state)
+    CastAheadDB, CastAheadClearance.Active, UIParent = savedDB, savedActive, savedUI
+end
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)

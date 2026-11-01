@@ -234,3 +234,74 @@ M.Adapters.plater = {
         return rects
     end,
 }
+
+local ORDER = { "platynator", "ellesmere", "plater" }
+
+function M.Active()
+    for _, key in ipairs(ORDER) do
+        local adapter = M.Adapters[key]
+        if adapter.loaded() then return adapter end
+    end
+end
+
+local SIDES = { left = true, right = true, top = true, bottom = true }
+local cache = setmetatable({}, { __mode = "k" })
+
+-- Second result: whether the answer may be kept. We load before the
+-- nameplate addons and see NAME_PLATE_UNIT_ADDED first, so their frame for
+-- this unit may not exist yet; that miss is asked again on the next paint.
+local function Measure(plate, unit, side, size, nudge)
+    local adapter = M.Active()
+    if not adapter then return 0, true end
+    local okSize, w, h = pcall(CastAheadCore.MeasurePlate, plate)
+    if not okSize or not w or not h then return 0, true end
+    local ok, rects = pcall(adapter.rects, plate, unit)
+    if not ok then return 0, true end
+    if not rects then return 0, false end
+    return M.Push(rects, side, w / 2, h / 2, { nudge - size / 2, nudge + size / 2 }), true
+end
+
+-- Outward push in UIParent pixels for our icons on `side` of this plate.
+-- `nudge` is the player's shift across that side (NudgeY beside the plate,
+-- NudgeX above or below it).
+function M.ForPlate(plate, unit, side, size, nudge)
+    if not plate or not unit or not SIDES[side] then return 0 end
+    local hit = cache[plate]
+    if hit and hit.side == side and hit.size == size and hit.nudge == nudge then return hit.push end
+    local push, keep = Measure(plate, unit, side, size, nudge)
+    if keep then cache[plate] = { side = side, size = size, nudge = nudge, push = push } end
+    return push
+end
+
+function M.Invalidate(plate)
+    if plate then
+        cache[plate] = nil
+    else
+        for key in pairs(cache) do cache[key] = nil end
+    end
+end
+
+-- Plates are recycled between units and Platynator picks a design per unit,
+-- so a plate is measured again whenever it changes hands. The two hooks only
+-- drop the cache when the other addon re-lays its plates after a settings
+-- change.
+if CreateFrame then
+    local events = CreateFrame("Frame")
+    events:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+    events:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
+    events:RegisterEvent("PLAYER_LOGIN")
+    events:SetScript("OnEvent", function(_, event, unit)
+        if event == "PLAYER_LOGIN" then
+            if hooksecurefunc and Plater and type(Plater.UpdateAllPlates) == "function" then
+                hooksecurefunc(Plater, "UpdateAllPlates", function() M.Invalidate() end)
+            end
+            local ns = EllesmereNameplates_NS
+            if hooksecurefunc and ns and type(ns.NPC_ReloadAll) == "function" then
+                hooksecurefunc(ns, "NPC_ReloadAll", function() M.Invalidate() end)
+            end
+            return
+        end
+        local plate = unit and C_NamePlate and C_NamePlate.GetNamePlateForUnit(unit)
+        if plate then M.Invalidate(plate) end
+    end)
+end

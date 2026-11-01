@@ -171,6 +171,8 @@ local SWITCHES = {
         tip = "Space icons evenly, whatever the word length. Two long words side by side may overlap." },
     fullLabels = { label = "Full labels", defaultOff = true,
         tip = "Write long calls in full under the icon: TANKBUSTER, not BUSTER." },
+    auraClearance = { label = "Make room for nameplate auras",
+        tip = "Move the icons out by one aura icon when Platynator, EllesmereUI Nameplates or Plater draws auras on the same side." },
     devMode = { label = "Development mode", defaultOff = true,
         tip = "Starts recording data that helps improve the addon (Record everything, on by default)." },
     recordAll = { label = "Record everything",

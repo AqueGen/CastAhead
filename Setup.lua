@@ -115,6 +115,7 @@ end
 local function ShowRow(key, frame)
     local state = rows[key] or {}
     rows[key] = state
+    state.unit = key ~= "sample" and key or nil
     CastAheadCore.ShowSampleRow(state, frame)
     CastAheadCore.SampleStates[state] = frame
     state.plateUp = Shown(frame) and true or false

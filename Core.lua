@@ -1091,7 +1091,7 @@ end
 -- Filled by RefreshBar on every repaint, so the spread costs no garbage.
 local spread = {}
 
-local function AnchorToFrame(plate, bar, index)
+local function AnchorToFrame(plate, bar, index, unit)
     -- Bars stay children of UIParent rather than the plate: plates are recycled
     -- and carry their own alpha, scale and frame level, all of which would drag
     -- the bar around with them.
@@ -1101,10 +1101,14 @@ local function AnchorToFrame(plate, bar, index)
     -- below run sideways, first icon centred.
     local side = CastAheadDB and CastAheadDB.anchor or "left"
     local spec = ANCHORS[side] or ANCHORS.left
-    local gap = BAR_GAP + (CastAheadDB and tonumber(CastAheadDB.offsetX) or 0)
     local growSetting = CastAheadDB and CastAheadDB.grow or "auto"
     local size = bar._size or ICON_SIZE
     local nudgeX, nudgeY = CastAheadConfig.NudgeX(), CastAheadConfig.NudgeY()
+    -- Room for the nameplate addon's own aura icons on this side.
+    local clear = CastAheadClearance and CastAheadConfig.Enabled("auraClearance")
+        and CastAheadClearance.ForPlate(plate, unit, side, size,
+            (side == "top" or side == "bottom") and nudgeX or nudgeY) or 0
+    local gap = BAR_GAP + (CastAheadDB and tonumber(CastAheadDB.offsetX) or 0) + clear
     -- SpreadBars measured this one against its neighbours; the fallback only
     -- covers a bar anchored before anything has been painted.
     local hOffset = bar._hOffset or (index - 1) * H_STEP
@@ -1173,7 +1177,7 @@ local function AnchorBar(unit, bar, index)
         bar:Hide()
         return false
     end
-    AnchorToFrame(plate, bar, index)
+    AnchorToFrame(plate, bar, index, unit)
     return true
 end
 
@@ -3212,6 +3216,7 @@ CastAheadCore.Population = function() return killed, exhausted end
 CastAheadCore.MoveCenter = ToggleMoveCenter
 CastAheadCore.IsHostileNameplate = IsHostileNameplate
 CastAheadCore.RememberPlateSize = RememberPlateSize
+CastAheadCore.MeasurePlate = MeasurePlate
 
 function CastAheadCore.PlateSize()
     local size = CastAheadDB and CastAheadDB.plateSize
@@ -3950,7 +3955,7 @@ CastAheadCore.SAMPLE_ROW = {
 }
 CastAheadCore.SampleStates = {}
 
-function CastAheadCore.ShowSampleRow(state, frame)
+function CastAheadCore.ShowSampleRow(state, frame, unit)
     local row = CastAheadCore.SAMPLE_ROW
     local on = CastAheadConfig.Enabled("nameplates") and (not frame.IsShown or frame:IsShown())
     for i = 1, #row do
@@ -3963,7 +3968,7 @@ function CastAheadCore.ShowSampleRow(state, frame)
     end
     SpreadBars(spread, #row)
     for i = 1, #row do
-        AnchorToFrame(frame, state.bars[i], i)
+        AnchorToFrame(frame, state.bars[i], i, unit or state.unit)
         state.bars[i]:SetShown(on)
     end
 end
