@@ -113,3 +113,65 @@ M.Adapters.platynator = {
         return rects
     end,
 }
+
+-- EllesmereUI Nameplates exports its own getters, which already resolve slot
+-- sizes and fallbacks; the rows hang off the health bar as in
+-- EUI_Nameplates_AuraContainers.lua AnchorNPContainer.
+local EUI_KINDS = {
+    { slot = "debuffSlot", size = "GetDebuffIconSize" },
+    { slot = "buffSlot", size = "GetBuffIconSize" },
+    { slot = "ccSlot", size = "GetCCIconSize" },
+}
+
+local function EuiRow(ns, slot, size, w, hh, hy, xOff, yOff)
+    local top = hy + hh / 2 + ((ns.GetDebuffYOffset and ns.GetDebuffYOffset()) or 2) + yOff
+    if slot == "left" or slot == "right" then
+        local gap = ns.GetSideAuraXOffset and ns.GetSideAuraXOffset() or 2
+        local bottom = hy - hh / 2 + yOff
+        local inner = w / 2 + gap
+        if slot == "left" then
+            return { left = -inner - size + xOff, right = -inner + xOff, bottom = bottom, top = bottom + size }
+        end
+        return { left = inner + xOff, right = inner + size + xOff, bottom = bottom, top = bottom + size }
+    elseif slot == "top" then
+        return { left = xOff - size / 2, right = xOff + size / 2, bottom = top, top = top + size }
+    elseif slot == "bottom" then
+        local below = hy - hh / 2 - 2 + yOff
+        return { left = xOff - size / 2, right = xOff + size / 2, bottom = below - size, top = below }
+    elseif slot == "topleft" then
+        return { left = -w / 2 + xOff, right = -w / 2 + size + xOff, bottom = top, top = top + size }
+    elseif slot == "topright" then
+        return { left = w / 2 - size + xOff, right = w / 2 + xOff, bottom = top, top = top + size }
+    end
+end
+
+M.Adapters.ellesmere = {
+    name = "EllesmereUI Nameplates",
+    perUnit = false,
+    loaded = function() return EllesmereNameplates_NS ~= nil end,
+    rects = function(_, unit)
+        local ns = EllesmereNameplates_NS
+        local eui = ns and ns.plates and ns.plates[unit]
+        local health = eui and eui.health
+        if not health or not ns.GetHealthBarWidth then return nil end
+        local ratio = Ratio(health)
+        local w, hh = ns.GetHealthBarWidth(), health:GetHeight()
+        local _, _, _, _, hy = health:GetPoint(1)
+        hy = hy or 0
+        if not ratio or not Readable(w, hh, hy) or not w or not hh then return nil end
+        local profile = ns.NP_GetProfile and ns.NP_GetProfile()
+        local defaults = ns.NP_GetDefaults and ns.NP_GetDefaults() or {}
+        local rects = {}
+        for _, kind in ipairs(EUI_KINDS) do
+            local slot = (profile and profile[kind.slot]) or defaults[kind.slot]
+            local size = ns[kind.size] and ns[kind.size]()
+            if slot and slot ~= "none" and size then
+                local xOff, yOff = 0, 0
+                if ns.GetAuraSlotOffsets then xOff, yOff = ns.GetAuraSlotOffsets(kind.slot) end
+                local row = EuiRow(ns, slot, size, w, hh, hy, xOff or 0, yOff or 0)
+                if row then rects[#rects + 1] = Scaled(row, ratio, 0) end
+            end
+        end
+        return rects
+    end,
+}

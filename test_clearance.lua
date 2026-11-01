@@ -82,5 +82,59 @@ do
     check(not A.loaded(), "no Platynator global means not loaded")
 end
 
+local function EuiStub(profile)
+    local defaults = { buffSlot = "left", debuffSlot = "top", ccSlot = "right" }
+    local health = {
+        GetHeight = function() return 10 end,
+        GetPoint = function() return "CENTER", nil, "CENTER", 0, 0 end,
+        GetEffectiveScale = function() return 1 end,
+    }
+    local plate = { health = health }
+    EllesmereNameplates_NS = {
+        plates = { nameplate1 = plate },
+        NP_GetProfile = function() return profile end,
+        NP_GetDefaults = function() return defaults end,
+        GetHealthBarWidth = function() return 120 end,
+        GetBuffIconSize = function() return 24 end,
+        GetDebuffIconSize = function() return 26 end,
+        GetCCIconSize = function() return 24 end,
+        GetSideAuraXOffset = function() return 2 end,
+        GetDebuffYOffset = function() return 2 end,
+        GetAuraSlotOffsets = function() return 0, 0 end,
+    }
+    return plate
+end
+
+local function Has(rects, l, r, b, t)
+    for _, rect in ipairs(rects or {}) do
+        if Same(rect, l, r, b, t) then return true end
+    end
+    return false
+end
+
+do
+    local A = CastAheadClearance.Adapters.ellesmere
+    EuiStub(nil)
+    check(A.loaded(), "EllesmereNameplates_NS means loaded")
+    local rects = A.rects({}, "nameplate1")
+    check(rects and #rects == 3, "defaults give three rows")
+    check(Has(rects, -86, -62, -5, 19), "buffs left of the health bar, bottom-aligned")
+    check(Has(rects, 62, 86, -5, 19), "CC right of the health bar")
+    check(Has(rects, -13, 13, 7, 33), "debuffs above the health bar")
+    check(A.rects({}, "nameplate2") == nil, "a unit EUI does not draw")
+    EuiStub({ buffSlot = "none" })
+    rects = A.rects({}, "nameplate1")
+    check(rects and #rects == 2 and not Has(rects, -86, -62, -5, 19), "a slot set to none adds nothing")
+    EuiStub({ buffSlot = "bottom" })
+    check(Has(A.rects({}, "nameplate1"), -12, 12, -31, -7), "a bottom slot hangs under the bar")
+    EuiStub({ buffSlot = "topleft" })
+    check(Has(A.rects({}, "nameplate1"), -60, -36, 7, 31), "a topleft slot sits on the bar's top-left corner")
+    local plate = EuiStub(nil)
+    plate.health.GetHeight = function() return SECRET end
+    check(A.rects({}, "nameplate1") == nil, "a Secret bar height gives up")
+    EllesmereNameplates_NS = nil
+    check(not A.loaded(), "no namespace means not loaded")
+end
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)
