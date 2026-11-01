@@ -94,9 +94,8 @@ M.Adapters.platynator = {
         local rects = {}
         for _, kind in ipairs({ "debuffs", "buffs", "crowdControl" }) do
             local info = display.aurasInfo[kind]
-            if info then
-                local anchor, scale = info.anchor, tonumber(info.scale)
-                if type(anchor) ~= "table" or not scale then return nil end
+            local anchor, scale = info and info.anchor, info and tonumber(info.scale)
+            if type(anchor) == "table" and scale then
                 local w = 20 * scale
                 local h = w * (tonumber(info.height) or 1)
                 local box
@@ -110,7 +109,13 @@ M.Adapters.platynator = {
                 rects[#rects + 1] = Scaled(box, ratio, dy)
             end
         end
-        return rects
+        return rects, { display = display, info = display.aurasInfo }
+    end,
+    -- A design change re-installs the plate without any nameplate event
+    -- (Display/Initialize.lua UnitDesignChange): either another display takes
+    -- over and this one hides, or this one gets a new aurasInfo table.
+    stale = function(stamp)
+        return not stamp.display:IsShown() or stamp.display.aurasInfo ~= stamp.info
     end,
 }
 
@@ -118,30 +123,38 @@ M.Adapters.platynator = {
 -- sizes and fallbacks; the rows hang off the health bar as in
 -- EUI_Nameplates_AuraContainers.lua AnchorNPContainer.
 local EUI_KINDS = {
-    { slot = "debuffSlot", size = "GetDebuffIconSize" },
-    { slot = "buffSlot", size = "GetBuffIconSize" },
-    { slot = "ccSlot", size = "GetCCIconSize" },
+    { slot = "debuffSlot", size = "GetDebuffIconSize", crop = "debuffs" },
+    { slot = "buffSlot", size = "GetBuffIconSize", crop = "buffs" },
+    { slot = "ccSlot", size = "GetCCIconSize", crop = "ccs" },
 }
 
-local function EuiRow(ns, slot, size, w, hh, hy, xOff, yOff)
+-- Cropped icons are shorter than wide (AuraContainers.lua NPHeight).
+local function EuiHeight(ns, crop, size)
+    local factor = ns.GetAuraCrop and ns.GetAuraCrop(crop)
+    if factor and ns.GetAuraCropHeight then return ns.GetAuraCropHeight(factor, size) or size end
+    return size
+end
+
+local function EuiRow(ns, slot, size, height, w, hh, hy, xOff, yOff)
     local top = hy + hh / 2 + ((ns.GetDebuffYOffset and ns.GetDebuffYOffset()) or 2) + yOff
     if slot == "left" or slot == "right" then
-        local gap = ns.GetSideAuraXOffset and ns.GetSideAuraXOffset() or 2
+        local gap = (ns.GetSideAuraXOffset and ns.GetSideAuraXOffset() or 2)
+            + (ns.NP_ClassicSide and ns.NP_ClassicSide(slot) or 0)
         local bottom = hy - hh / 2 + yOff
         local inner = w / 2 + gap
         if slot == "left" then
-            return { left = -inner - size + xOff, right = -inner + xOff, bottom = bottom, top = bottom + size }
+            return { left = -inner - size + xOff, right = -inner + xOff, bottom = bottom, top = bottom + height }
         end
-        return { left = inner + xOff, right = inner + size + xOff, bottom = bottom, top = bottom + size }
+        return { left = inner + xOff, right = inner + size + xOff, bottom = bottom, top = bottom + height }
     elseif slot == "top" then
-        return { left = xOff - size / 2, right = xOff + size / 2, bottom = top, top = top + size }
+        return { left = xOff - size / 2, right = xOff + size / 2, bottom = top, top = top + height }
     elseif slot == "bottom" then
         local below = hy - hh / 2 - 2 + yOff
-        return { left = xOff - size / 2, right = xOff + size / 2, bottom = below - size, top = below }
+        return { left = xOff - size / 2, right = xOff + size / 2, bottom = below - height, top = below }
     elseif slot == "topleft" then
-        return { left = -w / 2 + xOff, right = -w / 2 + size + xOff, bottom = top, top = top + size }
+        return { left = -w / 2 + xOff, right = -w / 2 + size + xOff, bottom = top, top = top + height }
     elseif slot == "topright" then
-        return { left = w / 2 - size + xOff, right = w / 2 + xOff, bottom = top, top = top + size }
+        return { left = w / 2 - size + xOff, right = w / 2 + xOff, bottom = top, top = top + height }
     end
 end
 
@@ -153,7 +166,8 @@ M.Adapters.ellesmere = {
         local ns = EllesmereNameplates_NS
         local eui = ns and ns.plates and ns.plates[unit]
         local health = eui and eui.health
-        if not health or not ns.GetHealthBarWidth then return nil end
+        if not health then return nil end
+        if not ns.GetHealthBarWidth then return {} end
         local ratio = Ratio(health)
         local w, hh = ns.GetHealthBarWidth(), health:GetHeight()
         local _, _, _, _, hy = health:GetPoint(1)
@@ -168,7 +182,7 @@ M.Adapters.ellesmere = {
             if slot and slot ~= "none" and size then
                 local xOff, yOff = 0, 0
                 if ns.GetAuraSlotOffsets then xOff, yOff = ns.GetAuraSlotOffsets(kind.slot) end
-                local row = EuiRow(ns, slot, size, w, hh, hy, xOff or 0, yOff or 0)
+                local row = EuiRow(ns, slot, size, EuiHeight(ns, kind.crop, size), w, hh, hy, xOff or 0, yOff or 0)
                 if row then rects[#rects + 1] = Scaled(row, ratio, 0) end
             end
         end
@@ -206,31 +220,40 @@ M.Adapters.plater = {
     loaded = function() return Plater ~= nil end,
     rects = function(plate)
         local profile = Plater and Plater.db and Plater.db.profile
+        if not profile or profile.use_ui_parent then return {} end
         local unitFrame = plate.unitFrame
         local healthBar = unitFrame and unitFrame.healthBar
-        if not profile or not healthBar or profile.use_ui_parent then return nil end
+        if not healthBar then return nil end
         local config = profile.plate_config and profile.plate_config.enemynpc
-        local size = config and config.health
-        if type(size) ~= "table" or not size[1] or not size[2] then return nil end
+        local calm = config and config.health
+        if type(calm) ~= "table" or not calm[1] or not calm[2] then return {} end
+        -- The bar grows in combat (Plater.lua GetHashKey); the larger size
+        -- holds for both, so nothing moves when the pull starts.
+        local fight = type(config.health_incombat) == "table" and config.health_incombat or calm
+        local bw = math.max(calm[1], fight[1] or 0)
+        local bh = math.max(calm[2], fight[2] or 0)
         local barRatio, frameRatio = Ratio(healthBar), Ratio(unitFrame)
         local fw, fh = unitFrame:GetWidth(), unitFrame:GetHeight()
         if not barRatio or not frameRatio or not Readable(fw, fh) or not fw or not fh then return nil end
+        -- The aura rows are children of the unit frame and sized in its
+        -- units; only the bar they hang off is scaled on its own.
+        bw, bh = bw * barRatio / frameRatio, bh * barRatio / frameRatio
         local bx, by = profile.global_offset_x or 0, profile.global_offset_y or 0
         local dy = config.buff_frame_y_offset or 0
         local rects = {}
-        local function Add(rect, ratio)
-            if rect then rects[#rects + 1] = Scaled(rect, ratio, 0) end
+        local function Add(rect)
+            if rect then rects[#rects + 1] = Scaled(rect, frameRatio, 0) end
         end
         Add(PlaterIcon(profile.aura_frame1_anchor, (profile.aura_grow_direction or 2) == 2,
-            profile.aura_width or 26, profile.aura_height or 16, size[1], size[2], bx, by, dy), barRatio)
+            profile.aura_width or 26, profile.aura_height or 16, bw, bh, bx, by, dy))
         if profile.buffs_on_aura2 then
             Add(PlaterIcon(profile.aura_frame2_anchor, (profile.aura2_grow_direction or 2) == 2,
-                profile.aura_width2 or 26, profile.aura_height2 or 16, size[1], size[2], bx, by, dy), barRatio)
+                profile.aura_width2 or 26, profile.aura_height2 or 16, bw, bh, bx, by, dy))
         end
         -- The extra icons (purge, enrage, defensives) hang off the unit frame,
         -- which covers the whole Blizzard plate, not the health bar.
         Add(PlaterIcon(profile.extra_icon_anchor, false,
-            profile.extra_icon_width or 30, profile.extra_icon_height or 18, fw, fh, 0, 0), frameRatio)
+            profile.extra_icon_width or 30, profile.extra_icon_height or 18, fw, fh, 0, 0))
         return rects
     end,
 }
@@ -239,7 +262,9 @@ M.Adapters.plater = {
 -- Platynator picks a design per unit, so it can only say "can".
 M.Adapters.platynator.sides = function() return nil end
 
-local EUI_SIDE = { left = "left", right = "right", top = "top", topleft = "top", topright = "top", bottom = "bottom" }
+-- Corner rows sit at the bar's ends and miss our centred top or bottom icon,
+-- so they are not claimed.
+local EUI_SIDE = { left = "left", right = "right", top = "top", bottom = "bottom" }
 M.Adapters.ellesmere.sides = function()
     local ns = EllesmereNameplates_NS
     local profile = ns.NP_GetProfile and ns.NP_GetProfile()
@@ -252,7 +277,7 @@ M.Adapters.ellesmere.sides = function()
     return sides
 end
 
-local PLATER_SIDE = { "top", "left", "bottom", "bottom", "bottom", "right", "top", "top" }
+local PLATER_SIDE = { nil, "left", nil, "bottom", nil, "right", nil, "top" }
 M.Adapters.plater.sides = function()
     local profile = Plater.db and Plater.db.profile
     if not profile then return {} end
@@ -279,18 +304,29 @@ end
 local SIDES = { left = true, right = true, top = true, bottom = true }
 local cache = setmetatable({}, { __mode = "k" })
 
--- Second result: whether the answer may be kept. We load before the
--- nameplate addons and see NAME_PLATE_UNIT_ADDED first, so their frame for
--- this unit may not exist yet; that miss is asked again on the next paint.
-local function Measure(plate, unit, side, size, nudge)
-    local adapter = M.Active()
-    if not adapter then return 0, true end
+-- Second result: whether the answer may be kept, third: the adapter's stamp
+-- for it. Adapters answer nil while their frame for this unit is missing or a
+-- read is Secret - we load before the nameplate addons and see
+-- NAME_PLATE_UNIT_ADDED first - and that miss is asked again on the next
+-- paint. Settings they cannot be measured with come back as an empty list.
+local function Measure(adapter, plate, unit, side, size, nudge)
     local okSize, w, h = pcall(CastAheadCore.MeasurePlate, plate)
-    if not okSize or not w or not h then return 0, true end
-    local ok, rects = pcall(adapter.rects, plate, unit)
+    if not okSize or not w or not h then return 0, false end
+    local ok, rects, stamp = pcall(adapter.rects, plate, unit)
     if not ok then return 0, true end
     if not rects then return 0, false end
-    return M.Push(rects, side, w / 2, h / 2, { nudge - size / 2, nudge + size / 2 }), true
+    return M.Push(rects, side, w / 2, h / 2, { nudge - size / 2, nudge + size / 2 }), true, stamp
+end
+
+local function Fresh(hit, adapter, side, size, nudge)
+    if not hit or hit.adapter ~= adapter or hit.side ~= side or hit.size ~= size or hit.nudge ~= nudge then
+        return false
+    end
+    if hit.stamp and adapter.stale then
+        local ok, stale = pcall(adapter.stale, hit.stamp)
+        return ok and not stale
+    end
+    return true
 end
 
 -- Outward push in UIParent pixels for our icons on `side` of this plate.
@@ -298,10 +334,16 @@ end
 -- NudgeX above or below it).
 function M.ForPlate(plate, unit, side, size, nudge)
     if not plate or not unit or not SIDES[side] then return 0 end
+    local adapter = M.Active()
+    if not adapter then return 0 end
     local hit = cache[plate]
-    if hit and hit.side == side and hit.size == size and hit.nudge == nudge then return hit.push end
-    local push, keep = Measure(plate, unit, side, size, nudge)
-    if keep then cache[plate] = { side = side, size = size, nudge = nudge, push = push } end
+    if Fresh(hit, adapter, side, size, nudge) then return hit.push end
+    local push, keep, stamp = Measure(adapter, plate, unit, side, size, nudge)
+    if keep then
+        cache[plate] = { adapter = adapter, side = side, size = size, nudge = nudge, push = push, stamp = stamp }
+    else
+        cache[plate] = nil
+    end
     return push
 end
 

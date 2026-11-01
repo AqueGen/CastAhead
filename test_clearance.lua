@@ -9,6 +9,16 @@ local function check(ok, msg)
     end
 end
 
+local frames, hooks = {}, {}
+CreateFrame = function()
+    local f = { events = {} }
+    function f:RegisterEvent(event) self.events[event] = true end
+    function f:SetScript(_, fn) self.onEvent = fn end
+    frames[#frames + 1] = f
+    return f
+end
+hooksecurefunc = function(_, name, fn) hooks[name] = fn end
+
 dofile("Config.lua")
 dofile("Clearance.lua")
 
@@ -78,7 +88,9 @@ do
     local display = select(2, secret.GetChildren())
     display.GetEffectiveScale = function() return SECRET end
     check(A.rects(secret) == nil, "a Secret scale gives up")
-    check(A.rects(PlatyPlate({ buffs = { scale = 1, height = 1 } })) == nil, "an entry without an anchor gives up")
+    rects = A.rects(PlatyPlate({ buffs = { scale = 1, height = 1 }, debuffs = { anchor = { -70, 0 }, scale = 1, height = 1 } }))
+    check(rects and #rects == 1 and Same(rects[1], -80, -60, -10, 10),
+        "an entry without an anchor is skipped, the rest still count")
     Platynator = nil
     check(not A.loaded(), "no Platynator global means not loaded")
 end
@@ -172,7 +184,8 @@ do
     check(rects and #rects == 2, "defaults give the main aura row and the extra icons")
     check(Has(rects, -13, 13, 11, 27), "main auras centred above the health bar")
     check(Has(rects, 56, 86, -9, 9), "extra icons right of the plate frame, not the health bar")
-    check(A.rects(PlaterStub({ use_ui_parent = true })) == nil, "plates lifted into UIParent are not measured")
+    rects = A.rects(PlaterStub({ use_ui_parent = true }))
+    check(rects and #rects == 0, "plates lifted into UIParent are not measured, and that answer is final")
     rects = A.rects(PlaterStub({ extra_icon_anchor = { side = 11, x = 0, y = 0 } }))
     check(rects and #rects == 1, "an inner side adds nothing")
     rects = A.rects(PlaterStub({ aura_frame1_anchor = { side = 2, x = -2, y = 0 }, aura_grow_direction = 1 }))
@@ -215,6 +228,73 @@ do
     check(H("left") == "Platynator can draw auras on the left of its plates. Icons are moved out by one aura icon.",
         "hint: Platynator designs are per unit, so it can draw")
     Platynator = nil
+end
+
+do
+    local F, H = CastAheadClearance.ForPlate, CastAheadClearance.Hint
+    local measured = true
+    CastAheadCore = { MeasurePlate = function() if measured then return 120, 12 end end }
+    CastAheadDB = {}
+
+    Platynator = {}
+    local plate = PlatyPlate({ buffs = { anchor = { "RIGHT", -60, 0 }, scale = 1.2, height = 1 } })
+    local display = select(2, plate.GetChildren())
+    CastAheadClearance.Invalidate()
+    check(F(plate, "nameplate1", "left", 26, 0) == 24, "forplate: Platynator buff left of the plate")
+    display.aurasInfo = { buffs = { anchor = { "RIGHT", -60, 0 }, scale = 1.5, height = 1 } }
+    check(F(plate, "nameplate1", "left", 26, 0) == 30, "forplate: a new design on the same plate is measured again")
+    local swapped = PlatyPlate({ buffs = { anchor = { "RIGHT", -60, 0 }, scale = 1, height = 1 } })
+    local fresh = select(2, swapped.GetChildren())
+    display.IsShown = function() return false end
+    plate.GetChildren = function() return display, fresh end
+    check(F(plate, "nameplate1", "left", 26, 0) == 20, "forplate: a display swapped for another is measured again")
+
+    measured = false
+    CastAheadClearance.Invalidate()
+    check(F(plate, "nameplate1", "left", 26, 0) == 0, "forplate: an unreadable plate gives no push")
+    measured = true
+    check(F(plate, "nameplate1", "left", 26, 0) == 20, "forplate: and is measured once it reads again")
+    Platynator = nil
+
+    local p = PlaterStub({ aura_frame1_anchor = { side = 2, x = -2, y = 0 }, aura_grow_direction = 1 })
+    Plater.db.profile.plate_config.enemynpc.health_incombat = { 120, 16 }
+    check(Has(CastAheadClearance.Adapters.plater.rects(p), -88, -62, -8, 8),
+        "plater: the wider in-combat bar decides, so the icons do not move mid-fight")
+
+    PlaterStub({ aura_frame1_anchor = { side = 7, x = 0, y = 0 }, extra_icon_anchor = { side = 11, x = 0, y = 0 } })
+    check(H("top") == nil, "hint: a corner row does not reach our centred top icon")
+    Plater = nil
+    EuiStub({ debuffSlot = "topleft", buffSlot = "none", ccSlot = "none" })
+    check(H("top") == nil, "hint: an EUI corner slot does not claim top")
+
+    EuiStub(nil)
+    local ns = EllesmereNameplates_NS
+    ns.GetAuraCrop = function(kind) return kind == "buffs" and 0.8 or nil end
+    ns.GetAuraCropHeight = function(crop, size) return size * crop end
+    ns.NP_ClassicSide = function(side) return side == "left" and 3 or 0 end
+    check(Has(CastAheadClearance.Adapters.ellesmere.rects({}, "nameplate1"), -89, -65, -5, 14.2),
+        "eui: cropped icons are shorter and the classic border widens the gap")
+    EllesmereNameplates_NS = nil
+
+    local events = frames[1]
+    check(events and events.events.NAME_PLATE_UNIT_ADDED and events.events.NAME_PLATE_UNIT_REMOVED,
+        "events: plate add and remove are watched")
+    Platynator = {}
+    local onPlate = PlatyPlate({ buffs = { anchor = { "RIGHT", -60, 0 }, scale = 1.2, height = 1 } })
+    C_NamePlate = { GetNamePlateForUnit = function() return onPlate end }
+    CastAheadClearance.Invalidate()
+    F(onPlate, "nameplate1", "left", 26, 0)
+    select(2, onPlate.GetChildren()).aurasInfo.buffs.scale = 1.5
+    check(F(onPlate, "nameplate1", "left", 26, 0) == 24, "events: the same design table stays cached")
+    events.onEvent(events, "NAME_PLATE_UNIT_ADDED", "nameplate1")
+    check(F(onPlate, "nameplate1", "left", 26, 0) == 30, "events: a plate added again is measured again")
+    Platynator = nil
+    PlaterStub()
+    Plater.UpdateAllPlates = function() end
+    EllesmereNameplates_NS = { NPC_ReloadAll = function() end }
+    events.onEvent(events, "PLAYER_LOGIN")
+    check(hooks.UpdateAllPlates and hooks.NPC_ReloadAll, "events: Plater and EUI relayouts are hooked at login")
+    Plater, EllesmereNameplates_NS, C_NamePlate = nil, nil, nil
 end
 
 print(failures == 0 and "OK" or (failures .. " FAILURES"))

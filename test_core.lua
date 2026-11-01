@@ -8271,9 +8271,8 @@ do
     CastAheadDB = {}
     UIParent = { GetEffectiveScale = function() return 1 end }
     local width = 24
-    CastAheadClearance.Active = function()
-        return { rects = function() return { { left = -60 - width, right = -60, bottom = -12, top = 12 } } end }
-    end
+    local fake = { rects = function() return { { left = -60 - width, right = -60, bottom = -12, top = 12 } } end }
+    CastAheadClearance.Active = function() return fake end
     local plateW = 120
     local plate = {
         GetWidth = function() return plateW end,
@@ -8303,12 +8302,11 @@ do
     issecretvalue = savedSecret
     plateW = 120
     local ready = false
-    CastAheadClearance.Active = function()
-        return { rects = function()
-            if not ready then return nil end
-            return { { left = -84, right = -60, bottom = -12, top = 12 } }
-        end }
-    end
+    local late = { rects = function()
+        if not ready then return nil end
+        return { { left = -84, right = -60, bottom = -12, top = 12 } }
+    end }
+    CastAheadClearance.Active = function() return late end
     CastAheadClearance.Invalidate()
     check(FirstX("nameplate1") == -6, "clearance: the nameplate addon's frame is not there yet")
     ready = true
