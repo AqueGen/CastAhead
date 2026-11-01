@@ -3194,8 +3194,8 @@ CastAheadCore.Casting = function(unit) return plates[unit] and plates[unit].cast
 local PARTNERS = { "SquadCD" }
 
 local function Partner()
-    local ok, stack = pcall(debugstack, 3, 1, 0)
-    if not ok or type(stack) ~= "string" then return false end
+    local stack = type(debugstack) == "function" and debugstack(1, 6, 0)
+    if type(stack) ~= "string" then return false end
     for _, name in ipairs(PARTNERS) do
         if stack:find("AddOns[/\\]" .. name .. "[/\\]") then return true end
     end
