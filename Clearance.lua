@@ -16,14 +16,16 @@ local function Overlaps(low, high, band)
 end
 
 -- rects: { left, right, bottom, top } in UIParent units around the plate
--- centre; band: what our first icon covers across the side.
+-- centre, `anyHeight` when its height on the plate is not known; band: what
+-- our first icon covers across the side.
 function M.Push(rects, side, halfW, halfH, band)
     local push = 0
     for _, r in ipairs(rects) do
         local p = 0
-        if side == "left" and r.left < -halfW and Overlaps(r.bottom, r.top, band) then
+        local beside = r.anyHeight or Overlaps(r.bottom, r.top, band)
+        if side == "left" and r.left < -halfW and beside then
             p = -halfW - r.left
-        elseif side == "right" and r.right > halfW and Overlaps(r.bottom, r.top, band) then
+        elseif side == "right" and r.right > halfW and beside then
             p = r.right - halfW
         elseif side == "top" and r.top > halfH and Overlaps(r.left, r.right, band) then
             p = r.top - halfH
@@ -80,6 +82,10 @@ end
 
 -- Each aura holder is one icon, 20 px times the widget's scale, anchored
 -- around the display's centre the way Display/Widgets.lua ApplyAnchor does.
+-- In an instance the game refuses GetPoint, GetWidth and GetHeight on frames
+-- inside a nameplate ("Can't measure restricted regions"); scales still read.
+-- The display sits centred on the plate sideways, but how far up comes from
+-- Platynator's own settings, so its height on the plate stays unknown.
 M.Adapters.platynator = {
     name = "Platynator",
     perUnit = true,
@@ -88,9 +94,7 @@ M.Adapters.platynator = {
         local display = PlatynatorDisplay(plate)
         if not display then return nil end
         local ratio = Ratio(display)
-        local _, _, _, _, dy = display:GetPoint(1)
-        dy = dy or 0
-        if not ratio or not Readable(dy) then return nil end
+        if not ratio then return nil end
         local rects = {}
         for _, kind in ipairs({ "debuffs", "buffs", "crowdControl" }) do
             local info = display.aurasInfo[kind]
@@ -106,7 +110,9 @@ M.Adapters.platynator = {
                 else
                     box = Box(anchor[1], 0, 0, w, h)
                 end
-                rects[#rects + 1] = Scaled(box, ratio, dy)
+                local rect = Scaled(box, ratio, 0)
+                rect.anyHeight = true
+                rects[#rects + 1] = rect
             end
         end
         return rects, { display = display, info = display.aurasInfo }
@@ -167,12 +173,13 @@ M.Adapters.ellesmere = {
         local eui = ns and ns.plates and ns.plates[unit]
         local health = eui and eui.health
         if not health then return nil end
-        if not ns.GetHealthBarWidth then return {} end
+        if not ns.GetHealthBarWidth or not ns.GetHealthBarHeight then return {} end
+        -- Sizes and offsets come from EUI's getters: in an instance the bar
+        -- itself cannot be measured (see the Platynator note above).
         local ratio = Ratio(health)
-        local w, hh = ns.GetHealthBarWidth(), health:GetHeight()
-        local _, _, _, _, hy = health:GetPoint(1)
-        hy = hy or 0
-        if not ratio or not Readable(w, hh, hy) or not w or not hh then return nil end
+        local w, hh = ns.GetHealthBarWidth(), ns.GetHealthBarHeight()
+        local hy = ns.GetNameplateYOffset and ns.GetNameplateYOffset() or 0
+        if not ratio or not w or not hh then return nil end
         local profile = ns.NP_GetProfile and ns.NP_GetProfile()
         local defaults = ns.NP_GetDefaults and ns.NP_GetDefaults() or {}
         local rects = {}
@@ -218,7 +225,9 @@ M.Adapters.plater = {
     name = "Plater",
     perUnit = false,
     loaded = function() return Plater ~= nil end,
-    rects = function(plate)
+    -- pw, ph: the Blizzard plate's size in UIParent units, which the unit
+    -- frame covers exactly and which, unlike the unit frame, can be measured.
+    rects = function(plate, _, pw, ph)
         local profile = Plater and Plater.db and Plater.db.profile
         if not profile or profile.use_ui_parent then return {} end
         local unitFrame = plate.unitFrame
@@ -233,8 +242,8 @@ M.Adapters.plater = {
         local bw = math.max(calm[1], fight[1] or 0)
         local bh = math.max(calm[2], fight[2] or 0)
         local barRatio, frameRatio = Ratio(healthBar), Ratio(unitFrame)
-        local fw, fh = unitFrame:GetWidth(), unitFrame:GetHeight()
-        if not barRatio or not frameRatio or not Readable(fw, fh) or not fw or not fh then return nil end
+        if not barRatio or not frameRatio or not pw or not ph then return nil end
+        local fw, fh = pw / frameRatio, ph / frameRatio
         -- The aura rows are children of the unit frame and sized in its
         -- units; only the bar they hang off is scaled on its own.
         bw, bh = bw * barRatio / frameRatio, bh * barRatio / frameRatio
@@ -312,7 +321,7 @@ local cache = setmetatable({}, { __mode = "k" })
 local function Measure(adapter, plate, unit, side, size, nudge)
     local okSize, w, h = pcall(CastAheadCore.MeasurePlate, plate)
     if not okSize or not w or not h then return 0, false end
-    local ok, rects, stamp = pcall(adapter.rects, plate, unit)
+    local ok, rects, stamp = pcall(adapter.rects, plate, unit, w, h)
     if not ok then return 0, true end
     if not rects then return 0, false end
     return M.Push(rects, side, w / 2, h / 2, { nudge - size / 2, nudge + size / 2 }), true, stamp

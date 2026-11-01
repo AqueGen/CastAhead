@@ -45,6 +45,10 @@ do
     check(P({ { left = -84, right = -60, bottom = -12, top = 12 } }, "center", 60, 6, band) == 0, "centre never pushes")
     check(P({ { left = -84, right = -60, bottom = 13, top = 30 } }, "left", 60, 6, band) == 0,
         "touching the band edge is not overlap")
+    check(P({ { left = -84, right = -60, bottom = 40, top = 64, anyHeight = true } }, "left", 60, 6, band) == 24,
+        "a rect whose height is unknown counts beside the plate")
+    check(P({ { left = -12, right = 12, bottom = 6, top = 32, anyHeight = true } }, "top", 60, 6, band) == 26,
+        "and is measured as given above it")
 end
 
 local SECRET = {}
@@ -57,13 +61,18 @@ local function Same(rect, l, r, b, t)
         and math.abs(rect.bottom - b) < e and math.abs(rect.top - t) < e
 end
 
-local function PlatyPlate(aurasInfo, scale, yOffset)
+-- What the game answers inside an instance for frames on a nameplate.
+local function Restricted()
+    error("Frame:GetPoint(): Action[FrameMeasurement] failed because[Can't measure restricted regions]")
+end
+
+local function PlatyPlate(aurasInfo, scale)
     local display = {
         aurasInfo = aurasInfo,
         BuffDisplay = {},
         IsShown = function() return true end,
         GetEffectiveScale = function() return scale or 1 end,
-        GetPoint = function() return "CENTER", nil, "CENTER", 0, yOffset or 0 end,
+        GetPoint = Restricted, GetWidth = Restricted, GetHeight = Restricted,
     }
     local other = { IsShown = function() return true end }
     return { GetChildren = function() return other, display end }
@@ -76,10 +85,9 @@ do
     local buffs = { anchor = { "RIGHT", -60, 0 }, scale = 1.2, height = 1 }
     local rects = A.rects(PlatyPlate({ buffs = buffs }))
     check(rects and #rects == 1 and Same(rects[1], -84, -60, -12, 12), "a RIGHT-anchored holder left of centre")
+    check(rects and rects[1].anyHeight, "the display's height on the plate cannot be read, so any height counts")
     rects = A.rects(PlatyPlate({ buffs = buffs }, 0.5))
     check(rects and Same(rects[1], -42, -30, -6, 6), "a smaller display scale shrinks the rect")
-    rects = A.rects(PlatyPlate({ buffs = buffs }, 1, 10))
-    check(rects and Same(rects[1], -84, -60, -2, 22), "the display's y offset moves the rect")
     rects = A.rects(PlatyPlate({ debuffs = { anchor = { -70, 0 }, scale = 1, height = 1 } }))
     check(rects and Same(rects[1], -80, -60, -10, 10), "a two-number anchor centres the holder")
     check(A.rects({ GetChildren = function() return { IsShown = function() return true end } end }) == nil,
@@ -98,8 +106,7 @@ end
 local function EuiStub(profile)
     local defaults = { buffSlot = "left", debuffSlot = "top", ccSlot = "right" }
     local health = {
-        GetHeight = function() return 10 end,
-        GetPoint = function() return "CENTER", nil, "CENTER", 0, 0 end,
+        GetHeight = Restricted, GetWidth = Restricted, GetPoint = Restricted,
         GetEffectiveScale = function() return 1 end,
     }
     local plate = { health = health }
@@ -108,6 +115,8 @@ local function EuiStub(profile)
         NP_GetProfile = function() return profile end,
         NP_GetDefaults = function() return defaults end,
         GetHealthBarWidth = function() return 120 end,
+        GetHealthBarHeight = function() return 10 end,
+        GetNameplateYOffset = function() return 0 end,
         GetBuffIconSize = function() return 24 end,
         GetDebuffIconSize = function() return 26 end,
         GetCCIconSize = function() return 24 end,
@@ -143,8 +152,11 @@ do
     EuiStub({ buffSlot = "topleft" })
     check(Has(A.rects({}, "nameplate1"), -60, -36, 7, 31), "a topleft slot sits on the bar's top-left corner")
     local plate = EuiStub(nil)
-    plate.health.GetHeight = function() return SECRET end
-    check(A.rects({}, "nameplate1") == nil, "a Secret bar height gives up")
+    plate.health.GetEffectiveScale = function() return SECRET end
+    check(A.rects({}, "nameplate1") == nil, "a Secret bar scale gives up")
+    EuiStub(nil)
+    EllesmereNameplates_NS.GetNameplateYOffset = function() return 4 end
+    check(Has(A.rects({}, "nameplate1"), -86, -62, -1, 23), "the bar's own y offset moves its side rows")
     EllesmereNameplates_NS = nil
     check(not A.loaded(), "no namespace means not loaded")
 end
@@ -168,8 +180,7 @@ local function PlaterStub(profileChanges)
     local scale = function() return 1 end
     return {
         unitFrame = {
-            GetWidth = function() return 120 end,
-            GetHeight = function() return 40 end,
+            GetWidth = Restricted, GetHeight = Restricted, GetPoint = Restricted,
             GetEffectiveScale = scale,
             healthBar = { GetEffectiveScale = scale },
         },
@@ -178,23 +189,25 @@ end
 
 do
     local A = CastAheadClearance.Adapters.plater
+    -- The Blizzard plate's own size is readable in an instance, 120 x 40 here.
+    local function R(plate) return A.rects(plate, "nameplate1", 120, 40) end
     local plate = PlaterStub()
     check(A.loaded(), "Plater global means loaded")
-    local rects = A.rects(plate)
+    local rects = R(plate)
     check(rects and #rects == 2, "defaults give the main aura row and the extra icons")
     check(Has(rects, -13, 13, 11, 27), "main auras centred above the health bar")
     check(Has(rects, 56, 86, -9, 9), "extra icons right of the plate frame, not the health bar")
-    rects = A.rects(PlaterStub({ use_ui_parent = true }))
+    rects = R(PlaterStub({ use_ui_parent = true }))
     check(rects and #rects == 0, "plates lifted into UIParent are not measured, and that answer is final")
-    rects = A.rects(PlaterStub({ extra_icon_anchor = { side = 11, x = 0, y = 0 } }))
+    rects = R(PlaterStub({ extra_icon_anchor = { side = 11, x = 0, y = 0 } }))
     check(rects and #rects == 1, "an inner side adds nothing")
-    rects = A.rects(PlaterStub({ aura_frame1_anchor = { side = 2, x = -2, y = 0 }, aura_grow_direction = 1 }))
+    rects = R(PlaterStub({ aura_frame1_anchor = { side = 2, x = -2, y = 0 }, aura_grow_direction = 1 }))
     check(Has(rects, -84, -58, -8, 8), "a left main row, not centred, ends at the bar's left edge")
-    rects = A.rects(PlaterStub({ buffs_on_aura2 = true, aura_frame2_anchor = { side = 4, x = 0, y = -1 } }))
+    rects = R(PlaterStub({ buffs_on_aura2 = true, aura_frame2_anchor = { side = 4, x = 0, y = -1 } }))
     check(rects and #rects == 3 and Has(rects, -13, 13, -23, -7), "the second row counts when buffs go there")
     plate = PlaterStub()
     plate.unitFrame = nil
-    check(A.rects(plate) == nil, "no Plater unit frame on the plate")
+    check(R(plate) == nil, "no Plater unit frame on the plate")
     Plater = nil
     check(not A.loaded(), "no Plater global means not loaded")
 end
@@ -258,7 +271,7 @@ do
 
     local p = PlaterStub({ aura_frame1_anchor = { side = 2, x = -2, y = 0 }, aura_grow_direction = 1 })
     Plater.db.profile.plate_config.enemynpc.health_incombat = { 120, 16 }
-    check(Has(CastAheadClearance.Adapters.plater.rects(p), -88, -62, -8, 8),
+    check(Has(CastAheadClearance.Adapters.plater.rects(p, "nameplate1", 120, 40), -88, -62, -8, 8),
         "plater: the wider in-combat bar decides, so the icons do not move mid-fight")
 
     PlaterStub({ aura_frame1_anchor = { side = 7, x = 0, y = 0 }, extra_icon_anchor = { side = 11, x = 0, y = 0 } })
