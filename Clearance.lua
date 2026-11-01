@@ -175,3 +175,62 @@ M.Adapters.ellesmere = {
         return rects
     end,
 }
+
+-- Plater.SetAnchor's outer sides 1-8 (Plater.lua anchor_functions): the
+-- point on the frame it attaches to, then the widget's own point, plain and
+-- centred. Sides 9-17 sit inside the frame.
+local PLATER_SIDES = {
+    { "TOPLEFT", "BOTTOMLEFT", "BOTTOM" },
+    { "LEFT", "RIGHT", "CENTER" },
+    { "BOTTOMLEFT", "TOPLEFT", "TOP" },
+    { "BOTTOM", "TOP", "TOP" },
+    { "BOTTOMRIGHT", "TOPRIGHT", "TOP" },
+    { "RIGHT", "LEFT", "CENTER" },
+    { "TOPRIGHT", "BOTTOMRIGHT", "BOTTOM" },
+    { "TOP", "BOTTOM", "BOTTOM" },
+}
+
+-- One w x h icon placed by `anchor` on a frame of size fw x fh centred at (fx, fy).
+local function PlaterIcon(anchor, centred, w, h, fw, fh, fx, fy, dy)
+    local side = type(anchor) == "table" and PLATER_SIDES[anchor.side]
+    if not side then return nil end
+    local rel = side[1]
+    local x = fx + (rel:find("LEFT") and -fw / 2 or rel:find("RIGHT") and fw / 2 or 0) + (anchor.x or 0)
+    local y = fy + (rel:find("TOP") and fh / 2 or rel:find("BOTTOM") and -fh / 2 or 0) + (anchor.y or 0) + (dy or 0)
+    return Box(centred and side[3] or side[2], x, y, w, h)
+end
+
+M.Adapters.plater = {
+    name = "Plater",
+    perUnit = false,
+    loaded = function() return Plater ~= nil end,
+    rects = function(plate)
+        local profile = Plater and Plater.db and Plater.db.profile
+        local unitFrame = plate.unitFrame
+        local healthBar = unitFrame and unitFrame.healthBar
+        if not profile or not healthBar or profile.use_ui_parent then return nil end
+        local config = profile.plate_config and profile.plate_config.enemynpc
+        local size = config and config.health
+        if type(size) ~= "table" or not size[1] or not size[2] then return nil end
+        local barRatio, frameRatio = Ratio(healthBar), Ratio(unitFrame)
+        local fw, fh = unitFrame:GetWidth(), unitFrame:GetHeight()
+        if not barRatio or not frameRatio or not Readable(fw, fh) or not fw or not fh then return nil end
+        local bx, by = profile.global_offset_x or 0, profile.global_offset_y or 0
+        local dy = config.buff_frame_y_offset or 0
+        local rects = {}
+        local function Add(rect, ratio)
+            if rect then rects[#rects + 1] = Scaled(rect, ratio, 0) end
+        end
+        Add(PlaterIcon(profile.aura_frame1_anchor, (profile.aura_grow_direction or 2) == 2,
+            profile.aura_width or 26, profile.aura_height or 16, size[1], size[2], bx, by, dy), barRatio)
+        if profile.buffs_on_aura2 then
+            Add(PlaterIcon(profile.aura_frame2_anchor, (profile.aura2_grow_direction or 2) == 2,
+                profile.aura_width2 or 26, profile.aura_height2 or 16, size[1], size[2], bx, by, dy), barRatio)
+        end
+        -- The extra icons (purge, enrage, defensives) hang off the unit frame,
+        -- which covers the whole Blizzard plate, not the health bar.
+        Add(PlaterIcon(profile.extra_icon_anchor, false,
+            profile.extra_icon_width or 30, profile.extra_icon_height or 18, fw, fh, 0, 0), frameRatio)
+        return rects
+    end,
+}

@@ -136,5 +136,54 @@ do
     check(not A.loaded(), "no namespace means not loaded")
 end
 
+local function PlaterStub(profileChanges)
+    local profile = {
+        use_ui_parent = false,
+        aura_frame1_anchor = { side = 8, x = 0, y = 5 },
+        aura_frame2_anchor = { side = 8, x = 0, y = 5 },
+        aura_grow_direction = 2,
+        aura2_grow_direction = 2,
+        aura_width = 26, aura_height = 16, aura_width2 = 26, aura_height2 = 16,
+        buffs_on_aura2 = false,
+        extra_icon_anchor = { side = 6, x = -4, y = 0 },
+        extra_icon_width = 30, extra_icon_height = 18,
+        global_offset_x = 0, global_offset_y = 0,
+        plate_config = { enemynpc = { health = { 112, 12 }, buff_frame_y_offset = 0 } },
+    }
+    for k, v in pairs(profileChanges or {}) do profile[k] = v end
+    Plater = { db = { profile = profile } }
+    local scale = function() return 1 end
+    return {
+        unitFrame = {
+            GetWidth = function() return 120 end,
+            GetHeight = function() return 40 end,
+            GetEffectiveScale = scale,
+            healthBar = { GetEffectiveScale = scale },
+        },
+    }
+end
+
+do
+    local A = CastAheadClearance.Adapters.plater
+    local plate = PlaterStub()
+    check(A.loaded(), "Plater global means loaded")
+    local rects = A.rects(plate)
+    check(rects and #rects == 2, "defaults give the main aura row and the extra icons")
+    check(Has(rects, -13, 13, 11, 27), "main auras centred above the health bar")
+    check(Has(rects, 56, 86, -9, 9), "extra icons right of the plate frame, not the health bar")
+    check(A.rects(PlaterStub({ use_ui_parent = true })) == nil, "plates lifted into UIParent are not measured")
+    rects = A.rects(PlaterStub({ extra_icon_anchor = { side = 11, x = 0, y = 0 } }))
+    check(rects and #rects == 1, "an inner side adds nothing")
+    rects = A.rects(PlaterStub({ aura_frame1_anchor = { side = 2, x = -2, y = 0 }, aura_grow_direction = 1 }))
+    check(Has(rects, -84, -58, -8, 8), "a left main row, not centred, ends at the bar's left edge")
+    rects = A.rects(PlaterStub({ buffs_on_aura2 = true, aura_frame2_anchor = { side = 4, x = 0, y = -1 } }))
+    check(rects and #rects == 3 and Has(rects, -13, 13, -23, -7), "the second row counts when buffs go there")
+    plate = PlaterStub()
+    plate.unitFrame = nil
+    check(A.rects(plate) == nil, "no Plater unit frame on the plate")
+    Plater = nil
+    check(not A.loaded(), "no Plater global means not loaded")
+end
+
 print(failures == 0 and "OK" or (failures .. " FAILURES"))
 os.exit(failures == 0 and 0 or 1)
