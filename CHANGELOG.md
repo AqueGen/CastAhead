@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.28.0](https://github.com/AqueGen/CastAhead/compare/v0.27.0...v0.28.0) (2026-11-01)
+
+
+### Features
+
+* make room for nameplate addon auras ([#126](https://github.com/AqueGen/CastAhead/issues/126)) ([2525857](https://github.com/AqueGen/CastAhead/commit/252585766b3fb23c5c29ada651250d5c9d3553bb))
+* settings pictures in their own column beside each group ([#125](https://github.com/AqueGen/CastAhead/issues/125)) ([68e5c19](https://github.com/AqueGen/CastAhead/commit/68e5c19df71423325580fa20d041b316dffaaa07))
+* softer settings look via LibVelvet ([#123](https://github.com/AqueGen/CastAhead/issues/123)) ([5da8081](https://github.com/AqueGen/CastAhead/commit/5da8081550be295e72b39c71b188a13ba680000b))
+
 ## [0.27.0](https://github.com/AqueGen/CastAhead/compare/v0.26.0...v0.27.0) (2026-10-30)
 
 
