@@ -1091,7 +1091,7 @@ end
 -- Filled by RefreshBar on every repaint, so the spread costs no garbage.
 local spread = {}
 
-local function AnchorToFrame(plate, bar, index, unit)
+local function AnchorToFrame(plate, bar, index, unit, fixedClear)
     -- Bars stay children of UIParent rather than the plate: plates are recycled
     -- and carry their own alpha, scale and frame level, all of which would drag
     -- the bar around with them.
@@ -1104,10 +1104,14 @@ local function AnchorToFrame(plate, bar, index, unit)
     local growSetting = CastAheadDB and CastAheadDB.grow or "auto"
     local size = bar._size or ICON_SIZE
     local nudgeX, nudgeY = CastAheadConfig.NudgeX(), CastAheadConfig.NudgeY()
-    -- Room for the nameplate addon's own aura icons on this side.
-    local clear = CastAheadClearance and CastAheadConfig.Enabled("auraClearance")
-        and CastAheadClearance.ForPlate(plate, unit, side, size,
-            (side == "top" or side == "bottom") and nudgeX or nudgeY) or 0
+    -- Room for the nameplate addon's own aura icons on this side; a picture
+    -- in the settings window passes its own.
+    local clear = fixedClear
+    if not clear then
+        clear = CastAheadClearance and CastAheadConfig.Enabled("auraClearance")
+            and CastAheadClearance.ForPlate(plate, unit, side, size,
+                (side == "top" or side == "bottom") and nudgeX or nudgeY) or 0
+    end
     local gap = BAR_GAP + (CastAheadDB and tonumber(CastAheadDB.offsetX) or 0) + clear
     -- SpreadBars measured this one against its neighbours; the fallback only
     -- covers a bar anchored before anything has been painted.
@@ -3968,7 +3972,7 @@ function CastAheadCore.ShowSampleRow(state, frame, unit)
     end
     SpreadBars(spread, #row)
     for i = 1, #row do
-        AnchorToFrame(frame, state.bars[i], i, unit or state.unit)
+        AnchorToFrame(frame, state.bars[i], i, unit or state.unit, state.clear)
         state.bars[i]:SetShown(on)
     end
 end
@@ -3982,14 +3986,15 @@ end
 -- nameplate switch says; the caller draws the off state. Returns the size of
 -- plate, icons and labels together, so the caller can scale it to fit, and
 -- where the plate's bottom-left corner sits inside that size.
-function CastAheadCore.PreviewRow(holder, plate)
+-- `clear`: the push for a nameplate addon's aura the picture draws itself.
+function CastAheadCore.PreviewRow(holder, plate, clear)
     holder.previewBars = holder.previewBars or {}
     local bars = holder.previewBars
     local row = CastAheadCore.SAMPLE_ROW
     -- Every slot is filled before the sample row runs, so GetBar never
     -- reaches the pool for these bars.
     for i = 1, #row do bars[i] = bars[i] or CastAheadCore.NewBar(holder) end
-    CastAheadCore.ShowSampleRow({ bars = bars }, plate)
+    CastAheadCore.ShowSampleRow({ bars = bars, clear = clear or 0 }, plate)
     local function fraction(point)
         return point:find("LEFT") and 0 or point:find("RIGHT") and 1 or 0.5,
             point:find("BOTTOM") and 0 or point:find("TOP") and 1 or 0.5

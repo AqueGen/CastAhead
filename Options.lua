@@ -847,7 +847,14 @@ function BuildGeneral(panel)
     BuildSwitch(panel, "auraClearance", { "TOPLEFT", fullLabels, "BOTTOMLEFT", 0, -4 }, function()
         CastAheadClearance.Invalidate()
         Redraw()
+        platesStage.Paint()
     end)
+    -- One aura icon of the nameplate addon's, beside the plate on our side.
+    local AURA = 20
+    local auraAt = {
+        left = { "RIGHT", "LEFT", -2, 0 }, right = { "LEFT", "RIGHT", 2, 0 },
+        top = { "BOTTOM", "TOP", 0, 2 }, bottom = { "TOP", "BOTTOM", 0, -2 },
+    }
     platesStage.Picture(platesOn, {
         build = function(canvas)
             local plate = CreateFrame("Frame", nil, canvas)
@@ -857,11 +864,21 @@ function BuildGeneral(panel)
             local name = plate:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             name:SetPoint("BOTTOM", plate, "TOP", 0, 2)
             name:SetText("Training Dummy")
+            canvas.aura = plate:CreateTexture(nil, "ARTWORK")
+            canvas.aura:SetSize(AURA, AURA)
             canvas.plate = plate
         end,
         paint = function(canvas)
             canvas.health:SetColorTexture(0.75, 0.12, 0.1)
-            local w, h, x, y = CastAheadCore.PreviewRow(canvas, canvas.plate)
+            local side = CastAheadConfig.Get("anchor") or "left"
+            local at = auraAt[side]
+            local aura = at and CastAheadClearance.Hint(side, SWITCHES.auraClearance.label) ~= nil
+            canvas.aura:ClearAllPoints()
+            if aura then canvas.aura:SetPoint(at[1], canvas.plate, at[2], at[3], at[4]) end
+            canvas.aura:SetColorTexture(1, 0.5, 0)
+            canvas.aura:SetShown(aura)
+            local clear = aura and CastAheadConfig.Enabled("auraClearance") and AURA + 2 or 0
+            local w, h, x, y = CastAheadCore.PreviewRow(canvas, canvas.plate, clear)
             canvas.plate:ClearAllPoints()
             canvas.plate:SetPoint("BOTTOMLEFT", canvas, "BOTTOMLEFT", x, y)
             -- The name sits above the plate and may reach past the icons.

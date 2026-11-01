@@ -5419,6 +5419,25 @@ do
         local need = group.stage.Paint()
         check(type(need) == "number" and need > 0 and group.h == math.max(124, need),
             "Nameplate icons grows to what its stage needs, got " .. tostring(group.h) .. "/" .. tostring(need))
+        do
+            local realActive = CastAheadClearance.Active
+            local drawsAnywhere = { name = "Platynator", sides = function() return nil end }
+            CastAheadClearance.Active = function() return drawsAnywhere end
+            group.stage.Paint()
+            check(canvas.aura and canvas.aura.shown and canvas.previewBars[1].x == -(6 + 22),
+                "picture: with a nameplate addon's aura on our side, the icons sit past it, got "
+                .. tostring(canvas.previewBars[1].x))
+            CastAheadConfig.SetEnabled("auraClearance", false)
+            group.stage.Paint()
+            check(canvas.aura.shown and canvas.previewBars[1].x == -6,
+                "picture: switched off, the icons sit on the aura, got " .. tostring(canvas.previewBars[1].x))
+            CastAheadConfig.SetEnabled("auraClearance", true)
+            CastAheadClearance.Active = function() return nil end
+            group.stage.Paint()
+            check(not canvas.aura.shown and canvas.previewBars[1].x == -6,
+                "picture: no nameplate addon, no aura and no push")
+            CastAheadClearance.Active = realActive
+        end
         local function OffLine()
             for _, fs in ipairs(texts) do
                 if rawget(fs, "value") == "Off - no icons on nameplates" then return fs end
