@@ -229,7 +229,10 @@ M.Adapters.plater = {
     -- frame covers exactly and which, unlike the unit frame, can be measured.
     rects = function(plate, _, pw, ph)
         local profile = Plater and Plater.db and Plater.db.profile
-        if not profile or profile.use_ui_parent then return {} end
+        if not profile then return {} end
+        -- With use_ui_parent the unit frame moves to UIParent but is still
+        -- pinned to the plate's corners, the bar centred as usual
+        -- (Plater.lua, DB_USE_UIPARENT branch), so the same numbers hold.
         local unitFrame = plate.unitFrame
         local healthBar = unitFrame and unitFrame.healthBar
         if not healthBar then return nil end
@@ -290,7 +293,6 @@ local PLATER_SIDE = { nil, "left", nil, "bottom", nil, "right", nil, "top" }
 M.Adapters.plater.sides = function()
     local profile = Plater.db and Plater.db.profile
     if not profile then return {} end
-    if profile.use_ui_parent then return {}, true end
     local sides = {}
     local anchors = { profile.aura_frame1_anchor, profile.extra_icon_anchor }
     if profile.buffs_on_aura2 then anchors[3] = profile.aura_frame2_anchor end
@@ -362,11 +364,8 @@ function M.Hint(side, label)
     if not SIDES[side] then return nil end
     local adapter = M.Active()
     if not adapter then return nil end
-    local ok, sides, unmeasured = pcall(adapter.sides)
+    local ok, sides = pcall(adapter.sides)
     if not ok then return nil end
-    if unmeasured then
-        return adapter.name .. " draws its plates in a way we cannot measure. Icons are not moved for this setup."
-    end
     local verb = sides == nil and "can draw" or sides[side] and "draws"
     if not verb then return nil end
     local text = adapter.name .. " " .. verb .. " auras on the " .. side .. " of its plates. "

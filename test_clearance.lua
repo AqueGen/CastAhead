@@ -197,8 +197,10 @@ do
     check(rects and #rects == 2, "defaults give the main aura row and the extra icons")
     check(Has(rects, -13, 13, 11, 27), "main auras centred above the health bar")
     check(Has(rects, 56, 86, -9, 9), "extra icons right of the plate frame, not the health bar")
+    -- Lifted into UIParent the unit frame still covers the Blizzard plate and
+    -- the bar is still centred on it (Plater.lua UpdatePlateSize, DB_USE_UIPARENT).
     rects = R(PlaterStub({ use_ui_parent = true }))
-    check(rects and #rects == 0, "plates lifted into UIParent are not measured, and that answer is final")
+    check(rects and #rects == 2 and Has(rects, 56, 86, -9, 9), "plates lifted into UIParent are measured the same way")
     rects = R(PlaterStub({ extra_icon_anchor = { side = 11, x = 0, y = 0 } }))
     check(rects and #rects == 1, "an inner side adds nothing")
     rects = R(PlaterStub({ aura_frame1_anchor = { side = 2, x = -2, y = 0 }, aura_grow_direction = 1 }))
@@ -234,8 +236,8 @@ do
         "hint: Plater extra icons on the right")
     check(H("left") == nil, "hint: Plater defaults leave the left free")
     PlaterStub({ use_ui_parent = true })
-    check(H("right") == "Plater draws its plates in a way we cannot measure. Icons are not moved for this setup.",
-        "hint: plates lifted into UIParent")
+    check(H("right") == "Plater draws auras on the right of its plates. Icons are moved out by one aura icon.",
+        "hint: plates lifted into UIParent are handled like any other")
     Plater = nil
     Platynator = {}
     check(H("left") == "Platynator can draw auras on the left of its plates. Icons are moved out by one aura icon.",
