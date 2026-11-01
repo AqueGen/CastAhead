@@ -36,6 +36,7 @@ Saves.lua
 Burst.lua
 BossAdapter.lua
 Timeline.lua
+Clearance.lua
 Core.lua
 Setup.lua
 Recorder.lua
