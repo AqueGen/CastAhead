@@ -4519,6 +4519,42 @@ do
         steps(40)
         w.first, w.main, w.stop = 8.0, 15.0, nil
     end
+    do
+        CastAheadDefensives.spells[1230298] = { TANK = true, lead = 2.9 }
+        CastAheadPullWindows = { [3101] = { TANK = { first = 3.5, main = 3.5, stop = 14.2, spell = 1230298, spells = { 1230298 } } } }
+        sounds, spoken, clips = 0, 0, 0
+        A.OnEncounter("ENCOUNTER_START", 3101)
+        advance(0.5)
+        local early = Alerts()
+        advance(0.5)
+        check(early == 0 and Alerts() == 1, string.format("a pull window calls from the encounter start, got %d/%d", early, Alerts()))
+        steps(20)
+        A.OnEncounter("ENCOUNTER_END", 3101)
+        sounds, spoken, clips = 0, 0, 0
+        A.OnEncounter("ENCOUNTER_START", 3101)
+        A.OnEncounter("ENCOUNTER_END", 3101)
+        steps(5)
+        check(Alerts() == 0, string.format("the encounter end cancels a pending pull call, got %d", Alerts()))
+        CastAheadPullWindows = { [3209] = { TANK = { first = 27.0, main = 28.0, stop = 28.0, spell = 1297797, spells = { 1297797 } } } }
+        sounds, spoken, clips = 0, 0, 0
+        A.OnEncounter("ENCOUNTER_START", 3209)
+        A.OnBar("dbm", "wpull", 1243569, 13, now)
+        steps(21)
+        local atTimer = Alerts()
+        steps(10)
+        check(atTimer == 1 and Alerts() == 1, string.format("a timer predicting the pull window's hit replaces it, got %d/%d", atTimer, Alerts()))
+        A.OnEncounter("ENCOUNTER_END", 3209)
+        IsEncounterInProgress = function() return true end
+        sounds, spoken, clips = 0, 0, 0
+        A.OnBar("dbm", "wfirst", 1243569, 13, now)
+        A.OnEncounter("ENCOUNTER_START", 3209)
+        IsEncounterInProgress = nil
+        steps(32)
+        check(Alerts() == 1, string.format("a pull window skips a hit a timer that came first already holds, got %d", Alerts()))
+        A.OnEncounter("ENCOUNTER_END", 3209)
+        A.OnEncounter("ENCOUNTER_START", 1234)
+        CastAheadPullWindows, CastAheadDefensives.spells[1230298] = nil, nil
+    end
     CastAheadBossWindows[1242860] = { TANK = { first = 17.0, main = 17.0, stop = 17.0, spell = 1297793, spells = { 1297793 } } }
     sounds, spoken, clips = 0, 0, 0
     A.OnBar("dbm", "wo", 1243569, 13, now)

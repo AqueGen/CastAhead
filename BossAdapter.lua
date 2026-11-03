@@ -63,11 +63,22 @@ local function Covered(ownKey, spells, hitAt)
         local c = key ~= ownKey and CastAheadSaves.Window(key)
         if c and hitAt >= c.win.first - SAME_HIT and hitAt <= c.win.stop + SAME_HIT then
             for spell in pairs(spells) do
-                if other[spell] then return true end
+                if other[spell] then return key end
             end
         end
     end
-    return false
+    return nil
+end
+
+local function Schedule(key, id, lead, advice, w, base, endAt)
+    local win
+    if w then
+        win = { first = base + w.first, main = endAt, stop = base + (w.stop or w.main), lead = lead }
+        local spells = {}
+        for _, s in ipairs(w.spells) do spells[s] = true end
+        windowSpells[key] = spells
+    end
+    CastAheadSaves.Schedule(key, id, endAt - lead, endAt, advice, win)
 end
 
 function A.OnBar(source, barKey, spellID, duration, now)
@@ -89,19 +100,17 @@ function A.OnBar(source, barKey, spellID, duration, now)
     local _, hit = M.SaveRow(id)
     local spells = { [hit or id] = true }
     for _, s in ipairs(w and w.spells or {}) do spells[s] = true end
-    if Covered(key, spells, endAt) then
+    local cover = Covered(key, spells, endAt)
+    if cover and cover:find("^pull:") then
+        Log("replace", cover, key)
+        windowSpells[cover] = nil
+        CastAheadSaves.Cancel(cover)
+    elseif cover then
         Log("begin", key, spellID, duration, "covered")
         return
     end
     barSpells[key] = spellID
-    local win
-    if w then
-        win = { first = now + duration + w.first, main = endAt, stop = now + duration + (w.stop or w.main), lead = lead }
-        local spells = {}
-        for _, s in ipairs(w.spells) do spells[s] = true end
-        windowSpells[key] = spells
-    end
-    CastAheadSaves.Schedule(key, id, endAt - lead, endAt, advice, win)
+    Schedule(key, id, lead, advice, w, now + duration, endAt)
     local fireAt, _, pick = CastAheadSaves.Peek(key)
     Log("begin", key, spellID, duration, w and "window" or "delay", Seconds(fireAt, now), Seconds(endAt, now), pick or "-")
 end
@@ -224,13 +233,33 @@ function A.Status()
     return "No boss mod"
 end
 
-function A.OnEncounter(event)
+local function PullWindow(encounterID)
+    local byRole = encounterID and CastAheadPullWindows and CastAheadPullWindows[encounterID]
+    local role = byRole and M.SpecRole and M.SpecRole()
+    return role and byRole[role] or nil
+end
+
+function A.OnEncounter(event, encounterID)
     if event == "ENCOUNTER_START" then
         barsSeen, encounterAt, inEncounter = false, GetTime(), true
+        local w = CastAheadSaves and PullWindow(tonumber(encounterID))
+        local id, lead, advice
+        if w then id, lead, advice = Verdict(w.spell) end
+        local key, now = "pull:" .. tostring(encounterID), GetTime()
+        local spells = {}
+        for _, s in ipairs(w and w.spells or {}) do spells[s] = true end
+        if id and Covered(key, spells, now + w.main) then
+            Log("begin", key, id, 0, "covered")
+        elseif id then
+            Schedule(key, id, lead, advice, w, now, now + w.main)
+            local fireAt, _, pick = CastAheadSaves.Peek(key)
+            Log("begin", key, id, 0, "pull", Seconds(fireAt, now), Seconds(now + w.main, now), pick or "-")
+        end
     else
         encounterAt, inEncounter = nil, false
         A.OnStopAll("dbm")
         A.OnStopAll("bw")
+        A.OnStopAll("pull")
     end
 end
 

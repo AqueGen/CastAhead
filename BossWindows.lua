@@ -97,3 +97,43 @@ CastAheadBossWindows = {
         DAMAGER = { first = 2.0, main = 2.0, stop = 7.0, last = 7.0, spell = 1311988, spells = { 1311988 } },
     },
 }
+CastAheadPullWindows = {
+    [2126] = {
+        DAMAGER = { first = 9.7, main = 9.7, stop = 17.3, last = 17.3, spell = 266923, spells = { 266923 } },
+        HEALER = { first = 9.6, main = 9.6, stop = 17.2, last = 17.2, spell = 266923, spells = { 266923 } },
+    },
+    [2139] = {
+        TANK = { first = 9.5, main = 9.5, stop = 9.5, last = 9.5, spell = 265910, spells = { 265910 } },
+    },
+    [2623] = {
+        TANK = { first = 8.2, main = 8.2, stop = 8.2, last = 8.2, spell = 381513, spells = { 381513, 381514 } },
+    },
+    [3101] = {
+        TANK = { first = 3.5, main = 3.5, stop = 14.2, last = 14.2, spell = 1230298, spells = { 1230298 } },
+    },
+    [3199] = {
+        DAMAGER = { first = 9.0, main = 9.0, stop = 16.0, last = 16.0, spell = 1276586, spells = { 1276586 } },
+        HEALER = { first = 9.0, main = 9.0, stop = 16.0, last = 16.0, spell = 1276586, spells = { 1276586 } },
+        TANK = { first = 8.0, main = 8.0, stop = 8.0, last = 8.0, spell = 1234773, spells = { 1234753, 1234773 } },
+    },
+    [3201] = {
+        DAMAGER = { first = 8.5, main = 8.5, stop = 13.5, last = 13.5, spell = 1239825, spells = { 1239825 } },
+        HEALER = { first = 8.5, main = 8.5, stop = 13.5, last = 13.5, spell = 1239825, spells = { 1239825 } },
+    },
+    [3207] = {
+        DAMAGER = { first = 9.5, main = 9.5, stop = 19.2, last = 19.2, spell = 1234681, spells = { 1234681 } },
+        HEALER = { first = 9.4, main = 9.4, stop = 19.3, last = 19.3, spell = 1234681, spells = { 1234681 } },
+        TANK = { first = 9.5, main = 9.5, stop = 19.1, last = 19.1, spell = 1234681, spells = { 1234681 } },
+    },
+    [3285] = {
+        DAMAGER = { first = 13.9, main = 13.9, stop = 19.8, last = 19.8, spell = 1222103, spells = { 1222103 } },
+        HEALER = { first = 14.4, main = 14.4, stop = 19.9, last = 19.9, spell = 1222103, spells = { 1222103 } },
+        TANK = { first = 14.2, main = 14.2, stop = 19.9, last = 19.9, spell = 1222103, spells = { 1222103 } },
+    },
+    [3286] = {
+        TANK = { first = 12.0, main = 12.0, stop = 19.0, last = 19.0, spell = 1222642, spells = { 1222642 } },
+    },
+    [3457] = {
+        TANK = { first = 4.5, main = 10.0, stop = 10.0, last = 19.5, spell = 1298949, spells = { 1298949, 1299189 } },
+    },
+}

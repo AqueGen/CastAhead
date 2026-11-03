@@ -482,6 +482,14 @@ for id, d in pairs(CastAheadBossDelays) do
     check(type(d) == "number" and d > 0 and d <= 15, "boss delay " .. id .. " is a positive number of seconds up to 15")
 end
 dofile("BossWindows.lua")
+check(type(CastAheadPullWindows) == "table", "pull windows ship with the boss windows")
+for id, byRole in pairs(CastAheadPullWindows) do
+    check(type(id) == "number" and id > 0 and id < 100000, "pull window key " .. tostring(id) .. " is an encounter id")
+    for role, w in pairs(byRole) do
+        local row = CastAheadDefensives.spells[w.spell]
+        check(row and row[role] == true and w.first <= w.main and w.main <= w.stop, "pull window " .. id .. " " .. role .. " is sound")
+    end
+end
 for id, byRole in pairs(CastAheadBossWindows) do
     for role, w in pairs(byRole) do
         local name = "boss window " .. id .. " " .. role
