@@ -711,6 +711,7 @@ local function Retime(c)
     local w = c.win
     local row = M.SaveRow(c.spell)
     local save = S.PickSave({ row }, w.main - w.first)
+    c.pick = save and save.id or nil
     c.fireAt = save and save.duration and math.max(w.main - (save.duration - S.REACTION), w.first - w.lead) or w.main - w.lead
 end
 
@@ -728,6 +729,15 @@ end
 
 function S.Cancel(key)
     scheduled[key] = nil
+end
+
+function S.Peek(key)
+    local c = scheduled[key]
+    if c then return c.fireAt, c.endAt, c.pick end
+end
+
+local function Journal(kind, ...)
+    if CastAheadRecorder then CastAheadRecorder.Note(kind, "-", ...) end
 end
 
 function S.EndAt(key)
@@ -819,11 +829,13 @@ function S.Tick(now)
             if saveLead > 0 and not c.fired and not c.warned and now >= c.fireAt - saveLead and now < c.fireAt
                     and c.fireAt - now >= math.min(WARN_CLEAR, saveLead - 0.5) then
                 c.warned, c.warnedAt = true, now
+                Journal("SAVESOON", key, c.spell, c.pick or "-")
                 if Audible(c) then lastFiredAt = now end
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice, true, c.candidates) end
             end
             if not c.fired and now >= c.fireAt and now < c.endAt then
                 c.fired, c.firedAt = true, now
+                Journal("SAVE", key, c.spell, c.pick or "-")
                 if Audible(c) then lastFiredAt, lastCalledAt = now, now end
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice, nil, c.candidates) end
             end

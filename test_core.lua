@@ -4372,8 +4372,18 @@ do
         steps(30)
         return quiet, heard
     end
+    local savedDev = CastAheadDB.devMode
+    CastAheadDB.devMode = true
+    CastAheadRecorder.StartKey({ instance = 9825, name = "Den", level = 10 })
     local quiet, heard = callAt("w1", nil, 20.5)
     check(quiet == 0 and heard == 1, string.format("window call fires at main minus save duration plus reaction, got %d/%d", quiet, heard))
+    do
+        local text = table.concat(CastAheadRecorder.Current().lines, "\n")
+        check(text:find("|BAR|-|begin|dbm:w1|1243569|13|window|20.5|28.0|9002", 1, true) ~= nil, "the journal records the boss bar and its plan: " .. text:sub(-300))
+        check(text:find("|SAVE|-|dbm:w1|1297797|9002", 1, true) ~= nil, "the journal records the boss call and its save")
+        CastAheadRecorder.EndKey("completed")
+        CastAheadDB.devMode = savedDev
+    end
     check(CastAheadSaves.PickSave({ CastAheadDefensives.spells[1297797] }, 7.0).id == 9002, "the 8 s save is picked for a 7 s window")
     check(CastAheadSaves.PickSave({ CastAheadDefensives.spells[1297797] }, 7.0).duration == 8.0, "the picked save carries its duration")
     check(CastAheadSaves.Icons(CastAheadMatch.ADVICE.DEFENSIVE, { { spell = 1297797, span = 7.0 } })[1] == 4002,

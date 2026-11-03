@@ -52,6 +52,12 @@ local function Call(spellID)
     return id, lead, advice, w
 end
 
+local function Log(...)
+    if CastAheadRecorder then CastAheadRecorder.Note("BAR", "-", ...) end
+end
+
+local function Seconds(at, now) return at and string.format("%.1f", at - now) or "-" end
+
 local function Covered(ownKey, spell, hitAt)
     for key, other in pairs(windowSpells) do
         local c = key ~= ownKey and CastAheadSaves.Window(key)
@@ -63,15 +69,24 @@ end
 function A.OnBar(source, barKey, spellID, duration, now)
     barsSeen = true
     if not CastAheadSaves then return end
-    if not (inEncounter or (IsEncounterInProgress and IsEncounterInProgress())) then return end
+    local key = Key(source, barKey)
+    if not (inEncounter or (IsEncounterInProgress and IsEncounterInProgress())) then
+        Log("begin", key, spellID, duration, "outside")
+        return
+    end
     spellID, duration = tonumber(spellID), tonumber(duration)
     if not (spellID and duration) or duration <= 0 then return end
     local id, lead, advice, w = Call(spellID)
-    if not id then return end
-    local key = Key(source, barKey)
+    if not id then
+        Log("begin", key, spellID, duration, "noverdict")
+        return
+    end
     local endAt = now + duration + Offset(spellID)
     local _, hit = M.SaveRow(id)
-    if Covered(key, hit or id, endAt) then return end
+    if Covered(key, hit or id, endAt) then
+        Log("begin", key, spellID, duration, "covered")
+        return
+    end
     barSpells[key] = spellID
     local win
     if w then
@@ -81,6 +96,8 @@ function A.OnBar(source, barKey, spellID, duration, now)
         windowSpells[key] = spells
     end
     CastAheadSaves.Schedule(key, id, endAt - lead, endAt, advice, win)
+    local fireAt, _, pick = CastAheadSaves.Peek(key)
+    Log("begin", key, spellID, duration, w and "window" or "delay", Seconds(fireAt, now), Seconds(endAt, now), pick or "-")
 end
 
 function A.OnUpdate(source, barKey, elapsed, total, now)
@@ -91,6 +108,7 @@ function A.OnUpdate(source, barKey, elapsed, total, now)
     if not (spellID and elapsed and total) then return end
     local id, lead = Call(spellID)
     if not id then return end
+    Log("update", key, spellID, total - elapsed)
     if not CastAheadSaves.Move(key, total - elapsed + Offset(spellID), lead, now) then
         A.OnBar(source, barKey, spellID, total - elapsed, now)
     end
@@ -101,7 +119,11 @@ function A.OnStop(source, barKey)
     local key = Key(source, barKey)
     local spellID, endAt = barSpells[key], CastAheadSaves.EndAt(key)
     barSpells[key] = nil
-    if spellID and endAt and GetTime() >= endAt - Offset(spellID) - STOP_SLACK then return end
+    if spellID and endAt and GetTime() >= endAt - Offset(spellID) - STOP_SLACK then
+        Log("stop", key, spellID, "kept")
+        return
+    end
+    if spellID then Log("stop", key, spellID, "cancelled") end
     windowSpells[key] = nil
     CastAheadSaves.Cancel(key)
 end
