@@ -471,6 +471,12 @@ for id, c in pairs(CastAheadBossCadence) do
     check(type(c.first) == "number" and type(c.cd) == "table" and type(c.steady) == "boolean", "boss cadence " .. id .. " has first, cd and steady")
     for _, gap in ipairs(c.cd) do check(type(gap) == "number" and gap > 0, "boss cadence " .. id .. " gaps are positive numbers") end
 end
+dofile("BossDelays.lua")
+for id, d in pairs(CastAheadBossDelays) do
+    check(CastAheadDefensives.spells[id] or CastAheadDefensives.spells[CastAheadDefensives.alias[id] or 0],
+        "boss delay " .. id .. " belongs to a defensive row or its alias")
+    check(type(d) == "number" and d > 0 and d <= 15, "boss delay " .. id .. " is a positive number of seconds up to 15")
+end
 dofile("BurstWindows.lua")
 check(M.ADVICE.SOON and M.ADVICE.SOON.say == "burst soon", "SOON advice says burst soon")
 check(M.ADVICE.BURST and M.ADVICE.BURST.say == "burst now", "BURST advice says burst now")

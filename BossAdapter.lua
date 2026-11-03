@@ -28,6 +28,10 @@ local function Verdict(spellID)
     return spellID, row.lead or 3, advice
 end
 
+local function Delay(spellID)
+    return CastAheadBossDelays and CastAheadBossDelays[spellID] or 0
+end
+
 function A.OnBar(source, barKey, spellID, duration, now)
     barsSeen = true
     if not CastAheadSaves then return end
@@ -37,7 +41,7 @@ function A.OnBar(source, barKey, spellID, duration, now)
     local id, lead, advice = Verdict(spellID)
     if not id then return end
     local key = Key(source, barKey)
-    local endAt = now + duration
+    local endAt = now + duration + Delay(spellID)
     barSpells[key] = spellID
     CastAheadSaves.Schedule(key, id, endAt - lead, endAt, advice)
 end
@@ -50,7 +54,7 @@ function A.OnUpdate(source, barKey, elapsed, total, now)
     if not (spellID and elapsed and total) then return end
     local id, lead = Verdict(spellID)
     if not id then return end
-    if not CastAheadSaves.Move(key, total - elapsed, lead, now) then
+    if not CastAheadSaves.Move(key, total - elapsed + Delay(spellID), lead, now) then
         A.OnBar(source, barKey, spellID, total - elapsed, now)
     end
 end
