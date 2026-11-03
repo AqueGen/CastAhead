@@ -4381,6 +4381,16 @@ do
         local text = table.concat(CastAheadRecorder.Current().lines, "\n")
         check(text:find("|BAR|-|begin|dbm:w1|1243569|13|window|20.5|28.0|9002", 1, true) ~= nil, "the journal records the boss bar and its plan: " .. text:sub(-300))
         check(text:find("|SAVE|-|dbm:w1|1297797|9002", 1, true) ~= nil, "the journal records the boss call and its save")
+        A.OnBar("dbm", "wj", 1243569, 13, now)
+        steps(2)
+        A.OnPause("dbm", "wj", now)
+        steps(40)
+        A.OnStopAll("dbm")
+        text = table.concat(CastAheadRecorder.Current().lines, "\n")
+        check(text:find("|BAR|-|pause|dbm:wj", 1, true) ~= nil, "the journal records a paused boss bar")
+        check(text:find("|SAVEMISS|-|dbm:wj|1297797|", 1, true) ~= nil and text:find("|paused", 1, true) ~= nil,
+            "the journal records a boss call that never fired and why: " .. text:sub(-200))
+        CastAheadSaves.Cancel("dbm:wj")
         CastAheadRecorder.EndKey("completed")
         CastAheadDB.devMode = savedDev
     end
@@ -4483,6 +4493,24 @@ do
     A.OnBar("dbm", "w9", 1297797, 14, now)
     steps(20)
     check(Alerts() == 1, string.format("one call per mechanic, got %d", Alerts()))
+    do
+        local w = CastAheadBossWindows[1243569].TANK
+        w.first, w.main, w.stop = 9.0, 15.0, 15.0
+        sounds, spoken, clips = 0, 0, 0
+        A.OnBar("dbm", "Timer1243569cdcount\t1", 1243569, 13, now)
+        A.OnBar("dbm", "Timer1242860cdcount\t1", 1242860, 5, now)
+        steps(5)
+        A.OnBar("dbm", "Timer1242860cdcount\t2", 1242860, 25, now)
+        steps(8)
+        A.OnStop("dbm", "Timer1243569cdcount\t1")
+        A.OnBar("dbm", "Timer1243569cdcount\t2", 1243569, 25, now)
+        steps(7)
+        local before = Alerts()
+        steps(1)
+        check(before == 0 and Alerts() == 1, string.format("the first cycle calls even when the next bar starts at its end, got %d/%d", before, Alerts()))
+        steps(40)
+        w.first, w.main, w.stop = 8.0, 15.0, nil
+    end
     CastAheadBossWindows[1242860] = { TANK = { first = 17.0, main = 17.0, stop = 17.0, spell = 1297793, spells = { 1297793 } } }
     sounds, spoken, clips = 0, 0, 0
     A.OnBar("dbm", "wo", 1243569, 13, now)

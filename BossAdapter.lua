@@ -148,11 +148,13 @@ end
 
 function A.OnPause(source, barKey, now)
     if not CastAheadSaves then return end
+    if barSpells[Key(source, barKey)] then Log("pause", Key(source, barKey)) end
     CastAheadSaves.Pause(Key(source, barKey), now)
 end
 
 function A.OnResume(source, barKey, now)
     if not CastAheadSaves then return end
+    if barSpells[Key(source, barKey)] then Log("resume", Key(source, barKey)) end
     CastAheadSaves.Resume(Key(source, barKey), now)
 end
 

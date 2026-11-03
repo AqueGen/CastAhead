@@ -732,7 +732,16 @@ function S.Window(key)
     return c and c.win and c or nil
 end
 
+local function Missed(key, c, why)
+    if c and not c.fired and not key:find("^demo:") and CastAheadRecorder then
+        local now = GetTime()
+        CastAheadRecorder.Note("SAVEMISS", "-", key, c.spell, string.format("%.1f", c.fireAt - now),
+            string.format("%.1f", c.endAt - now), c.pausedAt and "paused" or why)
+    end
+end
+
 function S.Cancel(key)
+    Missed(key, scheduled[key], "cancelled")
     scheduled[key] = nil
 end
 
@@ -780,7 +789,10 @@ end
 
 function S.CancelPrefix(prefix)
     for key in pairs(scheduled) do
-        if key:sub(1, #prefix) == prefix then scheduled[key] = nil end
+        if key:sub(1, #prefix) == prefix then
+            Missed(key, scheduled[key], "cancelled")
+            scheduled[key] = nil
+        end
     end
 end
 
@@ -844,7 +856,10 @@ function S.Tick(now)
                 if Audible(c) then lastFiredAt, lastCalledAt = now, now end
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice, nil, c.candidates) end
             end
-            if now >= c.endAt then scheduled[key] = nil end
+            if now >= c.endAt then
+                Missed(key, c, "late")
+                scheduled[key] = nil
+            end
         end
     end
 end
