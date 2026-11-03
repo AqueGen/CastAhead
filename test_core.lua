@@ -4391,12 +4391,15 @@ do
     do
         local w = CastAheadBossWindows[1243569].TANK
         w.first, w.main, w.stop = 6.9, 6.9, 14.1
-        quiet, heard = callAt("wbarrage", nil, 19.4)
-        check(quiet == 0 and heard == 1, string.format("a repeated main hit is covered to its last hit from the first, got %d/%d", quiet, heard))
+        quiet, heard = callAt("wbarrage", nil, 16.8)
+        check(quiet == 0 and heard == 1, string.format("a repeated main hit is never called later than lead before the main hit, got %d/%d", quiet, heard))
         CastAheadSaveDurations[9002] = nil
-        quiet, heard = callAt("wbarrage4", nil, 19.4)
+        quiet, heard = callAt("wbarrage4", nil, 16.8)
         check(quiet == 0 and heard == 1, string.format("a save too short for the repeats still covers the first main hit, got %d/%d", quiet, heard))
         CastAheadSaveDurations[9002] = 8.0
+        w.first, w.main, w.stop = 2.0, 2.0, 12.0
+        quiet, heard = callAt("wbleed", nil, 11.9)
+        check(quiet == 0 and heard == 1, string.format("a hit with late repeats keeps the call lead before the hit, got %d/%d", quiet, heard))
         w.first, w.main, w.stop = 8.0, 15.0, nil
     end
     CastAheadBossWindows[1243569].TANK.first = 9.0

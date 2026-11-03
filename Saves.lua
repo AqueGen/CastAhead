@@ -430,7 +430,7 @@ local function WindowText(r)
     if not best then return text end
     local d = Duration(best)
     local floor = stop > w.first and w.first - (S.REACTION + S.MARGIN) or w.main - (r.lead or 3)
-    local before = w.main - math.min(math.max(stop - (d - S.REACTION), floor), w.main - S.REACTION)
+    local before = w.main - math.min(math.max(stop - (d - S.REACTION), floor), w.main - (r.lead or 3))
     return text .. string.format("%s the call comes %.1f s before it; %s (%d s) covers %s", text ~= "" and ";" or ".",
         before, ButtonName(best), math.floor(d + 0.5), cover or "the main hit")
 end
@@ -717,7 +717,7 @@ local function Retime(c)
     c.pick = save and save.id or nil
     local floor = w.stop > w.first and w.first - (S.REACTION + S.MARGIN) or w.main - w.lead
     c.fireAt = save and save.duration
-        and math.min(math.max(w.stop - (save.duration - S.REACTION), floor), w.main - S.REACTION) or w.main - w.lead
+        and math.min(math.max(w.stop - (save.duration - S.REACTION), floor), w.main - w.lead) or w.main - w.lead
 end
 
 function S.Schedule(key, spellID, fireAt, endAt, advice, win)
