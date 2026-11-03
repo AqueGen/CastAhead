@@ -6,7 +6,7 @@ local connected
 local barsSeen, encounterAt, healthWarned, inEncounter = false, nil, false, false
 local barSpells = {}
 local HEALTH_WAIT = 30
-local STOP_SLACK = 0.5
+local STOP_SLACK = 1.5
 local SAME_HIT = 3
 local windowSpells = {}
 

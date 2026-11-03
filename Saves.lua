@@ -228,6 +228,7 @@ local function FitsAny(e, rows)
 end
 
 S.REACTION = 0.5
+S.MARGIN = 1.0
 
 local function Duration(e)
     local d = CastAheadSaveDurations
@@ -427,7 +428,7 @@ local function WindowText(r)
     end
     if not best then return text end
     local d = Duration(best)
-    local before = math.min(d - S.REACTION, span + (r.lead or 3))
+    local before = math.min(d - S.REACTION, span > 0 and span + S.REACTION + S.MARGIN or (r.lead or 3))
     return text .. string.format("%s the call comes %.1f s before it; %s (%d s) covers %s", text ~= "" and ";" or ".",
         before, ButtonName(best), math.floor(d + 0.5), cover or "the main hit")
 end
@@ -712,7 +713,8 @@ local function Retime(c)
     local row = M.SaveRow(c.spell)
     local save = S.PickSave({ row }, w.main - w.first)
     c.pick = save and save.id or nil
-    c.fireAt = save and save.duration and math.max(w.main - (save.duration - S.REACTION), w.first - w.lead) or w.main - w.lead
+    local floor = w.main > w.first and w.first - (S.REACTION + S.MARGIN) or w.main - w.lead
+    c.fireAt = save and save.duration and math.max(w.main - (save.duration - S.REACTION), floor) or w.main - w.lead
 end
 
 function S.Schedule(key, spellID, fireAt, endAt, advice, win)

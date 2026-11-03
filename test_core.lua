@@ -4388,6 +4388,11 @@ do
     check(CastAheadSaves.PickSave({ CastAheadDefensives.spells[1297797] }, 7.0).duration == 8.0, "the picked save carries its duration")
     check(CastAheadSaves.Icons(CastAheadMatch.ADVICE.DEFENSIVE, { { spell = 1297797, span = 7.0 } })[1] == 4002,
         "the covering save leads the icons")
+    CastAheadBossWindows[1243569].TANK.first = 9.0
+    CastAheadSaveDurations[9002] = 20.0
+    quiet, heard = callAt("wlong", nil, 20.5)
+    check(quiet == 0 and heard == 1, string.format("a long save is called 1.5 s before the first hit, not lead before it, got %d/%d", quiet, heard))
+    CastAheadSaveDurations[9002] = 8.0
     CastAheadBossWindows[1243569].TANK.first = 15.0
     quiet, heard = callAt("w1s", nil, 24.9)
     check(quiet == 0 and heard == 1, string.format("a single-hit window keeps the call lead before the hit, got %d/%d", quiet, heard))
@@ -4413,6 +4418,12 @@ do
         A.OnStop("dbm", "w6")
     end, 20.5 - 13)
     check(quiet == 0 and heard == 1, string.format("stop at bar end keeps window call, got %d/%d", quiet, heard))
+    quiet, heard = callAt("w6b", function()
+        steps(12)
+        advance(0.4)
+        A.OnStop("dbm", "w6b")
+    end, 20.5 - 12.4)
+    check(quiet == 0 and heard == 1, string.format("a stop that lands 0.6 s short of a late-started bar's end keeps the call, got %d/%d", quiet, heard))
     quiet, heard = callAt("w7", function()
         steps(5)
         A.OnStop("dbm", "w7")
