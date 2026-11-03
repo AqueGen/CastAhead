@@ -4340,6 +4340,91 @@ check(Alerts() == 0, string.format("a bar stopped before its end still cancels t
 CastAheadBossDelays = nil
 advance(5)
 end
+do
+    local function steps(seconds)
+        for _ = 1, math.floor(seconds * 2 + 0.5) do advance(0.5) end
+    end
+    local saved = { role = GetSpecializationRole, known = IsPlayerSpell, buttons = CastAheadSaveButtons,
+                    defensives = CastAheadDefensives, cd = C_Spell.GetSpellCooldownDuration }
+    local onCooldown = {}
+    C_Spell.GetSpellCooldownDuration = function(id)
+        local busy = onCooldown[id] and now >= onCooldown[id]
+        return { HasSecretValues = function() return false end, IsZero = function() return not busy end }
+    end
+    GetSpecializationRole = function() return "TANK" end
+    IsPlayerSpell = function(id) return id == 9001 or id == 9002 end
+    textures[9001], textures[9002] = 4001, 4002
+    CastAheadSaveButtons = { [265] = { def = { 9001, 9002 } } }
+    CastAheadDefensives = { spells = { [1297797] = { TANK = true, lead = 3.1 }, [1297793] = { TANK = true, lead = 3.3 } },
+                            alias = { [1243569] = 1297793 } }
+    CastAheadSaveDurations = { [9001] = 4.0, [9002] = 8.0 }
+    CastAheadBossWindows = { [1243569] = { TANK = { first = 8.0, main = 15.0, last = 15.0, spell = 1297797, spells = { 1297793, 1297797 } } } }
+    CastAheadSaves.Refresh()
+    local function callAt(label, setup, quietUntil)
+        sounds, spoken, clips = 0, 0, 0
+        local start = now
+        A.OnBar("dbm", label, 1243569, 13, now)
+        if setup then setup(start) end
+        steps(quietUntil - 0.5)
+        local quiet = Alerts()
+        steps(1.0)
+        local heard = Alerts()
+        steps(30)
+        return quiet, heard
+    end
+    local quiet, heard = callAt("w1", nil, 20.5)
+    check(quiet == 0 and heard == 1, string.format("window call fires at main minus save duration plus reaction, got %d/%d", quiet, heard))
+    check(CastAheadSaves.PickSave({ CastAheadDefensives.spells[1297797] }, 7.0).id == 9002, "the 8 s save is picked for a 7 s window")
+    check(CastAheadSaves.PickSave({ CastAheadDefensives.spells[1297797] }, 7.0).duration == 8.0, "the picked save carries its duration")
+    check(CastAheadSaves.Icons(CastAheadMatch.ADVICE.DEFENSIVE, { { spell = 1297797, span = 7.0 } })[1] == 4002,
+        "the covering save leads the icons")
+    quiet, heard = callAt("w2", function(start) onCooldown[9002] = start + 10 end, 24.5)
+    check(quiet == 0 and heard == 1, string.format("retimes when the picked save goes on cooldown, got %d/%d", quiet, heard))
+    onCooldown[9002] = nil
+    CastAheadSaveDurations = {}
+    quiet, heard = callAt("w3", nil, 24.9)
+    check(quiet == 0 and heard == 1, string.format("unknown duration falls back to lead, got %d/%d", quiet, heard))
+    CastAheadSaveDurations = { [9001] = 4.0, [9002] = 8.0 }
+    quiet, heard = callAt("w4", function() A.OnUpdate("dbm", "w4", 0, 23, now) end, 30.5)
+    check(quiet == 0 and heard == 1, string.format("extended window bar, got %d/%d", quiet, heard))
+    quiet, heard = callAt("w5", function()
+        steps(2)
+        A.OnPause("dbm", "w5", now)
+        steps(5)
+        A.OnResume("dbm", "w5", now)
+    end, 25.5 - 7)
+    check(quiet == 0 and heard == 1, string.format("paused window bar, got %d/%d", quiet, heard))
+    quiet, heard = callAt("w6", function()
+        steps(13)
+        A.OnStop("dbm", "w6")
+    end, 20.5 - 13)
+    check(quiet == 0 and heard == 1, string.format("stop at bar end keeps window call, got %d/%d", quiet, heard))
+    quiet, heard = callAt("w7", function()
+        steps(5)
+        A.OnStop("dbm", "w7")
+    end, 20.5 - 5)
+    check(heard == 0, string.format("an early stop cancels the window call, got %d", heard))
+    sounds, spoken, clips = 0, 0, 0
+    A.OnBar("dbm", "w8", 1243569, 13, now)
+    steps(14)
+    A.OnBar("dbm", "w9", 1297797, 14, now)
+    steps(20)
+    check(Alerts() == 1, string.format("one call per mechanic, got %d", Alerts()))
+    GetSpecializationRole = function() return "DAMAGER" end
+    CastAheadDefensives.spells[1297793].DAMAGER = true
+    CastAheadBossDelays = { [1243569] = 8.0 }
+    sounds, spoken, clips = 0, 0, 0
+    A.OnBar("dbm", "w10", 1243569, 13, now)
+    steps(17.0)
+    local early = Alerts()
+    steps(1.0)
+    check(early == 0 and Alerts() == 1, string.format("no window keeps delay path, got %d/%d", early, Alerts()))
+    steps(20)
+    CastAheadBossDelays, CastAheadBossWindows, CastAheadSaveDurations = nil, nil, nil
+    GetSpecializationRole, IsPlayerSpell, CastAheadSaveButtons = saved.role, saved.known, saved.buttons
+    CastAheadDefensives, C_Spell.GetSpellCooldownDuration = saved.defensives, saved.cd
+    CastAheadSaves.Refresh()
+end
 CastAheadDB.saveButtons = { [265] = { def = {} } }
 CastAheadSaves.Refresh()
 A.OnBar("dbm", "tempty", 1299684, 10, now)

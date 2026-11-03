@@ -145,7 +145,7 @@ local function Collect(list, out)
             local item = ItemFor(e.use)
             resolved = resolved or item ~= nil
             if item and ItemReady(item) then
-                out[#out + 1] = { kind = "item", id = item, icon = C_Item.GetItemIconByID and C_Item.GetItemIconByID(item) }
+                out[#out + 1] = { kind = "item", id = item, use = e.use, icon = C_Item.GetItemIconByID and C_Item.GetItemIconByID(item) }
             end
         end
     end
@@ -227,18 +227,43 @@ local function FitsAny(e, rows)
     return false
 end
 
+S.REACTION = 0.5
+
+local function Duration(e)
+    local d = CastAheadSaveDurations
+    return d and d[e.kind == "spell" and e.id or e.use] or nil
+end
+
+function S.PickSave(rows, span)
+    local first
+    for _, e in ipairs((Available("def"))) do
+        if FitsAny(e, rows) then
+            local d = Duration(e)
+            if d and d >= span + S.REACTION then
+                e.duration = d
+                return e
+            end
+            first = first or e
+        end
+    end
+    if first then first.duration = Duration(first) end
+    return first
+end
+
 function S.Icons(advice, spellOrCandidates)
     local key = advice and LIST[advice.key]
     if not key then return NO_ICONS end
-    local rows = {}
+    local rows, span = {}, nil
     local hits = spellOrCandidates
     for _, h in ipairs(type(hits) == "table" and hits or { hits }) do
         local row = M.SaveRow(type(h) == "table" and h.spell or h)
         if row then rows[#rows + 1] = row end
+        span = span or type(h) == "table" and h.span or nil
     end
-    local out = {}
+    local picked = span and S.PickSave(rows, span)
+    local out = { picked and picked.icon or nil }
     for _, e in ipairs((Available(key))) do
-        if e.icon and FitsAny(e, rows) then out[#out + 1] = e.icon end
+        if e.icon and e ~= picked and FitsAny(e, rows) then out[#out + 1] = e.icon end
         if #out == 3 then break end
     end
     return out
@@ -651,9 +676,22 @@ function S.Refresh()
     RegisterAuraSounds()
 end
 
-function S.Schedule(key, spellID, fireAt, endAt, advice)
-    scheduled[key] = { spell = spellID, fireAt = fireAt, endAt = endAt, advice = advice,
-                       candidates = spellID and { { spell = spellID } } or nil }
+local function Retime(c)
+    local w = c.win
+    local save = S.PickSave({ M.SaveRow(c.spell) }, w.main - w.first)
+    c.fireAt = save and save.duration and w.main - (save.duration - S.REACTION) or w.main - w.lead
+end
+
+function S.Schedule(key, spellID, fireAt, endAt, advice, win)
+    local c = { spell = spellID, fireAt = fireAt, endAt = endAt, advice = advice, win = win,
+                candidates = spellID and { { spell = spellID, span = win and win.main - win.first } } or nil }
+    scheduled[key] = c
+    if win then Retime(c) end
+end
+
+function S.Window(key)
+    local c = scheduled[key]
+    return c and c.win and not c.fired and c or nil
 end
 
 function S.Cancel(key)
@@ -709,14 +747,21 @@ function S.Resume(key, now)
     if c and c.pausedAt then
         local held = now - c.pausedAt
         c.fireAt, c.endAt, c.pausedAt = c.fireAt + held, c.endAt + held, nil
+        if c.win then c.win.first, c.win.main = c.win.first + held, c.win.main + held end
     end
 end
 
 function S.Move(key, remaining, lead, now)
     local c = scheduled[key]
     if not c then return false end
-    c.endAt = (c.pausedAt or now) + remaining
-    c.fireAt = c.endAt - lead
+    local endAt = (c.pausedAt or now) + remaining
+    if c.win then
+        c.win.first, c.win.main = c.win.first + endAt - c.endAt, endAt
+        c.endAt = endAt
+        Retime(c)
+    else
+        c.endAt, c.fireAt = endAt, endAt - lead
+    end
     if c.fired and c.fireAt > now and c.fireAt - (c.firedAt or now) >= lead then c.fired = nil end
     local warnAt = c.fireAt - CastAheadConfig.SaveLead()
     if c.warned and warnAt > now and warnAt - (c.warnedAt or now) >= lead then c.warned = nil end
@@ -728,7 +773,7 @@ function S.Pending(now)
     wipe(pending)
     for _, c in pairs(scheduled) do
         if not c.pausedAt and c.fired and c.endAt > now then
-            pending[#pending + 1] = { endAt = c.endAt, advice = c.advice, row = { spell = c.spell }, icons = S.Icons(c.advice, c.spell) }
+            pending[#pending + 1] = { endAt = c.endAt, advice = c.advice, row = { spell = c.spell }, icons = S.Icons(c.advice, c.candidates) }
         end
     end
     return pending
@@ -737,6 +782,7 @@ end
 function S.Tick(now)
     for key, c in pairs(scheduled) do
         if not c.pausedAt then
+            if c.win and not c.fired then Retime(c) end
             local saveLead = CastAheadConfig.SaveLead()
             if saveLead > 0 and not c.fired and not c.warned and now >= c.fireAt - saveLead and now < c.fireAt
                     and c.fireAt - now >= math.min(WARN_CLEAR, saveLead - 0.5) then
