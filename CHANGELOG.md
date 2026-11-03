@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.0](https://github.com/AqueGen/CastAhead/compare/v0.28.1...v0.29.0) (2026-11-03)
+
+
+### Features
+
+* boss calls cover the whole damage window ([#131](https://github.com/AqueGen/CastAhead/issues/131)) ([636f90d](https://github.com/AqueGen/CastAhead/commit/636f90dd551c64b5f6558b5b9039639f3a3c0c00))
+
 ## [0.28.1](https://github.com/AqueGen/CastAhead/compare/v0.28.0...v0.28.1) (2026-11-03)
 
 
