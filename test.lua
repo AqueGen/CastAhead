@@ -463,6 +463,10 @@ M.SpecRole = function() return nil end
 check(M.Advice(saveRow) == M.ADVICE.AOE, "outside the game no role means no save call")
 
 dofile("SaveButtons.lua")
+dofile("SaveDurations.lua")
+for id, d in pairs(CastAheadSaveDurations) do
+    check(type(d) == "number" and d > 0 and d <= 60, "save duration " .. id .. " is between 0 and 60 seconds")
+end
 dofile("Defensives.lua")
 dofile("BossCadence.lua")
 for id, c in pairs(CastAheadBossCadence) do

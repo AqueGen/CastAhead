@@ -24,6 +24,7 @@ Config.lua
 Data.lua
 Priority.lua
 SaveButtons.lua
+SaveDurations.lua
 Defensives.lua
 RaidDefensives.lua
 BossCadence.lua
