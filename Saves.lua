@@ -422,8 +422,9 @@ local function WindowText(r)
     end
     if not best then return text end
     local d = Duration(best)
+    local before = math.min(d - S.REACTION, span + (r.lead or 3))
     return text .. string.format("%s the call comes %.1f s before it; %s (%d s) covers %s", text ~= "" and ";" or ".",
-        d - S.REACTION, ButtonName(best), math.floor(d + 0.5), cover or "the main hit")
+        before, ButtonName(best), math.floor(d + 0.5), cover or "the main hit")
 end
 
 local function GuideLine(r)
@@ -704,7 +705,7 @@ end
 local function Retime(c)
     local w = c.win
     local save = S.PickSave({ M.SaveRow(c.spell) }, w.main - w.first)
-    c.fireAt = save and save.duration and w.main - (save.duration - S.REACTION) or w.main - w.lead
+    c.fireAt = save and save.duration and math.max(w.main - (save.duration - S.REACTION), w.first - w.lead) or w.main - w.lead
 end
 
 function S.Schedule(key, spellID, fireAt, endAt, advice, win)
