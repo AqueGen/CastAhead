@@ -27,6 +27,7 @@ SaveButtons.lua
 Defensives.lua
 RaidDefensives.lua
 BossCadence.lua
+BossDelays.lua
 BurstWindows.lua
 Traits.lua
 Packs.lua

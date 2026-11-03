@@ -4307,6 +4307,39 @@ advance(6.5)
 check(Alerts() == 0, "quiet until bar end minus lead")
 advance(1.0)
 check(Alerts() == 1, "one call 3 s before the hit, through the alias")
+do
+local function steps(seconds)
+    for _ = 1, seconds * 2 do advance(0.5) end
+end
+CastAheadBossDelays = { [1299680] = 8.0 }
+sounds, spoken, clips = 0, 0, 0
+A.OnBar("dbm", "td", 1299680, 10, now)
+steps(14.5)
+check(Alerts() == 0, string.format("a timer spell whose damage lands later stays quiet at bar end minus lead, got %d", Alerts()))
+steps(1.0)
+check(Alerts() == 1, string.format("and calls lead before the damage, bar end plus its delay, got %d", Alerts()))
+A.OnBar("dbm", "tdu", 1299680, 10, now)
+A.OnUpdate("dbm", "tdu", 0, 20, now)
+sounds, spoken, clips = 0, 0, 0
+steps(24.5)
+check(Alerts() == 0, string.format("an extended bar keeps the delay, got %d", Alerts()))
+steps(1.0)
+check(Alerts() == 1, string.format("an extended bar calls at its new end plus the delay, got %d", Alerts()))
+A.OnBar("dbm", "tds", 1299680, 10, now)
+sounds, spoken, clips = 0, 0, 0
+steps(10.0)
+A.OnStop("dbm", "tds")
+steps(5.5)
+check(Alerts() == 1, string.format("the boss mod stopping its finished bar keeps the call that waits for the damage, got %d", Alerts()))
+A.OnBar("dbm", "tdc", 1299680, 10, now)
+sounds, spoken, clips = 0, 0, 0
+steps(5.0)
+A.OnStop("dbm", "tdc")
+steps(12.0)
+check(Alerts() == 0, string.format("a bar stopped before its end still cancels the delayed call, got %d", Alerts()))
+CastAheadBossDelays = nil
+advance(5)
+end
 CastAheadDB.saveButtons = { [265] = { def = {} } }
 CastAheadSaves.Refresh()
 A.OnBar("dbm", "tempty", 1299684, 10, now)

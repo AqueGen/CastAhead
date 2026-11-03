@@ -660,6 +660,11 @@ function S.Cancel(key)
     scheduled[key] = nil
 end
 
+function S.EndAt(key)
+    local c = scheduled[key]
+    return c and not c.pausedAt and c.endAt or nil
+end
+
 function S.LastFiredAt() return lastFiredAt end
 function S.LastCalledAt() return lastCalledAt end
 

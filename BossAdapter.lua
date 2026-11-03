@@ -6,6 +6,7 @@ local connected
 local barsSeen, encounterAt, healthWarned, inEncounter = false, nil, false, false
 local barSpells = {}
 local HEALTH_WAIT = 30
+local STOP_SLACK = 0.5
 
 local function Key(source, barKey) return source .. ":" .. tostring(barKey) end
 local function BigWigsSource(module) return "bw:" .. tostring(module) end
@@ -28,6 +29,10 @@ local function Verdict(spellID)
     return spellID, row.lead or 3, advice
 end
 
+local function Delay(spellID)
+    return CastAheadBossDelays and CastAheadBossDelays[spellID] or 0
+end
+
 function A.OnBar(source, barKey, spellID, duration, now)
     barsSeen = true
     if not CastAheadSaves then return end
@@ -37,7 +42,7 @@ function A.OnBar(source, barKey, spellID, duration, now)
     local id, lead, advice = Verdict(spellID)
     if not id then return end
     local key = Key(source, barKey)
-    local endAt = now + duration
+    local endAt = now + duration + Delay(spellID)
     barSpells[key] = spellID
     CastAheadSaves.Schedule(key, id, endAt - lead, endAt, advice)
 end
@@ -50,7 +55,7 @@ function A.OnUpdate(source, barKey, elapsed, total, now)
     if not (spellID and elapsed and total) then return end
     local id, lead = Verdict(spellID)
     if not id then return end
-    if not CastAheadSaves.Move(key, total - elapsed, lead, now) then
+    if not CastAheadSaves.Move(key, total - elapsed + Delay(spellID), lead, now) then
         A.OnBar(source, barKey, spellID, total - elapsed, now)
     end
 end
@@ -58,7 +63,9 @@ end
 function A.OnStop(source, barKey)
     if not CastAheadSaves then return end
     local key = Key(source, barKey)
+    local spellID, endAt = barSpells[key], CastAheadSaves.EndAt(key)
     barSpells[key] = nil
+    if spellID and endAt and GetTime() >= endAt - Delay(spellID) - STOP_SLACK then return end
     CastAheadSaves.Cancel(key)
 end
 
