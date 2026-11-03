@@ -27,14 +27,8 @@ CastAheadBossWindows = {
         DAMAGER = { first = 3.8, main = 3.8, stop = 8.7, last = 8.8, spell = 381862, spells = { 381862, 381864 } },
         HEALER = { first = 3.8, main = 3.8, stop = 8.8, last = 8.8, spell = 381862, spells = { 381862, 381864 } },
     },
-    [381605] = {
-        DAMAGER = { first = 3.2, main = 3.2, stop = 8.1, last = 8.2, spell = 381862, spells = { 381862, 381864 } },
-    },
     [474240] = {
         TANK = { first = 6.9, main = 6.9, stop = 14.1, last = 14.1, spell = 1230298, spells = { 1230298 } },
-    },
-    [474478] = {
-        TANK = { first = 0.3, main = 0.3, stop = 7.1, last = 19.1, spell = 474740, spells = { 474740, 1217099 } },
     },
     [1218347] = {
         TANK = { first = 1.4, main = 5.8, stop = 19.6, last = 19.6, spell = 474740, spells = { 474740, 1217099 } },
@@ -44,11 +38,6 @@ CastAheadBossWindows = {
     },
     [1226120] = {
         TANK = { first = 7.0, main = 7.0, stop = 17.0, last = 17.0, spell = 1222642, spells = { 1222642, 1262497 } },
-    },
-    [1234233] = {
-        DAMAGER = { first = 1.6, main = 18.8, stop = 19.8, last = 19.8, spell = 1235125, spells = { 1234734, 1235125 } },
-        HEALER = { first = 2.1, main = 18.8, stop = 19.8, last = 19.8, spell = 1235125, spells = { 1234734, 1235125 } },
-        TANK = { first = 1.6, main = 18.8, stop = 19.3, last = 19.3, spell = 1235125, spells = { 1234734, 1235125 } },
     },
     [1235118] = {
         DAMAGER = { first = 3.0, main = 3.0, stop = 13.0, last = 13.0, spell = 1234681, spells = { 1234681 } },
@@ -93,7 +82,6 @@ CastAheadBossWindows = {
     [1301413] = {
         DAMAGER = { first = 5.0, main = 5.0, stop = 12.0, last = 12.0, spell = 1301508, spells = { 1301508 } },
         HEALER = { first = 5.0, main = 5.0, stop = 12.0, last = 12.0, spell = 1301508, spells = { 1301508 } },
-        TANK = { first = 5.0, main = 9.5, stop = 10.0, last = 12.0, spell = 1301353, spells = { 1301353, 1301508 } },
     },
     [1303267] = {
         DAMAGER = { first = 6.0, main = 6.0, stop = 19.0, last = 19.0, spell = 1303267, spells = { 1303267 } },
