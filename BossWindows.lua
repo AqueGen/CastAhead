@@ -45,9 +45,6 @@ CastAheadBossWindows = {
     [381512] = {
         TANK = { first = 2.5, main = 2.5, stop = 2.5, last = 2.5, spell = 381513, spells = { 381513, 381514 } },
     },
-    [381517] = {
-        TANK = { first = 5.6, main = 6.1, stop = 6.1, last = 16.0, spell = 381513, spells = { 381513, 381514, 381516 } },
-    },
     [381602] = {
         DAMAGER = { first = 3.8, main = 3.8, stop = 8.7, last = 8.8, spell = 381862, spells = { 381862, 381864 } },
         HEALER = { first = 3.8, main = 3.8, stop = 8.8, last = 8.8, spell = 381862, spells = { 381862, 381864 } },
@@ -79,9 +76,6 @@ CastAheadBossWindows = {
         HEALER = { first = 2.1, main = 18.8, stop = 19.8, last = 19.8, spell = 1235125, spells = { 1234734, 1235125 } },
         TANK = { first = 1.6, main = 18.8, stop = 19.3, last = 19.3, spell = 1235125, spells = { 1234734, 1235125 } },
     },
-    [1234753] = {
-        DAMAGER = { first = 4.5, main = 4.5, stop = 11.0, last = 11.0, spell = 1276586, spells = { 1276586 } },
-    },
     [1235118] = {
         DAMAGER = { first = 3.0, main = 3.0, stop = 13.0, last = 13.0, spell = 1234681, spells = { 1234681 } },
         HEALER = { first = 3.0, main = 3.0, stop = 13.0, last = 13.0, spell = 1234681, spells = { 1234681 } },
@@ -97,17 +91,8 @@ CastAheadBossWindows = {
     [1241058] = {
         TANK = { first = 2.0, main = 2.0, stop = 5.0, last = 5.0, spell = 1241058, spells = { 1241058 } },
     },
-    [1242860] = {
-        TANK = { first = 17.0, main = 17.0, stop = 18.0, last = 18.0, spell = 1297793, spells = { 1297793 } },
-    },
     [1243569] = {
         TANK = { first = 9.0, main = 15.0, stop = 15.0, last = 15.0, spell = 1297797, spells = { 1297793, 1297797 } },
-    },
-    [1253811] = {
-        TANK = { first = 2.1, main = 2.1, stop = 16.8, last = 16.8, spell = 1230298, spells = { 1230298 } },
-    },
-    [1264095] = {
-        TANK = { first = 3.3, main = 3.3, stop = 17.7, last = 17.7, spell = 1230298, spells = { 1230298 } },
     },
     [1289205] = {
         HEALER = { first = 0.1, main = 0.1, stop = 4.0, last = 4.0, spell = 1293048, spells = { 1293048 } },
@@ -146,10 +131,6 @@ CastAheadBossWindows = {
     [1303267] = {
         DAMAGER = { first = 6.0, main = 6.0, stop = 19.0, last = 19.0, spell = 1303267, spells = { 1303267 } },
         HEALER = { first = 6.0, main = 6.0, stop = 19.0, last = 19.0, spell = 1303267, spells = { 1303267 } },
-        TANK = { first = 6.0, main = 17.1, stop = 17.1, last = 19.0, spell = 268590, spells = { 268587, 268589, 268590, 1303267, 1303374 } },
-    },
-    [1303327] = {
-        TANK = { first = 14.8, main = 14.8, stop = 19.7, last = 19.7, spell = 1303267, spells = { 1303267 } },
     },
     [1303488] = {
         HEALER = { first = 0.0, main = 0.0, stop = 9.0, last = 9.0, spell = 1303267, spells = { 1303267 } },
@@ -160,6 +141,5 @@ CastAheadBossWindows = {
     },
     [1311987] = {
         DAMAGER = { first = 2.0, main = 2.0, stop = 7.0, last = 7.0, spell = 1311988, spells = { 1311988 } },
-        TANK = { first = 2.0, main = 2.0, stop = 7.0, last = 7.0, spell = 1311988, spells = { 1311988 } },
     },
 }

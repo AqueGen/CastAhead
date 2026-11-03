@@ -4480,6 +4480,13 @@ do
     A.OnBar("dbm", "w9", 1297797, 14, now)
     steps(20)
     check(Alerts() == 1, string.format("one call per mechanic, got %d", Alerts()))
+    CastAheadBossWindows[1242860] = { TANK = { first = 17.0, main = 17.0, stop = 17.0, spell = 1297793, spells = { 1297793 } } }
+    sounds, spoken, clips = 0, 0, 0
+    A.OnBar("dbm", "wo", 1243569, 13, now)
+    A.OnBar("dbm", "wm", 1242860, 5, now)
+    steps(30)
+    check(Alerts() == 1, string.format("a window whose hit sits inside a pending window does not call again, got %d", Alerts()))
+    CastAheadBossWindows[1242860] = nil
     GetSpecializationRole = function() return "DAMAGER" end
     CastAheadDefensives.spells[1297793].DAMAGER = true
     CastAheadBossDelays = { [1243569] = 8.0 }

@@ -58,10 +58,14 @@ end
 
 local function Seconds(at, now) return at and string.format("%.1f", at - now) or "-" end
 
-local function Covered(ownKey, spell, hitAt)
+local function Covered(ownKey, spells, hitAt)
     for key, other in pairs(windowSpells) do
         local c = key ~= ownKey and CastAheadSaves.Window(key)
-        if c and other[spell] and math.abs(c.win.main - hitAt) <= SAME_HIT then return true end
+        if c and hitAt >= c.win.first - SAME_HIT and hitAt <= c.win.stop + SAME_HIT then
+            for spell in pairs(spells) do
+                if other[spell] then return true end
+            end
+        end
     end
     return false
 end
@@ -83,7 +87,9 @@ function A.OnBar(source, barKey, spellID, duration, now)
     end
     local endAt = now + duration + Offset(spellID)
     local _, hit = M.SaveRow(id)
-    if Covered(key, hit or id, endAt) then
+    local spells = { [hit or id] = true }
+    for _, s in ipairs(w and w.spells or {}) do spells[s] = true end
+    if Covered(key, spells, endAt) then
         Log("begin", key, spellID, duration, "covered")
         return
     end
