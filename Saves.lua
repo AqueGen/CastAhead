@@ -415,20 +415,22 @@ end
 local function WindowText(r)
     local w = r.window
     if not w then return "" end
-    local span = w.main - w.first
+    local stop = w.stop or w.main
+    local span = stop - w.first
     local text = span >= 1 and string.format(". %d s of damage, %s is the main hit", math.floor(span + 0.5), r.name) or ""
     local best, cover
     for _, b in ipairs(r.buttons) do
         local d = Duration(b)
         if d and d >= span + S.REACTION then
-            best, cover = b, w.last > w.main + S.REACTION and "it through the main hit" or "all of it"
+            best, cover = b, w.last > stop + S.REACTION and "it through the main hit" or "all of it"
             break
         end
         if d and not best then best = b end
     end
     if not best then return text end
     local d = Duration(best)
-    local before = math.min(d - S.REACTION, span > 0 and span + S.REACTION + S.MARGIN or (r.lead or 3))
+    local floor = stop > w.first and w.first - (S.REACTION + S.MARGIN) or w.main - (r.lead or 3)
+    local before = w.main - math.min(math.max(stop - (d - S.REACTION), floor), w.main - S.REACTION)
     return text .. string.format("%s the call comes %.1f s before it; %s (%d s) covers %s", text ~= "" and ";" or ".",
         before, ButtonName(best), math.floor(d + 0.5), cover or "the main hit")
 end
@@ -711,15 +713,16 @@ end
 local function Retime(c)
     local w = c.win
     local row = M.SaveRow(c.spell)
-    local save = S.PickSave({ row }, w.main - w.first)
+    local save = S.PickSave({ row }, w.stop - w.first)
     c.pick = save and save.id or nil
-    local floor = w.main > w.first and w.first - (S.REACTION + S.MARGIN) or w.main - w.lead
-    c.fireAt = save and save.duration and math.max(w.main - (save.duration - S.REACTION), floor) or w.main - w.lead
+    local floor = w.stop > w.first and w.first - (S.REACTION + S.MARGIN) or w.main - w.lead
+    c.fireAt = save and save.duration
+        and math.min(math.max(w.stop - (save.duration - S.REACTION), floor), w.main - S.REACTION) or w.main - w.lead
 end
 
 function S.Schedule(key, spellID, fireAt, endAt, advice, win)
     local c = { spell = spellID, fireAt = fireAt, endAt = endAt, advice = advice, win = win,
-                candidates = spellID and { { spell = spellID, span = win and win.main - win.first } } or nil }
+                candidates = spellID and { { spell = spellID, span = win and win.stop - win.first } } or nil }
     scheduled[key] = c
     if win then Retime(c) end
 end
@@ -791,7 +794,7 @@ function S.Resume(key, now)
     if c and c.pausedAt then
         local held = now - c.pausedAt
         c.fireAt, c.endAt, c.pausedAt = c.fireAt + held, c.endAt + held, nil
-        if c.win then c.win.first, c.win.main = c.win.first + held, c.win.main + held end
+        if c.win then c.win.first, c.win.main, c.win.stop = c.win.first + held, c.win.main + held, c.win.stop + held end
     end
 end
 
@@ -801,7 +804,7 @@ function S.Move(key, remaining, lead, now)
     local endAt = (c.pausedAt or now) + remaining
     if c.win then
         local shift = endAt - c.endAt
-        c.win.first, c.win.main, c.endAt = c.win.first + shift, endAt, endAt
+        c.win.first, c.win.main, c.win.stop, c.endAt = c.win.first + shift, endAt, c.win.stop + shift, endAt
         if c.fired then c.fireAt = c.fireAt + shift else Retime(c) end
     else
         c.endAt, c.fireAt = endAt, endAt - lead

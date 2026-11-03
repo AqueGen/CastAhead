@@ -4388,6 +4388,17 @@ do
     check(CastAheadSaves.PickSave({ CastAheadDefensives.spells[1297797] }, 7.0).duration == 8.0, "the picked save carries its duration")
     check(CastAheadSaves.Icons(CastAheadMatch.ADVICE.DEFENSIVE, { { spell = 1297797, span = 7.0 } })[1] == 4002,
         "the covering save leads the icons")
+    do
+        local w = CastAheadBossWindows[1243569].TANK
+        w.first, w.main, w.stop = 6.9, 6.9, 14.1
+        quiet, heard = callAt("wbarrage", nil, 19.4)
+        check(quiet == 0 and heard == 1, string.format("a repeated main hit is covered to its last hit from the first, got %d/%d", quiet, heard))
+        CastAheadSaveDurations[9002] = nil
+        quiet, heard = callAt("wbarrage4", nil, 19.4)
+        check(quiet == 0 and heard == 1, string.format("a save too short for the repeats still covers the first main hit, got %d/%d", quiet, heard))
+        CastAheadSaveDurations[9002] = 8.0
+        w.first, w.main, w.stop = 8.0, 15.0, nil
+    end
     CastAheadBossWindows[1243569].TANK.first = 9.0
     CastAheadSaveDurations[9002] = 20.0
     quiet, heard = callAt("wlong", nil, 20.5)

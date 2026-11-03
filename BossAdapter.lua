@@ -90,7 +90,7 @@ function A.OnBar(source, barKey, spellID, duration, now)
     barSpells[key] = spellID
     local win
     if w then
-        win = { first = now + duration + w.first, main = endAt, lead = lead }
+        win = { first = now + duration + w.first, main = endAt, stop = now + duration + (w.stop or w.main), lead = lead }
         local spells = {}
         for _, s in ipairs(w.spells) do spells[s] = true end
         windowSpells[key] = spells
