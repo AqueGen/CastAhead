@@ -21,12 +21,12 @@ local function Secret(...)
     return false
 end
 
-local function Verdict(spellID)
+local function Verdict(spellID, barSpell)
     if not CastAheadConfig.Enabled("bossAdapter") then return nil end
     local row, resolvedId = M.SaveRow(spellID)
     if not row then return nil end
-    local advice = M.Advice({ prio = CastAheadPriority and (CastAheadPriority[spellID] or CastAheadPriority[resolvedId]),
-                              save = row })
+    local prio = CastAheadPriority and ((barSpell and CastAheadPriority[barSpell]) or CastAheadPriority[spellID] or CastAheadPriority[resolvedId])
+    local advice = M.Advice({ prio = prio, save = row })
     if not M.IsSave(advice) then return nil end
     return spellID, row.lead or 3, advice
 end
@@ -48,13 +48,13 @@ end
 
 local function Call(spellID)
     local w = Window(spellID)
-    local id, lead, advice = Verdict(w and w.spell or spellID)
+    local id, lead, advice = Verdict(w and w.spell or spellID, spellID)
     return id, lead, advice, w
 end
 
-local function Covered(spell, hitAt)
+local function Covered(ownKey, spell, hitAt)
     for key, other in pairs(windowSpells) do
-        local c = CastAheadSaves.Window(key)
+        local c = key ~= ownKey and CastAheadSaves.Window(key)
         if c and other[spell] and math.abs(c.win.main - hitAt) <= SAME_HIT then return true end
     end
     return false
@@ -71,7 +71,7 @@ function A.OnBar(source, barKey, spellID, duration, now)
     local key = Key(source, barKey)
     local endAt = now + duration + Offset(spellID)
     local _, hit = M.SaveRow(id)
-    if Covered(hit or id, endAt) then return end
+    if Covered(key, hit or id, endAt) then return end
     barSpells[key] = spellID
     local win
     if w then
@@ -111,6 +111,9 @@ function A.OnStopAll(source)
     local prefix = source .. ":"
     for key in pairs(barSpells) do
         if key:sub(1, #prefix) == prefix then barSpells[key] = nil end
+    end
+    for key in pairs(windowSpells) do
+        if key:sub(1, #prefix) == prefix then windowSpells[key] = nil end
     end
     CastAheadSaves.CancelPrefix(prefix)
 end

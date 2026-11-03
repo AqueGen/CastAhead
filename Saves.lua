@@ -319,10 +319,12 @@ local function FitsRow(buttons, row)
 end
 
 local function WindowFor(id, role)
+    local best
     for _, byRole in pairs(CastAheadBossWindows or {}) do
         local w = byRole[role]
-        if w and w.spell == id then return w end
+        if w and w.spell == id and (not best or w.main - w.first > best.main - best.first) then best = w end
     end
+    return best
 end
 
 function S.ViewRows(instanceID)
@@ -417,7 +419,10 @@ local function WindowText(r)
     local best, cover
     for _, b in ipairs(r.buttons) do
         local d = Duration(b)
-        if d and d >= span + S.REACTION then best, cover = b, "all of it" break end
+        if d and d >= span + S.REACTION then
+            best, cover = b, w.last > w.main + S.REACTION and "it through the main hit" or "all of it"
+            break
+        end
         if d and not best then best = b end
     end
     if not best then return text end
@@ -704,7 +709,8 @@ end
 
 local function Retime(c)
     local w = c.win
-    local save = S.PickSave({ M.SaveRow(c.spell) }, w.main - w.first)
+    local row = M.SaveRow(c.spell)
+    local save = S.PickSave({ row }, w.main - w.first)
     c.fireAt = save and save.duration and math.max(w.main - (save.duration - S.REACTION), w.first - w.lead) or w.main - w.lead
 end
 
@@ -717,7 +723,7 @@ end
 
 function S.Window(key)
     local c = scheduled[key]
-    return c and c.win and not c.fired and c or nil
+    return c and c.win and c or nil
 end
 
 function S.Cancel(key)
@@ -782,9 +788,9 @@ function S.Move(key, remaining, lead, now)
     if not c then return false end
     local endAt = (c.pausedAt or now) + remaining
     if c.win then
-        c.win.first, c.win.main = c.win.first + endAt - c.endAt, endAt
-        c.endAt = endAt
-        Retime(c)
+        local shift = endAt - c.endAt
+        c.win.first, c.win.main, c.endAt = c.win.first + shift, endAt, endAt
+        if c.fired then c.fireAt = c.fireAt + shift else Retime(c) end
     else
         c.endAt, c.fireAt = endAt, endAt - lead
     end

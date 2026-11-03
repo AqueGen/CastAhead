@@ -4408,6 +4408,40 @@ do
         A.OnStop("dbm", "w7")
     end, 20.5 - 5)
     check(heard == 0, string.format("an early stop cancels the window call, got %d", heard))
+    local savedLimits = CastAheadButtonLimits
+    CastAheadButtonLimits = { [9002] = "magic" }
+    CastAheadDefensives.spells[1297797].school = 1
+    quiet, heard = callAt("wl", nil, 24.5)
+    check(quiet == 0 and heard == 1, string.format("a save limited to another school is skipped for the window, got %d/%d", quiet, heard))
+    CastAheadButtonLimits, CastAheadDefensives.spells[1297797].school = savedLimits, nil
+    quiet, heard = callAt("wr", function() A.OnBar("dbm", "wr", 1243569, 14, now) end, 21.5)
+    check(quiet == 0 and heard == 1, string.format("a restarted bar replaces its own window call, got %d/%d", quiet, heard))
+    sounds, spoken, clips = 0, 0, 0
+    A.OnBar("dbm", "wa", 1243569, 13, now)
+    steps(22)
+    A.OnBar("dbm", "wb", 1297797, 6, now)
+    steps(20)
+    check(Alerts() == 1, string.format("a bar for a hit inside an already called window stays quiet, got %d", Alerts()))
+    do
+        local w, slam = CastAheadBossWindows[1243569].TANK, CastAheadDefensives.spells[1297797]
+        w.first, w.main, slam.lead = 0.0, 5.0, 1.0
+        sounds, spoken, clips = 0, 0, 0
+        local start = now
+        A.OnBar("dbm", "wu", 1243569, 13, now)
+        steps(12)
+        local first = Alerts()
+        onCooldown[9002] = start + 12.2
+        steps(0.5)
+        A.OnUpdate("dbm", "wu", 12.5, 13, now)
+        steps(15)
+        check(first == 1 and Alerts() == 1, string.format("an update after the call does not call again, got %d/%d", first, Alerts()))
+        w.first, w.main, slam.lead, onCooldown[9002] = 8.0, 15.0, 3.1, nil
+    end
+    local savedPrio = CastAheadPriority
+    CastAheadPriority = setmetatable({ [1243569] = "CC" }, { __index = savedPrio })
+    quiet, heard = callAt("wp", nil, 20.5)
+    check(heard == 0, string.format("a timer curated as another call gets no window call, got %d", heard))
+    CastAheadPriority = savedPrio
     sounds, spoken, clips = 0, 0, 0
     A.OnBar("dbm", "w8", 1243569, 13, now)
     steps(14)
@@ -4432,6 +4466,16 @@ do
     check(guide:find("7 s of damage, Forceful Slam is the main hit", 1, true) ~= nil, "guide states the damage window: " .. guide)
     check(guide:find("the call comes 7.5 s before it", 1, true) ~= nil and guide:find("(8 s) covers all of it", 1, true) ~= nil,
         "guide names the covering save and the call time")
+    CastAheadBossWindows[1297797] = { TANK = { first = 3.0, main = 3.0, last = 3.0, spell = 1297797, spells = { 1297797 } } }
+    for _ = 1, 8 do
+        guide = CastAheadSaves.GuideText(9825) or ""
+        check(guide:find("7 s of damage", 1, true) ~= nil, "guide picks the widest window of a hit every time")
+    end
+    CastAheadBossWindows[1297797] = nil
+    CastAheadBossWindows[1243569].TANK.last = 19.0
+    guide = CastAheadSaves.GuideText(9825) or ""
+    check(guide:find("(8 s) covers it through the main hit", 1, true) ~= nil, "hits after the main one are not claimed as covered: " .. guide)
+    CastAheadBossWindows[1243569].TANK.last = 15.0
     CastAheadSaveButtons = { [265] = { def = { 9001 } } }
     CastAheadSaves.Refresh()
     guide = CastAheadSaves.GuideText(9825) or ""
