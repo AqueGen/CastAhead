@@ -4420,6 +4420,19 @@ do
     steps(1.0)
     check(early == 0 and Alerts() == 1, string.format("no window keeps delay path, got %d/%d", early, Alerts()))
     steps(20)
+    GetSpecializationRole = function() return "TANK" end
+    local slam = CastAheadDefensives.spells[1297797]
+    slam.name, slam.mob, slam.boss, slam.dungeon, slam.bar = "Forceful Slam", "Nalorakk", "Nalorakk", 9825, false
+    CastAheadSaves.Refresh()
+    local guide = CastAheadSaves.GuideText(9825) or ""
+    check(guide:find("7 s of damage, Forceful Slam is the main hit", 1, true) ~= nil, "guide states the damage window: " .. guide)
+    check(guide:find("the call comes 7.5 s before it", 1, true) ~= nil and guide:find("(8 s) covers all of it", 1, true) ~= nil,
+        "guide names the covering save and the call time")
+    CastAheadSaveButtons = { [265] = { def = { 9001 } } }
+    CastAheadSaves.Refresh()
+    guide = CastAheadSaves.GuideText(9825) or ""
+    check(guide:find("(4 s) covers the main hit", 1, true) ~= nil and guide:find("the call comes 3.5 s before it", 1, true) ~= nil,
+        "a short save covers only the main hit: " .. guide)
     CastAheadBossDelays, CastAheadBossWindows, CastAheadSaveDurations = nil, nil, nil
     GetSpecializationRole, IsPlayerSpell, CastAheadSaveButtons = saved.role, saved.known, saved.buttons
     CastAheadDefensives, C_Spell.GetSpellCooldownDuration = saved.defensives, saved.cd

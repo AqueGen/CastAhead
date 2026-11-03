@@ -318,6 +318,13 @@ local function FitsRow(buttons, row)
     return out
 end
 
+local function WindowFor(id, role)
+    for _, byRole in pairs(CastAheadBossWindows or {}) do
+        local w = byRole[role]
+        if w and w.spell == id then return w end
+    end
+end
+
 function S.ViewRows(instanceID)
     local out = {}
     local spells = CastAheadDefensives and CastAheadDefensives.spells
@@ -345,6 +352,7 @@ function S.ViewRows(instanceID)
                 buttons = FitsRow(buttons, row),
                 ep = row.ep and row.ep[role],
                 say = M.ADVICE[key].say,
+                window = WindowFor(id, role),
             }
         end
     end
@@ -401,6 +409,23 @@ local function ButtonLink(b)
     return Link("spell", b.kind == "item" and b.use or b.id, text)
 end
 
+local function WindowText(r)
+    local w = r.window
+    if not w then return "" end
+    local span = w.main - w.first
+    local text = span >= 1 and string.format(". %d s of damage, %s is the main hit", math.floor(span + 0.5), r.name) or ""
+    local best, cover
+    for _, b in ipairs(r.buttons) do
+        local d = Duration(b)
+        if d and d >= span + S.REACTION then best, cover = b, "all of it" break end
+        if d and not best then best = b end
+    end
+    if not best then return text end
+    local d = Duration(best)
+    return text .. string.format("%s the call comes %.1f s before it; %s (%d s) covers %s", text ~= "" and ";" or ".",
+        d - S.REACTION, ButtonName(best), math.floor(d + 0.5), cover or "the main hit")
+end
+
 local function GuideLine(r)
     local names = {}
     for _, b in ipairs(r.buttons) do names[#names + 1] = ButtonLink(b) end
@@ -412,7 +437,7 @@ local function GuideLine(r)
     if r.ep then line = line .. string.format(". Takes about %d%% of your health at +20", r.ep) end
     local cadence = Cadence(r)
     if cadence then line = line .. ". Comes " .. cadence end
-    return line
+    return line .. WindowText(r)
 end
 
 S.EP_NOTE = "Damage is the share of your health one whole hit takes (its DoT, pulses and stacks included), "
