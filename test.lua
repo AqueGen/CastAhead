@@ -481,6 +481,18 @@ for id, d in pairs(CastAheadBossDelays) do
         "boss delay " .. id .. " belongs to a defensive row or its alias")
     check(type(d) == "number" and d > 0 and d <= 15, "boss delay " .. id .. " is a positive number of seconds up to 15")
 end
+dofile("BossWindows.lua")
+for id, byRole in pairs(CastAheadBossWindows) do
+    for role, w in pairs(byRole) do
+        local name = "boss window " .. id .. " " .. role
+        check(w.first >= 0 and w.first <= w.main and w.main <= w.last and w.last <= 20, name .. " has 0 <= first <= main <= last <= 20")
+        local row = CastAheadDefensives.spells[w.spell]
+        check(row and row[role] == true, name .. " main hit has a defensive row for the role")
+        local listed = false
+        for _, s in ipairs(w.spells) do listed = listed or s == w.spell end
+        check(listed, name .. " lists its main hit")
+    end
+end
 dofile("BurstWindows.lua")
 check(M.ADVICE.SOON and M.ADVICE.SOON.say == "burst soon", "SOON advice says burst soon")
 check(M.ADVICE.BURST and M.ADVICE.BURST.say == "burst now", "BURST advice says burst now")

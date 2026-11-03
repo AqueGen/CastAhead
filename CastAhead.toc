@@ -29,6 +29,7 @@ Defensives.lua
 RaidDefensives.lua
 BossCadence.lua
 BossDelays.lua
+BossWindows.lua
 BurstWindows.lua
 Traits.lua
 Packs.lua
