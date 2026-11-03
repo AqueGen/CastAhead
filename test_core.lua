@@ -4509,6 +4509,14 @@ do
         steps(1)
         check(before == 0 and Alerts() == 1, string.format("the first cycle calls even when the next bar starts at its end, got %d/%d", before, Alerts()))
         steps(40)
+        sounds, spoken, clips = 0, 0, 0
+        A.OnBar("dbm", "Timer1243569cdcount\t9", 1243569, 13, now)
+        steps(13)
+        A.OnStop("dbm", "Timer1243569cdcount\t9")
+        A.OnPause("dbm", "Timer1243569cdcount\t9", now)
+        steps(8)
+        check(Alerts() == 1, string.format("a pause for a bar that already ended does not freeze its call, got %d", Alerts()))
+        steps(40)
         w.first, w.main, w.stop = 8.0, 15.0, nil
     end
     CastAheadBossWindows[1242860] = { TANK = { first = 17.0, main = 17.0, stop = 17.0, spell = 1297793, spells = { 1297793 } } }

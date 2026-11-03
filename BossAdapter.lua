@@ -148,14 +148,16 @@ end
 
 function A.OnPause(source, barKey, now)
     if not CastAheadSaves then return end
-    if barSpells[Key(source, barKey)] then Log("pause", Key(source, barKey)) end
-    CastAheadSaves.Pause(Key(source, barKey), now)
+    local key = Key(source, barKey)
+    Log("pause", key, barSpells[key] and "live" or "ended")
+    if barSpells[key] then CastAheadSaves.Pause(key, now) end
 end
 
 function A.OnResume(source, barKey, now)
     if not CastAheadSaves then return end
-    if barSpells[Key(source, barKey)] then Log("resume", Key(source, barKey)) end
-    CastAheadSaves.Resume(Key(source, barKey), now)
+    local key = Key(source, barKey)
+    Log("resume", key, barSpells[key] and "live" or "ended")
+    if barSpells[key] then CastAheadSaves.Resume(key, now) end
 end
 
 function A.Connect()
