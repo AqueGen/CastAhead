@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.1](https://github.com/AqueGen/CastAhead/compare/v0.28.0...v0.28.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* boss save calls wait for the damage, not the timer end ([#129](https://github.com/AqueGen/CastAhead/issues/129)) ([2fec682](https://github.com/AqueGen/CastAhead/commit/2fec682df8fbdcb7f97b5708945f3540611c5fcf))
+
 ## [0.28.0](https://github.com/AqueGen/CastAhead/compare/v0.27.0...v0.28.0) (2026-11-01)
 
 
