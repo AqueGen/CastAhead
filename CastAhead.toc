@@ -24,10 +24,12 @@ Config.lua
 Data.lua
 Priority.lua
 SaveButtons.lua
+SaveDurations.lua
 Defensives.lua
 RaidDefensives.lua
 BossCadence.lua
 BossDelays.lua
+BossWindows.lua
 BurstWindows.lua
 Traits.lua
 Packs.lua

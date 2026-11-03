@@ -2537,7 +2537,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     end
     if event == "ENCOUNTER_START" or event == "ENCOUNTER_END" then
         inEncounter = event == "ENCOUNTER_START"
-        if CastAheadBossAdapter then CastAheadBossAdapter.OnEncounter(event) end
+        if CastAheadBossAdapter then CastAheadBossAdapter.OnEncounter(event, unit) end
         if CastAheadBurst then CastAheadBurst.OnEncounter(event, unit, arg3, GetTime()) end
         if inEncounter then
             -- Everything on screen belongs to the pull that just ended; the

@@ -145,7 +145,7 @@ local function Collect(list, out)
             local item = ItemFor(e.use)
             resolved = resolved or item ~= nil
             if item and ItemReady(item) then
-                out[#out + 1] = { kind = "item", id = item, icon = C_Item.GetItemIconByID and C_Item.GetItemIconByID(item) }
+                out[#out + 1] = { kind = "item", id = item, use = e.use, icon = C_Item.GetItemIconByID and C_Item.GetItemIconByID(item) }
             end
         end
     end
@@ -227,18 +227,44 @@ local function FitsAny(e, rows)
     return false
 end
 
+S.REACTION = 0.5
+S.MARGIN = 1.0
+
+local function Duration(e)
+    local d = CastAheadSaveDurations
+    return d and d[e.kind == "spell" and e.id or e.use] or nil
+end
+
+function S.PickSave(rows, span)
+    local first
+    for _, e in ipairs((Available("def"))) do
+        if FitsAny(e, rows) then
+            local d = Duration(e)
+            if d and d >= span + S.REACTION then
+                e.duration = d
+                return e
+            end
+            first = first or e
+        end
+    end
+    if first then first.duration = Duration(first) end
+    return first
+end
+
 function S.Icons(advice, spellOrCandidates)
     local key = advice and LIST[advice.key]
     if not key then return NO_ICONS end
-    local rows = {}
+    local rows, span = {}, nil
     local hits = spellOrCandidates
     for _, h in ipairs(type(hits) == "table" and hits or { hits }) do
         local row = M.SaveRow(type(h) == "table" and h.spell or h)
         if row then rows[#rows + 1] = row end
+        span = span or type(h) == "table" and h.span or nil
     end
-    local out = {}
+    local picked = span and S.PickSave(rows, span)
+    local out = { picked and picked.icon or nil }
     for _, e in ipairs((Available(key))) do
-        if e.icon and FitsAny(e, rows) then out[#out + 1] = e.icon end
+        if e.icon and e ~= picked and FitsAny(e, rows) then out[#out + 1] = e.icon end
         if #out == 3 then break end
     end
     return out
@@ -293,6 +319,15 @@ local function FitsRow(buttons, row)
     return out
 end
 
+local function WindowFor(id, role)
+    local best
+    for _, byRole in pairs(CastAheadBossWindows or {}) do
+        local w = byRole[role]
+        if w and w.spell == id and (not best or w.main - w.first > best.main - best.first) then best = w end
+    end
+    return best
+end
+
 function S.ViewRows(instanceID)
     local out = {}
     local spells = CastAheadDefensives and CastAheadDefensives.spells
@@ -320,6 +355,7 @@ function S.ViewRows(instanceID)
                 buttons = FitsRow(buttons, row),
                 ep = row.ep and row.ep[role],
                 say = M.ADVICE[key].say,
+                window = WindowFor(id, role),
             }
         end
     end
@@ -376,6 +412,29 @@ local function ButtonLink(b)
     return Link("spell", b.kind == "item" and b.use or b.id, text)
 end
 
+local function WindowText(r)
+    local w = r.window
+    if not w then return "" end
+    local stop = w.stop or w.main
+    local span = stop - w.first
+    local text = span >= 1 and string.format(". %d s of damage, %s is the main hit", math.floor(span + 0.5), r.name) or ""
+    local best, cover
+    for _, b in ipairs(r.buttons) do
+        local d = Duration(b)
+        if d and d >= span + S.REACTION then
+            best, cover = b, w.last > stop + S.REACTION and "it through the main hit" or "all of it"
+            break
+        end
+        if d and not best then best = b end
+    end
+    if not best then return text end
+    local d = Duration(best)
+    local floor = stop > w.first and w.first - (S.REACTION + S.MARGIN) or w.main - (r.lead or 3)
+    local before = w.main - math.min(math.max(stop - (d - S.REACTION), floor), w.main - (r.lead or 3))
+    return text .. string.format("%s the call comes %.1f s before it; %s (%d s) covers %s", text ~= "" and ";" or ".",
+        before, ButtonName(best), math.floor(d + 0.5), cover or "the main hit")
+end
+
 local function GuideLine(r)
     local names = {}
     for _, b in ipairs(r.buttons) do names[#names + 1] = ButtonLink(b) end
@@ -387,7 +446,7 @@ local function GuideLine(r)
     if r.ep then line = line .. string.format(". Takes about %d%% of your health at +20", r.ep) end
     local cadence = Cadence(r)
     if cadence then line = line .. ". Comes " .. cadence end
-    return line
+    return line .. WindowText(r)
 end
 
 S.EP_NOTE = "Damage is the share of your health one whole hit takes (its DoT, pulses and stacks included), "
@@ -651,13 +710,48 @@ function S.Refresh()
     RegisterAuraSounds()
 end
 
-function S.Schedule(key, spellID, fireAt, endAt, advice)
-    scheduled[key] = { spell = spellID, fireAt = fireAt, endAt = endAt, advice = advice,
-                       candidates = spellID and { { spell = spellID } } or nil }
+local function Retime(c)
+    local w = c.win
+    local row = M.SaveRow(c.spell)
+    local save = S.PickSave({ row }, w.stop - w.first)
+    c.pick = save and save.id or nil
+    local floor = w.stop > w.first and w.first - (S.REACTION + S.MARGIN) or w.main - w.lead
+    c.fireAt = save and save.duration
+        and math.min(math.max(w.stop - (save.duration - S.REACTION), floor), w.main - w.lead) or w.main - w.lead
+end
+
+function S.Schedule(key, spellID, fireAt, endAt, advice, win)
+    local c = { spell = spellID, fireAt = fireAt, endAt = endAt, advice = advice, win = win,
+                candidates = spellID and { { spell = spellID, span = win and win.stop - win.first } } or nil }
+    scheduled[key] = c
+    if win then Retime(c) end
+end
+
+function S.Window(key)
+    local c = scheduled[key]
+    return c and c.win and c or nil
+end
+
+local function Missed(key, c, why)
+    if c and not c.fired and not key:find("^demo:") and CastAheadRecorder then
+        local now = GetTime()
+        CastAheadRecorder.Note("SAVEMISS", "-", key, c.spell, string.format("%.1f", c.fireAt - now),
+            string.format("%.1f", c.endAt - now), c.pausedAt and "paused" or why)
+    end
 end
 
 function S.Cancel(key)
+    Missed(key, scheduled[key], "cancelled")
     scheduled[key] = nil
+end
+
+function S.Peek(key)
+    local c = scheduled[key]
+    if c then return c.fireAt, c.endAt, c.pick end
+end
+
+local function Journal(kind, ...)
+    if CastAheadRecorder then CastAheadRecorder.Note(kind, "-", ...) end
 end
 
 function S.EndAt(key)
@@ -695,7 +789,10 @@ end
 
 function S.CancelPrefix(prefix)
     for key in pairs(scheduled) do
-        if key:sub(1, #prefix) == prefix then scheduled[key] = nil end
+        if key:sub(1, #prefix) == prefix then
+            Missed(key, scheduled[key], "cancelled")
+            scheduled[key] = nil
+        end
     end
 end
 
@@ -709,14 +806,21 @@ function S.Resume(key, now)
     if c and c.pausedAt then
         local held = now - c.pausedAt
         c.fireAt, c.endAt, c.pausedAt = c.fireAt + held, c.endAt + held, nil
+        if c.win then c.win.first, c.win.main, c.win.stop = c.win.first + held, c.win.main + held, c.win.stop + held end
     end
 end
 
 function S.Move(key, remaining, lead, now)
     local c = scheduled[key]
     if not c then return false end
-    c.endAt = (c.pausedAt or now) + remaining
-    c.fireAt = c.endAt - lead
+    local endAt = (c.pausedAt or now) + remaining
+    if c.win then
+        local shift = endAt - c.endAt
+        c.win.first, c.win.main, c.win.stop, c.endAt = c.win.first + shift, endAt, c.win.stop + shift, endAt
+        if c.fired then c.fireAt = c.fireAt + shift else Retime(c) end
+    else
+        c.endAt, c.fireAt = endAt, endAt - lead
+    end
     if c.fired and c.fireAt > now and c.fireAt - (c.firedAt or now) >= lead then c.fired = nil end
     local warnAt = c.fireAt - CastAheadConfig.SaveLead()
     if c.warned and warnAt > now and warnAt - (c.warnedAt or now) >= lead then c.warned = nil end
@@ -728,7 +832,7 @@ function S.Pending(now)
     wipe(pending)
     for _, c in pairs(scheduled) do
         if not c.pausedAt and c.fired and c.endAt > now then
-            pending[#pending + 1] = { endAt = c.endAt, advice = c.advice, row = { spell = c.spell }, icons = S.Icons(c.advice, c.spell) }
+            pending[#pending + 1] = { endAt = c.endAt, advice = c.advice, row = { spell = c.spell }, icons = S.Icons(c.advice, c.candidates) }
         end
     end
     return pending
@@ -737,19 +841,25 @@ end
 function S.Tick(now)
     for key, c in pairs(scheduled) do
         if not c.pausedAt then
+            if c.win and not c.fired then Retime(c) end
             local saveLead = CastAheadConfig.SaveLead()
             if saveLead > 0 and not c.fired and not c.warned and now >= c.fireAt - saveLead and now < c.fireAt
                     and c.fireAt - now >= math.min(WARN_CLEAR, saveLead - 0.5) then
                 c.warned, c.warnedAt = true, now
+                Journal("SAVESOON", key, c.spell, c.pick or "-")
                 if Audible(c) then lastFiredAt = now end
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice, true, c.candidates) end
             end
             if not c.fired and now >= c.fireAt and now < c.endAt then
                 c.fired, c.firedAt = true, now
+                Journal("SAVE", key, c.spell, c.pick or "-")
                 if Audible(c) then lastFiredAt, lastCalledAt = now, now end
                 if CastAheadCore and CastAheadCore.Announce then CastAheadCore.Announce(c.advice, nil, c.candidates) end
             end
-            if now >= c.endAt then scheduled[key] = nil end
+            if now >= c.endAt then
+                Missed(key, c, "late")
+                scheduled[key] = nil
+            end
         end
     end
 end

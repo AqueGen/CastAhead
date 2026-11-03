@@ -463,6 +463,10 @@ M.SpecRole = function() return nil end
 check(M.Advice(saveRow) == M.ADVICE.AOE, "outside the game no role means no save call")
 
 dofile("SaveButtons.lua")
+dofile("SaveDurations.lua")
+for id, d in pairs(CastAheadSaveDurations) do
+    check(type(d) == "number" and d > 0 and d <= 60, "save duration " .. id .. " is between 0 and 60 seconds")
+end
 dofile("Defensives.lua")
 dofile("BossCadence.lua")
 for id, c in pairs(CastAheadBossCadence) do
@@ -476,6 +480,27 @@ for id, d in pairs(CastAheadBossDelays) do
     check(CastAheadDefensives.spells[id] or CastAheadDefensives.spells[CastAheadDefensives.alias[id] or 0],
         "boss delay " .. id .. " belongs to a defensive row or its alias")
     check(type(d) == "number" and d > 0 and d <= 15, "boss delay " .. id .. " is a positive number of seconds up to 15")
+end
+dofile("BossWindows.lua")
+check(type(CastAheadPullWindows) == "table", "pull windows ship with the boss windows")
+for id, byRole in pairs(CastAheadPullWindows) do
+    check(type(id) == "number" and id > 0 and id < 100000, "pull window key " .. tostring(id) .. " is an encounter id")
+    for role, w in pairs(byRole) do
+        local row = CastAheadDefensives.spells[w.spell]
+        check(row and row[role] == true and w.first <= w.main and w.main <= w.stop, "pull window " .. id .. " " .. role .. " is sound")
+    end
+end
+for id, byRole in pairs(CastAheadBossWindows) do
+    for role, w in pairs(byRole) do
+        local name = "boss window " .. id .. " " .. role
+        check(w.first >= 0 and w.first <= w.main and w.main <= w.stop and w.stop <= w.last and w.last <= 20,
+            name .. " has 0 <= first <= main <= stop <= last <= 20")
+        local row = CastAheadDefensives.spells[w.spell]
+        check(row and row[role] == true, name .. " main hit has a defensive row for the role")
+        local listed = false
+        for _, s in ipairs(w.spells) do listed = listed or s == w.spell end
+        check(listed, name .. " lists its main hit")
+    end
 end
 dofile("BurstWindows.lua")
 check(M.ADVICE.SOON and M.ADVICE.SOON.say == "burst soon", "SOON advice says burst soon")
