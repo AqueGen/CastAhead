@@ -162,6 +162,25 @@ def _run_gen(tmp, casts, spell_times=None, channels=None, overrides=None, follow
     return open(out_path, encoding="utf-8").read(), buf.getvalue()
 
 
+def test_a_creature_seen_only_inside_boss_encounters_gets_no_row_and_loses_an_old_one():
+    import gen
+    with tempfile.TemporaryDirectory() as tmp:
+        casts = {"1|Zone": {
+            "246367": {"1000": _base_cast_record(starts=50)},
+            "10": {"1001": _base_cast_record(cast=[4.0] * 5, starts=50)},
+        }}
+        include = {"include": ["1000", "1001"]}
+        old = gen.ENCOUNTER_ONLY
+        gen.ENCOUNTER_ONLY = set()
+        try:
+            lua, _ = _run_gen(tmp, casts, overrides=include)
+        finally:
+            gen.ENCOUNTER_ONLY = old
+        assert "spell = 1000," in lua
+        lua, _ = _run_gen(tmp, casts, overrides=include)
+        assert "spell = 1000," not in lua and "spell = 1001," in lua
+
+
 def test_an_opening_that_covers_few_first_casts_is_dropped():
     spike = [0.5] * 12 + [20.0 + i for i in range(30)]
     tight = [8.0 + 0.1 * (i % 5) for i in range(20)] + [30.0, 31.0]

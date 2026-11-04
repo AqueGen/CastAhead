@@ -89,3 +89,40 @@ def test_a_pure_channel_replays_as_a_channel_start_and_end_marked_full_or_cut(tm
     events = [(e["e"], e.get("spell"), e.get("full")) for e in runs[0].events if e["e"] in ("CHAN", "CHANEND")]
     assert events == [("CHAN", 385536, None), ("CHANEND", 385536, False),
                       ("CHAN", 385536, None), ("CHANEND", 385536, True)]
+
+
+def hit(stamp):
+    return "10/7/2026 22:%s  SPELL_DAMAGE,Player-1-AAAA,\"P\",0x512,0x0,%s,\"Ashseer Flamelasher\",0xa48,0x0,1,\"Hit\",0x1" % (
+        stamp, MOB)
+
+
+def test_a_mob_hit_before_it_acts_gets_its_plate_at_the_hit(tmp_path):
+    log = [
+        "10/7/2026 22:05:00.000  CHALLENGE_MODE_START,\"Ruby Life Pools\",2521,399,12,[10]",
+        hit("05:10.000"),
+        start("05:13.000", 384194, "Cinderbolt"),
+        success("05:15.000", 384194, "Cinderbolt"),
+        "10/7/2026 22:09:00.000  CHALLENGE_MODE_END,2521,1,12,600000",
+    ]
+    path = tmp_path / "WoWCombatLog-1.txt"
+    path.write_text("\n".join(log) + "\n", encoding="utf-8")
+    runs = []
+    scan(str(path), runs, {}, {})
+    adds = [e["t"] for e in runs[0].events if e["e"] == "ADD"]
+    assert adds == [10.0]
+
+
+def test_a_hit_on_a_friendly_creature_gives_it_no_plate(tmp_path):
+    friendly = hit("05:10.000").replace(",0xa48,0x0,1,", ",0xa18,0x0,1,")
+    log = [
+        "10/7/2026 22:05:00.000  CHALLENGE_MODE_START,\"Ruby Life Pools\",2521,399,12,[10]",
+        friendly,
+        success("05:15.000", 384194, "Cinderbolt"),
+        "10/7/2026 22:09:00.000  CHALLENGE_MODE_END,2521,1,12,600000",
+    ]
+    path = tmp_path / "WoWCombatLog-1.txt"
+    path.write_text("\n".join(log) + "\n", encoding="utf-8")
+    runs = []
+    scan(str(path), runs, {}, {})
+    adds = [e["t"] for e in runs[0].events if e["e"] == "ADD"]
+    assert adds == [15.0]

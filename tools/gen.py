@@ -57,6 +57,16 @@ SOLE_CHANNEL_SHARE = 0.98
 # Spells whose payload window only ever catches the caster's other spells: Ice Shield
 # is an absorb on an ally, its 5 "hits" in 3295 casts are the same mob's Frostbolts.
 NO_PAYLOAD = {372743}
+# Creatures no replay set (24 sets, 2026-11-04) ever showed on a trash plate; the addon is silent
+# inside encounters, so their rows only stole trash casts (Spirit Bear's Pulverizing Strikes took
+# Potad-Toss 73 times in 80 public keys). Reban 136984 and Blazebound Firestorm 189886 are just as
+# encounter-bound but stay: dropping them raised wrong calls voiced at cast start.
+ENCOUNTER_ONLY = {136264, 273050, 135761, 268491, 134390, 268344, 134389, 244759, 246367, 247755, 254677,
+                  262398, 264045, 261915}
+
+
+def encounter_bound(facts, npcid):
+    return bool(facts and facts.get("encounter")) or int(npcid) in ENCOUNTER_ONLY
 
 
 def densest(xs, width):
@@ -396,7 +406,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
         for npcid, spells in mobs.items():
             for spellid, r in spells.items():
                 facts = mdt.get(str(npcid))
-                if facts and facts.get("encounter"):
+                if encounter_bound(facts, npcid):
                     # Boss abilities are DBM's job, and letting them compete to
                     # identify a trash cast is how Melidrussa's kickable Frigid
                     # Shard ended up labelling Primal Juggernaut's Crushing Smash.
@@ -523,7 +533,7 @@ def main(casts_path, out_path, mdt_path=None, overrides_path=None, channels_path
         instance_id, spellid, npcid = row_key
         facts = mdt.get(str(npcid))
         zone = dungeons.get(instance_id, (anchor_zones[instance_id],))[0]
-        if (str(spellid) in exclude or facts and facts.get("encounter")
+        if (str(spellid) in exclude or encounter_bound(facts, npcid)
                 or owned_elsewhere(facts, spellid, owned)):
             report.append(("-", zone, old, old, []))
             continue
