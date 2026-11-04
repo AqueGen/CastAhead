@@ -2625,6 +2625,209 @@ CastAheadCore.Tuning.population = false
 CastAheadCore.Tuning.packsNarrow = false
 CastAheadCore.Tuning.packsCompany = false
 
+-- Damage on a plate, summed from UNIT_COMBAT, against MDT's health ---------
+do
+    local savedDB, savedSecret = CastAheadDB, issecretvalue
+    local keyLevel = 10
+    C_ChallengeMode = { GetActiveKeystoneInfo = function() return keyLevel, {}, false end }
+    CastAheadPacks = { ["Test"] = { total = { [1] = 5, [2] = 5 }, health = { [1] = 1000000, [2] = 2000000 }, packs = {} } }
+    CastAheadDB = { devMode = true }
+    local function lines()
+        local key = CastAheadRecorder.Current()
+        return key and table.concat(key.lines, "\n") or ""
+    end
+    local function lastKill()
+        local found
+        for line in lines():gmatch("[^\n]+") do
+            if line:find("|KILL|", 1, true) then found = line end
+        end
+        return found and found:match("|KILL|[^|]*|(.*)$")
+    end
+    local function hit(amount, action) fire("UNIT_COMBAT", unit, action or "WOUND", "", amount, 1) end
+    local function die()
+        dead[unit] = true
+        fire("UNIT_HEALTH", unit)
+    end
+
+    fire("CHALLENGE_MODE_START")
+    check(CastAheadCore.KeyScale() == 2.21, "a +10 key scales health by 2.21, got " .. tostring(CastAheadCore.KeyScale()))
+    enter()
+    hit(500000) hit(500000) hit(500000)
+    check(CastAheadCore.PlateDamage(unit) == 1500000, "three hits sum on the plate")
+    die()
+    check(lastKill() == "1500000|-|-|-|partial", "a death writes its total; nothing known, nothing matched: " .. tostring(lastKill()))
+    reset()
+
+    enter()
+    hit(500000) hit(200000, "HEAL") hit(500000)
+    check(CastAheadCore.PlateDamage(unit) == 800000, "a heal on the mob takes its amount back off")
+    hit(5000000, "HEAL")
+    check(CastAheadCore.PlateDamage(unit) == 0, "healing never drives the sum below zero")
+    hit(300000)
+    fire("NAME_PLATE_UNIT_ADDED", unit)
+    check(CastAheadCore.PlateDamage(unit) == 0, "a recycled token starts from nothing")
+    for _, other_ in ipairs({ "player", "party1", "target" }) do
+        fire("UNIT_COMBAT", other_, "WOUND", "", 999999, 1)
+    end
+    check(CastAheadCore.PlateDamage(unit) == 0 and CastAheadCore.PlateDamage("player") == nil,
+        "hits on the player, the party or the target are not a plate's")
+    reset()
+
+    enter()
+    castFor(3.0)                          -- spell 100: the Caster, npc 1
+    hit(2210000)
+    die()
+    check(lastKill() == "2210000|1|1.00|1|partial", "a Caster dying at its scaled health: " .. tostring(lastKill()))
+    reset()
+    enter()
+    castFor(3.0)
+    hit(4420000)
+    die()
+    check(lastKill() == "4420000|1|2.00|2|partial", "twice the Caster's health matches the other creature: " .. tostring(lastKill()))
+    reset()
+
+    keyLevel = 0
+    fire("CHALLENGE_MODE_START")
+    check(CastAheadCore.KeyScale() == nil, "no keystone, no scale")
+    enter()
+    castFor(3.0)
+    hit(2210000)
+    die()
+    check(lastKill() == "2210000|1|-|-|partial", "outside a key the total is kept but nothing is compared: " .. tostring(lastKill()))
+    reset()
+
+    keyLevel = 10
+    fire("CHALLENGE_MODE_START")
+    enter()
+    issecretvalue = function(v) return v == "SECRET" end
+    local ok, err = pcall(fire, "UNIT_COMBAT", unit, "WOUND", "", "SECRET", 1)
+    check(ok, "a secret amount raises no error: " .. tostring(err))
+    hit(500000)
+    check(CastAheadCore.PlateDamage(unit) == 0, "after a secret amount nothing more is summed this key")
+    issecretvalue = savedSecret
+    fire("CHALLENGE_MODE_START")
+    hit(500000)
+    check(CastAheadCore.PlateDamage(unit) == 500000, "a new key sums again")
+    reset()
+
+    -- The 1.5s tie: Cycler (npc 3) and Other (npc 4) share level, traits and
+    -- the cast length. Cycler dies at 1M x 2.21; past that x 1.10 it is not Cycler.
+    table.insert(CastAheadData[1877], { spell = 950, npc = 4, mob = "Other", name = "Also", cast = 1.5,
+                              cd = { 4.8, 4.8, 8.7 }, first = 3.0, firstN = 5, hits = 3, dmg = 0.25, n = 99,
+                              kick = 0, cc = 0, prio = "DODGE" })
+    CastAheadPacks["Test"].health = { [1] = 1000000, [3] = 1000000, [4] = 2000000 }
+    local function spells()
+        local c = CastAheadCore.LastCandidates(unit) or {}
+        local ids = {}
+        for i = 1, #c do ids[#ids + 1] = c[i].spell end
+        table.sort(ids)
+        return table.concat(ids, ",")
+    end
+    local function journalHas(text) return lines():find(text, 1, true) ~= nil end
+
+    CastAheadDB.hpEvidence = true
+    fire("CHALLENGE_MODE_START")
+    levels[unit] = 92
+    enter()
+    castFor(1.5)
+    check(spells() == "300,950", "before any damage the tie stands: " .. spells())
+    hit(2500000)
+    advance(5)
+    castFor(1.5)
+    check(spells() == "950", "past Cycler's health the cast is Other's: " .. spells())
+    check(journalHas("|4|traits"), "and the plate locks to Other from its traits")
+    reset()
+
+    CastAheadPacks["Test"].health = { [1] = 1000000, [3] = 1000000 }
+    enter()
+    castFor(1.5)
+    hit(2500000)
+    advance(5)
+    castFor(1.5)
+    check(spells() == "950", "a creature without a health value is never ruled out: " .. spells())
+    reset()
+    CastAheadPacks["Test"].health = { [1] = 1000000, [3] = 1000000, [4] = 2000000 }
+
+    levels[unit] = 91
+    enter()
+    castFor(3.0)                          -- the Caster, npc 1, locked from its cast
+    check(journalHas("|1|traits") or journalHas("|1|cast"), "the Caster is locked: " .. lines():sub(-300))
+    check(IconShown(100), "and its next Big is counted down")
+    hit(2500000)
+    check(journalHas("|UNLOCK|") and journalHas("|1|hp"), "damage past the Caster's health drops the lock")
+    check(not IconShown(100), "and the dropped creature's countdown goes with it")
+    reset()
+
+    enter()
+    castFor(3.0)
+    dead[unit] = true
+    local unlocksBefore = select(2, lines():gsub("|UNLOCK|", ""))
+    hit(2500000)                          -- the killing blow, overkill included
+    check(select(2, lines():gsub("|UNLOCK|", "")) == unlocksBefore, "a hit on a dead mob drops no lock")
+    dead[unit] = nil
+    reset()
+
+    enter()
+    hit(2000000)
+    combat[unit] = false
+    for _ = 1, 20 do advance(0.1) end
+    check(CastAheadCore.PlateDamage(unit) == 0, "a mob that left combat (evade, wipe) starts its sum again")
+    combat[unit] = true
+    reset()
+
+    levels[unit] = 92
+    keyLevel = 9
+    fire("CHALLENGE_MODE_START")
+    enter()
+    castFor(1.5)
+    hit(2500000)
+    advance(5)
+    castFor(1.5)
+    check(spells() == "300,950", "below +10, where no key was measured, damage rules nothing out: " .. spells())
+    reset()
+    keyLevel = 10
+    fire("CHALLENGE_MODE_START")
+    levels[unit] = 91
+
+    combat[unit] = nil
+    hostile[unit] = true
+    fire("PLAYER_ENTERING_WORLD")
+    fire("NAME_PLATE_UNIT_ADDED", unit)   -- appears out of combat: its sum is whole
+    combat[unit] = true
+    hit(100)
+    die()
+    check(lastKill():find("|full$") ~= nil, "a plate seen from before its pull gives a full total: " .. tostring(lastKill()))
+    reset()
+    enter()                               -- appears already fighting: damage before it is missing
+    hit(100)
+    die()
+    check(lastKill():find("|partial$") ~= nil, "a plate that appeared mid-fight gives a partial total: " .. tostring(lastKill()))
+    reset()
+
+    CastAheadDB.hpEvidence = nil
+    levels[unit] = 92
+    enter()
+    castFor(1.5)
+    hit(2500000)
+    advance(5)
+    castFor(1.5)
+    check(spells() == "300,950", "with HP evidence off the damage changes nothing: " .. spells())
+    reset()
+    levels[unit] = nil
+    table.remove(CastAheadData[1877])
+
+    CastAheadDB.devMode = nil
+    enter()
+    hit(500000)
+    check(CastAheadCore.PlateDamage(unit) == nil, "without Development mode no damage is tracked")
+    reset()
+
+    if CastAheadRecorder.Current() then CastAheadRecorder.EndKey("completed") end
+    CastAheadDB.devMode = true              -- /ca probe answers only in Development mode
+    SlashCmdList.CASTAHEAD("probe clear")   -- Development mode above opened a probe session on this DB
+    C_ChallengeMode, CastAheadPacks, CastAheadDB = nil, nil, savedDB
+end
+
 -- The probe keeps one fingerprint per hostile cast and one clock anchor per
 -- cast of the player's own, and runs whenever Development mode is on.
 date = date or os.date
@@ -7161,6 +7364,19 @@ do
         check(sw.recordAll.tip == "Records dungeon logs and a journal of up to 12 keys. Asks you to reload when full. No player names.",
             "record tip is short")
         check(sw.kickFocusOnly.tip == nil, "the kick focus switch has no tip")
+        check(sw.hpEvidence and sw.hpEvidence.label == "Experimental identification" and sw.hpEvidence.defaultOff == true
+            and sw.hpEvidence.tip == "Experimental. Tells more mobs apart during a pull. Keys only.",
+            "the HP evidence switch starts off and says what, not how")
+        local savedDB = CastAheadDB
+        CastAheadDB = { devMode = true }
+        local plainDev = CastAheadConfig.HealthEvidence()
+        CastAheadDB = { devMode = true, hpEvidence = true }
+        local bothOn = CastAheadConfig.HealthEvidence()
+        CastAheadDB = { hpEvidence = true }
+        local noDev = CastAheadConfig.HealthEvidence()
+        CastAheadDB = savedDB
+        check(plainDev == false and bothOn == true and noDev == false,
+            "HP evidence needs Development mode and its own switch")
         local long = {}
         for key, option in pairs(sw) do
             if option.tip and #option.tip > 160 then long[#long + 1] = key end

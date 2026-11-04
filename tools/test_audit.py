@@ -1,6 +1,6 @@
 import pathlib
 
-from audit import coverage_report, issue_report, load_data_rows, owner_audit, parse_export, parse_line, read_journal
+from audit import coverage_report, issue_report, kill_audit, load_data_rows, owner_audit, parse_export, parse_line, read_journal
 
 HERE = pathlib.Path(__file__).parent
 SAMPLE = (HERE / "fixtures" / "export_sample.txt").read_text(encoding="utf-8")
@@ -141,3 +141,31 @@ def test_coverage_leaves_out_casts_inside_a_boss_encounter(tmp_path):
     path.write_text("\n".join(log) + "\n", encoding="utf-8")
     text = coverage_report(sv, [str(path)], data, {700: "DODGE"})
     assert "Beam (700) DODGE, cast 1, shown 0" in text.split("Missed")[1].split("Not cast")[0]
+
+
+def test_the_kill_audit_sorts_deaths_by_what_their_damage_says():
+    lines = [parse_line(t) for t in (
+        "1000|KILL|1|2210000|236071|1.00|236071|full",
+        "2000|KILL|2|6490491|236071|1.47|252529|full",
+        "3000|KILL|3|1093000|-|-|236085|full",
+        "4000|KILL|4|2400000|-|-|261557,261560|full",
+        "5000|KILL|5|50000|-|-|-|full",
+        "6000|UNLOCK|2|236071|hp",
+        "7000|KILL|6|900000|236071|0.20|-|partial",
+        "8000|KILL|7|900000|236071|-|-|full",
+        "9000|KILL|8|900000|-|-|-|blocked",
+    )]
+    text = kill_audit(lines)
+    assert "locked, damage agrees: 1" in text
+    assert "locked, damage disagrees: 1" in text
+    assert "- mob 2: locked 236071, ratio 1.47, damage fits 252529" in text
+    assert "unlocked, one creature fits: 1" in text
+    assert "unlocked, several fit: 1" in text
+    assert "unlocked, nothing fits: 1" in text
+    assert "locks dropped by damage: 1" in text
+    assert "partial or blocked totals, not judged: 2" in text
+    assert "locked, no health to compare: 1" in text
+
+
+def test_no_kill_lines_says_so():
+    assert "no KILL lines" in kill_audit([parse_line("1|START|1|-|-")])

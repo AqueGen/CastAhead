@@ -171,6 +171,10 @@ function C.Recording()
     return C.Dev() and C.Enabled("recordAll")
 end
 
+function C.HealthEvidence()
+    return C.Dev() and C.Get("hpEvidence") == true
+end
+
 function C.SetEnabled(key, enabled)
     if enabled then
         C.Set(key, nil)

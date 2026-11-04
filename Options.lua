@@ -177,6 +177,8 @@ local SWITCHES = {
         tip = "Starts recording data that helps improve the addon (Record everything, on by default)." },
     recordAll = { label = "Record everything",
         tip = "Records dungeon logs and a journal of up to 12 keys. Asks you to reload when full. No player names." },
+    hpEvidence = { label = "Experimental identification", defaultOff = true,
+        tip = "Experimental. Tells more mobs apart during a pull. Keys only." },
     saveCalls = { label = "Defensive calls in dungeons", defaultOff = true,
         tip = "In dungeons and the open world, call a defensive ahead of damage that needs one, and show your button for it in the centre. Raids have their own switch." },
     bossAdapter = { label = "Boss calls from DBM / BigWigs",
@@ -958,7 +960,7 @@ function BuildDevelopment(panel)
     intro:SetPoint("TOPLEFT", panel, "TOPLEFT", COL_X, -6)
     intro:SetJustifyH("LEFT")
     intro:SetWordWrap(true)
-    intro:SetText("|cffaaaaaaRecord everything: combat log in dungeons, key journal, enemy casts. Nothing on this page changes what the addon calls out.|r")
+    intro:SetText("|cffaaaaaaRecord everything: combat log in dungeons, key journal, enemy casts. Only Experiments changes what the addon calls out.|r")
     panel:HookScript("OnSizeChanged", function(self, width)
         intro:SetWidth(math.max(width - 2 * COL_X, 1))
         if self:IsShown() then self:Relayout() end
@@ -995,6 +997,9 @@ function BuildDevelopment(panel)
         "journal", "Print how many keys the journal holds. /ca journal")
     DevButton(panel, "Clear journal", 110, { "LEFT", count, "RIGHT", 4, 0 },
         "journal clear", "Empty the journal after you copied it off the disk; asks first. /ca journal clear")
+
+    local experiments = BuildGroup(panel, "Experiments", 62)
+    BuildSwitch(panel, "hpEvidence", { "TOPLEFT", experiments, "TOPLEFT", 10, -26 }, function() end)
 end
 
 local function IconLabel(icon, name)

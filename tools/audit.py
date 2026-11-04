@@ -239,6 +239,44 @@ def owner_audit(lines, log_path, rows):
     return "\n".join(out)
 
 
+KILL_TOLERANCE = 0.08
+
+
+def kill_audit(lines):
+    kills = [l for l in lines if l.kind == "KILL"]
+    if not kills:
+        return "## Kill audit\nno KILL lines (Development mode was off, or nothing died in view)"
+    agree, disagree, one, several, none, unjudged, unscaled = [], [], 0, 0, 0, 0, 0
+    for k in kills:
+        locked, ratio, fits, whole = k.fields[1], k.fields[2], k.fields[3], k.fields[4]
+        if whole in ("partial", "blocked"):
+            unjudged += 1
+        elif locked != "-":
+            if ratio == "-":
+                unscaled += 1
+            elif abs(float(ratio) - 1) <= KILL_TOLERANCE:
+                agree.append(k)
+            else:
+                disagree.append("- mob %s: locked %s, ratio %s, damage fits %s" % (k.mob, locked, ratio, fits))
+        elif fits == "-":
+            none += 1
+        elif "," in fits:
+            several += 1
+        else:
+            one += 1
+    out = ["## Kill audit",
+           "partial or blocked totals, not judged: %d" % unjudged,
+           "locked, no health to compare: %d" % unscaled,
+           "locked, damage agrees: %d" % len(agree),
+           "locked, damage disagrees: %d" % len(disagree)]
+    out += disagree
+    out += ["unlocked, one creature fits: %d" % one,
+            "unlocked, several fit: %d" % several,
+            "unlocked, nothing fits: %d" % none,
+            "locks dropped by damage: %d" % sum(1 for l in lines if l.kind == "UNLOCK")]
+    return "\n".join(out)
+
+
 SHOWN_FIELD = {"START": 1, "STOP": 2, "PRED": 0, "TL": 1}
 
 
@@ -418,7 +456,7 @@ def main(argv):
         return
     rows = load_data_rows(data)
     lines = read_journal(pathlib.Path(args.saved).read_text(encoding="utf-8"), args.key)
-    text = owner_audit(lines, args.log, rows)
+    text = owner_audit(lines, args.log, rows) + "\n\n" + kill_audit(lines)
     if args.out:
         target = pathlib.Path(args.out)
         target.mkdir(parents=True, exist_ok=True)

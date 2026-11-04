@@ -4,6 +4,7 @@ dofile("Data.lua")
 dofile("Priority.lua")
 dofile("Traits.lua")
 dofile("Match.lua")
+dofile("Packs.lua")
 
 local M = CastAheadMatch
 local failures = 0
@@ -564,6 +565,36 @@ end
 for id, limit in pairs(CastAheadButtonLimits) do
     check(limit == "magic" or limit == "physical" or limit == "aoe", "button " .. id .. " has a known limit")
 end
+
+check(M.KeyHealthScale(10) == 2.21 and M.KeyHealthScale(11) == 2.43 and M.KeyHealthScale(12) == 2.67,
+    "key health scale at +10/+11/+12 follows MDT's formula with Fortified")
+check(M.KeyHealthScale(9) == 1.72 and M.KeyHealthScale(2) == 1.07, "below +10 there is no Fortified")
+check(M.KeyHealthScale(1) == nil and M.KeyHealthScale(nil) == nil, "no keystone, no scale")
+local hpTable = { [1] = 1000000 }
+check(M.HealthAllows(hpTable, 1, 2420000, 2.21, 1.10) == true, "damage under max HP x margin keeps the creature")
+check(M.HealthAllows(hpTable, 1, 2440000, 2.21, 1.10) == false, "damage past max HP x margin rules it out")
+check(M.HealthAllows(hpTable, 2, 9e9, 2.21, 1.10) == true, "a creature without a health value is never ruled out")
+check(M.HealthAllows(nil, 1, 9e9, 2.21, 1.10) == true, "no health table rules nothing out")
+check(M.HealthAllows(hpTable, 1, 9e9, nil, 1.10) == true, "no key scale rules nothing out")
+local byHealth = M.DropByHealth({ { npc = 1 }, { npc = 2 } }, hpTable, 2440000, 2.21, 1.10)
+check(#byHealth == 1 and byHealth[1].npc == 2, "DropByHealth keeps only the creatures the damage allows")
+local keptAll = { { npc = 1 } }
+check(M.DropByHealth(keptAll, hpTable, 10, 2.21, 1.10) == keptAll, "nothing dropped returns the same table")
+check(math.abs(M.KillRatio(hpTable, 1, 2210000, 2.21) - 1) < 1e-9, "kill ratio is total over scaled health")
+check(M.KillRatio(hpTable, 3, 1, 2.21) == nil and M.KillRatio(hpTable, 1, 1, nil) == nil, "unknown inputs give no ratio")
+check(M.HEALTH_MARGIN == 1.10 and M.KILL_TOLERANCE == 0.08, "health margin and kill tolerance")
+
+for name, data in pairs(CastAheadPacks) do
+    check(type(data.health) == "table", name .. ": pack data carries creature health")
+    for npc in pairs(data.total) do
+        local hp = data.health and data.health[npc]
+        check(type(hp) == "number" and hp > 0 and hp == math.floor(hp),
+            name .. ": creature " .. npc .. " placed in the dungeon has a health value")
+    end
+end
+local murderRow = CastAheadPacks["Murder Row"].health or {}
+check(murderRow[236071] == 5189208 and murderRow[252529] == 7783812 and murderRow[253324] == 648651,
+    "Murder Row health: Bribed Guard, Bribed Captain and the Tiny Felwyrm summon")
 
 print(string.format("%d dungeons, %d spells, %d unresolvable after two casts, %d needing the mob check",
     dungeons, spells, stuck, rescued))

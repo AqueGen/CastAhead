@@ -630,6 +630,43 @@ function M.DropNPCs(candidates, exhausted)
     return out
 end
 
+-- Measured in a group +10: kill totals land within about 5% of the scaled health.
+M.HEALTH_MARGIN = 1.10
+M.KILL_TOLERANCE = 0.08
+
+-- MDT's own key scaling; kill totals in a +10 matched it with no extra factor.
+function M.KeyHealthScale(level)
+    if not level or level < 2 then return nil end
+    local f = level >= 10 and 1.2 or 1
+    local scale = f * 1.07 ^ math.min(level - 1, 9) * 1.1 ^ math.max(0, level - 10)
+    return tonumber(string.format("%.2f", scale))
+end
+
+function M.HealthAllows(health, npc, damage, scale, margin)
+    local hp = health and health[npc]
+    if not (hp and scale) then return true end
+    return hp * scale * margin >= damage
+end
+
+function M.DropByHealth(candidates, health, damage, scale, margin)
+    local out
+    for i = 1, #candidates do
+        if M.HealthAllows(health, candidates[i].npc, damage, scale, margin) then
+            if out then out[#out + 1] = candidates[i] end
+        elseif not out then
+            out = {}
+            for j = 1, i - 1 do out[j] = candidates[j] end
+        end
+    end
+    return out or candidates
+end
+
+function M.KillRatio(health, npc, total, scale)
+    local hp = health and health[npc]
+    if not (hp and scale) then return nil end
+    return total / (hp * scale)
+end
+
 -- Shortest upcoming cooldown among candidates: warn early rather than late.
 function M.ConsensusCD(candidates, index)
     local best

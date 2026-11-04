@@ -175,6 +175,20 @@ local function ResetPopulation()
     wipe(exhausted)
 end
 
+-- Damage each plate took, summed from UNIT_COMBAT, measured against MDT's
+-- health scaled for the key. One secret amount stops it until the next key.
+-- Ruling out needs +10 or higher: the only keys where the scale was measured.
+local hp = { blocked = false }
+
+function hp.RefreshScale()
+    hp.scale, hp.level = nil, nil
+    if not (C_ChallengeMode and C_ChallengeMode.GetActiveKeystoneInfo) then return end
+    local ok, level = pcall(C_ChallengeMode.GetActiveKeystoneInfo)
+    if ok and not (issecretvalue and issecretvalue(level)) and type(level) == "number" then
+        hp.scale, hp.level = CastAheadMatch.KeyHealthScale(level), level
+    end
+end
+
 -- MDT and our table spell a name apart ("King's Rest" against "Kings' Rest"),
 -- so the lookup ignores everything but letters and digits.
 local function PacksFor(name)
@@ -192,6 +206,7 @@ local function LoadDungeon()
     dungeon = IsInInstance() and instanceID and CastAheadData and CastAheadData[instanceID] or nil
     traitRows = dungeon and CastAheadTraits and CastAheadTraits[instanceID] or nil
     packs = dungeon and PacksFor(dungeon.name) or nil
+    hp.RefreshScale()
     if instanceID ~= countedInstance then
         ResetPopulation()
         countedInstance = instanceID
@@ -693,22 +708,92 @@ end
 
 -- Creatures pinned down on the other plates. Only a locked identity counts as
 -- company; a plate still choosing between several says nothing.
--- A plate we knew the identity of has died: one fewer of that kind left.
-local function NoteDeath(state)
-    if not packs or not packs.total then return end
-    local npc = state.npc
-    if not npc then
-        -- No lock, but every sure cast on the plate agreed on one creature.
-        local known = ResolvedNPCs(state)
-        if known then
-            local only
-            for id in pairs(known) do
-                if only then only = nil break end
-                only = id
+function hp.DeadNPC(state)
+    if state.npc then return state.npc end
+    -- No lock, but every sure cast on the plate agreed on one creature.
+    local known = ResolvedNPCs(state)
+    if not known then return nil end
+    local only
+    for id in pairs(known) do
+        if only then return nil end
+        only = id
+    end
+    return only
+end
+
+function hp.NoteKill(unit, state, npc)
+    local total = state.damage
+    if not total then return end
+    local health = packs and packs.health
+    local ratio = npc and CastAheadMatch.KillRatio(health, npc, total, hp.scale)
+    local matches = {}
+    if health and hp.scale then
+        for id in pairs(health) do
+            local r = CastAheadMatch.KillRatio(health, id, total, hp.scale)
+            if math.abs(r - 1) <= CastAheadMatch.KILL_TOLERANCE then matches[#matches + 1] = id end
+        end
+        table.sort(matches)
+    end
+    Record("KILL", unit, math.floor(total), npc or "-", ratio and string.format("%.2f", ratio) or "-",
+        #matches > 0 and table.concat(matches, ",") or "-",
+        hp.blocked and "blocked" or state.damageWhole and "full" or "partial")
+end
+
+function hp.On()
+    return CastAheadConfig.HealthEvidence() and not hp.blocked and hp.scale ~= nil
+        and hp.level >= 10 and packs ~= nil and packs.health ~= nil
+end
+
+function hp.Allows(state, npc)
+    return CastAheadMatch.HealthAllows(packs.health, npc, state.damage or 0, hp.scale, CastAheadMatch.HEALTH_MARGIN)
+end
+
+function hp.OnHit(unit, action, amount)
+    local state = plates[unit]
+    if not state or hp.blocked or not CastAheadConfig.Dev() then return end
+    if issecretvalue and (issecretvalue(action) or issecretvalue(amount)) then
+        hp.blocked = true
+        return
+    end
+    if type(amount) ~= "number" then return end
+    if action == "WOUND" then
+        state.damage = (state.damage or 0) + amount
+    elseif action == "HEAL" then
+        state.damage = math.max(0, (state.damage or 0) - amount)
+        return
+    else
+        return
+    end
+    if not hp.On() or UnitIsDead(unit) then return end
+    if state.npc then
+        if not hp.Allows(state, state.npc) then
+            local wrong = state.npc
+            Record("UNLOCK", unit, wrong, "hp")
+            state.npc, state.npcSource, state.npcSet = nil, nil, nil
+            for slot, track in pairs(state.tracks) do
+                if track.candidates and #track.candidates == 1 and track.candidates[1].npc == wrong then
+                    if CastAheadTimeline then CastAheadTimeline.Cancel(track) end
+                    state.tracks[slot] = nil
+                end
             end
-            npc = only
+            Identify(unit, state)
+            RefreshBar(unit, state)
+        end
+    elseif state.npcSet then
+        for npc in pairs(state.npcSet) do
+            if not hp.Allows(state, npc) then
+                Identify(unit, state)
+                return
+            end
         end
     end
+end
+
+-- A plate we knew the identity of has died: one fewer of that kind left.
+local function NoteDeath(unit, state)
+    local npc = hp.DeadNPC(state)
+    hp.NoteKill(unit, state, npc)
+    if not packs or not packs.total then return end
     if not npc then return end
     killed[npc] = (killed[npc] or 0) + 1
     local total = packs.total[npc]
@@ -806,8 +891,10 @@ function Identify(unit, state)
     if not obs.level then return end
     local stage = CurrentStage()
     local matched = {}
+    local byHealth = hp.On()
     for i = 1, #traitRows do
         if not (tuning.population and exhausted[traitRows[i].npc])
+            and not (byHealth and not hp.Allows(state, traitRows[i].npc))
             and MatchTraits(traitRows[i], obs, stage, state) then
             matched[#matched + 1] = traitRows[i]
         end
@@ -1714,7 +1801,7 @@ local function RefreshCombat(unit)
         -- Not attackable any more, dead, or the plate is simply gone: the unit
         -- token may already have been recycled onto something else.
         local dead = UnitIsDead(unit)
-        if dead then NoteDeath(state) end
+        if dead then NoteDeath(unit, state) end
         DropUnit(unit, dead and "died" or "gone")
         return
     end
@@ -1738,6 +1825,8 @@ local function RefreshCombat(unit)
         state.interrupted = nil
         state.interruptible = nil
         state.opening = nil
+        state.damage = state.damage and 0
+        state.damageWhole = true
         HideBar(state)
         StartPreview(unit, state)
     end
@@ -2020,6 +2109,11 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
             candidates = CastAheadMatch.DropNPCs(candidates, exhausted)
             Trace(unit, "population", candidates)
         end
+        if hp.On() and state.damage then
+            candidates = CastAheadMatch.DropByHealth(candidates, packs.health, state.damage, hp.scale,
+                CastAheadMatch.HEALTH_MARGIN)
+            Trace(unit, "health", candidates)
+        end
         if rejected then
             local kept = {}
             for i = 1, #candidates do
@@ -2123,6 +2217,10 @@ local function FinishCast(unit, state, startAt, duration, channel, follow, claim
         candidates = CastAheadMatch.ByCastTime(dungeon, duration, channel)
         candidates = CastAheadMatch.NarrowByEnabled(candidates, CastAheadUI and CastAheadUI.IsDisabled)
         candidates = CastAheadMatch.NarrowByLevel(candidates, state.level)
+        if hp.On() and state.damage then
+            candidates = CastAheadMatch.DropByHealth(candidates, packs.health, state.damage, hp.scale,
+                CastAheadMatch.HEALTH_MARGIN)
+        end
         candidates = CastAheadMatch.NarrowByMob(candidates, ResolvedNPCs(state, track))
         candidates = CastAheadMatch.NarrowByFollow(candidates, follow)
         if lastSeen then
@@ -2404,6 +2502,10 @@ local NOTICE_DELAY = 2
 local noticePending
 
 frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
+    if event == "UNIT_COMBAT" then
+        if dungeon and not inEncounter then hp.OnHit(unit, arg2, arg4) end
+        return
+    end
     if unit == "player" and (event == "UNIT_SPELLCAST_SUCCEEDED" or event == "UNIT_SPELLCAST_START") then
         ProbeAnchor(arg3)
         if event == "UNIT_SPELLCAST_SUCCEEDED" and not IsSecret(arg3) then Record("SELF", nil, arg3) end
@@ -2496,6 +2598,8 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     end
     if event == "CHALLENGE_MODE_START" then
         ResetPopulation()
+        hp.RefreshScale()
+        hp.blocked = false
         if CastAheadRecorder and CastAheadRecorder.Enabled() then
             local name, _, _, _, _, _, _, instance = GetInstanceInfo()
             local level, affixes = 0, ""
@@ -2573,6 +2677,8 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
             state.engagedAt = nil
             state.actedAt = nil
             state.firstCastAt = nil
+            state.damage = CastAheadConfig.Dev() and 0 or nil
+            state.damageWhole = not UnitAffectingCombat(unit)
             HideBar(state)
             state.level = SafeLevel(unit)
             local traits = ReadTraits(unit)
@@ -2587,7 +2693,7 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         end
     elseif event == "UNIT_HEALTH" then
         if plates[unit] and UnitIsDead(unit) then
-            NoteDeath(plates[unit])
+            NoteDeath(unit, plates[unit])
             DropUnit(unit, "died")
         end
     elseif event == "UNIT_SPELLCAST_START" then
@@ -3156,7 +3262,7 @@ for _, event in ipairs({
     "PLAYER_DIFFICULTY_CHANGED",
     "ENCOUNTER_START", "ENCOUNTER_END", "CHALLENGE_MODE_START", "CHALLENGE_MODE_COMPLETED",
     "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "BAG_UPDATE_DELAYED",
-    "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH",
+    "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "UNIT_HEALTH", "UNIT_COMBAT",
     "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP",
     "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",
     "UNIT_SPELLCAST_INTERRUPTED",
@@ -3217,6 +3323,8 @@ CastAheadCore.SetTrace = function(fn) narrowTrace = fn end
 CastAheadCore.Tuning = tuning
 CastAheadCore.SpreadBars = SpreadBars
 CastAheadCore.Population = function() return killed, exhausted end
+CastAheadCore.KeyScale = function() return hp.scale end
+CastAheadCore.PlateDamage = function(unit) return plates[unit] and plates[unit].damage end
 CastAheadCore.MoveCenter = ToggleMoveCenter
 CastAheadCore.IsHostileNameplate = IsHostileNameplate
 CastAheadCore.RememberPlateSize = RememberPlateSize
