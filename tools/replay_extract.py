@@ -45,6 +45,7 @@ LEVEL_INDEX = 30       # advanced block on SPELL_CAST_SUCCESS: caster level
 POWER_INDEX = 22       # ... and its power type (0 mana, 1 rage, 3 energy, ...)
 HOSTILE = 0x40
 CHANNEL_FULL = 0.9     # a channel ending past this share of its length ran in full
+ENGAGING = ("_DAMAGE", "_MISSED", "_HEAL", "_AURA_APPLIED")   # collect.py DMG_EVENTS
 TICKS = ("SPELL_PERIODIC_DAMAGE", "SPELL_HEAL", "SPELL_PERIODIC_HEAL", "SPELL_MISSED", "SPELL_PERIODIC_MISSED")
 
 
@@ -227,6 +228,15 @@ def scan(path, runs, kickable, channels=None):
             if ev == "UNIT_DIED" and dst.startswith("Creature-"):
                 run.remove(dst, t, dead=True)
                 continue
+            # Engage the way collect.py measures `first`: the first hit, miss,
+            # heal or aura on either side, so `elapsed` and `first` share a zero.
+            if ev.endswith(ENGAGING):
+                for guid, flags in ((src, p[3]), (dst, p[7])):
+                    try:
+                        if guid.startswith("Creature-") and int(flags, 16) & HOSTILE:
+                            run.touch(guid, t)
+                    except ValueError:
+                        pass
             if not src.startswith("Creature-"):
                 if ev == "SPELL_INTERRUPT" and dst.startswith("Creature-"):
                     try:
